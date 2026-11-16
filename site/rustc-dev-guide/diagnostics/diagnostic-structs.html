@@ -1,0 +1,317 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>ساختارهای تشخیص و تشخیص فرعی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="diagnostics/diagnostic-structs"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="diagnostic-and-subdiagnostic-structs"><a class="header" href="#diagnostic-and-subdiagnostic-structs">ساختارهای Diagnostic و subdiagnostic</a></h1>
+<p>rustc دو صفت تشخیصی (diagnostic trait) دارد که می‌توان از آن‌ها برای ساخت diagnosticها استفاده کرد: <code>Diagnostic</code> و <code>Subdiagnostic</code>.</p>
+<p>برای diagnosticهای ساده می‌توان از پیاده‌سازی‌های مشتق‌شده (derived impl) استفاده کرد، مثلاً <code>#[derive(Diagnostic)]</code>. این روش فقط برای diagnosticهای ساده مناسب است که برای تصمیم‌گیری درباره‌ی افزودن subdiagnosticهای اضافی به منطق زیادی نیاز ندارند.</p>
+<p>در مواردی که diagnosticها به رفتار پیچیده‌تر یا پویاتری نیاز دارند، مانند افزودن شرطی subdiagnosticها، سفارشی‌سازی منطق رندر کردن یا انتخاب پیام‌ها در زمان اجرا، باید صفت متناظر (<code>Diagnostic</code> یا <code>Subdiagnostic</code>) را به صورت دستی پیاده‌سازی کنید. این رویکرد انعطاف بیشتری فراهم می‌کند و برای diagnosticهایی که از ساختارهای ساده و ایستا فراتر می‌روند توصیه می‌شود.</p>
+<p>Diagnostic را می‌توان به زبان‌های مختلف ترجمه کرد.</p>
+<h2 id="derivediagnostic"><a class="header" href="#derivediagnostic"><code>#[derive(Diagnostic)]</code></a></h2>
+<p><a href="https://github.com/rust-lang/rust/blob/6201eabde85db854c1ebb57624be5ec699246b50/compiler/rustc_hir_analysis/src/errors.rs#L68-L77">تعریف</a> diagnostic مربوط به «field already declared» را که در زیر آمده در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">#[derive(Diagnostic)]
+#[diag("field `{$field_name}` is already declared", code = E0124)]
+pub struct FieldAlreadyDeclared {
+    pub field_name: Ident,
+    #[primary_span]
+    #[label("field already declared")]
+    pub span: Span,
+    #[label("`{$field_name}` first declared here")]
+    pub prev_span: Span,
+}</code></pre>
+<p><code>Diagnostic</code> را فقط می‌توان روی ساختارها و شمارش‌ها مشتق کرد. attributeهایی که برای ساختارها روی نوع قرار می‌گیرند، برای شمارش‌ها روی هر واریانت قرار می‌گیرند (یا برعکس). هر <code>Diagnostic</code> باید یک attribute به نام <code>#[diag(...)]</code> داشته باشد که روی ساختار یا هر واریانت شمارش اعمال می‌شود.</p>
+<p>اگر یک خطا کد خطا دارد (مثلاً «E0624»)، آن را می‌توان با زیرattribute به نام <code>code</code> مشخص کرد. تعیین <code>code</code> اجباری نیست، اما اگر در حال انتقال یک diagnostic هستید که از <code>Diag</code> استفاده می‌کند تا از <code>Diagnostic</code> استفاده کند، باید در صورت وجود کد، آن را نگه دارید.</p>
+<p><code>#[diag(..)]</code> باید یک پیام را به عنوان اولین آرگومان موقعیتی (positional) ارائه دهد. پیام به انگلیسی نوشته می‌شود، اما ممکن است به زبان محلی (locale) درخواستی کاربر ترجمه شود. برای اطلاع بیشتر درباره‌ی نحوه‌ی نوشتن و تولید پیام‌های خطای قابل ترجمه، <a href="./translation.html">مستندات ترجمه</a> را ببینید.</p>
+<p>هر فیلد از <code>Diagnostic</code> که annotation ندارد، در پیام‌های Fluent به عنوان یک متغیر در دسترس است، مانند <code>field_name</code> در مثال بالا.</p>
+<p>استفاده از attribute به نام <code>#[primary_span]</code> روی یک فیلد (که نوع <code>Span</code> دارد) span اصلی diagnostic را مشخص می‌کند که پیام اصلی diagnostic را خواهد داشت.</p>
+<p>diagnosticها فقط پیام اصلی خود نیستند؛ اغلب شامل برچسب‌ها (label)، یادداشت‌ها (note)، پیام‌های راهنما (help) و پیشنهادها (suggestion) هستند که همه‌ی آن‌ها را نیز می‌توان روی یک <code>Diagnostic</code> مشخص کرد.</p>
+<p><code>#[label]</code>، <code>#[help]</code>، <code>#[warning]</code> و <code>#[note]</code> همگی را می‌توان روی فیلدهایی که نوع <code>Span</code> دارند اعمال کرد. اعمال هر یک از این attributeها subdiagnostic متناظر را با آن <code>Span</code> ایجاد می‌کند. این attributeها یک پیام diagnostic را به عنوان آرگومان می‌گیرند.</p>
+<p>نوع‌های دیگر هنگام استفاده در یک derive از <code>Diagnostic</code> رفتار ویژه‌ای دارند:</p>
+<ul>
+<li>هر attribute که روی <code>Option&lt;T&gt;</code> اعمال شود، فقط در صورتی یک subdiagnostic صادر می‌کند که option برابر <code>Some(..)</code> باشد.</li>
+<li>هر attribute که روی <code>Vec&lt;T&gt;</code> اعمال شود، برای هر عنصر بردار تکرار می‌شود.</li>
+</ul>
+<p><code>#[help]</code>، <code>#[warning]</code> و <code>#[note]</code> را می‌توان روی خود ساختار نیز اعمال کرد، که در این صورت دقیقاً مانند اعمال روی فیلدها کار می‌کنند، با این تفاوت که subdiagnostic هیچ <code>Span</code> نخواهد داشت. این attributeها را می‌توان برای همین اثر روی فیلدهایی از نوع <code>()</code> نیز اعمال کرد، که در ترکیب با نوع <code>Option</code> می‌تواند برای نمایش subdiagnosticهای اختیاری <code>#[note]</code>/<code>#[help]</code>/<code>#[warning]</code> به کار رود.</p>
+<p>پیشنهادها را می‌توان با یکی از چهار attribute فیلد صادر کرد:</p>
+<ul>
+<li><code>#[suggestion("message", code = "...", applicability = "...")]</code></li>
+<li><code>#[suggestion_hidden("message", code = "...", applicability = "...")]</code></li>
+<li><code>#[suggestion_short("message", code = "...", applicability = "...")]</code></li>
+<li><code>#[suggestion_verbose("message", code = "...", applicability = "...")]</code></li>
+</ul>
+<p>پیشنهادها باید روی فیلدی از نوع <code>Span</code> یا فیلدی از نوع <code>(Span, MachineApplicability)</code> اعمال شوند. مشابه سایر attributeهای فیلد، باید پیامی ارائه شود که به کاربر نمایش داده می‌شود. <code>code</code> کدی را مشخص می‌کند که باید به عنوان جایگزین پیشنهاد شود و یک رشته‌ی قالب (format string) است (مثلاً <code>{field_name}</code> با مقدار فیلد <code>field_name</code> ساختار جایگزین می‌شود). از <code>applicability</code> می‌توان برای مشخص کردن قابلیت اعمال در attribute استفاده کرد؛ هنگامی که نوع فیلد شامل یک <code>Applicability</code> باشد نمی‌توان از آن استفاده کرد.</p>
+<p>در نهایت، derive مربوط به <code>Diagnostic</code> یک پیاده‌سازی از <code>Diagnostic</code> تولید می‌کند که شبیه زیر است:</p>
+<pre><code class="language-rust ignore">impl&lt;'a&gt; Diagnostic&lt;'a&gt; for FieldAlreadyDeclared {
+    fn into_diag(self, dcx: DiagCtxtHandle&lt;'a&gt;, level: Level) -&gt; Diag&lt;'a&gt; {
+        let mut diag = Diag::new(dcx, level, "field `{$field_name}` is already declared");
+        diag.set_span(self.span);
+        diag.span_label(
+            self.span,
+            "field already declared"
+        );
+        diag.span_label(
+            self.prev_span,
+            "`{$field_name}` first declared here"
+        );
+        diag
+    }
+}</code></pre>
+<p>حال که diagnostic خود را تعریف کرده‌ایم، چگونه <a href="https://github.com/rust-lang/rust/blob/f1112099eba41abadb6f921df7edba70affe92c5/compiler/rustc_hir_analysis/src/collect.rs#L823-L827">از آن استفاده کنیم</a>؟ کاملاً سر راست است؛ فقط یک نمونه از ساختار بسازید و آن را به <code>emit_err</code> (یا <code>emit_warning</code>) بدهید:</p>
+<pre><code class="language-rust ignore">tcx.dcx().emit_err(FieldAlreadyDeclared {
+    field_name: f.ident,
+    span: f.span,
+    prev_span,
+});</code></pre>
+<h3 id="reference-for-derivediagnostic"><a class="header" href="#reference-for-derivediagnostic">مرجع <code>#[derive(Diagnostic)]</code></a></h3>
+<p><code>#[derive(Diagnostic)]</code> از attributeهای زیر پشتیبانی می‌کند:</p>
+<ul>
+<li><code>#[diag("message", code = "...")]</code>
+<ul>
+<li><em>روی ساختار یا واریانت شمارش اعمال می‌شود.</em></li>
+<li><em>اجباری</em></li>
+<li>متن و کد خطایی را که با diagnostic مرتبط می‌شود تعریف می‌کند.</li>
+<li>پیام (<em>اجباری</em>)
+<ul>
+<li>پیام diagnostic که به کاربر نمایش داده می‌شود.</li>
+<li><a href="./translation.html">مستندات ترجمه</a> را ببینید.</li>
+</ul>
+</li>
+<li><code>code = "..."</code> (<em>اختیاری</em>)
+<ul>
+<li>کد خطا را مشخص می‌کند.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><code>#[note("message")]</code> (<em>اختیاری</em>)
+<ul>
+<li><em>روی ساختار یا فیلدهای ساختار از نوع <code>Span</code>، <code>Option&lt;()&gt;</code>، <code>bool</code> یا <code>()</code> اعمال می‌شود.</em></li>
+<li>یک subdiagnostic از نوع note اضافه می‌کند.</li>
+<li>مقدار، پیام note است.</li>
+<li>اگر روی فیلد <code>Span</code> اعمال شود، یک note مبتنی بر span ایجاد می‌کند.</li>
+</ul>
+</li>
+<li><code>#[help("message")]</code> (<em>اختیاری</em>)
+<ul>
+<li><em>روی ساختار یا فیلدهای ساختار از نوع <code>Span</code>، <code>Option&lt;()&gt;</code>، <code>bool</code> یا <code>()</code> اعمال می‌شود.</em></li>
+<li>یک subdiagnostic از نوع help اضافه می‌کند.</li>
+<li>مقدار، پیام help است.</li>
+<li>اگر روی فیلد <code>Span</code> اعمال شود، یک help مبتنی بر span ایجاد می‌کند.</li>
+</ul>
+</li>
+<li><code>#[label("message")]</code> (<em>اختیاری</em>)
+<ul>
+<li><em>روی فیلدهای <code>Span</code> اعمال می‌شود.</em></li>
+<li>یک subdiagnostic از نوع label اضافه می‌کند.</li>
+<li>مقدار، پیام label است.</li>
+</ul>
+</li>
+<li><code>#[warning("message")]</code> (<em>اختیاری</em>)
+<ul>
+<li><em>روی ساختار یا فیلدهای ساختار از نوع <code>Span</code>، <code>Option&lt;()&gt;</code>، <code>bool</code> یا <code>()</code> اعمال می‌شود.</em></li>
+<li>یک subdiagnostic از نوع warning اضافه می‌کند.</li>
+<li>مقدار، پیام warning است.</li>
+</ul>
+</li>
+<li><code>#[suggestion("message", code = "...", applicability = "...", style = "...")]</code> (<em>اختیاری</em>)
+<ul>
+<li><em>روی فیلدهای <code>(Span, MachineApplicability)</code> یا <code>Span</code> اعمال می‌شود.</em></li>
+<li>یک subdiagnostic از نوع suggestion اضافه می‌کند.</li>
+<li>پیام (<em>اجباری</em>)
+<ul>
+<li>مقدار، پیام پیشنهادی است که به کاربر نمایش داده می‌شود.</li>
+<li><a href="./translation.html">مستندات ترجمه</a> را ببینید.</li>
+</ul>
+</li>
+<li><code>code = "..."</code>/<code>code("...", ...)</code> (<em>اجباری</em>)
+<ul>
+<li>یک یا چند رشته‌ی قالب که کدی را که باید به عنوان جایگزین پیشنهاد شود نشان می‌دهند. چند مقدار به معنای چند جایگزین ممکن است.</li>
+</ul>
+</li>
+<li><code>applicability = "..."</code> (<em>اختیاری</em>)
+<ul>
+<li>رشته‌ای که باید یکی از <code>machine-applicable</code>، <code>maybe-incorrect</code>، <code>has-placeholders</code> یا <code>unspecified</code> باشد.</li>
+</ul>
+</li>
+<li><code>style = "..."</code> (<em>اختیاری</em>)
+<ul>
+<li>مقدار، سبک پیشنهاد است.</li>
+<li>رشته‌ای که باید یکی از <code>normal</code>، <code>short</code>، <code>hidden</code>، <code>verbose</code> یا <code>tool-only</code> باشد.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><code>#[subdiagnostic]</code>
+<ul>
+<li><em>روی نوعی که <code>Subdiagnostic</code> را پیاده‌سازی می‌کند (از <code>#[derive(Subdiagnostic)]</code>) اعمال می‌شود.</em></li>
+<li>subdiagnosticی را که ساختار subdiagnostic نمایندگی می‌کند اضافه می‌کند.</li>
+</ul>
+</li>
+<li><code>#[primary_span]</code> (<em>اختیاری</em>)
+<ul>
+<li><em>روی فیلدهای <code>Span</code> در <code>Subdiagnostic</code>ها اعمال می‌شود.</em></li>
+<li>span اصلی diagnostic را مشخص می‌کند.</li>
+</ul>
+</li>
+</ul>
+<h2 id="derivesubdiagnostic"><a class="header" href="#derivesubdiagnostic"><code>#[derive(Subdiagnostic)]</code></a></h2>
+<p>در کامپایلر رایج است که تابعی نوشته شود که در صورت قابل اعمال بودن، به صورت شرطی یک subdiagnostic مشخص را به یک خطا اضافه می‌کند. اغلب این subdiagnosticها را می‌توان با یک ساختار diagnostic نمایش داد، حتی اگر کل diagnostic را نتوان این‌گونه نمایش داد. در این شرایط، derive مربوط به <code>Subdiagnostic</code> را می‌توان برای نمایش یک diagnostic جزئی (مثلاً یک note، label، help یا suggestion) به صورت ساختار به کار برد.</p>
+<p><a href="https://github.com/rust-lang/rust/blob/f1112099eba41abadb6f921df7edba70affe92c5/compiler/rustc_hir_analysis/src/errors.rs#L221-L234">تعریف</a> برچسب «expected return type» را که در زیر آمده در نظر بگیرید:</p>
+<pre><code class="language-rust">#[derive(Subdiagnostic)]
+pub enum ExpectedReturnTypeLabel&lt;'tcx&gt; {
+    #[label("expected `()` because of default return type")]
+    Unit {
+        #[primary_span]
+        span: Span,
+    },
+    #[label("expected `{$expected}` because of return type")]
+    Other {
+        #[primary_span]
+        span: Span,
+        expected: Ty&lt;'tcx&gt;,
+    },
+}</code></pre>
+<p>مانند <code>Diagnostic</code>، می‌توان <code>Subdiagnostic</code> را برای ساختارها یا شمارش‌ها مشتق کرد. attributeهایی که برای ساختارها روی نوع قرار می‌گیرند، برای شمارش‌ها روی هر واریانت قرار می‌گیرند (یا برعکس). هر <code>Subdiagnostic</code> باید یک attribute روی ساختار یا هر واریانت داشته باشد، یکی از موارد زیر:</p>
+<ul>
+<li><code>#[label(..)]</code> برای تعریف یک label</li>
+<li><code>#[note(..)]</code> برای تعریف یک note</li>
+<li><code>#[help(..)]</code> برای تعریف یک help</li>
+<li><code>#[warning(..)]</code> برای تعریف یک warning</li>
+<li><code>#[suggestion(..)]</code> برای تعریف یک suggestion</li>
+</ul>
+<p>همه‌ی موارد بالا باید یک پیام diagnostic را به عنوان اولین آرگومان موقعیتی ارائه دهند. برای اطلاع بیشتر درباره‌ی نحوه‌ی تولید پیام‌های خطای قابل ترجمه، <a href="./translation.html">مستندات ترجمه</a> را ببینید.</p>
+<p>استفاده از attribute به نام <code>#[primary_span]</code> روی یک فیلد (با نوع <code>Span</code>) span اصلی subdiagnostic را مشخص می‌کند. span اصلی فقط برای label یا suggestion لازم است، زیرا آن‌ها نمی‌توانند بدون span باشند.</p>
+<p>هر فیلد از نوع/واریانت که annotation ندارد، در پیام‌های Fluent به عنوان یک متغیر در دسترس است.</p>
+<p>مانند <code>Diagnostic</code>، <code>Subdiagnostic</code> از فیلدهای <code>Option&lt;T&gt;</code> و <code>Vec&lt;T&gt;</code> پشتیبانی می‌کند.</p>
+<p>پیشنهادها را می‌توان با یکی از چهار attribute روی نوع/واریانت صادر کرد:</p>
+<ul>
+<li><code>#[suggestion("...", code = "...", applicability = "...")]</code></li>
+<li><code>#[suggestion_hidden("...", code = "...", applicability = "...")]</code></li>
+<li><code>#[suggestion_short("...", code = "...", applicability = "...")]</code></li>
+<li><code>#[suggestion_verbose("...", code = "...", applicability = "...")]</code></li>
+</ul>
+<p>پیشنهادها نیاز دارند که <code>#[primary_span]</code> روی یک فیلد تنظیم شود و می‌توانند زیرattributeهای زیر را داشته باشند:</p>
+<ul>
+<li>اولین آرگومان موقعیتی پیامی را مشخص می‌کند که به کاربر نمایش داده می‌شود.</li>
+<li><code>code</code> کدی را مشخص می‌کند که باید به عنوان جایگزین پیشنهاد شود و یک رشته‌ی قالب است (مثلاً <code>{field_name}</code> با مقدار فیلد <code>field_name</code> ساختار جایگزین می‌شود)، نه یک شناسه‌ی Fluent.</li>
+<li>از <code>applicability</code> می‌توان برای مشخص کردن قابلیت اعمال در attribute استفاده کرد؛ هنگامی که نوع فیلد شامل یک <code>Applicability</code> باشد نمی‌توان از آن استفاده کرد.</li>
+</ul>
+<p>قابلیت اعمال را می‌توان به صورت یک فیلد (از نوع <code>Applicability</code>) با attribute به نام <code>#[applicability]</code> نیز مشخص کرد.</p>
+<p>در نهایت، derive مربوط به <code>Subdiagnostic</code> یک پیاده‌سازی از <code>Subdiagnostic</code> تولید می‌کند که شبیه زیر است:</p>
+<pre><code class="language-rust">impl&lt;'tcx&gt; Subdiagnostic for ExpectedReturnTypeLabel&lt;'tcx&gt; {
+    fn add_to_diag(self, diag: &amp;mut rustc_errors::Diagnostic) {
+        use rustc_errors::{Applicability, IntoDiagArg};
+        match self {
+            ExpectedReturnTypeLabel::Unit { span } =&gt; {
+                diag.span_label(span, "expected `()` because of default return type")
+            }
+            ExpectedReturnTypeLabel::Other { span, expected } =&gt; {
+                diag.set_arg("expected", expected);
+                diag.span_label(span, "expected `{$expected}` because of return type")
+            }
+        }
+    }
+}</code></pre>
+<p>پس از تعریف، یک subdiagnostic را می‌توان با دادن آن به تابع <code>subdiagnostic</code> (<a href="https://github.com/rust-lang/rust/blob/f1112099eba41abadb6f921df7edba70affe92c5/compiler/rustc_hir_analysis/src/check/fn_ctxt/suggestions.rs#L670-L674">مثال</a> و <a href="https://github.com/rust-lang/rust/blob/f1112099eba41abadb6f921df7edba70affe92c5/compiler/rustc_hir_analysis/src/check/fn_ctxt/suggestions.rs#L704-L707">مثال</a>) روی یک diagnostic یا با اختصاص دادن آن به فیلدی از ساختار diagnostic که با <code>#[subdiagnostic]</code> annotate شده است به کار برد.</p>
+<h3 id="argument-sharing-and-isolation"><a class="header" href="#argument-sharing-and-isolation">اشتراک و انزوای آرگومان‌ها</a></h3>
+<p>subdiagnosticها پیش از رندر کردن اطلاعات، آرگومان‌های خودشان (یعنی برخی فیلدهای ساختارشان) را به ساختار <code>Diag</code> اضافه می‌کنند. ساختار <code>Diag</code> آرگومان‌های diagnostic اصلی را نیز ذخیره می‌کند، بنابراین subdiagnostic می‌تواند از آرگومان‌های diagnostic اصلی هم استفاده کند.</p>
+<p>با این حال، هنگامی که یک subdiagnostic با پیاده‌سازی <code>#[derive(Subdiagnostic)]</code> به یک diagnostic اصلی افزوده می‌شود، قواعد زیر، که در <a href="https://github.com/rust-lang/rust/pull/142724">rust-lang/rust#142724</a> معرفی شدند، در مدیریت آرگومان‌ها (یعنی متغیرهای استفاده‌شده در پیام‌های Fluent) اعمال می‌شوند:</p>
+<p><strong>انزوای آرگومان بین subdiagnosticها</strong>: آرگومان‌هایی که یک subdiagnostic تنظیم می‌کند فقط در طول رندر شدن همان subdiagnostic در دسترس هستند. پس از رندر شدن subdiagnostic، همه‌ی آرگومان‌هایی که معرفی کرده بود از diagnostic اصلی بازیابی می‌شوند. این کار تضمین می‌کند که چند subdiagnostic دامنه‌ی آرگومان‌های یکدیگر را آلوده نمی‌کنند. برای مثال، هنگام استفاده از <code>Vec&lt;Subdiag&gt;</code>، هر subdiagnostic ممکن است همان آرگومان را به طور مکرر اضافه کند.</p>
+<p><strong>بازنویسی آرگومان هم‌نام بین sub و diagnostic اصلی</strong>: اگر یک subdiagnostic آرگومانی را با همان نام آرگومانی که قبلاً در diagnostic اصلی هست تنظیم کند، در زمان اجرا خطا گزارش می‌دهد، مگر اینکه هر دو دقیقاً یک مقدار داشته باشند. این دو مزیت دارد:</p>
+<ul>
+<li>انعطاف‌پذیری آرگومان‌های diagnostic اصلی را برای ظاهر شدن در attributeهای subdiagnostic حفظ می‌کند. برای مثال، attributeای مانند <code>#[suggestion("...", code = "{new_vis}")]</code> در subdiagnostic می‌تواند به <code>new_vis</code> ارجاع دهد، که فیلدی در ساختار diagnostic اصلی است.</li>
+<li>از بازنویسی یا حذف تصادفی آرگومان‌های موردنیاز diagnostic اصلی یا subdiagnosticهای دیگر جلوگیری می‌کند.</li>
+</ul>
+<p>این قواعد تضمین می‌کنند که آرگومان‌های تزریق‌شده توسط subdiagnosticها کاملاً به رندر شدن خودشان محدود می‌مانند. آرگومان‌های diagnostic اصلی حتی در صورت برخورد نام‌ها از منطق subdiagnostic تأثیری نمی‌پذیرند. علاوه بر این، subdiagnosticها در صورت نیاز می‌توانند به آرگومان‌های هم‌نام diagnostic اصلی دسترسی داشته باشند.</p>
+<h3 id="reference-for-derivesubdiagnostic"><a class="header" href="#reference-for-derivesubdiagnostic">مرجع <code>#[derive(Subdiagnostic)]</code></a></h3>
+<p><code>#[derive(Subdiagnostic)]</code> از attributeهای زیر پشتیبانی می‌کند:</p>
+<ul>
+<li><code>#[label("message")]</code>، <code>#[help("message")]</code>، <code>#[warning("message")]</code> یا <code>#[note("message")]</code>
+<ul>
+<li><em>روی ساختار یا واریانت شمارش اعمال می‌شود. با attributeهای ساختار/واریانت شمارش دیگر ناسازگار (mutually exclusive) است.</em></li>
+<li><em>اجباری</em></li>
+<li>نوع را به عنوان نمایندگی یک label، help یا note تعریف می‌کند.</li>
+<li>پیام (<em>اجباری</em>)
+<ul>
+<li>پیام diagnostic که به کاربر نمایش داده می‌شود.</li>
+<li><a href="./translation.html">مستندات ترجمه</a> را ببینید.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><code>#[suggestion("message", code = "...", applicability = "...", style = "...")]</code>
+<ul>
+<li><em>روی ساختار یا واریانت شمارش اعمال می‌شود. با attributeهای ساختار/واریانت شمارش دیگر ناسازگار است.</em></li>
+<li><em>اجباری</em></li>
+<li>نوع را به عنوان نمایندگی یک suggestion تعریف می‌کند.</li>
+<li>پیام (<em>اجباری</em>)
+<ul>
+<li>پیام diagnostic که به کاربر نمایش داده می‌شود.</li>
+<li><a href="./translation.html">مستندات ترجمه</a> را ببینید.</li>
+</ul>
+</li>
+<li><code>code = "..."</code>/<code>code("...", ...)</code> (<em>اجباری</em>)
+<ul>
+<li>یک یا چند رشته‌ی قالب که کدی را که باید به عنوان جایگزین پیشنهاد شود نشان می‌دهند. چند مقدار به معنای چند جایگزین ممکن است.</li>
+</ul>
+</li>
+<li><code>applicability = "..."</code> (<em>اختیاری</em>)
+<ul>
+<li><em>با <code>#[applicability]</code> روی یک فیلد ناسازگار است.</em></li>
+<li>مقدار، قابلیت اعمال پیشنهاد است.</li>
+<li>رشته‌ای که باید یکی از موارد زیر باشد:
+<ul>
+<li><code>machine-applicable</code></li>
+<li><code>maybe-incorrect</code></li>
+<li><code>has-placeholders</code></li>
+<li><code>unspecified</code></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><code>style = "..."</code> (<em>اختیاری</em>)
+<ul>
+<li>مقدار، سبک پیشنهاد است.</li>
+<li>رشته‌ای که باید یکی از موارد زیر باشد:
+<ul>
+<li><code>normal</code> (پیش‌فرض)</li>
+<li><code>short</code></li>
+<li><code>hidden</code></li>
+<li><code>verbose</code></li>
+<li><code>tool-only</code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><code>#[multipart_suggestion("message", applicability = "...", style = "...")]</code>
+<ul>
+<li><em>روی ساختار یا واریانت شمارش اعمال می‌شود. با attributeهای ساختار/واریانت شمارش دیگر ناسازگار است.</em></li>
+<li><em>اجباری</em></li>
+<li>نوع را به عنوان نمایندگی یک پیشنهاد چندبخشی (multipart) تعریف می‌کند.</li>
+<li>پیام (<em>اجباری</em>): به <code>#[suggestion]</code> مراجعه کنید</li>
+<li><code>applicability = "..."</code> (<em>اختیاری</em>): به <code>#[suggestion]</code> مراجعه کنید</li>
+<li><code>style = "..."</code> (<em>اختیاری</em>): به <code>#[suggestion]</code> مراجعه کنید</li>
+</ul>
+</li>
+<li><code>#[primary_span]</code> (برای label و suggestion <em>اجباری</em>؛ در غیر این صورت <em>اختیاری</em>؛ برای پیشنهادهای چندبخشی قابل اعمال نیست)
+<ul>
+<li><em>روی فیلدهای <code>Span</code> اعمال می‌شود.</em></li>
+<li>span اصلی subdiagnostic را مشخص می‌کند.</li>
+</ul>
+</li>
+<li><code>#[suggestion_part(code = "...")]</code> (<em>اجباری</em>؛ فقط برای پیشنهادهای چندبخشی قابل اعمال است)
+<ul>
+<li><em>روی فیلدهای <code>Span</code> اعمال می‌شود.</em></li>
+<li>مشخص می‌کند که span یک بخش از پیشنهاد چندبخشی است.</li>
+<li><code>code = "..."</code> (<em>اجباری</em>)
+<ul>
+<li>مقدار، یک رشته‌ی قالب است که کدی را که باید به عنوان جایگزین پیشنهاد شود نشان می‌دهد.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><code>#[applicability]</code> (<em>اختیاری</em>؛ فقط برای پیشنهادها (ساده و چندبخشی) قابل اعمال است)
+<ul>
+<li><em>روی فیلدهای <code>Applicability</code> اعمال می‌شود.</em></li>
+<li>قابلیت اعمال پیشنهاد را مشخص می‌کند.</li>
+</ul>
+</li>
+</ul><nav class="page-nav"><a href="../diagnostics.html">→ خطاها و lintها</a><a href="translation.html">ترجمه ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,188 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>متعارف‌سازی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="traits/canonicalization"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="canonicalization"><a class="header" href="#canonicalization">کانونی‌سازی (Canonicalization)</a></h1>
+<blockquote>
+<p><strong>نکته</strong>: FIXME: محتوای این فصل با
+<a href="../solve/canonicalization.html">فصل Canonicalization در حل صفت نسل بعد</a>
+تا حدی هم‌پوشانی دارد.
+پیشنهاد می‌شود این محتواها در آینده بازسازماندهی شوند.</p>
+</blockquote>
+<p>کانونی‌سازی (Canonicalization) فرایند <strong>جداسازی</strong> یک مقدار استنتاجی
+از بافت آن است. بخش کلیدی پیاده‌سازی
+<a href="./canonical-queries.html">query‌های کانونی</a> است، و شاید بخواهید فصل مادر را بخوانید
+تا بافت بیشتری به دست آورید.</p>
+<p>کانونی‌سازی در واقع بر مفهومی بسیار ساده استوار است: هر
+<a href="../type-inference.html#vars">متغیر استنتاج</a> همیشه در یکی از
+دو حالت است: یا <strong>بدون مقدار (unbound)</strong> است که در این حالت هنوز نمی‌دانیم
+چه نوعی است، یا <strong>مقید (bound)</strong> است که در این حالت می‌دانیم. پس برای
+جدا کردن یک ساختار داده T که شامل نوع‌ها/نواحی است از
+محیطش، فقط پایین می‌رویم و متغیرهای بدون مقداری را که
+در T ظاهر می‌شوند پیدا می‌کنیم؛ این متغیرها با «متغیرهای کانونی (canonical variables)» جایگزین می‌شوند
+که از صفر شروع می‌شوند و با ترتیبی ثابت شماره‌گذاری می‌شوند (بیشتر از چپ به راست، اما در واقع
+تا وقتی یکنواخت باشد مهم نیست).</p>
+<p>برای مثال، اگر نوع <code>X = (?T, ?U)</code> را داشته باشیم که <code>?T</code> و
+<code>?U</code> متغیرهای استنتاج متمایز و بدون مقدارند، آن‌گاه شکل کانونی
+<code>X</code> برابر <code>(?0, ?1)</code> خواهد بود، که <code>?0</code> و <code>?1</code> این
+<strong>جانگهدارهای کانونی</strong> را نشان می‌دهند. توجه کنید که نوع <code>Y = (?U, ?T)</code> هم
+به <code>(?0, ?1)</code> کانونی می‌شود. اما نوع <code>Z = (?T, ?T)</code> به
+<code>(?0, ?0)</code> کانونی می‌شود (همان‌طور که <code>(?U, ?U)</code> هم می‌شود). به عبارت دیگر،
+هویت دقیق متغیرهای استنتاج مهم نیست – مگر اینکه
+تکرار شده باشند.</p>
+<p>از این برای بهبود کش کردن و نیز تشخیص چرخه‌ها و چیزهای دیگر
+در حین حل صفت استفاده می‌کنیم. به‌طور تقریبی، ایده این است که اگر
+دو query صفت شکل کانونی یکسان داشته باشند، پاسخ یکسان
+می‌گیرند. آن پاسخ بر حسب
+متغیرهای کانونی (<code>?0</code>، <code>?1</code>) بیان می‌شود که می‌توانیم آن‌ها را دوباره به
+متغیرهای اصلی (<code>?T</code>، <code>?U</code>) نگاشت کنیم.</p>
+<h2 id="canonicalizing-the-query"><a class="header" href="#canonicalizing-the-query">کانونی‌سازی query</a></h2>
+<p>برای دیدن اینکه چگونه کار می‌کند، تصور کنید می‌خواهیم query صفت زیر را حل کنیم:
+<code>?A: Foo&lt;'static, ?B&gt;</code>، که <code>?A</code> و <code>?B</code> بدون مقدارند.
+این query دو متغیر بدون مقدار دارد، اما طول عمر
+<code>'static</code> را هم دارد. سامانهٔ صفت عموماً همهٔ طول عمرها را نادیده می‌گیرد
+و با همه یکسان رفتار می‌کند، پس هنگام کانونی‌سازی <em>هر</em>
+<a href="../appendix/background.html#free-vs-bound">طول عمر آزاد</a> را هم با یک
+متغیر کانونی جایگزین می‌کنیم (توجه کنید که <code>'static</code> در اینجا در واقع یک متغیر طول عمر <em>آزاد</em>
+است. آن را در بافت نوع‌گذاری کل
+برنامه در نظر نمی‌گیریم، بلکه فقط در بافت این ارجاع صفت. از نظر ریاضی،
+روی کل برنامه سورگذاری (quantify) نمی‌کنیم، بلکه فقط روی همین الزام).
+بنابراین نتیجهٔ زیر را می‌گیریم:</p>
+<pre><code class="language-text">?0: Foo&lt;'?1, ?2&gt;
+</code></pre>
+<p>گاهی این را به شکل دیگری می‌نویسیم، مانند:</p>
+<pre><code class="language-text">for&lt;T,L,T&gt; { ?0: Foo&lt;'?1, ?2&gt; }
+</code></pre>
+<p>این <code>for&lt;&gt;</code> اطلاعاتی دربارهٔ هر یک از متغیرهای کانونی
+درون آن می‌دهد.  در این مورد، هر <code>T</code> یک متغیر نوع را نشان می‌دهد،
+پس <code>?0</code> و <code>?2</code> نوع‌اند؛ <code>L</code> یک متغیر طول عمر را نشان می‌دهد، پس
+<code>?1</code> یک طول عمر است. متد <code>canonicalize</code> <em>همچنین</em> آرایهٔ
+<code>CanonicalVarValues</code> به نام OV را با «مقادیر اصلی» هر
+متغیر کانونی‌شده برمی‌گرداند:</p>
+<pre><code class="language-text">[?A, 'static, ?B]
+</code></pre>
+<p>بعداً، هنگام پردازش پاسخ query، به این بردار OV نیاز خواهیم داشت.</p>
+<h2 id="executing-the-query"><a class="header" href="#executing-the-query">اجرای query</a></h2>
+<p>پس از ساختن query کانونی، می‌توانیم تلاش کنیم آن را حل کنیم.
+برای این کار، در نهایت یک بافت استنتاج تازه می‌سازیم و
+query کانونی را در آن بافت <strong>نمونه‌سازی (instantiate)</strong> می‌کنیم. ایده این است که
+از شکل کانونی یک جایگزین S می‌سازیم که برای هر متغیر کانونی یک
+متغیر استنتاج تازه (از نوع مناسب) دارد.
+پس برای query نمونهٔ ما:</p>
+<pre><code class="language-text">for&lt;T,L,T&gt; { ?0: Foo&lt;'?1, ?2&gt; }
+</code></pre>
+<p>جایگزین S ممکن است چنین باشد:</p>
+<pre><code class="language-text">S = [?A, '?B, ?C]
+</code></pre>
+<p>سپس می‌توانیم متغیرهای کانونی مقید (<code>?0</code> و غیره) را با
+این متغیرهای استنتاج جایگزین کنیم و query کاملاً نمونه‌سازی‌شدهٔ زیر را
+به دست آوریم:</p>
+<pre><code class="language-text">?A: Foo&lt;'?B, ?C&gt;
+</code></pre>
+<p>اما آن جایگزین S را به یاد داشته باشید! بعداً به آن نیاز خواهیم داشت.</p>
+<p>خب، اکنون که یک بافت استنتاج تازه و یک query نمونه‌سازی‌شده داریم،
+می‌توانیم تلاش کنیم آن را حل کنیم. خود حل‌کنندهٔ صفت در
+<a href="../solve/the-solver.html">بخشی دیگر</a> با جزئیات بیشتر توضیح داده شده است، اما
+همین‌قدر بگوییم که یک <a href="./canonical-queries.html#query-response">مقدار قطعیت</a> (<code>Proven</code> یا
+<code>Ambiguous</code>) محاسبه می‌کند و بر متغیرهای استنتاجی که ساخته‌ایم
+اثر جانبی می‌گذارد. برای مثال، اگر فقط یک impl از <code>Foo</code> وجود داشت، مانند این:</p>
+<pre><code class="language-rust ignore">impl&lt;'a, X&gt; Foo&lt;'a, X&gt; for Vec&lt;X&gt;
+where X: 'a
+{ ... }</code></pre>
+<p>آن‌گاه ممکن است به مقدار قطعیت <code>Proven</code> برسیم، و نیز
+متغیرهای استنتاج تازهٔ <code>'?D</code> و <code>?E</code> را بسازیم (تا پارامترهای
+impl را نشان دهند) و به‌صورت زیر یکسان‌سازی کنیم:</p>
+<ul>
+<li><code>'?B = '?D</code></li>
+<li><code>?A = Vec&lt;?E&gt;</code></li>
+<li><code>?C = ?E</code></li>
+</ul>
+<p>همچنین به‌دلیل
+where clause، قید ناحیهٔ <code>?E: '?D</code> را انباشته می‌کنیم.</p>
+<p>برای ساختن نتیجهٔ نهایی query، باید این
+مقادیر را از بافت استنتاج query «بالا ببریم» و به چیزی تبدیل کنیم که
+بتوان آن را دوباره در بافت استنتاج اصلی‌مان اعمال کرد. این کار را با
+<strong>اعمال دوبارهٔ کانونی‌سازی</strong> انجام می‌دهیم، اما روی <strong>نتیجهٔ query</strong>.</p>
+<h2 id="canonicalizing-the-query-result"><a class="header" href="#canonicalizing-the-query-result">کانونی‌سازی نتیجهٔ query</a></h2>
+<p>همان‌طور که در <a href="./canonical-queries.html#query-response">بخش مادر</a> بحث شد، بیشتر query‌های صفت به
+نتیجه‌ای ختم می‌شوند که یک «مقدار قطعیت» به نام <code>certainty</code>، یک
+جایگزین نتیجه به نام <code>var_values</code> و چند قید ناحیه را کنار هم می‌آورد. برای
+ساختن این، در نهایت از جایگزین S که هنگام نمونه‌سازی اولیهٔ query ساختیم
+دوباره استفاده می‌کنیم. برای تازه کردن حافظه‌تان، query‌ای داشتیم</p>
+<pre><code class="language-text">for&lt;T,L,T&gt; { ?0: Foo&lt;'?1, ?2&gt; }
+</code></pre>
+<p>که برایش جایگزین S را ساختیم:</p>
+<pre><code class="language-text">S = [?A, '?B, ?C]
+</code></pre>
+<p>سپس کارهایی انجام دادیم که برخی از آن متغیرها را با چیزهای دیگر یکسان‌سازی کرد.
+اگر S را با آخرین نتایج «تازه‌سازی» کنیم، می‌رسیم به:</p>
+<pre><code class="language-text">S = [Vec&lt;?E&gt;, '?D, ?E]
+</code></pre>
+<p>این‌ها دقیقاً مقادیر جدید سه متغیر ورودی query اصلی ما هستند.
+اما توجه کنید که شامل چند متغیر جدید هم هستند
+(مانند <code>?E</code>). می‌توانیم با کانونی‌سازی دوباره آن‌ها را از بین ببریم! اما
+فقط S را کانونی نمی‌کنیم، بلکه کل پاسخ query یعنی QR را کانونی می‌کنیم:</p>
+<pre><code class="language-text">QR = {
+    certainty: Proven,             // or whatever
+    var_values: [Vec&lt;?E&gt;, '?D, ?E] // this is S
+    region_constraints: [?E: '?D], // from the impl
+    value: (),                     // for our purposes, just (), but
+                                   // in some cases this might have
+                                   // a type or other info
+}
+</code></pre>
+<p>نتیجه چنین خواهد بود:</p>
+<pre><code class="language-text">Canonical(QR) = for&lt;T, L&gt; {
+    certainty: Proven,
+    var_values: [Vec&lt;?0&gt;, '?1, ?0]
+    region_constraints: [?0: '?1],
+    value: (),
+}
+</code></pre>
+<p>(یک نکتهٔ ظریف: هنگامی که <strong>نتیجهٔ</strong> query را کانونی می‌کنیم،
+با طول عمرهای آزاد رفتار ویژه‌ای نداریم. توجه کنید که برای مثال هر دو
+ارجاع به <code>'?D</code> به همان
+متغیر کانونی (<code>?1</code>) تبدیل شدند. این برخلاف query اصلی است،
+که در آن هر طول عمر آزاد را به یک متغیر کانونی
+تازه کانونی کردیم.)</p>
+<p>اکنون این نتیجه باید در هر بافتی که لازم است دوباره اعمال شود.</p>
+<h2 id="processing-the-canonicalized-query-result"><a class="header" href="#processing-the-canonicalized-query-result">پردازش نتیجهٔ query کانونی‌شده</a></h2>
+<p>در بخش پیشین یک نتیجهٔ query کانونی تولید کردیم. اکنون باید
+آن نتیجه را در بافت اصلی‌مان اعمال کنیم. اگر به یاد داشته باشید، خیلی پیش‌تر، در
+ابتدا، می‌خواستیم این query را اثبات کنیم:</p>
+<pre><code class="language-text">?A: Foo&lt;'static, ?B&gt;
+</code></pre>
+<p>آن را به این کانونی کردیم:</p>
+<pre><code class="language-text">for&lt;T,L,T&gt; { ?0: Foo&lt;'?1, ?2&gt; }
+</code></pre>
+<p>و اکنون یک پاسخ کانونی پس گرفتیم:</p>
+<pre><code class="language-text">for&lt;T, L&gt; {
+    certainty: Proven,
+    var_values: [Vec&lt;?0&gt;, '?1, ?0]
+    region_constraints: [?0: '?1],
+    value: (),
+}
+</code></pre>
+<p>اکنون می‌خواهیم آن پاسخ را در بافت خود اعمال کنیم. از نظر مفهومی،
+روش انجام آن چنین است: (الف) هر یک از متغیرهای کانونی
+نتیجه را با یک متغیر استنتاج تازه نمونه‌سازی کنیم، (ب) مقادیر
+نتیجه را با مقادیر اصلی یکسان‌سازی کنیم، و سپس (ج) قیدهای ناحیه را
+برای بعد ثبت کنیم. انجام گام (الف) نتیجه‌ای به این شکل می‌دهد</p>
+<pre><code class="language-text">{
+      certainty: Proven,
+      var_values: [Vec&lt;?C&gt;, '?D, ?C]
+                       ^^   ^^^ fresh inference variables
+      region_constraints: [?C: '?D],
+      value: (),
+}
+</code></pre>
+<p>گام (ب) سپس یکسان‌سازی می‌کند:</p>
+<pre><code class="language-text">?A with Vec&lt;?C&gt;
+'static with '?D
+?B with ?C
+</code></pre>
+<p>و سرانجام قید ناحیهٔ <code>?C: 'static</code> برای
+وارسی بعدی ثبت می‌شود.</p>
+<p>(آنچه <em>در عمل</em> انجام می‌دهیم گونه‌ای کمی بهینه‌شده از آن است: به‌جای
+نمونه‌سازی مشتاقانهٔ همهٔ مقادیر کانونی نتیجه
+با متغیرها، بردار مقادیر را پیمایش می‌کنیم و به دنبال
+مواردی می‌گردیم که مقدار صرفاً یک متغیر کانونی است. در مثال ما،
+<code>values[2]</code> برابر <code>?C</code> است، پس می‌توانیم نتیجه بگیریم <code>?C := ?B</code> و
+<code>'?D := 'static</code>. این یک مجموعهٔ جزئی از مقادیر به ما می‌دهد. برای هر چیزی که
+مقداری برایش پیدا نکنیم، یک متغیر استنتاج می‌سازیم.)</p><nav class="page-nav"><a href="canonical-queries.html">→ queryهای متعارف</a><a href="../solve/trait-solving.html">حل صفت نسل بعد ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

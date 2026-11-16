@@ -1,0 +1,61 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>مجموعه آزمون rustdoc-json — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rustdoc-internals/rustdoc-json-test-suite"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="the-rustdoc-json-test-suite"><a class="header" href="#the-rustdoc-json-test-suite">مجموعهٔ تست <code>rustdoc-json</code></a></h1>
+<p>این صفحه مخصوص مجموعهٔ تستی به نام <code>rustdoc-json</code> است که <a href="../../rustdoc/unstable-features.html#json-output">خروجی JSON</a> در rustdoc را تست می‌کند.
+برای مجموعه‌های تست دیگر مربوط به rustdoc، <a href="../tests/compiletest.html#rustdoc-test-suites">§مجموعه‌های تست Rustdoc</a> را ببینید.</p>
+<p>تست‌ها با compiletest اجرا می‌شوند و به مجموعهٔ معمول <a href="../tests/directives.html">directiveها</a> دسترسی دارند.
+directiveهای پرکاربرد اینجا عبارت‌اند از:</p>
+<ul>
+<li><a href="../tests/compiletest.html#building-auxiliary-crates"><code>//@ aux-build</code></a> برای داشتن وابستگی‌ها.</li>
+<li><code>//@ edition: 2021</code> (یا edition دیگر).</li>
+<li><code>//@ compile-flags: --document-hidden-items</code> برای فعال‌کردن <a href="../../rustdoc/command-line-arguments.html#--document-private-items-show-items-that-are-not-public">مستندسازی آیتم‌های خصوصی</a>.</li>
+</ul>
+<p>خروجی JSON هر crate توسط ۲ برنامه بررسی می‌شود: <a href="#jsondocck">jsondoclint</a> و <a href="#jsondocck">jsondocck</a>.</p>
+<h2 id="jsondoclint"><a class="header" href="#jsondoclint">jsondoclint</a></h2>
+<p><a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/jsondoclint">jsondoclint</a> بررسی می‌کند همهٔ <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc_json_types/struct.Id.html"><code>Id</code></a>ها در <code>index</code> (یا <code>paths</code>) وجود دارند.
+این تضمین می‌کند <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc_json_types/struct.Id.html"><code>Id</code></a> معلق (dangling) نداریم.</p>
+<!-- TODO: It does some more things too?
+Also, talk about how it works
+ -->
+<h2 id="jsondocck"><a class="header" href="#jsondocck">jsondocck</a></h2>
+<p><a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/jsondocck">jsondocck</a> directiveهایی را که در کامنت‌ها آمده پردازش می‌کند تا تأیید کند مقادیر خروجی مورد انتظارند.
+از این نظر بسیار شبیه <a href="./rustdoc-html-test-suite.html">htmldocck</a> است.</p>
+<p>از <a href="https://www.rfc-editor.org/rfc/rfc9535.html">JSONPath</a> به‌عنوان زبان کوئری استفاده می‌کند، که یک مسیر می‌گیرد و <em>فهرستی</em> از مقادیری را که آن مسیر با آن‌ها مطابقت دارد برمی‌گرداند.</p>
+<h3 id="directives"><a class="header" href="#directives">Directives</a></h3>
+<ul>
+<li><code>//@ has &lt;path&gt;</code>: بررسی می‌کند <code>&lt;path&gt;</code> وجود دارد، یعنی دست‌کم با ۱ مقدار مطابقت دارد.</li>
+<li><code>//@ !has &lt;path&gt;</code>: بررسی می‌کند <code>&lt;path&gt;</code> وجود ندارد، یعنی با ۰ مقدار مطابقت دارد.</li>
+<li><code>//@ has &lt;path&gt; &lt;value&gt;</code>: بررسی می‌کند <code>&lt;path&gt;</code> وجود دارد و دست‌کم یکی از تطابق‌ها با <code>&lt;value&gt;</code> داده‌شده برابر است.</li>
+<li><code>//@ !has &lt;path&gt; &lt;value&gt;</code>: بررسی می‌کند <code>&lt;path&gt;</code> وجود دارد، اما هیچ‌یک از تطابق‌ها با <code>&lt;value&gt;</code> داده‌شده برابر نیستند.</li>
+<li><code>//@ is &lt;path&gt; &lt;value&gt;</code>: بررسی می‌کند <code>&lt;path&gt;</code> دقیقاً با یک مقدار مطابقت دارد و آن با <code>&lt;value&gt;</code> داده‌شده برابر است.</li>
+<li><code>//@ is &lt;path&gt; &lt;value&gt; &lt;value&gt;...</code>: بررسی می‌کند <code>&lt;path&gt;</code> دقیقاً با همهٔ <code>&lt;value&gt;</code>های داده‌شده مطابقت دارد.
+ترتیب اینجا اهمیتی ندارد.</li>
+<li><code>//@ !is &lt;path&gt; &lt;value&gt;</code>: بررسی می‌کند <code>&lt;path&gt;</code> دقیقاً با یک مقدار مطابقت دارد و آن مقدار با <code>&lt;value&gt;</code> داده‌شده برابر نیست.</li>
+<li><code>//@ count &lt;path&gt; &lt;number&gt;</code>: بررسی می‌کند <code>&lt;path&gt;</code> با <code>&lt;number&gt;</code> مقدار مطابقت دارد.</li>
+<li><code>//@ set &lt;name&gt; = &lt;path&gt;</code>: بررسی می‌کند <code>&lt;path&gt;</code> دقیقاً با یک مقدار مطابقت دارد و آن مقدار را در متغیری به نام <code>&lt;name&gt;</code> ذخیره می‌کند.</li>
+</ul>
+<p>این‌ها در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/tools/jsondocck/src/directive.rs"><code>directive.rs</code></a> تعریف شده‌اند.</p>
+<h3 id="values"><a class="header" href="#values">Values</a></h3>
+<p>مقدارها می‌توانند مقادیر JSON یا متغیر باشند.</p>
+<ul>
+<li>
+<p>مقادیر JSON literalهای JSON هستند، مثل <code>true</code>، <code>"string"</code>، <code>{"key": "value"}</code>.
+این‌ها اغلب باید با <code>'</code> نقل‌قول شوند تا به‌عنوان ۱ مقدار پردازش شوند.
+<a href="#argument-splitting">§تقسیم آرگومان‌ها</a> را ببینید</p>
+</li>
+<li>
+<p>متغیرها را می‌توان برای ذخیرهٔ مقدار در یک مسیر و استفاده از آن در کوئری‌های بعدی به‌کار برد.
+با directive با نام <code>//@ set &lt;name&gt; = &lt;path&gt;</code> تنظیم و با <code>$&lt;name&gt;</code> دسترسی داده می‌شوند</p>
+<pre><code class="language-rust">//@ set foo = $some.path
+//@ is $.some.other.path $foo</code></pre>
+</li>
+</ul>
+<h3 id="argument-splitting"><a class="header" href="#argument-splitting">Argument splitting</a></h3>
+<p>آرگومان‌های directiveها با crate با نام <a href="https://docs.rs/shlex/1.3.0/shlex/index.html">shlex</a> تقسیم می‌شوند که escape کردن به سبک shell در POSIX را پیاده‌سازی می‌کند.
+دلیل این است که هر دو آرگومان <code>&lt;path&gt;</code> و <code>&lt;value&gt;</code> در <a href="#directives">directiveها</a> اغلب هم فاصله و هم علامت نقل‌قول دارند.</p>
+<p>برای استفاده از <code>@ is</code> با <code>&lt;path&gt;</code> برابر <code>$.index[?(@.docs == "foo")].some.field</code> و مقدار <code>"bar"</code> <sup class="footnote-reference" id="fr-why_quote-1"><a href="#footnote-why_quote">1</a></sup>، می‌نویسید:</p>
+<pre><code class="language-rust">//@ is '$.is[?(@.docs == "foo")].some.field' '"bar"'</code></pre>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-why_quote">
+<p>مقدار باید <em>پس از</em> تقسیم shlex برابر <code>"bar"</code> باشد، چون باید مقدار رشتهٔ JSON باشد. <a href="#fr-why_quote-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="rustdoc-gui-test-suite.html">→ مجموعه آزمون rustdoc-gui (ناقص)</a><a href="../offload/internals.html">درونیات انتقال بار به GPU ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

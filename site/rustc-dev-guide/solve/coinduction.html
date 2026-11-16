@@ -1,0 +1,231 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>هم‌استقرا (Coinduction) — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="solve/coinduction"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="coinduction"><a class="header" href="#coinduction">هم‌استقرا (Coinduction)</a></h1>
+<p>حل‌کنندهٔ صفت ممکن است هنگام اثبات goalها از هم‌استقرا (coinduction) استفاده کند.
+هم‌استقرا نسبتاً ظریف است، بنابراین فصلی جداگانه به آن اختصاص داده‌ایم.</p>
+<h2 id="coinduction-and-induction"><a class="header" href="#coinduction-and-induction">هم‌استقرا و استقرا</a></h2>
+<p>در استقرا، اثبات‌ها را به‌صورت بازگشتی اعمال می‌کنیم تا به یک درخت اثبات متناهی برسیم.
+مثال <code>Vec&lt;Vec&lt;Vec&lt;u32&gt;&gt;&gt;: Debug</code> را در نظر بگیرید که به درخت زیر می‌انجامد.</p>
+<ul>
+<li><code>Vec&lt;Vec&lt;Vec&lt;u32&gt;&gt;&gt;: Debug</code>
+<ul>
+<li><code>Vec&lt;Vec&lt;u32&gt;&gt;: Debug</code>
+<ul>
+<li><code>Vec&lt;u32&gt;: Debug</code>
+<ul>
+<li><code>u32: Debug</code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>این درخت متناهی است.
+اما همهٔ goalهایی که می‌خواهیم برقرار باشند درخت اثبات متناهی ندارند؛
+مثال زیر را در نظر بگیرید:</p>
+<pre><code class="language-rust">struct List&lt;T&gt; {
+    value: T,
+    next: Option&lt;Box&lt;List&lt;T&gt;&gt;&gt;,
+}</code></pre>
+<p>برای اینکه <code>List&lt;T&gt;: Send</code> برقرار باشد، همهٔ فیلدهای آن باید به‌صورت بازگشتی <code>Send</code> را نیز پیاده‌سازی کنند.
+این به درخت اثبات زیر می‌انجامد:</p>
+<ul>
+<li><code>List&lt;T&gt;: Send</code>
+<ul>
+<li><code>T: Send</code></li>
+<li><code>Option&lt;Box&lt;List&lt;T&gt;&gt;&gt;: Send</code>
+<ul>
+<li><code>Box&lt;List&lt;T&gt;&gt;: Send</code>
+<ul>
+<li><code>List&lt;T&gt;: Send</code>
+<ul>
+<li><code>T: Send</code></li>
+<li><code>Option&lt;Box&lt;List&lt;T&gt;&gt;&gt;: Send</code>
+<ul>
+<li><code>Box&lt;List&lt;T&gt;&gt;: Send</code>
+<ul>
+<li>…</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>این درخت بی‌نهایت بزرگ خواهد بود که دقیقاً موضوع هم‌استقراست.</p>
+<blockquote>
+<p>برای اثبات <strong>استقرایی</strong> یک goal باید برایش یک درخت اثبات متناهی ارائه دهید.
+برای اثبات <strong>هم‌استقرایی</strong> یک goal، درخت اثبات ارائه‌شده می‌تواند نامتناهی باشد.</p>
+</blockquote>
+<h2 id="why-is-coinduction-correct"><a class="header" href="#why-is-coinduction-correct">چرا هم‌استقرا درست است</a></h2>
+<p>هنگام بررسی اینکه آیا یک goal صفت برقرار است، می‌پرسیم «آیا <code>impl</code>ای وجود دارد
+که این کران را برآورده کند».
+حتی اگر زنجیره‌های نامتناهی از goalهای تودرتو وجود داشته باشد، باز هم یک
+<code>impl</code> یکتا داریم که باید از آن استفاده شود.</p>
+<h2 id="how-to-implement-coinduction"><a class="header" href="#how-to-implement-coinduction">چگونه هم‌استقرا را پیاده‌سازی کنیم</a></h2>
+<p>اگرچه پیاده‌سازی ما نمی‌تواند با تلاش برای ساختن یک درخت نامتناهی هم‌استقرا را بررسی کند، چون این کار
+منابع نامتناهی می‌خواهد، همچنان منطقی است که از این منظر به هم‌استقرا فکر کنیم.</p>
+<p>چون نمی‌توانیم درخت‌های نامتناهی را بررسی کنیم، در عوض به دنبال الگوهایی می‌گردیم که می‌دانیم
+به درخت اثبات نامتناهی می‌انجامند.
+در حال حاضر الگویی که تشخیص می‌دهیم چرخه‌های (کانونی) است.
+اگر <code>T: Send</code> به <code>T: Send</code> وابسته باشد، کاملاً روشن است که این تا ابد ادامه می‌یابد.</p>
+<p>در مورد چرخه‌ها باید مراقب کش کردن باشیم.
+به‌دلیل کانونی‌سازی نواحی و
+متغیرهای استنتاج، برخورد با یک چرخه به این معنا نیست که به درخت اثبات نامتناهی می‌رسیم.
+مثال زیر را ببینید:</p>
+<pre><code class="language-rust">trait Foo {}
+struct Wrapper&lt;T&gt;(T);
+
+impl&lt;T&gt; Foo for Wrapper&lt;Wrapper&lt;T&gt;&gt;
+where
+    Wrapper&lt;T&gt;: Foo
+{}</code></pre>
+<p>اثبات <code>Wrapper&lt;?0&gt;: Foo</code> از impl به شکل <code>impl&lt;T&gt; Foo for Wrapper&lt;Wrapper&lt;T&gt;&gt;</code> استفاده می‌کند که
+<code>?0</code> را به <code>Wrapper&lt;?1&gt;</code> مقید می‌کند و سپس <code>Wrapper&lt;?1&gt;: Foo</code> را لازم دارد.
+به‌دلیل کانونی‌سازی، این به‌صورت یک چرخه تشخیص داده می‌شود.</p>
+<p>ایدهٔ حل این است که هر بار چرخه‌ای تشخیص دادیم یک <em>نتیجهٔ موقت</em> برگردانیم و goalها را مکرراً
+دوباره امتحان کنیم تا <em>نتیجهٔ موقت</em> با نتیجهٔ نهایی آن goal برابر شود.
+با استفاده از <code>Yes</code> بدون قید به‌عنوان نتیجه شروع می‌کنیم و هر بار که لازم باشد دوباره اجرا کنیم
+آن را به نتیجهٔ تکرار قبلی به‌روز می‌کنیم.</p>
+<p>TODO: اینجا تفصیل داده شود.
+برای چرخه‌های هم‌استقرایی از همان رویکرد chalk استفاده می‌کنیم.
+توجه کنید که برخورد با چرخه‌های استقرایی در حال حاضر متفاوت است و صرفاً <code>Overflow</code> برمی‌گرداند.
+<a href="https://rust-lang.github.io/chalk/book/recursive/inductive_cycles.html">فصل‌های مربوطه</a> را در کتاب chalk ببینید.</p>
+<h2 id="future-work"><a class="header" href="#future-work">کارهای آینده</a></h2>
+<p>در حال حاضر فقط صفت‌های خودکار، <code>Sized</code> و goalهای <code>WF</code> را هم‌استقرایی می‌دانیم.
+در آینده تقریباً قصد داریم همهٔ goalها هم‌استقرایی باشند.
+ابتدا توضیح بدهیم چرا اجازه دادن به اثبات‌های هم‌استقرایی بیشتر اصلاً مطلوب است.</p>
+<h3 id="recursive-data-types-already-rely-on-coinduction"><a class="header" href="#recursive-data-types-already-rely-on-coinduction">نوع‌های داده‌ای بازگشتی هم‌اکنون به هم‌استقرا متکی‌اند…</a></h3>
+<p>…فقط تمایل دارند در حل‌کنندهٔ صفت از آن‌ها پرهیز کنند.</p>
+<pre><code class="language-rust">enum List&lt;T&gt; {
+    Nil,
+    Succ(T, Box&lt;List&lt;T&gt;&gt;),
+}
+
+impl&lt;T: Clone&gt; Clone for List&lt;T&gt; {
+    fn clone(&amp;self) -&gt; Self {
+        match self {
+            List::Nil =&gt; List::Nil,
+            List::Succ(head, tail) =&gt; List::Succ(head.clone(), tail.clone()),
+        }
+    }
+}</code></pre>
+<p>در این impl از <code>tail.clone()</code> استفاده می‌کنیم.
+برای این کار باید <code>Box&lt;List&lt;T&gt;&gt;: Clone</code> را اثبات کنیم،
+که <code>List&lt;T&gt;: Clone</code> را لازم دارد.
+اما این به همان impl‌ای وابسته است که اکنون در حال بررسی آن هستیم.
+با افزودن آن الزام به <code>where</code>-clauseهای impl،
+کاری که با <a href="https://smallcultfollowing.com/babysteps/blog/2022/04/12/implied-bounds-and-perfect-derive">perfect derive</a> انجام می‌دادیم،
+آن چرخه را به درون حل‌کنندهٔ صفت می‌بریم و <a href="https://play.rust-lang.org/?version=stable&amp;mode=debug&amp;edition=2021&amp;gist=0a9c3830b93a2380e6978d6328df8f72">خطا می‌گیریم</a>.</p>
+<h3 id="recursive-data-types"><a class="header" href="#recursive-data-types">نوع‌های داده‌ای بازگشتی</a></h3>
+<p>برای استدلال دربارهٔ نوع‌های بازگشتی که projection دارند هم به هم‌استقرا نیاز داریم؛
+مثلاً مثال زیر در حال حاضر کامپایل نمی‌شود، هرچند باید معتبر باشد.</p>
+<pre><code class="language-rust">use std::borrow::Cow;
+pub struct Foo&lt;'a&gt;(Cow&lt;'a, [Foo&lt;'a&gt;]&gt;);</code></pre>
+<p>این مشکل دست‌کم از سال ۲۰۱۵ شناخته‌شده است؛ برای اطلاعات بیشتر
+<a href="https://github.com/rust-lang/rust/issues/23714">#23714</a> را ببینید.</p>
+<h3 id="explicitly-checked-implied-bounds"><a class="header" href="#explicitly-checked-implied-bounds">کران‌های ضمنیِ صریحاً بررسی‌شده</a></h3>
+<p>هنگام بررسی یک impl، فرض می‌کنیم نوع‌های موجود در سرایند impl well-formed هستند.
+یعنی هنگام نمونه‌سازی impl باید ثابت کنیم که واقعاً چنین است.
+<a href="https://github.com/rust-lang/rust/issues/100051">#100051</a> نشان می‌دهد که چنین نیست.
+برای رفع این مشکل باید گزاره‌های <code>WF</code> را برای نوع‌های سرایند impl اضافه کنیم.
+بدون هم‌استقرا برای همهٔ صفت‌ها، این حتی <code>core</code> را خراب می‌کند.</p>
+<pre><code class="language-rust">trait FromResidual&lt;R&gt; {}
+trait Try: FromResidual&lt;&lt;Self as Try&gt;::Residual&gt; {
+    type Residual;
+}
+
+struct Ready&lt;T&gt;(T);
+impl&lt;T&gt; Try for Ready&lt;T&gt; {
+    type Residual = Ready&lt;()&gt;;
+}
+impl&lt;T&gt; FromResidual&lt;&lt;Ready&lt;T&gt; as Try&gt;::Residual&gt; for Ready&lt;T&gt; {}</code></pre>
+<p>هنگام بررسی well-formed بودن impl مربوط به <code>FromResidual</code>، به چرخهٔ زیر می‌رسیم:</p>
+<p>impl در صورتی well-formed است که <code>&lt;Ready&lt;T&gt; as Try&gt;::Residual</code> و <code>Ready&lt;T&gt;</code> well-formed باشند.</p>
+<ul>
+<li><code>wf(&lt;Ready&lt;T&gt; as Try&gt;::Residual)</code> نیاز دارد به</li>
+<li><code>Ready&lt;T&gt;: Try</code>، که به‌دلیل صفت بالادستی (super trait) نیاز دارد به</li>
+<li><code>Ready&lt;T&gt;: FromResidual&lt;Ready&lt;T&gt; as Try&gt;::Residual&gt;</code>, <strong>به‌دلیل کران‌های ضمنی روی impl</strong></li>
+<li><code>wf(&lt;Ready&lt;T&gt; as Try&gt;::Residual)</code> :tada: <strong>چرخه</strong></li>
+</ul>
+<h3 id="issues-when-extending-coinduction-to-more-goals"><a class="header" href="#issues-when-extending-coinduction-to-more-goals">مشکلات هنگام گسترش هم‌استقرا به goalهای بیشتر</a></h3>
+<p>هنگام گسترش هم‌استقرا چند مشکل اضافی وجود دارد که باید در نظر داشت.
+مشکلات اینجا به حل‌کنندهٔ فعلی ربطی ندارند.</p>
+<h4 id="implied-super-trait-bounds"><a class="header" href="#implied-super-trait-bounds">کران‌های ضمنی صفت‌های بالادستی</a></h4>
+<p>سامانهٔ صفت ما در حال حاضر با صفت‌های بالادستی، مثلاً <code>trait Trait: SuperTrait</code>،
+چنین رفتار می‌کند: ۱) الزام می‌کند که <code>SuperTrait</code> برای همهٔ نوع‌هایی که <code>Trait</code> را پیاده‌سازی می‌کنند برقرار باشد،
+و ۲) فرض می‌کند <code>SuperTrait</code> برقرار است اگر <code>Trait</code> برقرار باشد.</p>
+<p>تکیه بر ۲) هنگام اثبات ۱) ناسالم (unsound) است.
+این را فقط در مورد چرخه‌های هم‌استقرایی می‌توان مشاهده کرد.
+بدون چرخه، هر زمان بر ۲) تکیه می‌کنیم باید برای impl به‌کاررفتهٔ <code>Trait</code> ۱) را هم
+بدون تکیه بر ۲) اثبات کرده باشیم.</p>
+<pre><code class="language-rust">trait Trait: SuperTrait {}
+
+impl&lt;T: Trait&gt; Trait for T {}
+
+// Keeping the current setup for coinduction
+// would allow this compile. Uff :&lt;
+fn sup&lt;T: SuperTrait&gt;() {}
+fn requires_trait&lt;T: Trait&gt;() { sup::&lt;T&gt;() }
+fn generic&lt;T&gt;() { requires_trait::&lt;T&gt;() }</code></pre>
+<p>این در واقع ذاتی هم‌استقرا نیست، بلکه ویژگی‌ای موجود است
+که به‌واسطهٔ آن ناسالم می‌شود.</p>
+<h5 id="possible-solutions"><a class="header" href="#possible-solutions">راه‌حل‌های ممکن</a></h5>
+<p>ساده‌ترین راه حل این است که ۲) را به‌کلی حذف کنیم و همیشه
+<code>T: Trait</code> را به <code>T: Trait</code> و <code>T: SuperTrait</code> در بیرون از حل‌کنندهٔ صفت بسط دهیم.
+این به ما اجازه می‌دهد ۱) را هم حذف کنیم، اما چون هنوز باید
+<code>where</code>-boundهای معمولی روی صفت‌ها را اثبات کنیم، این صرفاً کار اضافه است.</p>
+<p>هرچند می‌توان راه‌هایی برای غیرفعال کردن کاربردهای چرخه‌ای ۲) هنگام بررسی ۱) تصور کرد،
+دست‌کم ایده‌های خودم - @lcnr - همگی بسیار پیچیده‌تر از آن‌اند که معقول باشند.</p>
+<h4 id="normalizes_to-goals-and-progress"><a class="header" href="#normalizes_to-goals-and-progress"><code>normalizes_to</code> goalها و پیشرفت</a></h4>
+<p>یک goal از نوع <code>normalizes_to</code> الزام نرمال‌شدن <code>&lt;T as Trait&gt;::Assoc</code> به یک <code>U</code> را نشان می‌دهد.
+این در عمل با نرمال‌سازی ابتدایی <code>&lt;T as Trait&gt;::Assoc</code> و سپس
+یکسان‌سازی نوع حاصل با <code>U</code> انجام می‌شود.
+باید یک نگاشت باشد، زیرا هر projection باید دقیقاً به یک نوع نرمال شود.
+اگر صرفاً اجازهٔ درخت‌های اثبات نامتناهی را بدهیم، رفتار زیر را خواهیم داشت:</p>
+<pre><code class="language-rust">trait Trait {
+    type Assoc;
+}
+
+impl Trait for () {
+    type Assoc = &lt;() as Trait&gt;::Assoc;
+}</code></pre>
+<p>اگر اکنون <code>normalizes_to(&lt;() as Trait&gt;::Assoc, Vec&lt;u32&gt;)</code> را محاسبه کنیم، impl را حل می‌کنیم
+و نوع وابستهٔ <code>&lt;() as Trait&gt;::Assoc</code> را به دست می‌آوریم.
+سپس آن را با نوع مورد انتظار یکسان می‌کنیم
+که باعث می‌شود <code>normalizes_to(&lt;() as Trait&gt;::Assoc, Vec&lt;u32&gt;)</code> را دوباره بررسی کنیم.
+این تا ابد ادامه می‌یابد و به یک درخت اثبات نامتناهی می‌انجامد.</p>
+<p>یعنی <code>&lt;() as Trait&gt;::Assoc</code> با هر نوع دیگری برابر می‌شد که ناسالم است.</p>
+<h5 id="how-to-solve-this"><a class="header" href="#how-to-solve-this">چگونه این را حل کنیم</a></h5>
+<p><strong>هشدار: این موضوع ظریف است و ممکن است نادرست باشد</strong></p>
+<p>برخلاف goalهای صفت، <code>normalizes_to</code> باید <em>مولد (productive)</em> باشد<sup class="footnote-reference" id="fr-1-1"><a href="#footnote-1">1</a></sup>.
+یک goal از نوع <code>normalizes_to</code> وقتی مولد است که projection به یک سازندهٔ نوع صلب (rigid) نرمال شود،
+پس نرمال شدن <code>&lt;() as Trait&gt;::Assoc</code> به <code>Vec&lt;&lt;() as Trait&gt;::Assoc&gt;</code> مولد خواهد بود.</p>
+<p>یک goal از نوع <code>normalizes_to</code> دو نوع goal تودرتو دارد:
+الزامات تودرتویی که برای نرمال‌سازی واقعی projection لازم‌اند،
+و برابری میان projection نرمال‌شده و نوع مورد انتظار.
+فقط برابری باید مولد باشد.
+یک شاخه در درخت اثبات مولد است اگر یا متناهی باشد،
+یا دست‌کم یک <code>normalizes_to</code> داشته باشد که در آن alias به
+یک سازندهٔ نوع صلب حل شده است.</p>
+<p>به‌عنوان جایگزین، می‌توانیم صرفاً همیشه شاخهٔ یکسان‌سازی <code>normalizes_to</code> را استقرایی در نظر بگیریم.
+هر چرخه‌ای باید به نوع‌های نامتناهی بینجامد که به‌هرحال پشتیبانی نمی‌شوند و فقط
+هنگام نرمال‌سازی عمیق برای codegen به سرریز می‌انجامند.</p>
+<p>آزمایش‌ها و مثال‌ها: <a href="https://hackmd.io/-8p0AHnzSq2VAE6HE_wX-w?view">https://hackmd.io/-8p0AHnzSq2VAE6HE_wX-w?view</a></p>
+<p>تلاشی دیگر برای خلاصه‌سازی.</p>
+<ul>
+<li>در projection eq باید در مقید کردن سمت راست (rhs) پیشرفت کنیم</li>
+<li>یک چرخه فقط در صورتی مجاز است که هنگام یکسان‌سازی دست‌کم یک بار پس از نرمال‌سازی یک نوع صلب در سمت چپ (lhs) داشته باشیم</li>
+<li>چرخه‌های بیرون از فراخوانی بازگشتی <code>eq</code> در <code>normalizes_to</code> همیشه مشکلی ندارند</li>
+</ul>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-1">
+<p>مرتبط: <a href="https://coq.inria.fr/refman/language/core/coinductive.html#top-level-definitions-of-corecursive-functions">https://coq.inria.fr/refman/language/core/coinductive.html#top-level-definitions-of-corecursive-functions</a> <a href="#fr-1-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="canonicalization.html">→ متعارف‌سازی</a><a href="caching.html">کش‌کردن ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

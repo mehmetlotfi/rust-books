@@ -1,0 +1,68 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>powerpc64-sony-ps3 — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="platform-support/powerpc64-sony-ps3"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="powerpc64-sony-ps3"><a class="header" href="#powerpc64-sony-ps3"><code>powerpc64-sony-ps3</code></a></h1>
+<p><strong>Tier: 3</strong></p>
+<p>هدفی برای Sony PlayStation 3 (که به‌اختصار «PS3» گفته می‌شود)، برای PowerPC Processor Element (PPU) از <a href="https://ieeexplore.ieee.org/document/5388675">Cell Broadband Engine Architecture (CBEA)</a>.</p>
+<h2 id="target-maintainers"><a class="header" href="#target-maintainers">نگهدارندگان هدف</a></h2>
+<ul>
+<li><a href="https://github.com/ZephyrCodesStuff">@ZephyrCodesStuff</a> (توسعه‌دهنده و نگهدارندهٔ اصلی)</li>
+<li><a href="https://github.com/RipleyTom">@RipleyTom</a> (نگهدارندهٔ پشتیبان)</li>
+</ul>
+<h2 id="requirements"><a class="header" href="#requirements">الزامات</a></h2>
+<p>این هدف یک پلتفرم <strong>PowerPC64 ELFv1 با ترتیب بایت big-endian</strong> (همان PPE در Cell Broadband Engine) است و فقط برای استفاده روی سیستم‌های Sony PlayStation 3 و تحت سیستم‌عامل رسمی آن، «CellOS»، در نظر گرفته شده است.</p>
+<p>پیوندده باید از <strong>PowerPC64 ELFv1 با ترتیب Big-Endian</strong> پشتیبانی کند: پیوندده‌ای که توصیه و آزمایش شده <a href="https://github.com/rui314/mold">mold</a> است. <code>lld</code> در LLVM جابه‌جایی‌های (relocation) فراخوانی ELFv1 را در محیط‌های freestanding با <code>no_std</code> به‌درستی مدیریت نمی‌کند و به همین دلیل ناسازگار است. (ببینید: <a href="https://github.com/rust-lang/rust/issues/85589">rust-lang/rust#85589</a>، <a href="https://github.com/llvm/llvm-project/issues/27630">llvm/llvm-project#27630</a>)</p>
+<p>باینری‌های حاصل پس از پیوند نیاز به وصله‌زنی (patch) بیشتری دارند تا با سیستم‌عامل PlayStation 3 سازگار شوند و قابل بوت باشند. یک ابزار وصله‌زن متن‌باز <a href="https://github.com/ZephyrCodesStuff/rust-ps3/tree/main/moldier">اینجا</a> در دسترس است. به‌طور کلی، یک وصله‌زن باید این کارها را انجام دهد:</p>
+<ul>
+<li>بازنویسی OS/ABI در ELF به <code>0x66</code> (<code>ELFOSABI_CELLLV2</code>)</li>
+<li>حذف هر هدر GNU/Linux</li>
+<li>افزودن پرچم‌ها، بخش‌ها (<code>.sys_proc_param</code> و <code>.sys_proc_prx_param</code>) و هدرهای مخصوص Sony</li>
+<li>افزودن «stub»ها برای کتابخانه‌های پیوند پویای SPRX شرکت Sony، با افزودن یک بخش (<code>.lib.stub</code>) تا CellOS بتواند آن‌ها را پیوند دهد</li>
+<li>وصله‌زنی توصیف‌گرهای تابع OPD (در بخش <code>.opd</code>)</li>
+</ul>
+<p><em><strong>نکته</strong>: ممکن است این فهرست برای همهٔ موارد استفاده جامع نباشد، اما برای تولید یک باینری قابل اجرا کافی است. تولید یک کتابخانهٔ پویای PRX ممکن است به مراحل بیشتر یا متفاوتی نیاز داشته باشد.</em></p>
+<p>این هدف <em>به‌طور کامل پشتیبانی می‌کند</em> از:</p>
+<ul>
+<li>قابلیت‌های <code>core</code> در Rust</li>
+<li>قابلیت <code>alloc</code> در Rust، چون هستهٔ CellOS Lv2 تخصیص حافظهٔ مجازی (<code>sys_memory_allocate</code>) را فراهم می‌کند که می‌توان روی آن یک تخصیص‌دهندهٔ heap (مانند <a href="https://github.com/SFBdragon/talc">talc</a>) پیاده‌سازی کرد.</li>
+<li>افزونه‌های برداری SIMD با نام AltiVec / VMX (که LLVM از طریق <code>+altivec</code> به‌صورت بومی پشتیبانی می‌کند)</li>
+</ul>
+<h2 id="building-the-target"><a class="header" href="#building-the-target">ساخت هدف</a></h2>
+<p>اگر <code>rustc</code> با فعال‌بودن این هدف ساخته شود، برای ساخت آرتیفکت‌های میزبان کامپایلر به‌طور الزامی هیچ زنجیرهٔ ابزار کامپایل متقابل C خارجی لازم نیست، اما <code>mold</code> باید برای انجام پیوند روی سیستم میزبان نصب شده باشد.</p>
+<p>استفاده از <code>lld</code> به‌عنوان پیوندده بعید است، تا زمانی که پشتیبانی از ELFv1 در <code>lld</code> پیاده‌سازی شود.</p>
+<h2 id="building-rust-programs"><a class="header" href="#building-rust-programs">ساخت برنامه‌های Rust</a></h2>
+<p>چون این هدف در Tier 3 قرار دارد، آرتیفکت‌های از پیش کامپایل‌شدهٔ کتابخانهٔ استاندارد (<code>core</code>، <code>alloc</code>) از طریق rustup توزیع نمی‌شوند. برنامه‌ها باید با یک زنجیرهٔ ابزار nightly همراه با مؤلفهٔ <code>rust-src</code> و <code>-Z build-std</code> ساخته شوند.</p>
+<p>یک SDK آمادهٔ توسعه برای Rust به‌صورت متن‌باز <a href="https://github.com/Zephyrcodesstuff/rust-ps3">اینجا</a> وجود دارد و با مجوز <code>MIT OR Apache-2.0</code> منتشر شده است.</p>
+<p>فایل <code>.cargo/config.toml</code> پروژهٔ خود را پیکربندی کنید:</p>
+<pre><code class="language-toml">[target.powerpc64-sony-ps3]
+linker = "mold"
+rustflags = [
+    "-C", "relocation-model=static",
+    "-C", "code-model=small",
+    "-C", "target-feature=+altivec",
+]
+</code></pre>
+<p><strong>پیش‌نیازها:</strong></p>
+<ul>
+<li>یک کامپایلر Rust نسخهٔ nightly همراه با مؤلفهٔ <code>rust-src</code></li>
+<li>پیوندده <a href="https://github.com/rui314/mold">mold</a></li>
+<li>ابزار پس از پیوند <a href="https://github.com/ZephyrCodesStuff/rust-ps3/tree/main/moldier">moldier</a></li>
+<li><em>(اختیاری)</em> <code>make_fself</code> یا <code>scetool</code> برای تبدیل خروجی <code>.ELF</code> به یک <code>EBOOT.BIN</code> رمزگذاری‌شده/امضاشده برای اجرا روی سخت‌افزار واقعی.</li>
+</ul>
+<p><strong>فرایند ساخت:</strong></p>
+<pre><code class="language-bash"># Compile the binary
+cargo +nightly build \
+    --target powerpc64-sony-ps3 \
+    -Z build-std=core,alloc \
+    --release
+
+# Patch the linked executable
+moldier patch target/powerpc64-sony-ps3/release/my_program.ELF
+
+# (Optional) Sign the binary for official hardware
+make_fself "target/powerpc64-sony-ps3/release/my_program.ELF" "target/powerpc64-sony-ps3/release/my_program.BIN"
+</code></pre>
+<h2 id="testing"><a class="header" href="#testing">آزمون</a></h2>
+<p>این هدف اجرای باینری‌ها (پس از وصله‌زنی) را، هم روی سخت‌افزار رسمی و هم روی <a href="https://github.com/rpcs3/rpcs3">شبیه‌سازهای متن‌باز</a>، به‌طور کامل پشتیبانی می‌کند.</p>
+<p>چون firmware رسمی سیستم اجرای کد امضانشده را ممنوع می‌کند، برای اجرای باینری‌ها ابتدا باید سیستم jailbreak شود. این کار اختیاری نیست.</p>
+<p>شبیه‌سازها هیچ الزامی دربارهٔ امضای کد ندارند، بنابراین آزمون روی شبیه‌سازها ساده است.</p>
+<p>اشکال‌زدایی کاملاً ممکن است، یا از طریق APIهای debug firmware روی سخت‌افزار رسمی، یا روی شبیه‌سازها از طریق اشکال‌زداهای یکپارچهٔ آن‌ها یا یک سرور GDB که شبیه‌ساز فراهم می‌کند.</p>
+<h2 id="cross-compilation-toolchains-and-c-code"><a class="header" href="#cross-compilation-toolchains-and-c-code">زنجیرهٔ ابزار کامپایل متقابل و کد C</a></h2>
+<p>این هدف از کد C/C++ به‌طور کامل پشتیبانی می‌کند. هر کامپایلری که بتواند برای پردازندهٔ PowerPC64 با ترتیب big-endian باینری تولید کند، می‌تواند کدی تولید کند که در برنامهٔ Rust جاسازی شود.</p><nav class="page-nav"><a href="aix.html">→ powerpc64-ibm-aix</a><a href="powerpc64-unknown-linux-gnuelfv2.html">powerpc64-unknown-linux-gnuelfv2 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

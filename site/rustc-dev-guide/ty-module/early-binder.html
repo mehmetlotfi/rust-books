@@ -1,0 +1,43 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>EarlyBinder و نمونه‌سازی پارامترها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="ty-module/early-binder"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="earlybinder-and-instantiating-parameters"><a class="header" href="#earlybinder-and-instantiating-parameters"><code>EarlyBinder</code> و نمونه‌سازی پارامترها (instantiating)</a></h1>
+<p>فرض کنید آیتمی پارامتر جنریک <code>T</code> معرفی می‌کند. هر وقت از بیرون <code>foo</code> به نوع‌های درون آن (یعنی نوع بازگشتی یا نوع آرگومان‌ها) ارجاع می‌دهیم باید مراقب مدیریت پارامترهای جنریک تعریف‌شده روی <code>foo</code> باشیم. برای مثال:</p>
+<pre><code class="language-rust ignore">fn foo&lt;T, U&gt;(a: T, _b: U) -&gt; T { a }
+
+fn main() {
+    let c = foo::&lt;i32, u128&gt;(1, 2);
+}</code></pre>
+<p>هنگام type checking در <code>main</code> نمی‌توانیم ساده‌لوحانه به نوع بازگشتی <code>foo</code> نگاه کنیم و نوع <code>T</code> را به متغیر <code>c</code> بدهیم. تابع <code>main</code> هیچ پارامتر جنریکی تعریف نمی‌کند، پس <code>T</code> در این زمینه کاملاً بی‌معناست. به‌طور کلی‌تر، هر وقت آیتمی پارامتر جنریک معرفی (bind) کند، هنگام دسترسی به نوع‌های درون آیتم از بیرون، پارامترهای جنریک باید با مقادیر آیتم بیرونی نمونه‌سازی شوند.</p>
+<p>در rustc این را از طریق نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.EarlyBinder.html"><code>EarlyBinder</code></a> ردیابی می‌کنیم؛ نوع بازگشتی <code>foo</code> به‌صورت <code>EarlyBinder&lt;Ty&gt;</code> نمایش داده می‌شود و تنها راه دسترسی به <code>Ty</code> دادن آرگومان برای هر پارامتر جنریکی است که <code>Ty</code> ممکن است استفاده کند. این با متد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.EarlyBinder.html#method.instantiate"><code>EarlyBinder::instantiate</code></a> پیاده‌سازی شده که binder را باز می‌کند (discharge) و مقدار درون را با همهٔ پارامترهای جنریک جایگزین‌شده توسط آرگومان‌های داده‌شده برمی‌گرداند.</p>
+<p>برای بازگشت به مثال، هنگام type checking در <code>main</code> نوع بازگشتی <code>foo</code> به‌صورت <code>EarlyBinder(T/#0)</code> نمایش داده می‌شود. سپس چون تابع را با <code>i32, u128</code> به‌عنوان آرگومان‌های جنریک فراخوانی کرده‌ایم، <code>EarlyBinder::instantiate</code> را روی نوع بازگشتی با <code>[i32, u128]</code> به‌عنوان args فراخوانی می‌کنیم. نتیجه نوع بازگشتی نمونه‌سازی‌شدهٔ <code>i32</code> است که می‌توانیم به‌عنوان نوع local با نام <code>c</code> به‌کار ببریم.</p>
+<p>چند مثال دیگر:</p>
+<pre><code class="language-rust ignore">fn foo&lt;T&gt;() -&gt; Vec&lt;(u32, T)&gt; { Vec::new() }
+fn bar() {
+    // the return type of `foo` before instantiating it would be:
+    // `EarlyBinder(Adt(Vec, &amp;[Tup(&amp;[u32, T/#=0])]))`
+    // we then instantiate the binder with `[u64]` resulting in the type:
+    // `Adt(Vec, &amp;[Tup(&amp;[u32, u64])])`
+    let a = foo::&lt;u64&gt;();
+}</code></pre>
+<pre><code class="language-rust ignore">struct Foo&lt;A, B&gt; {
+    x: Vec&lt;A&gt;,
+    ..
+}
+
+fn bar(foo: Foo&lt;u32, f32&gt;) { 
+    // the type of `foo`'s `x` field before instantiating it would be:
+    // `EarlyBinder(Vec&lt;A/#0&gt;)`
+    // we then instantiate the binder with `[u32, f32]` as those are the
+    // generic arguments to the `Foo` struct. This results in a type of:
+    // `Vec&lt;u32&gt;`
+    let y = foo.x;
+}</code></pre>
+<p>در کامپایلر فراخوانی <code>instantiate</code> برای این در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.FieldDef.html#method.ty"><code>FieldDef::ty</code></a> (<a href="https://github.com/rust-lang/rust/blob/44d679b9021f03a79133021b94e6d23e9b55b3ab/compiler/rustc_middle/src/ty/mod.rs#L1421-L1426">منبع</a>) انجام می‌شود؛ در نقطه‌ای هنگام type checking در <code>bar</code> برای گرفتن نوع <code>foo.x</code> به <code>FieldDef::ty(x, &amp;[u32, f32])</code> می‌رسیم.</p>
+<p><strong>نکته دربارهٔ اندیس‌ها:</strong> اگر اندیس یک <code>Param</code> با آنچه <code>EarlyBinder</code> bind می‌کند مطابقت نداشته باشد باگ است. برای مثال، اگر اندیس خارج از محدوده باشد یا اندیس یک طول‌عمر مربوط به پارامتر نوع باشد.
+این نوع خطاها زودتر در کامپایلر هنگام name resolution گرفته می‌شوند، جایی که ارجاع به پارامترهای جنریک معرفی‌شده توسط آیتم‌هایی که نباید توسط آیتم درونی قابل‌نام‌بردن باشند ممنوع است.</p>
+<hr>
+<p>همان‌طور که پیش‌تر گفته شد، وقتی <em>بیرون</em> آیتم هستیم مهم است <code>EarlyBinder</code> را پیش از دسترسی به مقدار درون با آرگومان‌های جنریک نمونه‌سازی کنیم، اما وقتی مفهوماً از قبل درون binder هستیم راه‌اندازی کمی متفاوت است.</p>
+<p>برای مثال:</p>
+<pre><code class="language-rust">impl&lt;T&gt; Trait for Vec&lt;T&gt; {
+    fn foo(&amp;self, b: Self) {}
+}</code></pre>
+<p>هنگام ساخت <code>Ty</code> برای نمایش نوع پارامتر <code>b</code> باید نوع <code>Self</code> را روی impl‌ای که درونش هستیم بگیریم. این را می‌توان با فراخوانی کوئری <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.TyCtxt.html#method.type_of"><code>type_of</code></a> با <code>DefId</code> مربوط به <code>impl</code> به دست آورد، اما این <code>EarlyBinder&lt;Ty&gt;</code> برمی‌گرداند چون بلوک impl پارامترهای جنریکی را bind می‌کند که اگر بیرون impl باشیم باید discharge شوند.</p>
+<p>نوع <code>EarlyBinder</code> تابع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.EarlyBinder.html#method.instantiate_identity"><code>instantiate_identity</code></a> را برای باز‌کردن binder وقتی «از قبل درون آن» هستید فراهم می‌کند. این اساساً نسخهٔ کارآمدتر نوشتن <code>EarlyBinder::instantiate(GenericArgs::identity_for_item(..))</code> است. از نظر مفهومی binder را با نمونه‌سازی با جانگهدارها در universe ریشه discharge می‌کند (در چند فصل بعد دربارهٔ معنای آن صحبت می‌کنیم). در عمل اما فقط مقدار درون را بدون هیچ تغییری برمی‌گرداند.</p><nav class="page-nav"><a href="../generic-parameters-summary.html">→ تعریف پارامترهای جنریک</a><a href="binders.html">Binderها و ناحیه‌های مرتبهٔ بالاتر ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

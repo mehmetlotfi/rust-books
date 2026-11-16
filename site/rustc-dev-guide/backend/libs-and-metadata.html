@@ -1,0 +1,134 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>کتابخانه‌ها و فراداده — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="backend/libs-and-metadata"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="libraries-and-metadata"><a class="header" href="#libraries-and-metadata">کتابخانه‌ها و فراداده</a></h1>
+<p>وقتی کامپایلر به ارجاعی به یک crate خارجی برمی‌خورد، باید اطلاعاتی دربارهٔ آن crate بارگذاری کند.
+این فصل مروری بر این فرایند
+و قالب‌های فایلِ پشتیبانی‌شده برای کتابخانه‌های crate ارائه می‌دهد.</p>
+<h2 id="libraries"><a class="header" href="#libraries">کتابخانه‌ها</a></h2>
+<p>یک وابستگی crate را می‌توان از یک فایل <code>rlib</code>، <code>dylib</code> یا <code>rmeta</code> بارگذاری کرد.
+نکتهٔ کلیدی این قالب‌های فایل آن است که حاوی
+<a href="#metadata"><em>فراداده (metadata)</em></a>ی مختص <code>rustc</code> هستند.
+این فراداده به کامپایلر امکان می‌دهد اطلاعات کافی دربارهٔ crate خارجی کشف کند
+تا آیتم‌هایی را که دارد،
+ماکروهایی را که صادر می‌کند، و <em>بسیار</em> چیزهای دیگر را بفهمد.</p>
+<h3 id="rlib"><a class="header" href="#rlib">rlib</a></h3>
+<p>یک <code>rlib</code> یک <a href="https://en.wikipedia.org/wiki/Ar_(Unix)">فایل آرشیو</a> است که به فایل tar شباهت دارد.
+این قالب فایل مختص <code>rustc</code> است و ممکن است در طول زمان تغییر کند.
+این فایل شامل موارد زیر است:</p>
+<ul>
+<li>کد شیء (object code) که نتیجهٔ تولید کد است.
+این کد در پیوندزنی (linking) معمولی استفاده می‌شود.
+برای هر <a href="../backend/codegen.html">واحد تولید کد (codegen unit)</a> یک فایل <code>.o</code> جداگانه وجود دارد.
+می‌توان مرحلهٔ تولید کد را با گزینهٔ خط فرمان <a href="../../rustc/codegen-options/index.html#linker-plugin-lto"><code>-C linker-plugin-lto</code></a> نادیده گرفت،
+که یعنی هر فایل <code>.o</code> فقط شامل بیت‌کد LLVM خواهد بود.</li>
+<li><a href="https://llvm.org/docs/BitCodeFormat.html">بیت‌کد LLVM</a>، که نمایشی دودویی از بازنمایی میانی LLVM است
+و به‌صورت یک بخش (section) درون فایل‌های <code>.o</code> تعبیه می‌شود.
+از این می‌توان برای <a href="https://llvm.org/docs/LinkTimeOptimization.html">بهینه‌سازی زمان پیوند</a> (LTO) استفاده کرد.
+اگر LTO لازم نباشد، می‌توان آن را با گزینهٔ خط فرمان
+<a href="../../rustc/codegen-options/index.html#embed-bitcode"><code>-C embed-bitcode=no</code></a> حذف کرد تا زمان کامپایل بهبود یابد
+و فضای دیسک کمتری مصرف شود.</li>
+<li><a href="#metadata">فرادادهٔ</a> <code>rustc</code>، در فایلی به نام <code>lib.rmeta</code>.</li>
+<li>یک جدول نمادها (symbol table)، که اساساً فهرستی از نمادها است
+همراه با آفست‌هایی به فایل‌های شیءای که آن نماد را دارند.
+این برای فایل‌های آرشیو کاملاً معمول است.</li>
+</ul>
+<h3 id="dylib"><a class="header" href="#dylib">dylib</a></h3>
+<p>یک <code>dylib</code> کتابخانهٔ اشتراکی مختص پلتفرم است.
+این فایل <a href="#metadata">فرادادهٔ</a> <code>rustc</code> را در یک بخش پیوند ویژه به نام <code>.rustc</code> دارد.</p>
+<h3 id="rmeta"><a class="header" href="#rmeta">rmeta</a></h3>
+<p>یک فایل <code>rmeta</code> قالبی دودویی و سفارشی است که <a href="#metadata">فراداده</a> مربوط به crate را در خود دارد.
+از این فایل می‌توان برای «بررسی»های سریع یک پروژه با نادیده گرفتن کل تولید کد
+(همان‌طور که با <code>cargo check</code> انجام می‌شود)، گردآوری اطلاعات کافی برای
+مستندسازی (همان‌طور که با <code>cargo doc</code> انجام می‌شود)، یا برای <a href="#pipelining">خط‌لوله‌سازی (pipelining)</a> استفاده کرد.
+این فایل در صورتی ایجاد می‌شود که از گزینهٔ خط فرمان <a href="../../rustc/command-line-arguments.html#option-emit"><code>--emit=metadata</code></a> استفاده شود.</p>
+<p>فایل‌های <code>rmeta</code> از پیوندزنی پشتیبانی نمی‌کنند، چون فایل‌های شیء کامپایل‌شده را در خود ندارند.</p>
+<h2 id="metadata"><a class="header" href="#metadata">فراداده</a></h2>
+<p>فراداده عناصر متنوع بسیاری را در بر می‌گیرد.
+این راهنما به جزئیات همهٔ فیلدهای آن نمی‌پردازد.
+توصیه می‌شود برای دستیابی به تصویری از عناصر مختلف آن، تعریف
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/rmeta/struct.CrateRoot.html"><code>CrateRoot</code></a> را مرور کنید.
+همهٔ مطالب مربوط به کدگذاری و کدگشایی فراداده در بستهٔ <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/index.html"><code>rustc_metadata</code></a> قرار دارد.</p>
+<p>در اینجا چند نکتهٔ برجسته از چیزهایی که فراداده در بر دارد آمده است:</p>
+<ul>
+<li>نسخهٔ کامپایلر <code>rustc</code>.
+کامپایلر از بارگذاری فایل‌های هر نسخهٔ دیگری خودداری می‌کند.</li>
+<li><a href="#strict-version-hash">هش نسخهٔ سخت‌گیرانه (Strict Version Hash)</a> (SVH).
+این به اطمینان از بارگذاری وابستگی درست کمک می‌کند.</li>
+<li><a href="#stable-crate-id">شناسهٔ پایدار crate (Stable Crate Id)</a>.
+این هشی است که برای شناسایی crateها به‌کار می‌رود.</li>
+<li>اطلاعاتی دربارهٔ همهٔ فایل‌های منبع در کتابخانه.
+این اطلاعات برای کارهای گوناگون به‌کار می‌آید، مانند تشخیص‌هایی (diagnostics) که به منابع درون یک
+وابستگی اشاره می‌کنند.</li>
+<li>اطلاعاتی دربارهٔ ماکروها، صفت‌ها (traits)، نوع‌ها و آیتم‌های صادرشده.
+به‌طور کلی،
+هر چیزی که وقتی یک مسیر به چیزی درون یک وابستگی crate ارجاع می‌دهد باید شناخته شود.</li>
+<li><a href="../mir/index.html">MIR</a> کدگذاری‌شده.
+این اختیاری است و فقط در صورتی کدگذاری می‌شود که برای تولید کد لازم باشد.
+<code>cargo check</code> به دلایل کارایی از این صرف‌نظر می‌کند.</li>
+</ul>
+<h3 id="strict-version-hash"><a class="header" href="#strict-version-hash">هش نسخهٔ سخت‌گیرانه (Strict Version Hash)</a></h3>
+<p>هش نسخهٔ سخت‌گیرانه (Strict Version Hash؛ <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_data_structures/svh/struct.Svh.html">SVH</a>، که با نام «هش crate» نیز شناخته می‌شود) هشی ۶۴ بیتی است
+که برای اطمینان از بارگذاری وابستگی‌های درست crate به‌کار می‌رود.
+ممکن است یک پوشه چندین نسخهٔ یک وابستگی یکسان را شامل شود
+که با تنظیمات متفاوت یا از منابع متفاوت ساخته شده‌اند.
+بارگذار crate هر crate‌ای را که SVH نادرست داشته باشد نادیده می‌گیرد.</p>
+<p>SVH همچنین برای نام فایل نشست <a href="../queries/incremental-compilation.html">کامپایل افزایشی</a> استفاده می‌شود،
+هرچند این کاربرد بیشتر جنبهٔ تاریخی دارد.</p>
+<p>این هش عناصر گوناگونی را در بر می‌گیرد:</p>
+<ul>
+<li>هش‌های گره‌های HIR.</li>
+<li>همهٔ هش‌های crateهای بالادستی.</li>
+<li>همهٔ نام‌های فایل منبع.</li>
+<li>هش‌های برخی پرچم‌های خط فرمان (مانند <code>-C metadata</code> از طریق <a href="#stable-crate-id">شناسهٔ پایدار
+crate</a>، و همهٔ گزینه‌های خط فرمان که با <code>[TRACKED]</code> علامت‌گذاری شده‌اند).</li>
+</ul>
+<p>برای دیدن اینکه هش واقعاً کجا محاسبه می‌شود، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast_lowering/fn.compute_hir_hash.html"><code>compute_hir_hash</code></a> را ببینید.</p>
+<h3 id="stable-crate-id"><a class="header" href="#stable-crate-id">شناسهٔ پایدار crate (Stable Crate Id)</a></h3>
+<p>‏<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/def_id/struct.StableCrateId.html"><code>StableCrateId</code></a> هشی ۶۴ بیتی است که برای شناسایی crateهای مختلفی که ممکن است نام یکسانی داشته باشند به‌کار می‌رود.
+این هشِ نام crate و همهٔ
+گزینه‌های خط فرمان <a href="../../rustc/codegen-options/index.html#metadata"><code>-C metadata</code></a> است که در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/def_id/struct.StableCrateId.html#method.new"><code>StableCrateId::new</code></a> محاسبه می‌شود.
+در جاهای گوناگونی مانند تغییر نام نمادها (symbol name mangling)، بارگذاری crate و
+بسیاری موارد دیگر استفاده می‌شود.</p>
+<p>به‌طور پیش‌فرض، نام همهٔ نمادهای Rust دچار mangling می‌شود و شناسهٔ پایدار crate در آن‌ها گنجانده می‌شود.
+این کار اجازه می‌دهد چندین نسخه از یک crate با هم گنجانده شوند.
+Cargo به‌طور خودکار هش‌های <code>-C metadata</code> را بر اساس عوامل گوناگونی تولید می‌کند، مانند
+نسخهٔ بسته، منبع، و نوع هدف (یک lib و یک test می‌توانند نام crate یکسانی داشته باشند،
+بنابراین باید از هم متمایز شوند).</p>
+<h2 id="crate-loading"><a class="header" href="#crate-loading">بارگذاری crate</a></h2>
+<p>بارگذاری crate می‌تواند پیچیدگی‌های ظریف و فراوانی داشته باشد.
+در طول <a href="../name-resolution.html">تفکیک نام</a>، وقتی به یک crate خارجی ارجاع داده می‌شود (از طریق <code>extern crate</code> یا
+یک مسیر)، حل‌کنندهٔ نام (resolver) از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/creader/struct.CStore.html"><code>CStore</code></a> استفاده می‌کند که مسئول یافتن
+کتابخانه‌های crate و بارگذاری <a href="#metadata">فراداده</a> آن‌هاست.
+پس از بارگذاری وابستگی، <code>CStore</code> اطلاعاتی را که resolver برای انجام کارش لازم دارد
+(مانند بسط ماکروها، تحلیل مسیرها و غیره) فراهم می‌کند.</p>
+<p>برای بارگذاری هر crate خارجی، <code>CStore</code> از یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/locator/struct.CrateLocator.html"><code>CrateLocator</code></a> استفاده می‌کند تا
+فایل‌های درست را برای یک crate مشخص واقعاً پیدا کند.
+مستندات بسیار خوبی در ماژول <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/locator/index.html"><code>locator</code></a> هست که جزئیات نحوهٔ کار بارگذاری را شرح می‌دهد، و
+قویاً توصیه می‌کنم آن را بخوانید تا تصویر کامل را به دست آورید.</p>
+<p>مکان یک وابستگی می‌تواند از چند جای مختلف به دست آید.
+وابستگی‌های مستقیم معمولاً با پرچم‌های <code>--extern</code> داده می‌شوند و بارگذار می‌تواند
+مستقیماً به آن‌ها نگاه کند.
+وابستگی‌های مستقیم اغلب ارجاعاتی به وابستگی‌های خودشان دارند که آن‌ها هم باید بارگذاری شوند.
+این‌ها معمولاً با
+پویش پوشه‌هایی که با پرچم <code>-L</code> داده شده‌اند و یافتن هر فایلی که فراداده‌اش
+نام crate و <a href="#strict-version-hash">SVH</a> منطبق داشته باشد پیدا می‌شوند.
+بارگذار همچنین به <a href="../building/bootstrapping/what-bootstrapping-does.html#what-is-a-sysroot">sysroot</a> نگاه می‌کند تا وابستگی‌ها را پیدا کند.</p>
+<p>هنگام بارگذاری crateها، آن‌ها در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/creader/struct.CStore.html"><code>CStore</code></a> نگه داشته می‌شوند و فرادادهٔ crate
+در ساختار <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/rmeta/decoder/struct.CrateMetadata.html"><code>CrateMetadata</code></a> بسته‌بندی می‌شود.
+پس از تحلیل نام و بسط،
+<code>CStore</code> راه خود را به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.GlobalCtxt.html"><code>GlobalCtxt</code></a> برای بقیهٔ کامپایل باز می‌کند.</p>
+<h2 id="pipelining"><a class="header" href="#pipelining">خط‌لوله‌سازی (Pipelining)</a></h2>
+<p>یک ترفند برای بهبود زمان کامپایل آن است که ساخت یک crate را به محض در دسترس قرار گرفتن
+فرادادهٔ وابستگی‌هایش آغاز کنیم.
+برای یک کتابخانه، نیازی به منتظر ماندن برای پایان تولید کد وابستگی‌ها نیست.
+Cargo این تکنیک را با گفتن به <code>rustc</code> پیاده می‌کند تا برای هر
+وابستگی یک فایل <a href="#rmeta"><code>rmeta</code></a> و نیز یک <a href="#rlib"><code>rlib</code></a> تولید کند.
+<code>rustc</code> به‌محض اینکه بتواند،
+فایل <code>rmeta</code> را روی دیسک ذخیره می‌کند، پیش از آنکه به مرحلهٔ تولید کد ادامه دهد.
+کامپایلر یک پیام JSON می‌فرستد تا به ابزار ساخت اطلاع دهد که
+در صورت امکان می‌تواند ساخت crate بعدی را آغاز کند.</p>
+<p>سامانهٔ <a href="#crate-loading">بارگذاری crate</a> آن‌قدر هوشمند است که وقتی
+یک فایل <code>rmeta</code> ببیند، در صورتی که <code>rlib</code> وجود نداشته باشد (یا فقط بخشی از آن نوشته شده باشد) از آن استفاده کند.</p>
+<p>این خط‌لوله‌سازی برای فایل‌های باینری ممکن نیست، زیرا مرحلهٔ پیوند
+به تولید کد همهٔ وابستگی‌هایش نیاز دارد.
+در آینده، ممکن است
+بتوان با جدا کردن پیوند در یک فرمان مجزا این وضعیت را بیشتر بهبود داد
+(<a href="https://github.com/rust-lang/rust/issues/64191">#64191</a> را ببینید).</p><nav class="page-nav"><a href="../debugging-support-in-rustc.html">→ (یادداشت‌های درس) پشتیبانی از اشکال‌زدایی در کامپایلر Rust</a><a href="../profile-guided-optimization.html">بهینه‌سازی مبتنی بر پروفایل ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

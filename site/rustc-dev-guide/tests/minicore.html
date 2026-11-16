@@ -1,0 +1,53 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>Minicore — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tests/minicore"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="minicore-test-auxiliary-using-core-stubs"><a class="header" href="#minicore-test-auxiliary-using-core-stubs">تست کمکی <code>minicore</code>: استفاده از stubهای <code>core</code></a></h1>
+<p><a href="https://github.com/rust-lang/rust/tree/HEAD/tests/auxiliary/minicore.rs"><code>tests/auxiliary/minicore.rs</code></a> یک تست کمکی برای مجموعه‌های تست ui/codegen/assembly/mir-opt است.
+stubهای <code>core</code> را برای تست‌هایی فراهم می‌کند که باید
+برای هدف‌های cross-compile ساخته شوند اما نیاز/تمایلی به اجرا ندارند.</p>
+<div class="warning">
+<p>لطفاً توجه کنید که <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/auxiliary/minicore.rs"><code>minicore</code></a> فقط برای آیتم‌های <code>core</code> در نظر گرفته شده، و صراحتاً
+<strong>نه</strong> برای آیتم‌های <code>std</code> یا <code>alloc</code>، چون آیتم‌های <code>core</code> برای طیف گسترده‌تری از تست‌ها کاربرد دارند.</p>
+</div>
+
+<p>یک تست می‌تواند با مشخص‌کردن directive با نام <code>//@ add-minicore</code> از <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/auxiliary/minicore.rs"><code>minicore</code></a> استفاده کند.
+سپس تست را با <code>#![feature(no_core)]</code> + <code>#![no_std]</code> + <code>#![no_core]</code> علامت بزنید،
+و crate را با <code>extern crate minicore</code> (edition 2015)
+یا <code>use minicore</code> (edition 2018 به بعد) به تست وارد کنید.</p>
+<h2 id="implied-compiler-flags"><a class="header" href="#implied-compiler-flags">Implied compiler flags</a></h2>
+<p>به‌دلیل ماهیت <code>no_std</code> + <code>no_core</code> این تست‌ها، <code>//@ add-minicore</code>
+به‌طور ضمنی لازم می‌کند تست با <code>-C panic=abort</code> ساخته شود.
+<strong>panicهای unwinding پشتیبانی نمی‌شوند.</strong></p>
+<p>تست‌ها همچنین با <code>-C force-unwind-tables=yes</code> ساخته می‌شوند تا directiveهای CFI
+در تست‌های assembly حفظ شوند.</p>
+<p>خلاصه: <code>//@ add-minicore</code> دو پرچم کامپایلر را ضمنی می‌کند:</p>
+<ol>
+<li><code>-C panic=abort</code></li>
+<li><code>-C force-unwind-tables=yes</code></li>
+</ol>
+<h2 id="adding-more-core-stubs"><a class="header" href="#adding-more-core-stubs">افزودن stubهای بیشتر <code>core</code></a></h2>
+<p>اگر دیدید آیتمی از <code>core</code> در stub با نام <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/auxiliary/minicore.rs"><code>minicore</code></a> نیست، افزودن آن به تست کمکی را در نظر بگیرید اگر احتمالاً استفاده می‌شود یا از قبل
+بیش از یک تست به آن نیاز دارد.</p>
+<h2 id="staying-in-sync-with-core"><a class="header" href="#staying-in-sync-with-core">همگام‌ماندن با <code>core</code></a></h2>
+<p>آیتم‌های <code>minicore</code> باید با <code>core</code> به‌روز نگه داشته شوند.
+برای خروجی تشخیصی سازگار بین استفاده از <code>core</code> و <code>minicore</code>، هر attribute با نام <code>diagnostic</code>
+(مثل <code>on_unimplemented</code>) باید دقیقاً در <code>minicore</code> بازتولید شود.</p>
+<h2 id="example-codegen-test-that-uses-minicore"><a class="header" href="#example-codegen-test-that-uses-minicore">مثال تست codegen که از <code>minicore</code> استفاده می‌کند</a></h2>
+<pre><code class="language-rust no_run">//@ add-minicore
+//@ revisions: meow bark
+//@[meow] compile-flags: --target=x86_64-unknown-linux-gnu
+//@[meow] needs-llvm-components: x86
+//@[bark] compile-flags: --target=wasm32-unknown-unknown
+//@[bark] needs-llvm-components: webassembly
+
+#![crate_type = "lib"]
+#![feature(no_core)]
+#![no_std]
+#![no_core]
+
+extern crate minicore;
+use minicore::*;
+
+struct Meow;
+impl Copy for Meow {} // `Copy` here is provided by `minicore`
+
+// CHECK-LABEL: meow
+#[unsafe(no_mangle)]
+fn meow() {}</code></pre><nav class="page-nav"><a href="directives.html">→ دستورالعمل‌های آزمون</a><a href="ecosystem.html">آزمون اکوسیستم ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

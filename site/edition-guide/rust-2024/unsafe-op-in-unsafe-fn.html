@@ -1,0 +1,25 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>هشدار unsafe_op_in_unsafe_fn — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2024/unsafe-op-in-unsafe-fn"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="unsafe_op_in_unsafe_fn-warning"><a class="header" href="#unsafe_op_in_unsafe_fn-warning">هشدار unsafe_op_in_unsafe_fn</a></h1>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<ul>
+<li>lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html#unsafe-op-in-unsafe-fn"><code>unsafe_op_in_unsafe_fn</code></a> اکنون به‌طور پیش‌فرض هشدار می‌دهد. این هشدار فراخوانی عملیات unsafe در تابع‌های unsafe را بدون بلوک unsafe صریح شناسایی می‌کند.</li>
+</ul>
+<h2 id="details"><a class="header" href="#details">جزئیات</a></h2>
+<p>lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html#unsafe-op-in-unsafe-fn"><code>unsafe_op_in_unsafe_fn</code></a> زمانی فعال می‌شود که در یک تابع unsafe <a href="../../reference/unsafety.html">عملیات unsafe</a> بدون <a href="../../reference/expressions/block-expr.html#unsafe-blocks">بلوک صریح <code>unsafe {}</code></a> وجود داشته باشد.</p>
+<pre><code class="language-rust"><span class="boring">#![warn(unsafe_op_in_unsafe_fn)]
+</span>unsafe fn get_unchecked&lt;T&gt;(x: &amp;[T], i: usize) -&gt; &amp;T {
+  x.get_unchecked(i) // WARNING: requires unsafe block
+}</code></pre>
+<p>راه‌حل این است که هر عملیات unsafe را درون یک بلوک <code>unsafe</code> قرار دهید:</p>
+<pre><code class="language-rust"><span class="boring">#![deny(unsafe_op_in_unsafe_fn)]
+</span>unsafe fn get_unchecked&lt;T&gt;(x: &amp;[T], i: usize) -&gt; &amp;T {
+  unsafe { x.get_unchecked(i) }
+}</code></pre>
+<p>هدف این تغییر کمک به محافظت در برابر استفادهٔ ناخواسته از عملیات unsafe در یک تابع unsafe است. کلیدواژهٔ <code>unsafe</code> در تابع دو نقش را ایفا می‌کرد. یکی اعلام اینکه <em>فراخوانی</em> تابع به unsafe نیاز دارد و فراخواننده مسئول رعایت الزامات ایمنی بیشتر است. نقش دیگر اجازه دادن به استفاده از عملیات unsafe درون تابع بود. تشخیص داده شد که این نقش دوم بدون بلوک‌های <code>unsafe</code> صریح بیش از حد پرخطر است.</p>
+<p>اطلاعات بیشتر و انگیزه‌ها را می‌توانید در <a href="https://rust-lang.github.io/rfcs/2585-unsafe-block-in-unsafe-fn.html">RFC #2585</a> بیابید.</p>
+<h2 id="migration"><a class="header" href="#migration">مهاجرت</a></h2>
+<p>lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html#unsafe-op-in-unsafe-fn"><code>unsafe_op_in_unsafe_fn</code></a> بخشی از گروه lint با نام <code>rust-2024-compatibility</code> است. برای اینکه کد خود را با ویرایش Rust 2024 سازگار کنید، این دستور را اجرا کنید:</p>
+<pre><code class="language-sh">cargo fix --edition
+</code></pre>
+<p>به‌جای آن، می‌توانید lint را به‌صورت دستی فعال کنید تا جاهایی را که باید بلوک‌های unsafe اضافه شوند پیدا کنید، یا آن را روی <code>allow</code> بگذارید تا lint کاملاً خاموش شود.</p>
+<pre><code class="language-rust">// Add this to the root of your crate to do a manual migration.
+#![warn(unsafe_op_in_unsafe_fn)]</code></pre><nav class="page-nav"><a href="unsafe-attributes.html">→ attributeهای unsafe</a><a href="static-mut-references.html">ممنوعیت ارجاع به static mut ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

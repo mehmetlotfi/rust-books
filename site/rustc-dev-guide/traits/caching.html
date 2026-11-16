@@ -1,0 +1,44 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>ظرافت‌های کش‌کردن — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="traits/caching"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="caching-and-subtle-considerations-therewith"><a class="header" href="#caching-and-subtle-considerations-therewith">کش کردن و ملاحظات ظریف آن</a></h1>
+<p>به‌طور کلی تلاش می‌کنیم نتایج انتخاب صفت (trait selection) را کش کنیم. این
+فرایندی نسبتاً پیچیده است. بخشی از دلیل این است که
+می‌خواهیم بتوانیم نتایج را حتی زمانی که همهٔ نوع‌های موجود در مرجع صفت (trait
+reference) به‌طور کامل معلوم نیستند کش کنیم. در آن صورت ممکن است فرایند
+انتخاب صفت روی متغیرهای نوع هم اثر بگذارد، بنابراین
+باید بتوانیم نه‌تنها <em>نتیجهٔ</em> فرایند انتخاب را کش کنیم،
+بلکه اثرات آن را روی متغیرهای نوع نیز <em>بازپخش</em> (replay) کنیم.</p>
+<h2 id="an-example"><a class="header" href="#an-example">یک مثال</a></h2>
+<p>ایدهٔ سطح بالای نحوهٔ کار کش این است که ابتدا همهٔ متغیرهای استنتاج نامقید (unbound) را
+با نسخه‌های placeholder جایگزین می‌کنیم. بنابراین،
+اگر مرجع صفتی مانند <code>usize : Foo&lt;$t&gt;</code> داشته باشیم که در آن <code>$t</code> یک متغیر استنتاج
+نامقید است، ممکن است آن را با <code>usize : Foo&lt;$0&gt;</code> جایگزین کنیم که در آن
+<code>$0</code> یک نوع placeholder است. سپس این را در کش جست‌وجو می‌کنیم.</p>
+<p>اگر برخورد (hit) پیدا کنیم، آن برخورد گام بعدیِ بلافصل
+در فرایند انتخاب را به ما می‌گوید (مثلاً impl شمارهٔ ۲۲ را اعمال کن، یا بند where
+با عبارت <code>X : Foo&lt;Y&gt;</code> را اعمال کن).</p>
+<p>از طرف دیگر، اگر برخوردی نباشد، باید <a href="./resolution.html#selection">فرایند انتخاب</a> را
+از ابتدا طی کنیم. فرض کنید به این نتیجه می‌رسیم که تنها
+impl ممکن همین است، با def-id برابر ۲۲:</p>
+<pre><code class="language-rust ignore">impl Foo&lt;isize&gt; for usize { ... } // Impl #22</code></pre>
+<p>سپس در کش ثبت می‌کنیم <code>usize : Foo&lt;$0&gt; =&gt; ImplCandidate(22)</code>. بعد
+<code>ImplCandidate(22)</code> را <a href="./resolution.html#confirmation">تأیید</a> (confirm) می‌کنیم که (به‌عنوان اثر جانبی)
+<code>$t</code> را با <code>isize</code> یکی (unify) می‌کند.</p>
+<p>حالا، در زمانی بعد، ممکن است به <code>usize : Foo&lt;$u&gt;</code> برسیم. وقتی با placeholder جایگزین شود، این
+مانند قبل <code>usize : Foo&lt;$0&gt;</code> می‌شود و در نتیجه جست‌وجوی کش موفق می‌شود و
+<code>ImplCandidate(22)</code> را برمی‌گرداند. <code>ImplCandidate(22)</code> را تأیید می‌کنیم که
+(به‌عنوان اثر جانبی) <code>$u</code> را با <code>isize</code> یکی می‌کند.</p>
+<h2 id="where-clauses-and-the-local-vs-global-cache"><a class="header" href="#where-clauses-and-the-local-vs-global-cache">بندهای where و کش محلی در برابر کش سراسری</a></h2>
+<p>یک تعامل ظریف این است که نتایج جست‌وجوی صفت بسته به اینکه کدام بندهای where
+در دامنه باشند متفاوت خواهد بود. بنابراین در واقع
+<em>دو</em> کش داریم، یکی محلی و یکی سراسری. کش محلی به
+<a href="../typing-parameter-envs.html"><code>ParamEnv</code></a> متصل است و کش سراسری به
+<a href="../ty.html"><code>tcx</code></a>. هر زمان نتیجه ممکن است به
+بندهای where موجود در دامنه وابسته باشد از کش محلی استفاده می‌کنیم. تعیین اینکه کدام کش
+استفاده شود توسط متد <code>pick_candidate_cache</code> در <code>select.rs</code> انجام می‌شود. در
+حال حاضر از یک قاعدهٔ بسیار ساده و محافظه‌کارانه استفاده می‌کنیم: اگر هر
+بند whereای در دامنه باشد، از کش محلی استفاده می‌کنیم. پیش‌تر
+سعی می‌کردیم تمایزهای ریزتری قائل شویم، اما این به یک سری
+باگ آزاردهنده و عجیب مانند <a href="https://github.com/rust-lang/rust/issues/22019">#22019</a> و <a href="https://github.com/rust-lang/rust/issues/18290">#18290</a> منجر شد. به نظر می‌رسد این قاعدهٔ ساده
+به‌روشنی ایمن است و همچنان نرخ برخورد بسیار بالایی را حفظ می‌کند
+(حدود ۹۵٪ هنگام کامپایل rustc).</p>
+<p><strong>TODO</strong>: به نظر می‌رسد <code>pick_candidate_cache</code> دیگر وجود ندارد. به‌طور
+کلی، آیا این بخش هنوز اصلاً درست است؟</p><nav class="page-nav"><a href="hrtb.html">→ کران‌های صفت مرتبهٔ بالاتر</a><a href="implied-bounds.html">کران‌های ضمنی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,38 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0283 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0283"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>کامپایلر نتوانست یک نوع را استنتاج کند و یک حاشیه‌نویسی نوع (type annotation) خواست.</p>
+<p>کد دارای خطا:</p>
+<pre><code class="language-compile_fail E0283">let x = "hello".chars().rev().collect();
+</code></pre>
+<p>این خطا نشان می‌دهد که استنتاج نوع به یک نوع ممکن یکتا نرسیده و اطلاعات بیشتری لازم است. در بیشتر موارد می‌توان این اطلاعات را با افزودن یک حاشیه‌نویسی نوع فراهم کرد. گاهی لازم است پارامتر نوع جنریک را دستی مشخص کنید.</p>
+<p>یک مثال رایج، متد <code>collect</code> روی <code>Iterator</code> است. این متد یک پارامتر نوع جنریک با قید <code>FromIterator</code> دارد که برای یک iterator از <code>char</code>، از جمله توسط <code>Vec</code> و <code>String</code> پیاده‌سازی شده است. قطعه کد زیر را در نظر بگیرید که کاراکترهای یک رشته را معکوس می‌کند:</p>
+<p>در مثال کد اول، کامپایلر نمی‌تواند استنتاج کند که نوع <code>x</code> باید چه باشد: هم <code>Vec&lt;char&gt;</code> و هم <code>String</code> گزینه‌های مناسبی هستند. برای مشخص کردن اینکه کدام نوع به کار رود، می‌توانید روی <code>x</code> یک حاشیه‌نویسی نوع بگذارید:</p>
+<pre><code>let x: Vec&lt;char&gt; = "hello".chars().rev().collect();
+</code></pre>
+<p>لازم نیست نوع کامل حاشیه‌نویسی شود. پس از رفع ابهام، کامپایلر می‌تواند بقیه را استنتاج کند:</p>
+<pre><code>let x: Vec&lt;_&gt; = "hello".chars().rev().collect();
+</code></pre>
+<p>راه دیگر برای دادن اطلاعات کافی به کامپایلر، مشخص کردن پارامتر نوع جنریک است:</p>
+<pre><code>let x = "hello".chars().rev().collect::&lt;Vec&lt;char&gt;&gt;();
+</code></pre>
+<p>باز هم، اگر کامپایلر بتواند نوع را استنتاج کند، لازم نیست نوع کامل را مشخص کنید:</p>
+<pre><code>let x = "hello".chars().rev().collect::&lt;Vec&lt;_&gt;&gt;();
+</code></pre>
+<p>یک مثال مستقل در ادامه آمده است:</p>
+<pre><code class="language-compile_fail E0283">struct Foo;
+
+impl Into&lt;u32&gt; for Foo {
+    fn into(self) -&gt; u32 { 1 }
+}
+
+let foo = Foo;
+let bar: u32 = foo.into() * 1u32;
+</code></pre>
+<p>این خطا را می‌توان با افزودن حاشیه‌نویسی‌های نوعی که اطلاعات ازدست‌رفته را در اختیار کامپایلر می‌گذارند برطرف کرد. در این مورد، راه‌حل مشخص کردن پارامتر نوع صفت است:</p>
+<pre><code>struct Foo;
+
+impl Into&lt;u32&gt; for Foo {
+    fn into(self) -&gt; u32 { 1 }
+}
+
+let foo = Foo;
+let bar: u32 = Into::&lt;u32&gt;::into(foo) * 1u32;
+</code></pre><nav class="page-nav"><a href="../errors/E0282.html">→ E0282</a><a href="../errors/E0284.html">E0284 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

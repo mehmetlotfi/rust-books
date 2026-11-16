@@ -1,0 +1,55 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>کران‌های ضمنی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="traits/implied-bounds"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="implied-bounds"><a class="header" href="#implied-bounds">کران‌های ضمنی</a></h1>
+<p>در حال حاضر کران‌های ناحیهٔ ضمنی (implied region bounds) را اضافه می‌کنیم تا از annotationهای صریح بی‌نیاز شویم. برای مثال،
+<code>fn foo&lt;'a, T&gt;(x: &amp;'a T)</code> می‌تواند بدون اینکه آن را ذکر کند، آزادانه فرض کند که <code>T: 'a</code> برقرار است.</p>
+<p>دو نوع کران ضمنی وجود دارد: صریح و ضمنی.
+کران‌های ضمنیِ صریح به <code>fn clauses_of</code> آیتم مربوطه افزوده می‌شوند،
+در حالی که کران‌های ضمنیِ ضمنی… خب، به‌صورت ضمنی مدیریت می‌شوند.</p>
+<h2 id="explicit-implied-bounds"><a class="header" href="#explicit-implied-bounds">کران‌های ضمنیِ صریح</a></h2>
+<p>کران‌های ضمنیِ صریح در <a href="https://github.com/rust-lang/rust/blob/5b8bc568d28b2e922290c9a966b3231d0ce9398b/compiler/rustc_hir_analysis/src/outlives/mod.rs#L20"><code>fn inferred_outlives_of</code></a> محاسبه می‌شوند.
+فقط ADTها و <a href="../appendix/glossary.html#cta">CTAها</a> کران ضمنیِ صریح دارند
+که از طریق یک الگوریتم نقطهٔ ثابت (fixpoint) در query ای به نام <a href="https://github.com/rust-lang/rust/blob/5b8bc568d28b2e922290c9a966b3231d0ce9398b/compiler/rustc_hir_analysis/src/outlives/mod.rs#L83"><code>fn inferred_outlives_crate</code></a> محاسبه می‌شوند.</p>
+<p>ما <a href="https://github.com/rust-lang/rust/blob/5b8bc568d28b2e922290c9a966b3231d0ce9398b/compiler/rustc_hir_analysis/src/outlives/implicit_infer.rs#L89"><code>fn insert_required_clauses_to_be_wf</code></a> را روی همهٔ فیلدهای همهٔ ADTهای crate به‌کار می‌بریم.
+این تابع کران‌های outlives را برای هر مؤلفهٔ فیلد با
+پیاده‌سازی‌ای جداگانه محاسبه می‌کند.</p>
+<p>برای ADTها، شیءهای صفت (trait objects) و نوع‌های وابسته (associated types)، بندهای مورد نیازِ اولیه در
+<a href="https://github.com/rust-lang/rust/blob/5b8bc568d28b2e922290c9a966b3231d0ce9398b/compiler/rustc_hir_analysis/src/outlives/implicit_infer.rs#L238"><code>fn check_explicit_clauses</code></a> محاسبه می‌شوند.
+این تابع صرفاً از <code>fn explicit_clauses_of</code> بدون تفصیل (elaborate) آن‌ها استفاده می‌کند.</p>
+<p>بندهای ناحیه از طریق <a href="https://github.com/rust-lang/rust/blob/5b8bc568d28b2e922290c9a966b3231d0ce9398b/compiler/rustc_hir_analysis/src/outlives/utils.rs#L15"><code>fn insert_outlives_clause</code></a> اضافه می‌شوند.
+این تابع یک بند outlives را می‌گیرد،
+آن را تجزیه می‌کند و مؤلفه‌ها را به‌عنوان بندهای صریح فقط
+در صورتی اضافه می‌کند که ناحیهٔ outlived یک پارامتر ناحیه باشد.
+<a href="https://github.com/rust-lang/rust/blob/5b8bc568d28b2e922290c9a966b3231d0ce9398b/compiler/rustc_hir_analysis/src/outlives/utils.rs#L159-L165">این تابع الزام‌های <code>'static</code> را اضافه نمی‌کند</a>.</p>
+<!-- FIXME: update the links to point at the version of the repo with the renamed functions after #160343 lands -->
+<h2 id="implicit-implied-bounds"><a class="header" href="#implicit-implied-bounds">کران‌های ضمنیِ ضمنی</a></h2>
+<p>از آنجا که هنوز قادر به مدیریت استلزام‌ها (implications) در binderها نیستیم، نمی‌توانیم الزام‌های outlives
+مربوط به implها و توابع را به‌سادگی به‌عنوان گزاره‌های صریح اضافه کنیم.</p>
+<h3 id="using-implicit-implied-bounds-as-assumptions"><a class="header" href="#using-implicit-implied-bounds-as-assumptions">استفاده از کران‌های ضمنیِ ضمنی به‌عنوان فرض‌ها</a></h3>
+<p>این کران‌ها به <code>ParamEnv</code> خود آیتم مورد نظر اضافه نمی‌شوند.
+برای تفکیک ناحیهٔ لغوی (lexical region resolution)،
+با استفاده از <a href="https://github.com/rust-lang/rust/blob/8239a37f9c0951a037cfc51763ea52a20e71e6bd/compiler/rustc_infer/src/infer/outlives/env.rs#L50-L55"><code>fn OutlivesEnvironment::from_normalized_bounds</code></a> اضافه می‌شوند.
+به‌طور مشابه، در MIR borrowck آن‌ها را با استفاده از
+<a href="https://github.com/rust-lang/rust/blob/5b8bc568d28b2e922290c9a966b3231d0ce9398b/compiler/rustc_borrowck/src/type_check/free_region_relations.rs#L316"><code>fn UniversalRegionRelationsBuilder::add_implied_bounds</code></a> اضافه می‌کنیم.</p>
+<p><a href="https://github.com/rust-lang/rust/blob/91cae1dcdcf1a31bd8a92e4a63793d65cfe289bb/compiler/rustc_borrowck/src/type_check/free_region_relations.rs#L258-L332">ما در MIR borrowck کران‌های ضمنی را برای امضای تابع و سرایند impl اضافه می‌کنیم</a>.
+بیرون از MIR borrowck، الزام‌های outlives را برای نوع‌هایی که
+query ای به نام <a href="https://github.com/rust-lang/rust/blob/5b8bc568d28b2e922290c9a966b3231d0ce9398b/compiler/rustc_ty_utils/src/implied_bounds.rs#L21"><code>fn assumed_wf_types</code></a> برمی‌گرداند، اضافه می‌کنیم.</p>
+<p>قیدهای outlives فرض‌شده برای کران‌های ضمنیِ ضمنی با استفاده از
+query ای به نام <a href="https://github.com/rust-lang/rust/blob/5b8bc568d28b2e922290c9a966b3231d0ce9398b/compiler/rustc_traits/src/implied_outlives_bounds.rs#L18C4-L18C27"><code>fn implied_outlives_bounds</code></a> محاسبه می‌شوند.
+این query به‌طور مستقیم <a href="https://github.com/rust-lang/rust/blob/5b8bc568d28b2e922290c9a966b3231d0ce9398b/compiler/rustc_trait_selection/src/traits/query/type_op/implied_outlives_bounds.rs#L95-L96">کران‌های outlives مورد نیاز را از <code>fn wf::obligations</code> استخراج می‌کند</a>.</p>
+<p>MIR borrowck قیدهای outlives را هم برای نوع‌های نرمال‌شده و هم نرمال‌نشده اضافه می‌کند،
+در حالی که تفکیک ناحیهٔ لغوی <a href="https://github.com/rust-lang/rust/blob/91cae1dcdcf1a31bd8a92e4a63793d65cfe289bb/compiler/rustc_trait_selection/src/traits/engine.rs#L227-L250">فقط از نوع‌های نرمال‌نشده استفاده می‌کند</a>.</p>
+<h3 id="proving-implicit-implied-bounds"><a class="header" href="#proving-implicit-implied-bounds">اثبات کران‌های ضمنیِ ضمنی</a></h3>
+<p>از آنجا که کران‌های ضمنیِ ضمنی در <code>fn clauses_of</code> گنجانده نمی‌شوند، باید
+جداگانه مطمئن شویم که واقعاً برقرارند.
+معمولاً این کار را با بررسی اینکه
+همهٔ نوع‌های به‌کاررفته خوش‌ساخت (well-formed) هستند و با صدور گزاره‌های <code>WellFormed</code> انجام می‌دهیم.</p>
+<p>هنگام نمونه‌سازی implها نمی‌توانیم گزاره‌های <code>WellFormed</code> صادر کنیم، زیرا این کار به
+چرخه‌هایی در حل‌کنندهٔ صفت می‌انجامد که در حال حاضر اغلب استقرایی (inductive) هستند.
+همچنین قیدهایی را که ناحیه‌های مرتبهٔ بالاتر را شامل می‌شوند صادر نمی‌کنیم،
+زیرا کران‌های ضمنیِ binder آن‌ها را در اختیار نداریم.</p>
+<p>این امر به چند ناسالمی (unsoundness) می‌انجامد:</p>
+<ul>
+<li>با استفاده از زیرنوع‌سازی (subtyping): <a href="https://github.com/rust-lang/rust/issues/25860">#25860</a></li>
+<li>با استفاده از upcasting ابرصفت (super trait) برای یک کران صفت مرتبهٔ بالاتر: <a href="https://github.com/rust-lang/rust/issues/84591">#84591</a></li>
+<li>با توانایی نرمال‌سازی یک projection هنگام استفاده از یک impl، در حالی که
+هنگام بررسی خود impl نمی‌توان آن را نرمال کرد: <a href="https://github.com/rust-lang/rust/issues/100051">#100051</a></li>
+</ul><nav class="page-nav"><a href="caching.html">→ ظرافت‌های کش‌کردن</a><a href="specialization.html">تخصیص (Specialization) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

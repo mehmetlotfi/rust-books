@@ -1,0 +1,240 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Futureها و نحو async — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch17-01-futures-and-syntax"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="futures-and-the-async-syntax"><a class="header" href="#futures-and-the-async-syntax">Futureها و نحو Async</a></h2>
+<p>عناصر کلیدی برنامه‌نویسی ناهمگام در Rust، <em>Futureها</em> و واژه‌های کلیدی <code>async</code> و <code>await</code> هستند.</p>
+<p><em>Future</em> مقداری است که شاید اکنون آماده نباشد، اما زمانی در آینده آماده خواهد شد. همین مفهوم در زبان‌های بسیاری و گاهی با نام‌هایی مانند <em>Task</em> یا <em>Promise</em> دیده می‌شود. Rust صفت <code>Future</code> را به‌عنوان جزء سازنده فراهم می‌کند تا عملیات async متفاوت بتوانند با ساختارهای دادهٔ گوناگون، اما رابطی مشترک، پیاده‌سازی شوند. در Rust، Futureها نوع‌هایی هستند که صفت <code>Future</code> را پیاده‌سازی می‌کنند. هر Future اطلاعات پیشرفت خودش و معنای «آماده‌بودن» را نگه می‌دارد.</p>
+<p>می‌توانید واژهٔ کلیدی <code>async</code> را روی بلوک‌ها و توابع قرار دهید تا مشخص کنید امکان توقف و ازسرگیری آن‌ها وجود دارد. درون بلوک یا تابع async می‌توانید با واژهٔ کلیدی <code>await</code> <em>منتظر یک Future بمانید</em>؛ یعنی تا آماده‌شدنش صبر کنید. هر نقطه‌ای که درون بلوک یا تابع async منتظر Future می‌مانید، محل احتمالی توقف و ازسرگیری آن بلوک یا تابع است. فرایند بررسی آماده‌بودن مقدار یک Future، <em>poll کردن</em> نام دارد.</p>
+<p>بعضی زبان‌های دیگر مانند C# و JavaScript نیز از <code>async</code> و <code>await</code> برای برنامه‌نویسی ناهمگام استفاده می‌کنند. اگر با این زبان‌ها آشنا باشید، ممکن است تفاوت‌های مهمی در شیوهٔ استفادهٔ Rust از این نحو ببینید. همان‌گونه که خواهیم دید، این تفاوت‌ها دلیل خوبی دارند.</p>
+<p>هنگام نوشتن Rust ناهمگام، بیشتر از <code>async</code> و <code>await</code> استفاده می‌کنیم. Rust آن‌ها را به کدی معادل بر پایهٔ صفت <code>Future</code> کامپایل می‌کند؛ درست مانند تبدیل حلقه‌های <code>for</code> به کد معادل بر پایهٔ صفت <code>Iterator</code>. چون Rust صفت <code>Future</code> را فراهم می‌کند، هر جا لازم باشد می‌توانید آن را برای نوع‌های دادهٔ خودتان نیز پیاده‌سازی کنید. بسیاری از توابع این فصل نوع‌هایی را بازمی‌گردانند که پیاده‌سازی مخصوص خودشان از <code>Future</code> را دارند. در پایان فصل به تعریف صفت بازمی‌گردیم و سازوکارش را عمیق‌تر بررسی می‌کنیم، اما فعلاً همین مقدار برای ادامه کافی است.</p>
+<p>شاید این مطالب کمی انتزاعی باشند، پس نخستین برنامهٔ async خود را می‌نویسیم: یک جمع‌آورندهٔ کوچک وب. دو URL را از خط فرمان می‌گیریم، هر دو را هم‌روند دریافت می‌کنیم و نتیجهٔ هرکدام را که زودتر تمام شود بازمی‌گردانیم. این نمونه نحو تازهٔ زیادی دارد، اما نگران نباشید؛ هنگام پیشروی همهٔ نکات لازم را توضیح می‌دهیم.</p>
+<h2 id="our-first-async-program"><a class="header" href="#our-first-async-program">نخستین برنامهٔ Async ما</a></h2>
+<p>برای آنکه تمرکز این فصل بر یادگیری async باشد و نه درگیری با بخش‌های مختلف زیست‌بوم، crate‌ای به نام <code>trpl</code> ساخته‌ایم (<code>trpl</code> کوتاه‌شدهٔ «The Rust Programming Language» است). این crate همهٔ نوع‌ها، traitها و توابعی را که نیاز خواهید داشت، عمدتاً از crateهای <a href="https://crates.io/crates/futures"><code>futures</code></a><!-- ignore --> و <a href="https://tokio.rs"><code>tokio</code></a><!-- ignore -->، دوباره صادر (re-export) می‌کند. crate <code>futures</code> خانهٔ رسمی آزمایش‌های Rust برای کد async است و در واقع trait <code>Future</code> در ابتدا آنجا طراحی شد. Tokio امروزه پراستفاده‌ترین محیط اجرای async در Rust است، به‌ویژه برای برنامه‌های وب. محیط‌های اجرای عالی دیگری نیز وجود دارند و ممکن است برای هدف شما مناسب‌تر باشند. ما برای <code>trpl</code> در پشت صحنه از crate <code>tokio</code> استفاده می‌کنیم چون به‌خوبی آزموده شده و به‌طور گسترده استفاده می‌شود.</p>
+<p>در بعضی موارد، <code>trpl</code> نام APIهای اصلی را تغییر می‌دهد یا آن‌ها را در پوششی قرار می‌دهد تا تمرکز شما روی جزئیات مرتبط با این فصل بماند. اگر می‌خواهید کار crate را بفهمید، <a href="https://github.com/rust-lang/book/tree/main/packages/trpl">کد منبع آن</a> را ببینید. آنجا مشخص است هر صدور مجدد از کدام crate آمده و توضیحات مفصلی دربارهٔ کار <code>trpl</code> نوشته‌ایم.</p>
+<p>پروژهٔ باینری تازه‌ای با نام <code>hello-async</code> بسازید و crate مربوط به <code>trpl</code> را به‌عنوان وابستگی بیفزایید:</p>
+<pre><code class="language-console">$ cargo new hello-async
+$ cd hello-async
+$ cargo add trpl
+</code></pre>
+<p>اکنون می‌توانیم با اجزای فراهم‌شده در <code>trpl</code> نخستین برنامهٔ async را بنویسیم. ابزار کوچکی برای خط فرمان می‌سازیم که دو صفحهٔ وب را دریافت می‌کند، عنصر <code>&lt;title&gt;</code> هرکدام را بیرون می‌کشد و عنوان صفحه‌ای را چاپ می‌کند که کل این فرایند را زودتر تمام کرده است.</p>
+<h3 id="defining-the-page_title-function"><a class="header" href="#defining-the-page_title-function">تعریف تابع page_title</a></h3>
+<p>با نوشتن تابعی آغاز می‌کنیم که URL یک صفحه را به‌عنوان پارامتر می‌گیرد، درخواستی برای آن می‌فرستد و متن عنصر <code>&lt;title&gt;</code> را بازمی‌گرداند (فهرست ۱۷-۱).</p>
+<figure class="listing" id="listing-17-1">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    // TODO: we'll add this next!
+</span><span class="boring">}
+</span><span class="boring">
+</span>use trpl::Html;
+
+async fn page_title(url: &amp;str) -&gt; Option&lt;String&gt; {
+    let response = trpl::get(url).await;
+    let response_text = response.text().await;
+    Html::parse(&amp;response_text)
+        .select_first("title")
+        .map(|title| title.inner_html())
+}</code></pre>
+<figcaption><a href="#listing-17-1">لیست ۱۷-۱</a>: تعریف تابعی async برای گرفتن عنصر عنوان از صفحهٔ HTML</figcaption>
+</figure>
+<p>ابتدا تابعی با نام <code>page_title</code> تعریف و آن را با واژهٔ کلیدی <code>async</code> علامت‌گذاری می‌کنیم. سپس با تابع <code>trpl::get</code> هر URL ورودی را دریافت می‌کنیم و با افزودن <code>await</code> منتظر پاسخ می‌مانیم. برای گرفتن متن <code>response</code>، متد <code>text</code> آن را فرا می‌خوانیم و دوباره با <code>await</code> منتظر می‌مانیم. هر دو گام ناهمگام‌اند. در تابع <code>get</code> باید منتظر بمانیم سرور بخش نخست پاسخ، شامل سرآیندهای HTTP، کوکی‌ها و موارد مشابه، را بفرستد؛ این بخش ممکن است جدا از بدنهٔ پاسخ تحویل شود. به‌ویژه اگر بدنه بسیار بزرگ باشد، رسیدن کامل آن زمان می‌برد. چون باید منتظر رسیدن <em>تمام</em> پاسخ بمانیم، متد <code>text</code> نیز async است.</p>
+<p>باید صریحاً منتظر هر دو Future بمانیم، زیرا Futureها در Rust <em>تنبل‌اند</em>: تا با <code>await</code> از آن‌ها نخواهید، کاری انجام نمی‌دهند. در واقع Rust برای استفاده‌نکردن از یک Future هشدار کامپایلر می‌دهد. این رفتار ممکن است یادآور بحث تکرارگرها در بخش <a href="ch13-02-iterators.html">«پردازش دنباله‌ای از آیتم‌ها با تکرارگرها»</a> از فصل ۱۳ باشد. تکرارگر تا زمانی که متد <code>next</code> آن را ــ مستقیم، با حلقهٔ <code>for</code> یا متدهایی مانند <code>map</code> که در پشت صحنه از <code>next</code> استفاده می‌کنند ــ فرا نخوانید، کاری نمی‌کند. Futureها نیز تا صریحاً از آن‌ها درخواست نکنید کاری انجام نمی‌دهند. این تنبلی اجازه می‌دهد Rust کد async را تا زمان نیاز واقعی اجرا نکند.</p>
+<blockquote>
+<p>نکته: این رفتار با <code>thread::spawn</code> در بخش <a href="ch16-01-threads.html#creating-a-new-thread-with-spawn">«ساختن نخ جدید با spawn»</a> از فصل ۱۶ متفاوت است؛ آنجا بستار فرستاده‌شده به نخ دیگر بی‌درنگ شروع به اجرا کرد. همچنین با رویکرد async در بسیاری زبان‌های دیگر فرق دارد. اما درست مانند تکرارگرها، این تفاوت برای تضمین‌های کارایی Rust اهمیت دارد.</p>
+</blockquote>
+<p>پس از به‌دست‌آوردن <code>response_text</code>، آن را با <code>Html::parse</code> به نمونه‌ای از نوع <code>Html</code> تجزیه می‌کنیم. اکنون به‌جای رشتهٔ خام، نوع داده‌ای داریم که HTML را به‌صورت ساختار داده‌ای غنی‌تر در اختیارمان می‌گذارد. به‌طور مشخص، با متد <code>select_first</code> نخستین نمونهٔ یک انتخابگر CSS را می‌یابیم. با فرستادن رشتهٔ <code>"title"</code>، در صورت وجود، نخستین عنصر <code>&lt;title&gt;</code> سند را می‌گیریم. چون شاید هیچ عنصر منطبقی نباشد، <code>select_first</code> مقدار <code>Option&lt;ElementRef&gt;</code> بازمی‌گرداند. سرانجام از <code>Option::map</code> استفاده می‌کنیم تا اگر آیتمی در <code>Option</code> بود روی آن کار کنیم و در غیر این صورت کاری انجام ندهیم. می‌توانستیم اینجا از <code>match</code> نیز استفاده کنیم، اما <code>map</code> اصطلاحی‌تر است. در بدنهٔ تابع داده‌شده به <code>map</code>، متد <code>inner_html</code> را روی <code>title</code> فرا می‌خوانیم تا محتوای <code>String</code> آن را بگیریم. در پایان یک <code>Option&lt;String&gt;</code> داریم.</p>
+<p>توجه کنید که کلیدواژهٔ <code>await</code> در Rust <em>پس از</em> عبارتی می‌آید که منتظرش هستید، نه پیش از آن. یعنی یک کلیدواژهٔ <em>پسوندی</em> (postfix) است. اگر در زبان‌های دیگر از <code>async</code> استفاده کرده باشید، ممکن است این با چیزی که به آن عادت دارید متفاوت باشد، اما در Rust کار با زنجیره‌ای از متدها را بسیار دلپذیرتر می‌کند. در نتیجه، می‌توانیم بدنهٔ <code>page_title</code> را طوری تغییر دهیم که فراخوانی‌های توابع <code>trpl::get</code> و <code>text</code> را با <code>await</code> میان آن‌ها به هم زنجیر کند، همان‌طور که در لیستینگ ۱۷-۲ نشان داده شده است.</p>
+<figure class="listing" id="listing-17-2">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span><span class="boring">use trpl::Html;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    // TODO: we'll add this next!
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">async fn page_title(url: &amp;str) -&gt; Option&lt;String&gt; {
+</span>    let response_text = trpl::get(url).await.text().await;
+<span class="boring">    Html::parse(&amp;response_text)
+</span><span class="boring">        .select_first("title")
+</span><span class="boring">        .map(|title| title.inner_html())
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-17-2">لیست ۱۷-۲</a>: زنجیره‌سازی با واژهٔ کلیدی &lt;code&gt;&lt;/x-listing&gt;await&lt;/code&gt;</figcaption>
+</figure>
+<p>نخستین تابع async خود را با موفقیت نوشتیم! پیش از افزودن کدی در <code>main</code> برای فراخوانی آن، کمی بیشتر دربارهٔ آنچه نوشته‌ایم و معنایش صحبت کنیم.</p>
+<p>وقتی Rust <em>بلوکی</em> علامت‌خورده با <code>async</code> می‌بیند، آن را به نوع داده‌ای یکتا و بی‌نام تبدیل می‌کند که صفت <code>Future</code> را پیاده‌سازی می‌کند. وقتی <em>تابعی</em> علامت‌خورده با <code>async</code> می‌بیند، آن را به تابعی غیر async تبدیل می‌کند که بدنه‌اش یک بلوک async است. نوع بازگشتی تابع async همان نوع دادهٔ بی‌نامی است که کامپایلر برای بلوک async می‌سازد.</p>
+<p>بنابراین نوشتن <code>async fn</code> معادل نوشتن تابعی است که <em>Futureای</em> از نوع بازگشتی را برمی‌گرداند. برای کامپایلر، تعریف <code>async fn page_title</code> در فهرست ۱۷-۱ تقریباً معادل تابع غیر async زیر است:</p>
+<pre><code class="language-rust"><span class="boring">extern crate trpl; // required for mdbook test
+</span>use std::future::Future;
+use trpl::Html;
+
+fn page_title(url: &amp;str) -&gt; impl Future&lt;Output = Option&lt;String&gt;&gt; {
+    async move {
+        let text = trpl::get(url).await.text().await;
+        Html::parse(&amp;text)
+            .select_first("title")
+            .map(|title| title.inner_html())
+    }
+}</code></pre>
+<p>اجزای نسخهٔ تبدیل‌شده را مرور کنیم:</p>
+<ul>
+<li>از نحو <code>impl Trait</code> استفاده می‌کند که در بخش <a href="ch10-02-traits.html#traits-as-parameters">«صفت‌ها به‌عنوان پارامتر»</a> فصل ۱۰ بررسی کردیم.</li>
+<li>مقدار بازگشتی صفت <code>Future</code> را با نوع وابستهٔ <code>Output</code> پیاده‌سازی می‌کند. نوع <code>Output</code> همان <code>Option&lt;String&gt;</code> و برابر با نوع بازگشتی نسخهٔ اصلی <code>async fn</code> از <code>page_title</code> است.</li>
+<li>تمام کدی که در بدنهٔ تابع اصلی فراخوانی می‌شد در بلوک <code>async move</code> پیچیده شده است. بلوک‌ها عبارت‌اند و کل این بلوک عبارت بازگشتی تابع است.</li>
+<li>بلوک async مقداری از نوع <code>Option&lt;String&gt;</code> تولید می‌کند که با نوع <code>Output</code> در نوع بازگشتی یکسان است؛ درست مانند بلوک‌های دیگری که دیده‌اید.</li>
+<li>بدنهٔ تابع جدید به‌دلیل شیوهٔ استفاده از پارامتر <code>url</code>، بلوک <code>async move</code> است. بعدتر دربارهٔ تفاوت <code>async</code> و <code>async move</code> بیشتر صحبت می‌کنیم.</li>
+</ul>
+<p>اکنون می‌توانیم <code>page_title</code> را در <code>main</code> فراخوانی کنیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="determining-a-single-pages-title"></a></p>
+<h3 id="executing-an-async-function-with-a-runtime"><a class="header" href="#executing-an-async-function-with-a-runtime">اجرای یک تابع Async با محیط اجرا</a></h3>
+<p>ابتدا عنوان یک صفحه را می‌گیریم؛ همانند فهرست ۱۷-۳. متأسفانه این کد هنوز کامپایل نمی‌شود.</p>
+<figure class="listing" id="listing-17-3">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span><span class="boring">use trpl::Html;
+</span><span class="boring">
+</span>async fn main() {
+    let args: Vec&lt;String&gt; = std::env::args().collect();
+    let url = &amp;args[1];
+    match page_title(url).await {
+        Some(title) =&gt; println!("The title for {url} was {title}"),
+        None =&gt; println!("{url} had no title"),
+    }
+}
+<span class="boring">
+</span><span class="boring">async fn page_title(url: &amp;str) -&gt; Option&lt;String&gt; {
+</span><span class="boring">    let response_text = trpl::get(url).await.text().await;
+</span><span class="boring">    Html::parse(&amp;response_text)
+</span><span class="boring">        .select_first("title")
+</span><span class="boring">        .map(|title| title.inner_html())
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-17-3">لیست ۱۷-۳</a>: فراخوانی تابع &lt;code&gt;&lt;/x-listing&gt;page_title&lt;/code&gt; از &lt;code&gt;main&lt;/code&gt; با آرگومان داده‌شده از سوی کاربر</figcaption>
+</figure>
+<p>از همان الگویی استفاده می‌کنیم که در بخش <a href="ch12-01-accepting-command-line-arguments.html">«پذیرش آرگومان‌های خط فرمان»</a> فصل ۱۲ برای گرفتن آرگومان‌ها به کار بردیم. سپس آرگومان URL را به <code>page_title</code> می‌دهیم و منتظر نتیجه می‌مانیم. چون مقدار تولیدشدهٔ Future یک <code>Option&lt;String&gt;</code> است، با عبارت <code>match</code> بسته به داشتن یا نداشتن <code>&lt;title&gt;</code> پیام متفاوتی چاپ می‌کنیم.</p>
+<p>فقط در توابع یا بلوک‌های async می‌توانیم <code>await</code> را به کار ببریم و Rust اجازه نمی‌دهد تابع ویژهٔ <code>main</code> را <code>async</code> علامت‌گذاری کنیم.</p>
+<!-- manual-regeneration
+cd listings/ch17-async-await/listing-17-03
+cargo build
+copy just the compiler error
+-->
+<pre><code class="language-text">error[E0752]: `main` function is not allowed to be `async`
+ --&gt; src/main.rs:6:1
+  |
+6 | async fn main() {
+  | ^^^^^^^^^^^^^^^ `main` function is not allowed to be `async`
+</code></pre>
+<p>دلیل اینکه <code>main</code> را نمی‌توان <code>async</code> علامت‌گذاری کرد این است که کد async به یک <em>محیط اجرا</em> (runtime) نیاز دارد: یک crate در Rust که جزئیات اجرای کد ناهمگام را مدیریت می‌کند. تابع <code>main</code> یک برنامه می‌تواند یک محیط اجرا را <em>راه‌اندازی</em> کند، اما <em>خودش</em> محیط اجرا نیست. (کمی بعد بیشتر خواهیم دید که چرا چنین است.) هر برنامهٔ Rust که کد async اجرا می‌کند دست‌کم یک جا دارد که در آن محیط اجرایی را برپا می‌کند که futureها را اجرا می‌کند.</p>
+<p>بیشتر زبان‌های دارای async محیط اجرا را همراه خود دارند، اما Rust چنین نمی‌کند. محیط‌های اجرای async گوناگونی در دسترس‌اند که هر یک بده‌بستانی مناسب کاربرد هدف خود دارند. برای نمونه، نیازهای وب‌سروری پرترافیک با هسته‌های CPU و RAM فراوان، بسیار متفاوت از میکروکنترلری تک‌هسته‌ای با RAM اندک و بدون امکان تخصیص هیپ است. crateهای فراهم‌کنندهٔ محیط اجرا اغلب نسخه‌های async قابلیت‌های رایج مانند ورودی/خروجی فایل یا شبکه را نیز ارائه می‌کنند.</p>
+<p>در اینجا و در باقی این فصل، از تابع <code>block_on</code> در crate <code>trpl</code> استفاده می‌کنیم که یک future را به‌عنوان آرگومان می‌گیرد و نخ جاری را مسدود می‌کند تا این future تا پایان اجرا شود. در پشت صحنه، فراخوانی <code>block_on</code> با استفاده از crate <code>tokio</code> یک محیط اجرا برپا می‌کند که برای اجرای future ورودی به کار می‌رود (رفتار <code>block_on</code> در crate <code>trpl</code> شبیه توابع <code>block_on</code> در سایر crateهای محیط اجرا است). پس از کامل شدن future، <code>block_on</code> هر مقداری را که future تولید کرده باشد برمی‌گرداند.</p>
+<p>می‌توانستیم Future بازگشتی <code>page_title</code> را مستقیم به <code>block_on</code> بدهیم و پس از کامل‌شدن روی <code>Option&lt;String&gt;</code> حاصل تطبیق انجام دهیم، همان کاری که در فهرست ۱۷-۳ آزمودیم. اما در بیشتر نمونه‌های فصل و بیشتر کدهای async واقعی، بیش از یک تابع async فراخوانی می‌کنیم. بنابراین مانند فهرست ۱۷-۴ یک بلوک <code>async</code> می‌فرستیم و صریحاً منتظر نتیجهٔ <code>page_title</code> می‌مانیم.</p>
+<figure class="listing" id="listing-17-4">
+<span class="file-name">Filename: src/main.rs</span>
+<!-- should_panic,noplayground because mdbook test does not pass args -->
+<pre><code class="language-rust should_panic noplayground"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span><span class="boring">use trpl::Html;
+</span><span class="boring">
+</span>fn main() {
+    let args: Vec&lt;String&gt; = std::env::args().collect();
+
+    trpl::block_on(async {
+        let url = &amp;args[1];
+        match page_title(url).await {
+            Some(title) =&gt; println!("The title for {url} was {title}"),
+            None =&gt; println!("{url} had no title"),
+        }
+    })
+}
+<span class="boring">
+</span><span class="boring">async fn page_title(url: &amp;str) -&gt; Option&lt;String&gt; {
+</span><span class="boring">    let response_text = trpl::get(url).await.text().await;
+</span><span class="boring">    Html::parse(&amp;response_text)
+</span><span class="boring">        .select_first("title")
+</span><span class="boring">        .map(|title| title.inner_html())
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-17-4">لیست ۱۷-۴</a>: انتظار برای بلوک async با &lt;code&gt;&lt;/x-listing&gt;trpl::block_on&lt;/code&gt;</figcaption>
+</figure>
+<p>با اجرای کد، همان رفتار اولیهٔ مورد انتظار را می‌بینیم:</p>
+<!-- manual-regeneration
+cd listings/ch17-async-await/listing-17-04
+cargo build # skip all the build noise
+cargo run -- "https://www.rust-lang.org"
+# copy the output here
+-->
+<pre><code class="language-console">$ cargo run -- "https://www.rust-lang.org"
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running `target/debug/async_await 'https://www.rust-lang.org'`
+The title for https://www.rust-lang.org was
+            Rust Programming Language
+</code></pre>
+<p>سرانجام کد async کار می‌کند! اما پیش از افزودن کد مسابقهٔ دو سایت، دوباره کمی به سازوکار Futureها توجه کنیم.</p>
+<p>هر <em>نقطهٔ await</em>، یعنی هر جای استفاده از <code>await</code>، محلی است که کنترل به محیط اجرا بازمی‌گردد. برای این کار Rust باید حالت مرتبط با بلوک async را نگه دارد تا محیط اجرا بتواند کار دیگری را آغاز کند و هرگاه آماده بود، دوباره برای پیش‌بردن کار نخست بازگردد. این یک ماشین حالت نامرئی است؛ گویی برای ذخیرهٔ حالت جاری در هر نقطهٔ await، enum زیر را نوشته‌اید:</p>
+<pre><code class="language-rust"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span>enum PageTitleFuture&lt;'a&gt; {
+    Initial { url: &amp;'a str },
+    GetAwaitPoint { url: &amp;'a str },
+    TextAwaitPoint { response: trpl::Response },
+}</code></pre>
+<p>نوشتن دستی کد گذار میان حالت‌ها خسته‌کننده و خطاپذیر بود، به‌ویژه وقتی بعدها قابلیت‌ها و حالت‌های بیشتری اضافه شوند. خوشبختانه کامپایلر Rust ساختارهای دادهٔ ماشین حالت را برای کد async خودکار می‌سازد و مدیریت می‌کند. قواعد معمول قرض‌گیری و مالکیت همچنان روی ساختارهای داده اعمال می‌شوند و کامپایلر آن‌ها را نیز بررسی می‌کند و پیام‌های خطای مفیدی می‌دهد. چند نمونه را بعدتر در فصل بررسی می‌کنیم.</p>
+<p>در نهایت چیزی باید این ماشین حالت را اجرا کند و آن چیز محیط اجرا است. به همین دلیل ممکن است هنگام مطالعهٔ محیط‌های اجرا واژهٔ <em>اجراکننده</em> را ببینید: اجراکننده بخشی از محیط اجرا است که مسئول اجرای کد async است.</p>
+<p>اکنون می‌توانید ببینید که چرا کامپایلر در لیستینگ ۱۷-۳ مانع شد که خود <code>main</code> را یک تابع async کنیم. اگر <code>main</code> یک تابع async بود، چیز دیگری باید ماشین حالت (state machine) هر future‌ای را که <code>main</code> برمی‌گرداند مدیریت می‌کرد، اما <code>main</code> نقطهٔ شروع برنامه است! در عوض، تابع <code>trpl::block_on</code> را در <code>main</code> فراخوانی کردیم تا یک محیط اجرا برپا کنیم و future بازگردانده‌شده توسط بلوک <code>async</code> را تا پایان اجرا کنیم.</p>
+<blockquote>
+<p>نکته: بعضی محیط‌های اجرا ماکروهایی فراهم می‌کنند که اجازه می‌دهند تابع <code>main</code> را async بنویسید. آن ماکروها <code>async fn main() { ... }</code> را به یک <code>fn main</code> معمولی بازنویسی می‌کنند و همان کاری را انجام می‌دهند که در فهرست ۱۷-۴ دستی انجام دادیم: فراخوانی تابعی مانند <code>trpl::block_on</code> که یک Future را تا پایان اجرا می‌کند.</p>
+</blockquote>
+<p>حالا بیایید این بخش‌ها را کنار هم بگذاریم و ببینیم چگونه می‌توانیم کد همروند بنویسیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="racing-our-two-urls-against-each-other"></a></p>
+<h3 id="racing-two-urls-against-each-other-concurrently"><a class="header" href="#racing-two-urls-against-each-other-concurrently">مسابقهٔ هم‌زمان دو URL با یکدیگر</a></h3>
+<p>در فهرست ۱۷-۵، <code>page_title</code> را با دو URL متفاوت از خط فرمان فرا می‌خوانیم و با انتخاب Futureای که زودتر تمام می‌شود، آن‌ها را مسابقه می‌دهیم.</p>
+<figure class="listing" id="listing-17-5">
+<span class="file-name">Filename: src/main.rs</span>
+<!-- should_panic,noplayground because mdbook does not pass args -->
+<pre><code class="language-rust should_panic noplayground"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span>use trpl::{Either, Html};
+
+fn main() {
+    let args: Vec&lt;String&gt; = std::env::args().collect();
+
+    trpl::block_on(async {
+        let title_fut_1 = page_title(&amp;args[1]);
+        let title_fut_2 = page_title(&amp;args[2]);
+
+        let (url, maybe_title) =
+            match trpl::select(title_fut_1, title_fut_2).await {
+                Either::Left(left) =&gt; left,
+                Either::Right(right) =&gt; right,
+            };
+
+        println!("{url} returned first");
+        match maybe_title {
+            Some(title) =&gt; println!("Its page title was: '{title}'"),
+            None =&gt; println!("It had no title."),
+        }
+    })
+}
+
+async fn page_title(url: &amp;str) -&gt; (&amp;str, Option&lt;String&gt;) {
+    let response_text = trpl::get(url).await.text().await;
+    let title = Html::parse(&amp;response_text)
+        .select_first("title")
+        .map(|title| title.inner_html());
+    (url, title)
+}</code></pre>
+<figcaption><a href="#listing-17-5">لیست ۱۷-۵</a>: فراخوانی &lt;code&gt;&lt;/x-listing&gt;page_title&lt;/code&gt; برای دو URL و تشخیص نتیجهٔ زودتر</figcaption>
+</figure>
+<p>کار را با فراخوانی <code>page_title</code> برای هر URL ورودی کاربر آغاز می‌کنیم. Futureهای حاصل را در <code>title_fut_1</code> و <code>title_fut_2</code> نگه می‌داریم. به یاد داشته باشید هنوز کاری انجام نمی‌دهند، چون Futureها تنبل‌اند و منتظرشان نمانده‌ایم. سپس Futureها را به <code>trpl::select</code> می‌دهیم که مقداری برای مشخص‌کردن Future زودترتمام‌شده بازمی‌گرداند.</p>
+<blockquote>
+<p>نکته: در پشت صحنه، <code>trpl::select</code> بر پایهٔ تابع <code>select</code> عمومی‌تری ساخته شده است که در crate <code>futures</code> تعریف شده است. تابع <code>select</code> در crate <code>futures</code> می‌تواند کارهای زیادی انجام دهد که تابع <code>trpl::select</code> نمی‌تواند، اما پیچیدگی اضافه‌ای هم دارد که فعلاً می‌توانیم از آن بگذریم.</p>
+</blockquote>
+<p>هر یک از futureها می‌تواند به‌حق «برنده» شود، بنابراین منطقی نیست که یک <code>Result</code> برگردانده شود. در عوض، <code>trpl::select</code> نوعی را برمی‌گرداند که پیش‌تر ندیده‌ایم، یعنی <code>trpl::Either</code>. نوع <code>Either</code> از این نظر که دو حالت دارد تا حدی شبیه <code>Result</code> است. اما برخلاف <code>Result</code>، مفهوم موفقیت یا شکست در <code>Either</code> تعبیه نشده است. در عوض، از <code>Left</code> و <code>Right</code> برای نشان دادن «یکی یا دیگری» استفاده می‌کند:</p>
+<pre><code class="language-rust">enum Either&lt;A, B&gt; {
+    Left(A),
+    Right(B),
+}</code></pre>
+<p>اگر آرگومان نخست برنده شود، <code>select</code> مقدار <code>Left</code> را با خروجی همان Future بازمی‌گرداند؛ و اگر آرگومان دوم برنده شود، <code>Right</code> را با خروجی Future دوم می‌دهد. این نام‌ها با ترتیب آرگومان‌ها در فراخوانی تابع هماهنگ‌اند: آرگومان نخست در سمت چپ آرگومان دوم قرار دارد.</p>
+<p>همچنین <code>page_title</code> را به‌روز می‌کنیم تا همان URL ورودی را برگرداند. به این ترتیب، اگر صفحه‌ای که زودتر برمی‌گردد <code>&lt;title&gt;</code> قابل‌تفکیکی نداشته باشد، باز هم می‌توانیم پیام معناداری چاپ کنیم. با در دسترس بودن این اطلاعات، کار را با به‌روزرسانی خروجی <code>println!</code> به پایان می‌بریم تا هم نشان دهد کدام URL زودتر تمام شد و هم اینکه <code>&lt;title&gt;</code> صفحهٔ وب آن URL چیست، در صورت وجود.</p>
+<p>اکنون یک جمع‌آورندهٔ کوچک و کاربردی وب ساخته‌اید! چند URL انتخاب و ابزار خط فرمان را اجرا کنید. شاید ببینید بعضی سایت‌ها همیشه سریع‌ترند و در موارد دیگر سایت سریع‌تر در اجراهای مختلف تغییر می‌کند. مهم‌تر اینکه مبانی کار با Futureها را آموخته‌اید و اکنون می‌توانیم توانایی‌های async را عمیق‌تر بررسی کنیم.</p>
+<!-- TODO: map source link version to version of Rust? --><nav class="page-nav"><a href="ch17-00-async-await.html">→ مبانی برنامه‌نویسی ناهمگام: Async، Await، Futureها و Streamها</a><a href="ch17-02-concurrency-with-async.html">به‌کارگیری همروندی با async ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

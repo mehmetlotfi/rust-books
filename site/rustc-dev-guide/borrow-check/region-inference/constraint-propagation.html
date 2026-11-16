@@ -1,0 +1,165 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>انتشار قید — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="borrow-check/region-inference/constraint-propagation"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="constraint-propagation"><a class="header" href="#constraint-propagation">انتشار قید (Constraint propagation)</a></h1>
+<p>کار اصلی استنتاج ناحیه <strong>انتشار قید</strong> است
+که در تابع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/region_infer/struct.RegionInferenceContext.html#method.propagate_constraints"><code>propagate_constraints</code></a> انجام می‌شود.  سه نوع
+قید در NLL استفاده می‌شود و ما توضیح می‌دهیم
+<code>propagate_constraints</code> چگونه کار می‌کند، با «لایه‌لایه» افزودن آن انواع قید
+یکی‌یکی (هر یک از آن‌ها نسبتاً مستقل از بقیه است):</p>
+<ul>
+<li>قیدهای زنده‌بودن (liveness) (<code>R live at E</code>) که از liveness پدید می‌آیند؛</li>
+<li>قیدهای outlives (<code>R1: R2</code>) که از زیرنوع‌سازی (subtyping) پدید می‌آیند؛</li>
+<li><a href="./member-constraints.html">قیدهای عضویت (member constraints)</a> (<code>member R_m of [R_c...]</code>) که از impl Trait پدید می‌آیند.</li>
+</ul>
+<p>در این فصل «قلب» انتشار قید را توضیح می‌دهیم
+که هم قیدهای liveness و هم outlives را پوشش می‌دهد.</p>
+<h2 id="notation-and-high-level-concepts"><a class="header" href="#notation-and-high-level-concepts">نمادگذاری و مفاهیم سطح بالا</a></h2>
+<p>از نظر مفهومی، استنتاج ناحیه یک محاسبهٔ «نقطهٔ ثابت (fixed-point)» است. مجموعه‌ای از
+قیدهای <code>{C}</code> به آن داده می‌شود و مجموعه‌ای از مقادیر
+<code>Values: R -&gt; {E}</code> را محاسبه می‌کند که هر ناحیهٔ <code>R</code> را به مجموعه‌ای از عناصر
+<code>{E}</code> نگاشت می‌کند (برای یادداشت‌های بیشتر دربارهٔ عناصر ناحیه <a href="../region-inference.html#region-variables">اینجا</a> را ببینید):</p>
+<ul>
+<li>در ابتدا هر ناحیه به یک مجموعهٔ تهی نگاشت می‌شود، پس <code>Values(R) = {}</code> برای همهٔ نواحی <code>R</code>.</li>
+<li>سپس قیدها را مکرراً پردازش می‌کنیم تا به نقطهٔ ثابت برسیم:
+<ul>
+<li>برای هر قید C:
+<ul>
+<li><code>Values</code> را در حد لازم به‌روز کنید تا قید برآورده شود</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>به‌عنوان یک مثال ساده، اگر قید liveness به شکل <code>R live at E</code> داشته باشیم،
+می‌توانیم <code>Values(R) = Values(R) union {E}</code> را اعمال کنیم تا
+قید برآورده شود. به‌همین‌ترتیب، اگر قید outlives به شکل
+<code>R1: R2</code> داشته باشیم، می‌توانیم <code>Values(R1) = Values(R1) union Values(R2)</code> را اعمال کنیم.
+(قیدهای عضویت پیچیده‌ترند و <a href="./member-constraints.html">در این بخش</a> دربارهٔ آن‌ها بحث می‌کنیم.)</p>
+<p>اما در عمل کمی زرنگ‌تر عمل می‌کنیم. به‌جای اعمال
+قیدها در یک حلقه، می‌توانیم قیدها را تحلیل کنیم و ترتیب درست
+اعمال آن‌ها را بیابیم، به‌طوری که برای یافتن نتیجهٔ نهایی فقط لازم باشد
+هر قید را یک بار اعمال کنیم.</p>
+<p>به‌همین‌ترتیب، در پیاده‌سازی، مجموعهٔ <code>Values</code> در فیلد
+<code>scc_values</code> ذخیره می‌شود، اما نه بر اساس یک <em>ناحیه</em> بلکه بر اساس یک
+<em>مؤلفهٔ قویاً همبند (strongly connected component)</em> یا SCC نمایه‌گذاری می‌شوند. SCCها یک بهینه‌سازی‌اند که
+از بخش بزرگی از ذخیره‌سازی و محاسبهٔ زائد جلوگیری می‌کند.  در بخش
+مربوط به قیدهای outlives توضیح داده شده‌اند.</p>
+<h2 id="liveness-constraints"><a class="header" href="#liveness-constraints">قیدهای liveness</a></h2>
+<p>یک <strong>قید liveness</strong> وقتی پدید می‌آید که متغیری که نوعش
+شامل ناحیهٔ R است در یک <a href="../../appendix/glossary.html#point">نقطهٔ</a> P زنده باشد. این صرفاً یعنی
+مقدار R باید شامل نقطهٔ P باشد. قیدهای liveness
+توسط type checker مربوط به MIR محاسبه می‌شوند.</p>
+<p>قید liveness به شکل <code>R live at E</code> برآورده می‌شود اگر <code>E</code> عضو
+<code>Values(R)</code> باشد. پس برای «اعمال» چنین قیدی بر <code>Values</code> فقط باید
+<code>Values(R) = Values(R) union {E}</code> را محاسبه کنیم.</p>
+<p>مقادیر liveness در type-check محاسبه می‌شوند و هنگام ساخته شدن در آرگومان <code>liveness_constraints</code>
+به استنتاج ناحیه داده می‌شوند.
+اما این‌ها به‌صورت قیدهای جداگانه‌ای مانند <code>R live at E</code> نمایش داده نمی‌شوند؛
+در عوض برای هر متغیر ناحیه یک bitset (پراکنده) نگه می‌داریم (از
+نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/region_infer/values/struct.LivenessValues.html"><code>LivenessValues</code></a>). به این ترتیب برای هر
+قید liveness فقط به یک بیت نیاز داریم.</p>
+<p>نکته‌ای که ذکرش ارزش دارد: همهٔ پارامترهای طول عمر همیشه
+در تمام بدنهٔ تابع زنده در نظر گرفته می‌شوند. این به آن دلیل است که
+آن‌ها با بخشی از اجرای <em>فراخواننده</em> متناظرند، و آن
+اجرا آشکارا زمان صرف‌شده در این تابع را شامل می‌شود، چون
+فراخواننده منتظر است ما برگردیم.</p>
+<h2 id="outlives-constraints"><a class="header" href="#outlives-constraints">قیدهای outlives</a></h2>
+<p>قید outlives به شکل <code>'a: 'b</code> نشان می‌دهد مقدار <code>'a</code> باید
+<strong>ابرمجموعه</strong> مقدار <code>'b</code> باشد. یعنی قید outlives
+به شکل <code>R1: R2</code> برآورده می‌شود اگر <code>Values(R1)</code> ابرمجموعهٔ
+<code>Values(R2)</code> باشد. پس برای «اعمال» چنین قیدی بر <code>Values</code> فقط
+باید <code>Values(R1) = Values(R1) union Values(R2)</code> را محاسبه کنیم.</p>
+<p>یک مشاهدهٔ برآمده از این این است که اگر <code>R1: R2</code>
+و <code>R2: R1</code> را داشته باشید، حتماً <code>R1 = R2</code> درست است. به‌همین‌ترتیب، اگر داشته باشید:</p>
+<pre><code class="language-txt">R1: R2
+R2: R3
+R3: R4
+R4: R1
+</code></pre>
+<p>آن‌گاه <code>R1 = R2 = R3 = R4</code> نتیجه می‌شود. از این برای سریع‌تر کردن
+چشمگیر کارها بهره می‌بریم، همان‌طور که به‌زودی توضیح داده می‌شود.</p>
+<p>در کد، مجموعهٔ قیدهای outlives هنگام ساخته شدن در پارامتری از نوع
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/constraints/struct.OutlivesConstraintSet.html"><code>OutlivesConstraintSet</code></a> به بافت استنتاج ناحیه داده می‌شود. مجموعهٔ قیدها اساساً فقط فهرستی از قیدهای <code>'a: 'b</code> است.</p>
+<h3 id="the-outlives-constraint-graph-and-sccs"><a class="header" href="#the-outlives-constraint-graph-and-sccs">گراف قید outlives و SCCها</a></h3>
+<p>برای کار کارآمدتر با قیدهای outlives، آن‌ها
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/constraints/struct.OutlivesConstraintSet.html#method.graph">به شکل گراف تبدیل می‌شوند</a> که گره‌های
+گراف متغیرهای ناحیه‌اند (<code>'a</code>، <code>'b</code>) و هر قید <code>'a: 'b</code>
+یک یال <code>'a -&gt; 'b</code> پدید می‌آورد. این تبدیل در تابع
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/region_infer/struct.RegionInferenceContext.html#method.new"><code>RegionInferenceContext::new</code></a> که بافت استنتاج را می‌سازد انجام می‌شود.</p>
+<p>هنگام استفاده از بازنمایی گراف، می‌توانیم نواحی‌ای را که باید برابر باشند
+با جستجوی چرخه‌ها تشخیص دهیم. یعنی اگر قیدی مانند</p>
+<pre><code class="language-txt">'a: 'b
+'b: 'c
+'c: 'd
+'d: 'a
+</code></pre>
+<p>داشته باشید، این با یک چرخه در گراف متناظر است که شامل
+عناصر <code>'a...'d</code> است.</p>
+<p>بنابراین یکی از نخستین کارهایی که در انتشار مقادیر ناحیه انجام می‌دهیم
+محاسبهٔ <strong>مؤلفه‌های قویاً همبند</strong> (SCCها) در
+گراف قید است. نتیجه در فیلد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/region_infer/struct.RegionInferenceContext.html#structfield.constraint_sccs"><code>constraint_sccs</code></a>
+ذخیره می‌شود. سپس می‌توانید به‌راحتی SCCای را که ناحیهٔ <code>r</code> بخشی از آن است
+با فراخوانی <code>constraint_sccs.scc(r)</code> پیدا کنید.</p>
+<p>کار کردن بر حسب SCCها به ما اجازه می‌دهد کارآمدتر باشیم: اگر
+مجموعه‌ای از نواحی <code>'a...'d</code> داشته باشیم که بخشی از یک SCC واحدند، لازم نیست
+مقادیرشان را جداگانه محاسبه/ذخیره کنیم. می‌توانیم فقط یک مقدار
+<strong>برای SCC</strong> ذخیره کنیم، چون همه باید برابر باشند.</p>
+<p>اگر کد استنتاج ناحیه را مرور کنید، می‌بینید که تعدادی
+فیلد بر حسب SCCها تعریف شده‌اند. برای مثال، فیلد
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/region_infer/struct.RegionInferenceContext.html#structfield.scc_values"><code>scc_values</code></a> مقادیر هر SCC را ذخیره می‌کند. بنابراین برای به دست آوردن مقدار
+یک ناحیهٔ مشخص <code>'a</code>، ابتدا SCCای را که
+ناحیه بخشی از آن است می‌یابیم و سپس مقدار آن SCC را پیدا می‌کنیم.</p>
+<p>هنگام محاسبهٔ SCCها، نه‌تنها می‌فهمیم کدام نواحی عضو
+هر SCC هستند، بلکه یال‌های میان آن‌ها را هم می‌یابیم. برای مثال
+این مجموعه از قیدهای outlives را در نظر بگیرید:</p>
+<pre><code class="language-txt">'a: 'b
+'b: 'a
+
+'a: 'c
+
+'c: 'd
+'d: 'c
+</code></pre>
+<p>اینجا دو SCC داریم: S0 شامل <code>'a</code> و <code>'b</code> است و S1 شامل <code>'c</code>
+و <code>'d</code>.  اما این SCCها مستقل نیستند: چون <code>'a: 'c</code>، این
+یعنی <code>S0: S1</code> هم برقرار است. یعنی – مقدار <code>S0</code> باید
+ابرمجموعهٔ مقدار <code>S1</code> باشد. نکتهٔ حیاتی این است که این گراف
+SCCها همیشه یک DAG است – یعنی هرگز چرخه ندارد. این به آن دلیل است که
+همهٔ چرخه‌ها برای تشکیل خود SCCها حذف شده‌اند.</p>
+<h3 id="applying-liveness-constraints-to-sccs"><a class="header" href="#applying-liveness-constraints-to-sccs">اعمال قیدهای liveness بر SCCها</a></h3>
+<p>قیدهای liveness که از type-checker می‌رسند
+بر حسب نواحی بیان شده‌اند – یعنی نگاشتی مانند
+<code>Liveness: R -&gt; {E}</code> داریم.  اما می‌خواهیم نتیجهٔ نهایی ما بر حسب
+SCCها بیان شود – می‌توانیم این قیدهای liveness را بسیار آسان
+فقط با اجتماع گرفتن ادغام کنیم:</p>
+<pre><code class="language-txt">for each region R:
+  let S be the SCC that contains R
+  Values(S) = Values(S) union Liveness(R)
+</code></pre>
+<p>در استنتاج‌گر ناحیه، این گام در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/region_infer/struct.RegionInferenceContext.html#method.new"><code>RegionInferenceContext::new</code></a> انجام می‌شود.</p>
+<h3 id="applying-outlives-constraints"><a class="header" href="#applying-outlives-constraints">اعمال قیدهای outlives</a></h3>
+<p>پس از محاسبهٔ DAG مربوط به SCCها، از آن برای ساختاردهی
+کل محاسبه‌مان استفاده می‌کنیم. اگر یالی به شکل <code>S1 -&gt; S2</code> میان دو SCC داشته باشیم،
+یعنی <code>Values(S1) &gt;= Values(S2)</code> باید برقرار باشد. پس برای محاسبهٔ
+مقدار <code>S1</code>، ابتدا مقادیر هر جانشین <code>S2</code> را محاسبه می‌کنیم.
+سپس صرفاً همهٔ آن مقادیر را با هم اجتماع می‌گیریم. با نمادگذاری
+شبه‌iterator:</p>
+<pre><code class="language-txt">Values(S1) =
+  s1.successors()
+    .map(|s2| Values(s2))
+    .union()
+</code></pre>
+<p>در کد، این کار در تابع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/region_infer/struct.RegionInferenceContext.html#method.propagate_constraints"><code>propagate_constraints</code></a>
+شروع می‌شود که روی همهٔ SCCها پیمایش می‌کند. برای هر SCC به نام <code>S1</code>
+مقدارش را با محاسبهٔ ابتدایی مقدار
+جانشین‌هایش به دست می‌آوریم. چون SCCها یک DAG می‌سازند، لازم نیست نگران
+چرخه‌ها باشیم، هرچند باید مجموعه‌ای نگه داریم تا پیگیری کنیم آیا
+یک SCC مفروض را قبلاً پردازش کرده‌ایم یا نه. برای هر جانشین <code>S2</code>، وقتی
+مقدار <code>S2</code> را محاسبه کردیم، می‌توانیم آن عناصر را با
+مقدار <code>S1</code> اجتماع کنیم. (هرچند در این فرایند باید مراقب باشیم
+<a href="./placeholders-and-universes.html">جانگهدارهای مرتبه‌بالاتر (higher-ranked
+placeholders)</a> را درست مدیریت کنیم. توجه کنید که مقدار
+<code>S1</code> از قبل شامل قیدهای liveness است، چون آن‌ها در
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/region_infer/struct.RegionInferenceContext.html#method.new"><code>RegionInferenceContext::new</code></a> اضافه شده‌اند.</p>
+<p>پس از پایان آن فرایند، اکنون «کمینه مقدار» <code>S1</code> را داریم
+که همهٔ قیدهای liveness و outlives را در نظر می‌گیرد. با این حال، برای تکمیل فرایند باید
+<a href="./member-constraints.html">قیدهای عضویت</a> را هم در نظر بگیریم که در <a href="./member-constraints.html">بخشی بعدی</a>
+توضیح داده شده‌اند.</p><nav class="page-nav"><a href="../region-inference.html">→ استنتاج ناحیه</a><a href="lifetime-parameters.html">پارامترهای طول عمر ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../rustc-dev-guide/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

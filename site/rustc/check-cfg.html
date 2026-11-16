@@ -1,0 +1,199 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>بررسی پیکربندی‌های شرطی — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="check-cfg"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="checking-conditional-configurations"><a class="header" href="#checking-conditional-configurations">بررسی پیکربندی‌های شرطی</a></h1>
+<p><code>rustc</code> از بررسی این موضوع پشتیبانی می‌کند که هر <code>#[cfg]</code> <em>دسترس‌پذیر</em><sup class="footnote-reference" id="fr-reachable-1"><a href="#footnote-reachable">1</a></sup> با فهرستی از نام‌ها و مقادیر پیکربندی مورد انتظار مطابقت داشته باشد.</p>
+<p>این قابلیت می‌تواند به اطمینان از این کمک کند که crate کامپایل شرطی را برای پلتفرم‌های هدف یا featureهای مختلف به‌درستی مدیریت می‌کند. این بررسی تضمین می‌کند که تنظیمات cfg میان آنچه در نظر گرفته شده و آنچه به‌کار رفته است سازگار باشند و به شناسایی زودهنگام اشکال‌ها و خطاهای احتمالی در فرایند توسعه کمک می‌کند.</p>
+<p>برای رسیدن به این هدف، <code>rustc</code> پرچم <code>--check-cfg</code> را می‌پذیرد که مشخص می‌کند آیا شرط‌ها بررسی شوند و چگونه بررسی شوند.</p>
+<blockquote>
+<p><strong>توجه:</strong> برای کار با این قابلیت از طریق Cargo، صفحهٔ <a href="check-cfg/cargo-specifics.html">ویژگی‌های مخصوص Cargo</a> را ببینید.</p>
+</blockquote>
+<h2 id="specifying-expected-names-and-values"><a class="header" href="#specifying-expected-names-and-values">مشخص‌کردن نام‌ها و مقادیر مورد انتظار</a></h2>
+<p>برای مشخص‌کردن نام‌ها و مقادیر مورد انتظار، <em>مشخصات بررسی cfg</em> گزینهٔ <code>cfg(...)</code> را فراهم می‌کند که امکان تعیین یک نام پیکربندی مورد انتظار و مقادیر مورد انتظار آن را می‌دهد.</p>
+<blockquote>
+<p><strong>توجه:</strong> هنگام استفاده از <code>--cfg</code> هیچ انتظار ضمنی‌ای اضافه نمی‌شود. از کاربران انتظار می‌رود همهٔ نام‌ها و مقادیر مورد انتظار را با استفاده از <em>مشخصات بررسی cfg</em> ارائه کنند.</p>
+</blockquote>
+<p>شکل پایهٔ آن چنین است:</p>
+<pre><code class="language-bash">rustc --check-cfg 'cfg(name, values("value1", "value2", ... "valueN"))'
+</code></pre>
+<p>که در آن <code>name</code> یک شناسهٔ ساده (بدون نقل‌قول) است و هر عبارت <code>"value"</code> یک رشتهٔ لفظی داخل نقل‌قول است. <code>name</code> نام شرط را مشخص می‌کند، مانند <code>feature</code> یا <code>my_cfg</code>. <code>"value"</code> یکی از مقادیر آن نام شرط را مشخص می‌کند.</p>
+<p>وقتی گزینهٔ <code>cfg(...)</code> مشخص شده باشد، <code>rustc</code> همهٔ موارد زیر را بررسی می‌کند<sup class="footnote-reference" id="fr-reachable-2"><a href="#footnote-reachable">1</a></sup>:</p>
+<ul>
+<li>attribute به شکل <code>#[cfg(name = "value")]</code></li>
+<li>attribute به شکل <code>#[cfg_attr(name = "value")]</code></li>
+<li>attribute به شکل <code>#[link(name = "a", cfg(name = "value"))]</code></li>
+<li>فراخوانی ماکرو به شکل <code>cfg!(name = "value")</code></li>
+</ul>
+<blockquote>
+<p><em>آرگومان‌های <code>--cfg</code> در خط فرمان در حال حاضر بررسی نمی‌شوند، اما ممکن است در آینده بررسی شوند.</em></p>
+</blockquote>
+<p><code>rustc</code> بررسی می‌کند که <code>"value"</code> مشخص‌شده در فهرست مقادیر مورد انتظار وجود داشته باشد. اگر <code>"value"</code> در آن نباشد، <code>rustc</code> یک تشخیص lint به نام <code>unexpected_cfgs</code> گزارش می‌کند. سطح پیش‌فرض تشخیص برای این lint برابر <code>Warn</code> است.</p>
+<p>برای بررسی مقدار <em>هیچ</em> (یعنی <code>#[cfg(foo)]</code>) می‌توان از گزارهٔ <code>none()</code> درون <code>values()</code> استفاده کرد: <code>values(none())</code>. این گزاره می‌تواند پس از هر تعداد <code>"value"</code> یا پیش از آن‌ها بیاید.</p>
+<p>برای فعال‌کردن بررسی مقادیر، اما با ارائهٔ مجموعهٔ <em>هیچ</em>/خالی از مقادیر مورد انتظار (یعنی انتظار <code>#[cfg(name)]</code>)، از این شکل‌ها استفاده کنید:</p>
+<pre><code class="language-bash">rustc --check-cfg 'cfg(name)'
+rustc --check-cfg 'cfg(name, values(none()))'
+</code></pre>
+<p>برای فعال‌کردن بررسی نام اما نه مقادیر، از یکی از این شکل‌ها استفاده کنید:</p>
+<ul>
+<li>
+<p>بدون مقدار مورد انتظار (<em>برای هر مقدار <code>name</code> هشدار lint می‌دهد</em>): <code>bash rustc --check-cfg 'cfg(name, values())'</code></p>
+<pre><code class="language-bash">rustc --check-cfg 'cfg(name, values())'
+</code></pre>
+</li>
+<li>
+<p>مقادیر مورد انتظار ناشناخته (<em>هرگز برای مقدار <code>name</code> هشدار lint نمی‌دهد</em>): <code>bash rustc --check-cfg 'cfg(name, values(any()))'</code></p>
+<pre><code class="language-bash">rustc --check-cfg 'cfg(name, values(any()))'
+</code></pre>
+</li>
+</ul>
+<p>برای جلوگیری از تکرار یک مجموعهٔ مقادیر، از این شکل استفاده کنید:</p>
+<pre><code class="language-bash">rustc --check-cfg 'cfg(name1, ..., nameN, values("value1", "value2", ... "valueN"))'
+</code></pre>
+<p>برای فعال‌کردن بررسی بدون مشخص‌کردن هیچ نام یا مقداری، از این شکل استفاده کنید:</p>
+<pre><code class="language-bash">rustc --check-cfg 'cfg()'
+</code></pre>
+<p>گزینهٔ <code>--check-cfg cfg(...)</code> را می‌توان تکرار کرد، هم برای یک نام شرط یکسان و هم برای نام‌های متفاوت. اگر برای یک نام شرط یکسان تکرار شود، مجموعه‌های مقادیر آن شرط با هم ادغام می‌شوند (اولویت با <code>values(any())</code> است).</p>
+<blockquote>
+<p>برای کمک، یک جدول هم‌ارزی میان آرگومان‌های <code>--cfg</code> و <code>--check-cfg</code> در <a href="#equivalence-table-with---cfg">پایین</a> در دسترس است.</p>
+</blockquote>
+<h2 id="well-known-names-and-values"><a class="header" href="#well-known-names-and-values">نام‌ها و مقادیر شناخته‌شده</a></h2>
+<p><code>rustc</code> فهرستی از نام‌های شناخته‌شده و مقادیر متناظر آن‌ها را نگه می‌دارد تا نیازی به مشخص‌کردن دستی آن‌ها نباشد.</p>
+<p>نام‌ها و مقادیر شناخته‌شده تا زمانی که دست‌کم یک آرگومان <code>--check-cfg</code> وجود داشته باشد به‌صورت ضمنی اضافه می‌شوند.</p>
+<p>تا تاریخ <code>2026-08-11T</code>، فهرست نام‌های شناخته‌شده به این صورت است:</p>
+<!--- See CheckCfg::fill_well_known in compiler/rustc_session/src/config.rs -->
+<ul>
+<li><code>clippy</code></li>
+<li><code>debug_assertions</code></li>
+<li><code>doc</code></li>
+<li><code>doctest</code></li>
+<li><code>fmt_debug</code></li>
+<li><code>miri</code></li>
+<li><code>overflow_checks</code></li>
+<li><code>panic</code></li>
+<li><code>proc_macro</code></li>
+<li><code>relocation_model</code></li>
+<li><code>rust_analyzer</code></li>
+<li><code>rustfmt</code></li>
+<li><code>sanitize</code></li>
+<li><code>sanitizer_cfi_generalize_pointers</code></li>
+<li><code>sanitizer_cfi_normalize_integers</code></li>
+<li><code>target_abi</code></li>
+<li><code>target_arch</code></li>
+<li><code>target_endian</code></li>
+<li><code>target_env</code></li>
+<li><code>target_family</code></li>
+<li><code>target_object_format</code></li>
+<li><code>target_feature</code></li>
+<li><code>target_has_atomic</code></li>
+<li><code>target_has_atomic_primitive_alignment</code></li>
+<li><code>target_has_atomic_load_store</code></li>
+<li><code>target_os</code></li>
+<li><code>target_pointer_width</code></li>
+<li><code>target_thread_local</code></li>
+<li><code>target_vendor</code></li>
+<li><code>ub_checks</code></li>
+<li><code>contract_checks</code></li>
+<li><code>unix</code></li>
+<li><code>windows</code></li>
+</ul>
+<blockquote>
+<p>از نسخهٔ 1.85.0 به بعد، cfg با نام <code>test</code> یک پیکربندی «فضای کاربر» در نظر گرفته می‌شود، با وجود اینکه <code>rustc</code> نیز آن را تنظیم می‌کند، و باید توسط خود سامانهٔ ساخت مدیریت شود.</p>
+</blockquote>
+<p>مانند <code>values(any())</code>، بررسی نام‌های شناخته‌شده را می‌توان با ارسال <code>cfg(any())</code> به‌عنوان آرگومان <code>--check-cfg</code> غیرفعال کرد.</p>
+<h2 id="equivalence-table-with---cfg"><a class="header" href="#equivalence-table-with---cfg">جدول هم‌ارزی با <code>--cfg</code></a></h2>
+<p>این جدول هم‌ارزی میان یک آرگومان <code>--cfg</code> و یک آرگومان <code>--check-cfg</code> را توصیف می‌کند.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><code>--cfg</code></th><th><code>--check-cfg</code></th></tr>
+</thead>
+<tbody>
+<tr><td><em>هیچ‌چیز</em></td><td><em>هیچ‌چیز</em> یا <code>--check-cfg=cfg()</code> (برای فعال‌کردن بررسی)</td></tr>
+<tr><td><code>--cfg foo</code></td><td><code>--check-cfg=cfg(foo)</code> یا <code>--check-cfg=cfg(foo, values(none()))</code></td></tr>
+<tr><td><code>--cfg foo=""</code></td><td><code>--check-cfg=cfg(foo, values(""))</code></td></tr>
+<tr><td><code>--cfg foo="bar"</code></td><td><code>--check-cfg=cfg(foo, values("bar"))</code></td></tr>
+<tr><td><code>--cfg foo="1" --cfg foo="2"</code></td><td><code>--check-cfg=cfg(foo, values("1", "2"))</code></td></tr>
+<tr><td><code>--cfg foo="1" --cfg bar="2"</code></td><td><code>--check-cfg=cfg(foo, values("1")) --check-cfg=cfg(bar, values("2"))</code></td></tr>
+<tr><td><code>--cfg foo --cfg foo="bar"</code></td><td><code>--check-cfg=cfg(foo, values(none(), "bar"))</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="examples"><a class="header" href="#examples">مثال‌ها</a></h2>
+<h3 id="example-cargo-like-feature-example"><a class="header" href="#example-cargo-like-feature-example">مثال: نمونهٔ <code>feature</code> به سبک Cargo</a></h3>
+<p>این خط فرمان را در نظر بگیرید:</p>
+<pre><code class="language-bash">rustc --check-cfg 'cfg(feature, values("lion", "zebra"))' \
+      --cfg 'feature="lion"' example.rs
+</code></pre>
+<blockquote>
+<p>این خط فرمان نشان می‌دهد که این crate دو feature دارد: <code>lion</code> و <code>zebra</code>. feature با نام <code>lion</code> فعال است، در حالی که feature با نام <code>zebra</code> غیرفعال است.</p>
+</blockquote>
+<pre><code class="language-rust">#[cfg(feature = "lion")]     // This condition is expected, as "lion" is an
+                             // expected value of `feature`
+fn tame_lion(lion: Lion) {}
+
+#[cfg(feature = "zebra")]    // This condition is expected, as "zebra" is an expected
+                             // value of `feature` but the condition will evaluate
+                             // to false since only --cfg feature="lion" was passed
+fn ride_zebra(z: Zebra) {}
+
+#[cfg(feature = "platypus")] // This condition is UNEXPECTED, as "platypus" is NOT
+                             // an expected value of `feature` and will cause a
+                             // the compiler to emit the `unexpected_cfgs` lint
+fn poke_platypus() {}
+
+#[cfg(feechure = "lion")]    // This condition is UNEXPECTED, as 'feechure' is NOT
+                             // a expected condition name, no `cfg(feechure, ...)`
+                             // was passed in `--check-cfg`
+fn tame_lion() {}
+
+#[cfg(windows = "unix")]     // This condition is UNEXPECTED, as the well known
+                             // 'windows' cfg doesn't expect any values
+fn tame_windows() {}</code></pre>
+<h3 id="example-multiple-names-and-values"><a class="header" href="#example-multiple-names-and-values">مثال: چند نام و مقدار</a></h3>
+<pre><code class="language-bash">rustc --check-cfg 'cfg(is_embedded, has_feathers)' \
+      --check-cfg 'cfg(feature, values("zapping", "lasers"))' \
+      --cfg has_feathers --cfg 'feature="zapping"'
+</code></pre>
+<pre><code class="language-rust">#[cfg(is_embedded)]         // This condition is expected, as 'is_embedded' was
+                            // provided in --check-cfg and doesn't take any value
+fn do_embedded() {}
+
+#[cfg(has_feathers)]        // This condition is expected, as 'has_feathers' was
+                            // provided in --check-cfg and doesn't take any value
+fn do_features() {}
+
+#[cfg(has_mumble_frotz)]    // This condition is UNEXPECTED, as 'has_mumble_frotz'
+                            // was NEVER provided in any --check-cfg arguments
+fn do_mumble_frotz() {}
+
+#[cfg(feature = "lasers")]  // This condition is expected, as "lasers" is an
+                            // expected value of `feature`
+fn shoot_lasers() {}
+
+#[cfg(feature = "monkeys")] // This condition is UNEXPECTED, as "monkeys" is NOT
+                            // an expected value of `feature`
+fn write_shakespeare() {}</code></pre>
+<h3 id="example-condition-names-without-values"><a class="header" href="#example-condition-names-without-values">مثال: نام‌های شرط بدون مقدار</a></h3>
+<pre><code class="language-bash">rustc --check-cfg 'cfg(is_embedded, has_feathers, values(any()))' \
+      --cfg has_feathers
+</code></pre>
+<pre><code class="language-rust">#[cfg(is_embedded)]      // This condition is expected, as 'is_embedded' was
+                         // provided in --check-cfg as condition name
+fn do_embedded() {}
+
+#[cfg(has_feathers)]     // This condition is expected, as "has_feathers" was
+                         // provided in --check-cfg as condition name
+fn do_features() {}
+
+#[cfg(has_feathers = "zapping")] // This condition is expected, as "has_feathers"
+                                 // was provided and because *any* values is
+                                 // expected for 'has_feathers' no
+                                 // warning is emitted for the value "zapping"
+fn do_zapping() {}
+
+#[cfg(has_mumble_frotz)] // This condition is UNEXPECTED, as 'has_mumble_frotz'
+                         // was not provided in any --check-cfg arguments
+fn do_mumble_frotz() {}</code></pre>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-reachable">
+<p><code>rustc</code> قول می‌دهد دست‌کم <code>#[cfg]</code>های دسترس‌پذیر را بررسی کند، و هرچند <code>#[cfg]</code>های غیرقابل‌دسترس در حال حاضر بررسی نمی‌شوند، ممکن است در آینده بدون آنکه تغییری ناسازگار محسوب شود بررسی شوند. <a href="#fr-reachable-1">↩</a> <a href="#fr-reachable-2">↩2</a></p>
+</li>
+</ol><nav class="page-nav"><a href="linker-plugin-lto.html">→ LTO مبتنی بر افزونهٔ پیونددهنده</a><a href="check-cfg/cargo-specifics.html">ویژگی‌های مخصوص Cargo ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

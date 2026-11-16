@@ -1,0 +1,257 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>ماژول ty: نمایش نوع‌ها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ty"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="the-ty-module-representing-types"><a class="header" href="#the-ty-module-representing-types">ماژول <code>ty</code>: نمایش نوع‌ها</a></h1>
+<p>ماژول <code>ty</code> تعریف می‌کند که کامپایلر Rust نوع‌ها را در درون چگونه نمایش می‌دهد.
+همچنین <em>بستر نوع‌دهی (typing context)</em> را تعریف می‌کند (<code>tcx</code> یا <code>TyCtxt</code>)،
+که ساختار داده‌ای مرکزی کامپایلر است.</p>
+<h2 id="tyty"><a class="header" href="#tyty"><code>ty::Ty</code></a></h2>
+<p>وقتی از نحوهٔ نمایش نوع‌ها در rustc صحبت می‌کنیم، معمولاً به نوعی به نام <code>Ty</code> اشاره داریم.
+ماژول‌ها و نوع‌های نسبتاً زیادی برای <code>Ty</code> در کامپایلر هست (<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/index.html">مستندات Ty</a>).</p>
+<p><code>Ty</code> مشخصی که به آن اشاره داریم <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html"><code>rustc_middle::ty::Ty</code></a> است (و نه
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/struct.Ty.html"><code>rustc_hir::Ty</code></a>).
+این تمایز مهم است، پس پیش از ورود به جزئیات <code>ty::Ty</code> ابتدا آن را بحث می‌کنیم.</p>
+<h2 id="rustc_hirty-vs-tyty"><a class="header" href="#rustc_hirty-vs-tyty"><code>rustc_hir::Ty</code> در برابر <code>ty::Ty</code></a></h2>
+<p>HIR در rustc را می‌توان بازنمایی میانی سطح بالا دانست.
+کم‌وبیش همان AST است (<a href="hir.html">این فصل</a> را ببینید)، چون
+نحوی را که کاربر نوشته نمایش می‌دهد و پس از تجزیه (parsing) و مقداری <em>desugaring</em> به دست می‌آید.
+بازنمایی‌ای از نوع‌ها دارد،
+اما در واقع بیشتر آنچه را کاربر نوشته منعکس می‌کند،
+تا آن نوع را نمایش دهد.</p>
+<p>در مقابل، <code>ty::Ty</code> معناشناسی (semantics) یک نوع را نمایش می‌دهد؛
+یعنی <em>معنای</em> آنچه کاربر نوشته است.
+برای مثال، <code>rustc_hir::Ty</code> این واقعیت را ثبت می‌کند که کاربر نام <code>u32</code> را دو بار
+در برنامه‌اش به کار برده، اما <code>ty::Ty</code> این واقعیت را ثبت می‌کند که هر دو استفاده به یک نوع اشاره دارند.</p>
+<p><strong>مثال: <code>fn foo(x: u32) → u32 { x }</code></strong></p>
+<p>در این تابع می‌بینیم که <code>u32</code> دو بار ظاهر می‌شود.
+می‌دانیم که این همان نوع است،
+یعنی تابع یک آرگومان می‌گیرد و یک آرگومان از همان نوع برمی‌گرداند،
+اما از دید HIR،
+دو نمونهٔ نوع متمایز وجود دارد چون این‌ها
+در دو جای مختلف برنامه رخ می‌دهند.
+یعنی دو <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/struct.Span.html"><code>Span</code></a> (موقعیت) متفاوت دارند.</p>
+<p><strong>مثال: <code>fn foo(x: &amp;u32) -&gt; &amp;u32</code></strong></p>
+<p>افزون بر این، ممکن است HIR اطلاعاتی را کم داشته باشد.
+این نوع <code>&amp;u32</code> ناقص است،
+چون در نوع کامل Rust در واقع یک طول عمر هست، اما لازم نبود
+آن طول عمرها را بنویسیم.
+همچنین برخی قواعد حذف (elision) هستند که اطلاعات را درج می‌کنند.
+نتیجه ممکن است شبیه <code>fn foo&lt;'a&gt;(x: &amp;'a u32) -&gt; &amp;'a u32</code> باشد.</p>
+<p>در سطح HIR، این چیزها صراحتاً نوشته نمی‌شوند و می‌توان گفت تصویر نسبتاً ناقص است.
+اما در سطح <code>ty::Ty</code> این جزئیات اضافه می‌شوند و کامل است.
+افزون بر این، دقیقاً یک <code>ty::Ty</code> برای یک نوع مشخص خواهیم داشت، مثل <code>u32</code>، و آن <code>ty::Ty</code> برای همهٔ <code>u32</code>ها در
+کل برنامه به کار می‌رود، نه یک استفادهٔ مشخص، برخلاف <code>rustc_hir::Ty</code>.</p>
+<p>خلاصه‌ای در ادامه آمده است:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/struct.Ty.html"><code>rustc_hir::Ty</code></a></th><th><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html"><code>ty::Ty</code></a></th></tr>
+</thead>
+<tbody>
+<tr><td><em>نحو</em> یک نوع را توصیف می‌کند: آنچه کاربر نوشته (با مقداری desugaring).</td><td><em>معناشناسی</em> یک نوع را توصیف می‌کند: معنای آنچه کاربر نوشته.</td></tr>
+<tr><td>هر <code>rustc_hir::Ty</code> spanهای مخصوص خود را دارد که با جای مناسب در برنامه متناظر است.</td><td>با یک جای واحد در برنامهٔ کاربر متناظر نیست.</td></tr>
+<tr><td><code>rustc_hir::Ty</code> جنریک‌ها و طول عمرها دارد؛ اما برخی از آن طول عمرها نشانگرهای ویژه‌ای مانند <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/enum.LifetimeKind.html#variant.Implicit"><code>LifetimeKind::Implicit</code></a> هستند.</td><td><code>ty::Ty</code> نوع کامل را دارد، شامل جنریک‌ها و طول عمرها، حتی اگر کاربر آن‌ها را ننوشته باشد</td></tr>
+<tr><td><code>fn foo(x: u32) -&gt; u32 { }</code> - دو <code>rustc_hir::Ty</code> که هر استفاده از <code>u32</code> را نمایش می‌دهند، هر کدام <code>Span</code>های خود را دارد و <code>rustc_hir::Ty</code> به ما نمی‌گوید که هر دو یک نوع‌اند</td><td><code>fn foo(x: u32) -&gt; u32 { }</code> - یک <code>ty::Ty</code> برای همهٔ نمونه‌های <code>u32</code> در کل برنامه، و <code>ty::Ty</code> به ما می‌گوید که هر دو استفاده از <code>u32</code> یک نوع را معنا می‌دهند.</td></tr>
+<tr><td><code>fn foo(x: &amp;u32) -&gt; &amp;u32 { }</code> - باز هم دو <code>rustc_hir::Ty</code>. طول عمرهای ارجاع‌ها در <code>rustc_hir::Ty</code>ها با یک نشانگر ویژه ظاهر می‌شوند: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/enum.LifetimeKind.html#variant.Implicit"><code>LifetimeKind::Implicit</code></a>.</td><td><code>fn foo(x: &amp;u32) -&gt; &amp;u32 { }</code>- یک <code>ty::Ty</code> واحد. <code>ty::Ty</code> پارامتر طول عمر پنهان را دارد.</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>ترتیب</strong></p>
+<p>HIR مستقیماً از AST ساخته می‌شود، پس پیش از تولید هر <code>ty::Ty</code> رخ می‌دهد.
+پس از ساخت HIR، مقداری استنتاج نوع و بررسی نوع پایه انجام می‌شود.
+در حین استنتاج نوع،
+می‌فهمیم <code>ty::Ty</code> هر چیز چیست و همچنین بررسی می‌کنیم آیا نوع چیزی
+مبهم است یا نه.
+سپس <code>ty::Ty</code> برای بررسی نوع به کار می‌رود، در حالی که مطمئن می‌شویم همه‌چیز نوع مورد انتظار را دارد.
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_analysis/hir_ty_lowering/index.html">ماژول <code>hir_ty_lowering</code></a> جایی است که کد مسئول
+پایین‌آوری یک <code>rustc_hir::Ty</code> به یک <code>ty::Ty</code> در آن قرار دارد.
+روال اصلی مورد استفاده <code>lower_ty</code> است.
+این در مرحلهٔ بررسی نوع رخ می‌دهد، اما همچنین در بخش‌های دیگر کامپایلر که می‌خواهند
+پرسش‌هایی مانند «این تابع چه نوع آرگومان‌هایی انتظار دارد؟» بپرسند.</p>
+<p><strong>چگونه معناشناسی دو نمونهٔ <code>Ty</code> را پیش می‌برد</strong></p>
+<p>می‌توانید HIR را دیدگاهی از اطلاعات نوع دانست که کمترین فرض را می‌کند.
+فرض می‌کنیم دو چیز متمایزند تا وقتی ثابت شود یک چیزند.
+به عبارت دیگر، دربارهٔ آن‌ها کمتر می‌دانیم، پس باید دربارهٔ آن‌ها کمتر فرض کنیم.</p>
+<p>آن‌ها از نظر نحوی دو رشته‌اند: <code>"u32"</code> در خط N ستون ۲۰ و <code>"u32"</code> در خط N ستون ۳۵. هنوز
+نمی‌دانیم که یکی هستند.
+پس در HIR با آن‌ها طوری رفتار می‌کنیم که گویی متفاوت‌اند.
+بعداً
+تشخیص می‌دهیم که از نظر معنایی یک نوع‌اند و آن <code>ty::Ty</code>ای است که به کار می‌بریم.</p>
+<p>مثال دیگری را در نظر بگیرید: <code>fn foo&lt;T&gt;(x: T) -&gt; u32</code>.
+فرض کنید کسی <code>foo::&lt;u32&gt;(0)</code> را فراخوانی کند.
+این یعنی <code>T</code> و <code>u32</code> (در این فراخوانی) در واقع یک نوع از آب درمی‌آیند، پس
+در نهایت به همان <code>ty::Ty</code> می‌رسیم، اما <code>rustc_hir::Ty</code>های متمایز داریم.
+(البته این کمی بیش از حد ساده‌سازی شده است، چون در حین بررسی نوع،
+تابع را به‌صورت جنریک بررسی می‌کنیم و همچنان <code>T</code>ای متمایز از <code>u32</code> داریم.
+بعداً، هنگام تولید کد،
+همیشه با نسخه‌های «monomorphized» (کاملاً جایگزین‌شده) هر تابع سروکار داریم،
+و در نتیجه می‌دانیم <code>T</code> چه چیزی را نمایش می‌دهد (و به‌طور مشخص اینکه <code>u32</code> است).)</p>
+<p>این هم یک مثال دیگر:</p>
+<pre><code class="language-rust">mod a {
+    type X = u32;
+    pub fn foo(x: X) -&gt; u32 { 22 }
+}
+mod b {
+    type X = i32;
+    pub fn foo(x: X) -&gt; i32 { x }
+}</code></pre>
+<p>در اینجا نوع <code>X</code> بسته به بستر آشکارا فرق می‌کند.
+اگر به <code>rustc_hir::Ty</code> نگاه کنید،
+می‌بینید که <code>X</code> در هر دو مورد یک alias است (هرچند از طریق name resolution
+به aliasهای متمایز نگاشت می‌شود).
+اما اگر به امضای <code>ty::Ty</code> نگاه کنید،
+یا <code>fn(u32) -&gt; u32</code> خواهد بود یا <code>fn(i32) -&gt; i32</code> (با نام‌های مستعار نوع که کاملاً گسترش یافته‌اند).</p>
+<h2 id="tyty-implementation"><a class="header" href="#tyty-implementation">پیاده‌سازی <code>ty::Ty</code></a></h2>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html"><code>rustc_middle::ty::Ty</code></a> در واقع یک wrapper پیرامون
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html"><code>Interned&lt;WithCachedTypeInfo&lt;TyKind&gt;&gt;</code></a> است.
+عموماً می‌توانید <code>Interned</code> را نادیده بگیرید؛ تقریباً هرگز صراحتاً به آن دسترسی نخواهید داشت.
+همیشه آن‌ها را درون <code>Ty</code> پنهان می‌کنیم و از طریق پیاده‌سازی‌های <code>Deref</code> یا متدها از آن عبور می‌کنیم.
+<code>TyKind</code> یک enum بزرگ با گونه‌هایی برای نمایش بسیاری از نوع‌های مختلف Rust است
+(مثلاً نوع‌های اولیه، ارجاع‌ها، نوع‌های داده‌ای جبری، جنریک‌ها، طول عمرها و غیره).
+<code>WithCachedTypeInfo</code> چند مقدار کش‌شده مانند <code>flags</code> و <code>outer_exclusive_binder</code> دارد.
+این‌ها
+هک‌های مناسبی برای کارایی‌اند و اطلاعاتی دربارهٔ نوع را خلاصه می‌کنند که ممکن است بخواهیم
+بدانیم، اما در اینجا زیاد وارد تصویر نمی‌شوند.
+سرانجام، <a href="./memory.html"><code>Interned</code></a> به <code>ty::Ty</code> اجازه می‌دهد نوعی باریک و شبیه اشاره‌گر باشد.
+این به ما اجازه می‌دهد مقایسه‌های ارزان برای برابری انجام دهیم، در کنار دیگر مزایای interning.</p>
+<h2 id="allocating-and-working-with-types"><a class="header" href="#allocating-and-working-with-types">تخصیص و کار با نوع‌ها</a></h2>
+<p>برای تخصیص یک نوع جدید می‌توانید از متدهای مختلف <code>new_*</code> که روی
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html"><code>Ty</code></a> تعریف شده‌اند استفاده کنید.
+نام این‌ها بیشتر با انواع مختلف نوع‌ها متناظر است.
+برای مثال:</p>
+<pre><code class="language-rust ignore">let array_ty = Ty::new_array_with_const_len(tcx, ty, count);</code></pre>
+<p>همهٔ این متدها یک <code>Ty&lt;'tcx&gt;</code> برمی‌گردانند – توجه کنید که طول عمری که پس می‌گیرید طول عمر
+arenaای است که این <code>tcx</code> به آن دسترسی دارد.
+نوع‌ها همیشه canonicalize و intern می‌شوند (پس هرگز دقیقاً یک نوع را دو بار تخصیص نمی‌دهیم).</p>
+<p>همچنین می‌توانید نوع‌های رایج مختلف را در خود <code>tcx</code> با دسترسی به فیلدهایش بیابید:
+<code>tcx.types.bool</code>، <code>tcx.types.char</code> و غیره. (برای اطلاعات بیشتر <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.CommonTypes.html"><code>CommonTypes</code></a> را ببینید.)</p>
+<!-- N.B: This section is linked from the type comparison internal lint. -->
+<h2 id="comparing-types"><a class="header" href="#comparing-types">مقایسهٔ نوع‌ها</a></h2>
+<p>چون نوع‌ها interned هستند، می‌توان آن‌ها را برای برابری با <code>==</code> به‌طور کارا مقایسه کرد.
+اما این تقریباً هرگز کاری نیست که بخواهید انجام دهید،
+مگر اینکه اتفاقاً در حال hash کردن و جستجوی تکراری‌ها باشید.
+دلیلش این است که در Rust اغلب راه‌های متعددی برای نمایش یک نوع هست،
+به‌ویژه وقتی استنتاج درگیر باشد.</p>
+<p>برای مثال، نوع <code>{integer}</code> (<code>ty::Infer(ty::IntVar(..))</code> یک متغیر استنتاج عدد صحیح،
+نوع یک literal عدد صحیح مانند <code>0</code>) و <code>u8</code> (<code>ty::UInt(..)</code>) هنگام آزمودن اینکه آیا می‌توان آن‌ها را به هم اختصاص داد (که عملیاتی رایج در
+کد diagnostics است) اغلب باید برابر در نظر گرفته شوند.
+اما <code>==</code> روی آن‌ها <code>false</code> برمی‌گرداند، چون نوع‌های متفاوتی هستند.</p>
+<p>ساده‌ترین راه مقایسهٔ درست دو نوع به یک بستر استنتاج (<code>infcx</code>) نیاز دارد.
+اگر یکی دارید،
+می‌توانید از <code>infcx.can_eq(param_env, ty1, ty2)</code> برای بررسی اینکه آیا می‌توان نوع‌ها را برابر کرد استفاده کنید.
+این معمولاً چیزی است که می‌خواهید در حین diagnostics بررسی کنید، که با پرسش‌هایی از این دست سروکار دارد
+که آیا دو نوع را می‌توان به هم اختصاص داد،
+نه اینکه آیا در لایهٔ بررسی نوع کامپایلر به‌طور یکسان نمایش داده می‌شوند.</p>
+<p>هنگام کار با یک بستر استنتاج، باید مراقب باشید که متغیرهای استنتاج بالقوه
+درون نوع‌ها واقعاً به آن بستر استنتاج تعلق داشته باشند.
+اگر در تابعی هستید که از پیش به یک بستر استنتاج دسترسی دارد، این باید برقرار باشد.
+به‌طور مشخص، این در حین بررسی نوع HIR یا borrow checking در MIR برقرار است.</p>
+<p>ملاحظهٔ دیگر نرمال‌سازی است.
+دو نوع ممکن است در واقع یکی باشند، اما یکی پشت یک نوع وابسته باشد.
+برای مقایسهٔ درست آن‌ها، باید ابتدا نوع‌ها را نرمال کنید.
+این عمدتاً دغدغه‌ای در حین بررسی نوع HIR و برای همهٔ نوع‌های حاصل از یک query ‏<code>TyCtxt</code> است
+(برای مثال از <code>tcx.type_of()</code>).</p>
+<p>وقتی <code>FnCtxt</code> یا <code>ObligationCtxt</code> در حین بررسی نوع در دسترس است،
+باید <code>.normalize(ty)</code> را روی آن‌ها برای نرمال کردن نوع به کار برد.
+پس از بررسی نوع، کد diagnostics می‌تواند از <code>tcx.normalize_erasing_regions(ty)</code> استفاده کند.</p>
+<p>همچنین مواردی هست که استفاده از <code>==</code> روی <code>Ty</code> اشکالی ندارد.
+برای مثال، این در lintهای دیررس یا پس از monomorphization صدق می‌کند،
+چون بررسی نوع به پایان رسیده است، یعنی همهٔ متغیرهای استنتاج
+حل شده‌اند و همهٔ regionها پاک شده‌اند.
+در این موارد، اگر می‌دانید متغیرهای استنتاج یا نرمال‌سازی دغدغه نخواهند بود،
+توصیه می‌شود lint را با <code>#[allow]</code> یا <code>#[expect]</code> خاموش کنید.</p>
+<p>وقتی کد diagnostics به بستر استنتاج دسترسی ندارد، باید آن را از طریق
+فراخوانی‌های تابع عبور داد اگر در جایی در دسترس باشد (مانند حین بررسی نوع).</p>
+<p>اگر هیچ بستر استنتاجی اصلاً در دسترس نباشد،
+می‌توان یکی را همان‌طور که در <a href="./type-inference.html#creating-an-inference-context">type-inference</a> توضیح داده شده ساخت.
+اما این فقط وقتی مفید است که نوع‌های درگیر (برای مثال،
+اگر از یک query مانند <code>tcx.type_of()</code> آمده باشند) واقعاً با متغیرهای استنتاج تازه با استفاده از <a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_infer/infer/struct.InferCtxt.html#method.fresh_substs_for_item"><code>fresh_args_for_item</code></a> جایگزین شده باشند.
+این را می‌توان برای پاسخ به پرسش‌هایی مانند «آیا <code>Vec&lt;T&gt;</code> برای هر <code>T</code> را می‌توان با <code>Vec&lt;u32&gt;</code> یکسان‌سازی کرد؟» به کار برد.</p>
+<h2 id="tytykind-variants"><a class="header" href="#tytykind-variants">گونه‌های <code>ty::TyKind</code></a></h2>
+<p>توجه: <code>TyKind</code> مفهوم <em>Kind</em> در برنامه‌نویسی تابعی <strong>نیست</strong>.</p>
+<p>هر زمان با یک <code>Ty</code> در کامپایلر کار می‌کنید، رایج است که روی نوعِ (kind) type تطبیق دهید:</p>
+<pre><code class="language-rust ignore">fn foo(x: Ty&lt;'tcx&gt;) {
+  match x.kind {
+    ...
+  }
+}</code></pre>
+<p>فیلد <code>kind</code> از نوع <code>TyKind&lt;'tcx&gt;</code> است،
+که enumای است که همهٔ انواع مختلف نوع‌ها را در کامپایلر تعریف می‌کند.</p>
+<blockquote>
+<p>یادآوری: بررسی فیلد <code>kind</code> روی نوع‌ها در حین استنتاج نوع می‌تواند پرخطر باشد، چون ممکن است
+متغیرهای استنتاج و چیزهای دیگری برای در نظر گرفتن باشد، یا گاهی نوع‌ها هنوز شناخته نیستند و
+بعداً شناخته می‌شوند.</p>
+</blockquote>
+<p>نوع‌های مرتبط زیادی هست و در زمان مناسب آن‌ها را پوشش می‌دهیم (مثلاً regionها/طول عمرها،
+«جایگزینی‌ها (substitutions)» و غیره).</p>
+<p>گونه‌های بسیاری روی enum ‏<code>TyKind</code> هست،
+که می‌توانید با نگاه به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html">مستنداتش</a> ببینید.
+در اینجا نمونه‌ای آمده است:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html#variant.Adt"><strong>نوع‌های داده‌ای جبری (ADTs)</strong></a> یک <a href="https://en.wikipedia.org/wiki/Algebraic_data_type"><em>نوع داده‌ای جبری</em></a> یک <code>struct</code>،
+<code>enum</code> یا <code>union</code> است.
+در زیر پوسته، <code>struct</code>، <code>enum</code> و <code>union</code> در واقع به یک شکل پیاده‌سازی شده‌اند:
+همه‌شان <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html#variant.Adt"><code>ty::TyKind::Adt</code></a> هستند.
+اساساً یک نوع تعریف‌شده توسط کاربر است.
+بعداً دربارهٔ این‌ها بیشتر صحبت می‌کنیم.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html#variant.Foreign"><strong>Foreign</strong></a> با <code>extern type T</code> متناظر است.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html#variant.Str"><strong>Str</strong></a> همان نوع str است.
+وقتی کاربر <code>&amp;str</code> می‌نویسد، <code>Str</code> روشی است که بخش <code>str</code> آن نوع را نمایش می‌دهیم.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html#variant.Slice"><strong>Slice</strong></a> با <code>[T]</code> متناظر است.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html#variant.Array"><strong>Array</strong></a> با <code>[T; n]</code> متناظر است.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html#variant.RawPtr"><strong>RawPtr</strong></a> با <code>*mut T</code> یا <code>*const T</code> متناظر است.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html#variant.Ref"><strong>Ref</strong></a> <code>Ref</code> نمایندهٔ ارجاع‌های امن است، <code>&amp;'a mut T</code> یا <code>&amp;'a T</code>.
+<code>Ref</code> بخش‌های وابسته‌ای دارد،
+مانند <code>Ty&lt;'tcx&gt;</code>، که نوعی است که ارجاع به آن اشاره می‌کند.
+<code>Region&lt;'tcx&gt;</code> طول عمر یا region ارجاع است و <code>Mutability</code> نشان می‌دهد ارجاع
+تغییرپذیر هست یا نه.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html#variant.Param"><strong>Param</strong></a> یک پارامتر نوع را نمایش می‌دهد (مثلاً <code>T</code> در <code>Vec&lt;T&gt;</code>).</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html#variant.Error"><strong>Error</strong></a> یک خطای نوع را در جایی نمایش می‌دهد تا بتوانیم diagnostics بهتری چاپ کنیم.
+بعداً دربارهٔ این بیشتر بحث می‌کنیم.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html#variants"><strong>و بسیاری دیگر</strong>…</a></li>
+</ul>
+<h2 id="import-conventions"><a class="header" href="#import-conventions">قراردادهای import</a></h2>
+<p>هرچند قاعدهٔ سفت‌وسختی وجود ندارد، ماژول <code>ty</code> معمولاً این‌گونه استفاده می‌شود:</p>
+<pre><code class="language-rust ignore">use ty::{self, Ty, TyCtxt};</code></pre>
+<p>به‌ویژه، چون بسیار رایج‌اند، نوع‌های <code>Ty</code> و <code>TyCtxt</code> مستقیماً import می‌شوند.
+نوع‌های دیگر
+اغلب با پیشوند صریح <code>ty::</code> ارجاع داده می‌شوند (مثلاً <code>ty::TraitRef&lt;'tcx&gt;</code>). اما برخی
+ماژول‌ها مجموعهٔ بزرگ‌تر یا کوچک‌تری از نام‌ها را صراحتاً import می‌کنند.</p>
+<h2 id="type-errors"><a class="header" href="#type-errors">خطاهای نوع</a></h2>
+<p>یک <code>TyKind::Error</code> هست که وقتی کاربر خطای نوع می‌کند تولید می‌شود.
+ایده این است که
+این نوع را منتشر کنیم و خطاهای دیگری را که به‌خاطر آن پیش می‌آیند سرکوب کنیم تا کاربر
+با پیام‌های خطای کامپایلر آبشاری غرق نشود.</p>
+<p>یک <strong>پایای مهم (invariant)</strong> برای <code>TyKind::Error</code> هست.
+کامپایلر <strong>هرگز</strong> نباید <code>Error</code> تولید کند مگر اینکه <strong>بدانیم</strong> خطایی از پیش
+به کاربر گزارش شده است.
+این معمولاً
+به این دلیل است که (الف) همین‌جا آن را گزارش کرده‌اید یا (ب) یک نوع Error موجود را منتشر می‌کنید (که
+در آن صورت خطا باید هنگام تولید آن نوع Error گزارش شده باشد).</p>
+<p>حفظ این پایا مهم است چون کل هدف نوع <code>Error</code> سرکوب
+خطاهای دیگر است – یعنی آن‌ها را گزارش نمی‌کنیم. اگر نوع <code>Error</code> را بدون اینکه واقعاً
+خطایی به کاربر صادر کنیم تولید کنیم، این می‌تواند باعث سرکوب خطاهای بعدی شود،
+و کامپایل ممکن است سهواً موفق شود!</p>
+<p>گاهی حالت سومی هست.
+باور دارید که خطایی گزارش شده، اما باور دارید
+در کامپایل زودتر گزارش می‌شد، نه به‌صورت محلی.
+در آن صورت می‌توانید یک «باگ تأخیری (delayed bug)» با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.DiagCtxt.html#method.delayed_bug"><code>delayed_bug</code></a> یا <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.DiagCtxt.html#method.span_delayed_bug"><code>span_delayed_bug</code></a> بسازید.
+این یادداشت می‌کند که انتظار دارید کامپایل خطایی بدهد – اما اگر
+کامپایل موفق شود، یک
+گزارش باگ کامپایلر راه می‌اندازد.</p>
+<p>برای ایمنی بیشتر، واقعاً ممکن نیست مقدار <code>TyKind::Error</code> را
+بیرون از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/index.html"><code>rustc_middle::ty</code></a> تولید کرد؛ یک عضو خصوصی در
+<code>TyKind::Error</code> هست که مانع ساخته شدن آن در جاهای دیگر می‌شود.
+در عوض،
+باید از متدهای <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html#method.new_error"><code>Ty::new_error</code></a> یا <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html#method.new_error_with_message"><code>Ty::new_error_with_message</code></a> استفاده کرد.
+این متدها یا یک <code>ErrorGuaranteed</code> می‌گیرند
+یا <code>span_delayed_bug</code> را فراخوانی می‌کنند و سپس یک <code>Ty</code> interned از نوع <code>Error</code> برمی‌گردانند.
+اگر از پیش قصد استفاده از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.DiagCtxt.html#method.span_delayed_bug"><code>span_delayed_bug</code></a> داشتید، می‌توانید به‌جای آن فقط span و
+پیام را به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html#method.new_error_with_message"><code>ty_error_with_message</code></a> بدهید تا از یک delayed bug اضافی پرهیز شود.</p>
+<h2 id="tykind-variant-shorthand-syntax"><a class="header" href="#tykind-variant-shorthand-syntax">نحو کوتاه‌نویسی گونه‌های <code>TyKind</code></a></h2>
+<p>هنگام نگاه کردن به خروجی debug مربوط به <code>Ty</code> یا صرفاً صحبت دربارهٔ نوع‌های مختلف در کامپایلر، ممکن است با نحوی روبه‌رو شوید که Rust معتبر نیست اما برای نمایش موجز اطلاعات درونی دربارهٔ نوع‌ها به کار می‌رود.
+در ادامه یک برگهٔ مرجع سریع آمده تا بگوید نحوهای مختلف در واقع چه معنایی دارند:</p>
+<ul>
+<li>پارامترهای جنریک: <code>{name}/#{index}</code> مثلاً <code>T/#0</code>، که <code>index</code> با موقعیت آن در فهرست پارامترهای جنریک متناظر است</li>
+<li>متغیرهای استنتاج: <code>?{id}</code> مثلاً <code>?x</code>/<code>?0</code>، که <code>id</code> متغیر استنتاج را مشخص می‌کند</li>
+<li>متغیرهای binderها: <code>^{binder}_{index}</code> مثلاً <code>^0_x</code>/<code>^0_2</code>، که <code>binder</code> و <code>index</code> مشخص می‌کنند به کدام متغیر از کدام binder اشاره می‌شود</li>
+<li>جانگهدارها (placeholders): <code>!{id}</code> یا <code>!{id}_{universe}</code> مثلاً <code>!x</code>/<code>!0</code>/<code>!x_2</code>/<code>!0_2</code>، که یک نوع یکتا را در universe مشخص‌شده نمایش می‌دهند. وقتی universe برابر <code>0</code> است اغلب حذف می‌شود</li>
+</ul>
+<p>این‌ها باید در فصل‌های بعدی با عمق بیشتری پوشش داده شوند.</p><nav class="page-nav"><a href="early-late-parameters.html">→ پارامترهای Early در برابر Late bound</a><a href="ty-module/generic-arguments.html">ADTها و آرگومان‌های جنریک ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

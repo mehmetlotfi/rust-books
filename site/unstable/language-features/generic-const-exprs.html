@@ -1,0 +1,57 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>generic-const-exprs — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/generic-const-exprs"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="generic_const_exprs"><a class="header" href="#generic_const_exprs">generic_const_exprs</a></h1>
+<p>ثابت‌های جنریک غیرساده‌ای را مجاز می‌کند که باید با قرار گرفتن در امضای یک آیتم نشان داده شود که با موفقیت به یک مقدار ارزیابی می‌شوند.</p>
+<p>مسئلهٔ پیگیری (tracking issue) این ویژگی: <a href="https://github.com/rust-lang/rust/issues/76560">#76560</a></p>
+<hr>
+<p>هشدار: این ویژگی ناقص است؛ طراحی و نحو آن ممکن است تغییر کند.</p>
+<p>همچنین ببینید: <a href="gca-min-const-items.html">gca_min_const_items</a>، <a href="gca-const-items.html">gca_const_items</a></p>
+<h2 id="examples"><a class="header" href="#examples">مثال‌ها</a></h2>
+<pre><code class="language-rust">#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
+
+// Use parameters that depend on a generic argument.
+struct Foo&lt;const N: usize&gt;
+where
+    [(); N + 1]:,
+{
+    array: [usize; N + 1],
+}
+
+// Use generic parameters in const operations.
+trait Bar {
+    const X: usize;
+    const Y: usize;
+}
+
+// Note `B::X * B::Y`.
+const fn baz&lt;B: Bar&gt;(x: [usize; B::X], y: [usize; B::Y]) -&gt; [usize; B::X * B::Y] {
+    let mut out = [0; B::X * B::Y];
+    let mut i = 0;
+    while i &lt; B::Y {
+        let mut j = 0;
+        while j &lt; B::X {
+            out[i * B::X + j] = y[i].saturating_mul(x[j]);
+            j += 1;
+        }
+        i += 1;
+    }
+    out
+}
+
+
+// Create a new type based on a generic argument.
+pub struct Grow&lt;const N: usize&gt; {
+    arr: [usize; N],
+}
+
+impl&lt;const N: usize&gt; Grow&lt;N&gt; {
+    pub const fn grow(self, val: usize) -&gt; Grow&lt;{ N + 1 }&gt; {
+        let mut new_arr = [0; { N + 1 }];
+        let mut idx = 0;
+        while idx &lt; N {
+            new_arr[idx] = self.arr[idx];
+            idx += 1;
+        }
+        new_arr[N] = val;
+        Grow { arr: new_arr }
+    }
+}</code></pre><nav class="page-nav"><a href="../../unstable/language-features/gca-min-const-items.html">→ gca-min-const-items</a><a href="../../unstable/language-features/generic-const-items.html">generic-const-items ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

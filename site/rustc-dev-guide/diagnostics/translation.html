@@ -1,0 +1,80 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>ترجمه — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="diagnostics/translation"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="translation"><a class="header" href="#translation">Translation</a></h1>
+<div class="warning">
+rustc's current diagnostics translation infrastructure (as of
+<!-- date-check --> October 2024
+) unfortunately causes some friction for compiler contributors, and the current
+infrastructure is mostly pending a redesign that better addresses needs of both
+compiler contributors and translation teams.
+Note that there is no current
+active redesign proposals (as of
+<!-- date-check --> October 2024
+)!
+<p>برای به‌روزرسانی وضعیت issue پیگیری را ببینید: <a href="https://github.com/rust-lang/rust/issues/132181">https://github.com/rust-lang/rust/issues/132181</a></p>
+<p>زیرساخت ترجمه منتظر بازطراحی‌ای است که هنوز پیشنهاد نشده و در نتیجه بازکاری خواهد شد؛ استفاده از زیرساخت فعلی ترجمه را الزامی نمی‌کنیم.
+اگر <em>می‌خواهید</em> یا کد را تمیزتر می‌کند از این زیرساخت استفاده کنید، اما اگر به انعطاف بیشتر نیاز دارید آن را دور بزنید.</p>
+</div>
+
+<p>زیرساخت diagnostic در rustc از diagnosticهای قابل‌ترجمه با <a href="https://projectfluent.org">Fluent</a> پشتیبانی می‌کند.</p>
+<h2 id="writing-translatable-diagnostics"><a class="header" href="#writing-translatable-diagnostics">Writing translatable diagnostics</a></h2>
+<p>دو راه برای نوشتن diagnosticهای قابل‌ترجمه هست:</p>
+<ol>
+<li>برای diagnosticهای ساده، با استفاده از derive مربوط به diagnostic (یا subdiagnostic).
+(diagnosticهای «ساده» آن‌هایی هستند که برای تصمیم‌گیری دربارهٔ صدور subdiagnosticها منطق زیادی لازم ندارند و در نتیجه می‌توان به‌صورت struct نمایششان داد).
+<a href="./diagnostic-structs.html">مستندات structهای diagnostic و subdiagnostic</a> را ببینید.</li>
+<li>استفاده از شناسه‌های نوع‌دار با APIهای <code>Diag</code> (در پیاده‌سازی‌های <code>Diagnostic</code> یا <code>Subdiagnostic</code>).</li>
+</ol>
+<p>هنگام افزودن یا تغییر diagnostic قابل‌ترجمه، لازم نیست نگران ترجمه‌ها باشید.
+فقط به‌روزرسانی پیام اصلی انگلیسی لازم است.</p>
+<h2 id="fluent"><a class="header" href="#fluent">Fluent</a></h2>
+<p>Fluent حول ایدهٔ «بومی‌سازی نامتقارن (asymmetric localization)» ساخته شده که هدفش جداکردن گویایی ترجمه‌ها از دستور زبان مبدأ (در مورد rustc انگلیسی) است.
+پیش از ترجمه، diagnosticهای rustc برای ساخت پیام‌های نمایش‌داده‌شده به کاربر به‌شدت به درون‌یابی (interpolation) تکیه می‌کردند.
+رشته‌های درون‌یابی‌شده ترجمه‌اش دشوار است چون نوشتن ترجمه‌ای با آهنگ طبیعی ممکن است درون‌یابی بیشتر، کمتر یا متفاوتی از رشتهٔ انگلیسی لازم داشته باشد، که پشتیبانی از همه‌شان نیازمند تغییر در کد منبع کامپایلر می‌شود.</p>
+<p>پیام‌های diagnostic در منابع Fluent تعریف می‌شوند.
+مجموعهٔ ترکیبی منابع Fluent برای یک locale (مثلاً <code>en-US</code>) «Fluent bundle» نامیده می‌شود.</p>
+<pre><code class="language-fluent">typeck_address_of_temporary_taken = cannot take address of a temporary
+</code></pre>
+<p>در مثال بالا، <code>typeck_address_of_temporary_taken</code> شناسهٔ پیام Fluent است و با پیام diagnostic به انگلیسی متناظر است.
+منابع Fluent دیگری را می‌توان نوشت که با پیامی به زبان دیگر متناظر باشند.
+بنابراین هر diagnostic دست‌کم یک پیام Fluent دارد.</p>
+<pre><code class="language-fluent">typeck_address_of_temporary_taken = cannot take address of a temporary
+    .label = temporary value
+</code></pre>
+<p>طبق قرارداد، پیام‌های diagnostic برای subdiagnosticها به‌صورت «attribute» روی پیام‌های Fluent مشخص می‌شوند (پیام‌های مرتبط اضافی که با نحو <code>.&lt;attribute-name&gt;</code> نشان داده می‌شوند).
+در مثال بالا، <code>label</code> attribute پیام <code>typeck_address_of_temporary_taken</code> است که با پیام برچسب افزوده‌شده به این diagnostic متناظر است.</p>
+<p>پیام‌های diagnostic اغلب زمینهٔ اضافی‌ای مثل نام نوع یا متغیر را در پیام نمایش‌داده‌شده به کاربر درون‌یابی می‌کنند.
+زمینهٔ اضافی برای پیام‌های Fluent به‌صورت «آرگومان» به diagnostic داده می‌شود.</p>
+<pre><code class="language-fluent">typeck_struct_expr_non_exhaustive =
+    cannot create non-exhaustive {$what} using struct expression
+</code></pre>
+<p>در مثال بالا، پیام Fluent به آرگومانی به نام <code>what</code> ارجاع می‌دهد که انتظار می‌رود وجود داشته باشد (نحوهٔ دادن آرگومان‌ها به diagnosticها بعداً با جزئیات بحث می‌شود).</p>
+<p>برای مثال‌های استفادهٔ دیگر Fluent و نحو آن می‌توانید مستندات <a href="https://projectfluent.org">Fluent</a> را ببینید.</p>
+<h3 id="guideline-for-message-naming"><a class="header" href="#guideline-for-message-naming">رهنمود نام‌گذاری پیام</a></h3>
+<p>معمولاً fluent برای جداکردن واژه‌ها درون نام پیام از <code>-</code> استفاده می‌کند.
+با این حال، fluent <code>_</code> را هم می‌پذیرد.
+چون <code>_</code> با موارد استفادهٔ Rust بهتر جور است (شناسه‌ها در سمت Rust هم از <code>_</code> استفاده می‌کنند)، درون rustc استفاده از <code>-</code> برای جداکردن واژه‌ها مجاز نیست و به‌جای آن <code>_</code> توصیه می‌شود.
+تنها استثنا <code>-</code>های ابتدایی است، برای نام‌هایی مثل <code>-passes_see_issue</code>.</p>
+<h3 id="guidelines-for-writing-translatable-messages"><a class="header" href="#guidelines-for-writing-translatable-messages">رهنمودهای نوشتن پیام‌های قابل‌ترجمه</a></h3>
+<p>برای اینکه پیام به زبان‌های مختلف قابل‌ترجمه باشد، همهٔ اطلاعات لازم برای هر زبان باید به‌صورت آرگومان به diagnostic داده شود (نه فقط اطلاعات لازم برای پیام انگلیسی).</p>
+<p>با کسب تجربهٔ بیشتر تیم کامپایلر در نوشتن diagnosticهایی که همهٔ اطلاعات لازم برای ترجمه به زبان‌های مختلف را دارند، این صفحه با راهنمایی بیشتر به‌روز می‌شود.
+فعلاً مستندات <a href="https://projectfluent.org">Fluent</a> مثال‌های عالی از ترجمهٔ پیام‌ها به localeهای مختلف و اطلاعاتی که کد باید برای این کار بدهد دارد.</p>
+<h3 id="compile-time-validation-and-typed-identifiers"><a class="header" href="#compile-time-validation-and-typed-identifiers">اعتبارسنجی زمان کامپایل و شناسه‌های نوع‌دار</a></h3>
+<p>ماکروی <code>#[derive(Diagnostic)]</code> در rustc اعتبارسنجی زمان کامپایل پیام‌های Fluent را انجام می‌دهد.
+اعتبارسنجی زمان کامپایل منابع Fluent هر خطای تجزیهٔ منابع Fluent را هنگام ساخت کامپایلر صادر می‌کند و از panic در کامپایلر به‌دلیل منابع Fluent نامعتبر جلوگیری می‌کند.
+اعتبارسنجی زمان کامپایل همچنین اگر چند پیام Fluent شناسهٔ یکسان داشته باشند خطا صادر می‌کند.</p>
+<h2 id="internals"><a class="header" href="#internals">Internals</a></h2>
+<p>بخش‌های مختلف درون‌ساز diagnostic در rustc برای پشتیبانی از ترجمه تغییر کرده‌اند.</p>
+<h3 id="messages"><a class="header" href="#messages">Messages</a></h3>
+<p>همهٔ APIهای diagnostic سنتی rustc (مثلاً <code>struct_span_err</code> یا <code>note</code>) هر پیامی را که بتوان به <code>DiagMessage</code> تبدیل کرد می‌پذیرند.</p>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_error_messages/enum.DiagMessage.html"><code>rustc_error_messages::DiagMessage</code></a> می‌تواند هم پیام‌های diagnostic قدیمی غیرقابل‌ترجمه و هم پیام‌های قابل‌ترجمه را نمایش دهد.
+پیام‌های غیرقابل‌ترجمه فقط <code>String</code> هستند.
+پیام‌های قابل‌ترجمه فقط <code>&amp;'static str</code> با شناسهٔ پیام Fluent هستند (گاهی با <code>&amp;'static str</code> اضافی برای attribute).</p>
+<p>هرگز لازم نیست مستقیماً با <code>DiagMessage</code> تعامل کرد:
+ثابت‌های <code>DiagMessage</code> برای هر پیام diagnostic در منبع Fluent ساخته می‌شوند (در ادامه با جزئیات بیشتر شرح داده می‌شود)، یا <code>DiagMessage</code>ها در کد تولیدشده با ماکروی derive مربوط به diagnostic ساخته می‌شوند.</p>
+<p><code>DiagMessage</code> برای هر نوعی که بتوان به رشته تبدیل کرد <code>Into</code> را پیاده‌سازی می‌کند و آن‌ها را به diagnosticهای غیرقابل‌ترجمه تبدیل می‌کند – این باعث می‌شود همهٔ فراخوانی‌های diagnostic موجود کار کنند.</p>
+<h3 id="arguments"><a class="header" href="#arguments">Arguments</a></h3>
+<p>زمینهٔ اضافی برای پیام‌های Fluent که در محتوای پیام درون‌یابی می‌شوند باید به diagnosticهای قابل‌ترجمه داده شود.</p>
+<p>diagnosticها تابع <code>set_arg</code> دارند که برای دادن این زمینهٔ اضافی به diagnostic به‌کار می‌رود.</p>
+<p>آرگومان‌ها هم نام دارند (مثلاً «what» در مثال قبلی) و هم مقدار.
+مقادیر آرگومان با نوع <code>DiagArgValue</code> نمایش داده می‌شوند که فقط رشته یا عدد است.
+نوع‌های rustc می‌توانند <code>IntoDiagArg</code> را با تبدیل به رشته یا عدد پیاده‌سازی کنند، و نوع‌های رایج مثل <code>Ty&lt;'tcx&gt;</code> از قبل چنین پیاده‌سازی‌هایی دارند.</p>
+<p>فراخوانی‌های <code>set_arg</code> توسط deriveهای diagnostic به‌طور شفاف مدیریت می‌شوند اما هنگام استفاده از APIهای builder مربوط به diagnostic باید دستی افزوده شوند.</p><nav class="page-nav"><a href="diagnostic-structs.html">→ ساختارهای تشخیص و تشخیص فرعی</a><a href="lintstore.html">`LintStore` ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

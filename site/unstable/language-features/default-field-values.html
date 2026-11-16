@@ -1,0 +1,55 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>default-field-values — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/default-field-values"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="default_field_values"><a class="header" href="#default_field_values"><code>default_field_values</code></a></h1>
+<p>issue ردیابی این قابلیت: <a href="https://github.com/rust-lang/rust/issues/132162">#132162</a></p>
+<p>RFC مربوط به این قابلیت: <a href="https://rust-lang.github.io/rfcs/3681-default-field-values.html">#3681</a></p>
+<hr>
+<p>قابلیت <code>default_field_values</code> به کاربران اجازه می‌دهد برای فیلدهای منفرد در تعریف ساختارها یک مقدار const مشخص کنند، به‌طوری که بتوان آن‌ها را از مقداردهی‌های اولیه حذف کرد.</p>
+<h2 id="examples"><a class="header" href="#examples">مثال‌ها</a></h2>
+<pre><code class="language-rust">#![feature(default_field_values)]
+
+#[derive(Default)]
+struct Pet {
+    name: Option&lt;String&gt;, // impl Default for Pet will use Default::default() for name
+    age: i128 = 42, // impl Default for Pet will use the literal 42 for age
+}
+
+fn main() {
+    let a = Pet { name: Some(String::new()), .. }; // Pet { name: Some(""), age: 42 }
+    let b = Pet::default(); // Pet { name: None, age: 42 }
+    assert_eq!(a.age, b.age);
+    // The following would be a compilation error: `name` needs to be specified
+    // let _ = Pet { .. };
+}</code></pre>
+<h2 id="derivedefault"><a class="header" href="#derivedefault"><code>#[derive(Default)]</code></a></h2>
+<p>هنگام derive کردن Default، مقادیر ارائه‌شده به کار می‌روند. روی واریانت‌های شمارش، واریانت همچنان باید با <code>#[default]</code> علامت‌گذاری شود و همه‌ی فیلدهایش مقدار پیش‌فرض داشته باشند.</p>
+<pre><code class="language-rust">#![feature(default_field_values)]
+
+#[derive(Default)]
+enum A {
+    #[default]
+    B {
+        x: i32 = 0,
+        y: i32 = 0,
+    },
+    C,
+}</code></pre>
+<h2 id="enum-variants"><a class="header" href="#enum-variants">واریانت‌های شمارش</a></h2>
+<p>این قابلیت از واریانت‌های شمارش (enum) نیز پشتیبانی می‌کند، هم برای تعیین مقادیر پیش‌فرض و هم برای <code>#[derive(Default)]</code>.</p>
+<h2 id="interaction-with-non_exhaustive"><a class="header" href="#interaction-with-non_exhaustive">تعامل با <code>#[non_exhaustive]</code></a></h2>
+<p>ساختار یا واریانت شمارشی که با <code>#[non_exhaustive]</code> علامت‌گذاری شده باشد اجازه ندارد مقادیر پیش‌فرض فیلد داشته باشد.</p>
+<h2 id="lints"><a class="header" href="#lints">لینت‌ها</a></h2>
+<p>هنگام پیاده‌سازی دستی صفت <code>Default</code> برای نوعی که مقادیر پیش‌فرض فیلد دارد، اگر هر یک از این مقادیر در impl بازنویسی شود، lint به نام <code>default_overrides_default_fields</code> فعال می‌شود. این lint برای جلوگیری از رفتار متفاوتِ غافلگیرکننده میان <code>S { .. }</code> و <code>S::default()</code> وجود دارد، چون استفاده از یک نوع به هر دو روش ممکن است به مقادیر متفاوت بینجامد. شیوه‌ی درست نوشتن پیاده‌سازی دستی <code>Default</code> استفاده از نحو به‌روزرسانی تابعی (functional update) است:</p>
+<pre><code class="language-rust">#![feature(default_field_values)]
+
+struct Pet {
+    name: String,
+    age: i128 = 42, // impl Default for Pet will use the literal 42 for age
+}
+
+impl Default for Pet {
+    fn default() -&gt; Pet {
+        Pet {
+            name: "no-name".to_string(),
+            ..
+        }
+    }
+}</code></pre><nav class="page-nav"><a href="../../unstable/language-features/custom-test-frameworks.html">→ custom-test-frameworks</a><a href="../../unstable/language-features/deref-patterns.html">deref-patterns ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

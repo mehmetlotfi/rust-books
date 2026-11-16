@@ -1,0 +1,77 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0626 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0626"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>این خطا زمانی رخ می‌دهد که یک قرض (borrow) در یک coroutine قابل‌جابه‌جایی (movable) از یک نقطهٔ yield عبور کند و همچنان زنده بماند.</p>
+<p>نمونه کد خطادار:</p>
+<pre><code class="language-compile_fail E0626"># #![feature(coroutines, coroutine_trait, stmt_expr_attributes)]
+# use std::ops::Coroutine;
+# use std::pin::Pin;
+let mut b = #[coroutine] || {
+    let a = &amp;String::new(); // &lt;-- This borrow...
+    yield (); // ...is still in scope here, when the yield occurs.
+    println!("{}", a);
+};
+Pin::new(&amp;mut b).resume(());
+</code></pre>
+<p>coroutineها می‌توانند بدون نشانه باشند یا با <code>static</code> علامت‌گذاری شوند. اگر بدون نشانه باشند، coroutine «قابل‌جابه‌جایی» در نظر گرفته می‌شود. در حال حاضر، در یک coroutine قابل‌جابه‌جایی مجاز نیست yieldی رخ دهد که در آن لحظه یک قرض هنوز در حوزه (scope) باشد. برای رفع این خطا می‌توان coroutine را با <code>static</code> علامت‌گذاری کرد:</p>
+<pre><code># #![feature(coroutines, coroutine_trait, stmt_expr_attributes)]
+# use std::ops::Coroutine;
+# use std::pin::Pin;
+let mut b = #[coroutine] static || { // &lt;-- note the static keyword
+    let a = &amp;String::from("hello, world");
+    yield ();
+    println!("{}", a);
+};
+let mut b = std::pin::pin!(b);
+b.as_mut().resume(());
+</code></pre>
+<p>اگر coroutine باید قابل‌جابه‌جایی باقی بماند، مثلاً برای اینکه بدون پین کردن آن روی پشته یا در یک تخصیص حافظه به‌صورت <code>Unpin</code> استفاده شود، می‌توانیم مثال قبلی را به‌گونه‌ای دیگر هم رفع کنیم: قرض را حذف کنیم و نوع را فقط به‌صورت مقدار (by value) نگه داریم:</p>
+<pre><code># #![feature(coroutines, coroutine_trait, stmt_expr_attributes)]
+# use std::ops::Coroutine;
+# use std::pin::Pin;
+let mut b = #[coroutine] || {
+    let a = String::from("hello, world");
+    yield ();
+    println!("{}", a);
+};
+Pin::new(&amp;mut b).resume(());
+</code></pre>
+<p>البته این یک حالت بسیار ساده است. در حالت‌های پیچیده‌تر ممکن است بخواهیم بیش از یک ارجاع به مقداری که قرض گرفته شده داشته باشیم؛ در چنین مواردی چیزی شبیه نوع‌های <code>Rc</code> یا <code>Arc</code> می‌تواند مفید باشد.</p>
+<p>این خطا اغلب هنگام پیمایش (iteration) هم پیش می‌آید:</p>
+<pre><code class="language-compile_fail E0626"># #![feature(coroutines, coroutine_trait, stmt_expr_attributes)]
+# use std::ops::Coroutine;
+# use std::pin::Pin;
+let mut b = #[coroutine] || {
+  let v = vec![1,2,3];
+  for &amp;x in &amp;v { // &lt;-- borrow of `v` is still in scope...
+    yield x; // ...when this yield occurs.
+  }
+};
+Pin::new(&amp;mut b).resume(());
+</code></pre>
+<p>چنین حالت‌هایی را گاهی می‌توان با پیمایش «به‌صورت مقدار» (یا استفاده از <code>into_iter()</code>) برای جلوگیری از قرض‌گیری رفع کرد:</p>
+<pre><code># #![feature(coroutines, coroutine_trait, stmt_expr_attributes)]
+# use std::ops::Coroutine;
+# use std::pin::Pin;
+let mut b = #[coroutine] || {
+  let v = vec![1,2,3];
+  for x in v { // &lt;-- Take ownership of the values instead!
+    yield x; // &lt;-- Now yield is OK.
+  }
+};
+Pin::new(&amp;mut b).resume(());
+</code></pre>
+<p>اگر گرفتن مالکیت گزینهٔ مناسبی نیست، استفاده از اندیس‌ها هم می‌تواند جواب دهد:</p>
+<pre><code># #![feature(coroutines, coroutine_trait, stmt_expr_attributes)]
+# use std::ops::Coroutine;
+# use std::pin::Pin;
+let mut b = #[coroutine] || {
+  let v = vec![1,2,3];
+  let len = v.len(); // (*)
+  for i in 0..len {
+    let x = v[i]; // (*)
+    yield x; // &lt;-- Now yield is OK.
+  }
+};
+Pin::new(&amp;mut b).resume(());
+
+// (*) -- Unfortunately, these temporaries are currently required.
+// See &lt;https://github.com/rust-lang/rust/issues/43122&gt;.
+</code></pre><nav class="page-nav"><a href="../errors/E0625.html">→ E0625</a><a href="../errors/E0627.html">E0627 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

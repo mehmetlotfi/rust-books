@@ -1,0 +1,142 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>پایین‌آوردن به منطق — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="traits/lowering-to-logic"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="lowering-to-logic"><a class="header" href="#lowering-to-logic">تبدیل به منطق (Lowering to logic)</a></h1>
+<p>مشاهدهٔ کلیدی در اینجا این است که سامانهٔ صفت Rust اساساً نوعی منطق است و می‌توان آن را به
+قواعد استنتاج منطقی استاندارد نگاشت کرد. سپس می‌توانیم راه‌حل‌های این قواعد استنتاج را
+به شیوه‌ای بسیار شبیه به کار یک حل‌گر <a href="https://en.wikipedia.org/wiki/Prolog">Prolog</a> بجوییم. معلوم می‌شود
+که نمی‌توانیم <em>دقیقاً</em> از قواعد Prolog (که بندهای Horn نیز نامیده می‌شوند) استفاده کنیم
+و به گونه‌ای کمی رساتر نیاز داریم.</p>
+<h2 id="rust-traits-and-logic"><a class="header" href="#rust-traits-and-logic">صفت‌های Rust و منطق</a></h2>
+<p>یکی از نخستین مشاهدات این است که سامانهٔ صفت Rust
+اساساً نوعی منطق است. به همین دلیل می‌توانیم اعلان‌های struct، trait و
+impl خود را به قواعد استنتاج منطقی نگاشت کنیم. در بیشتر موارد
+این‌ها اساساً بندهای Horn هستند، هرچند خواهیم دید که برای دربرگرفتن
+غنای کامل Rust – و به‌ویژه برای پشتیبانی از برنامه‌نویسی جنریک –
+باید کمی فراتر از بندهای Horn استاندارد برویم.</p>
+<p>برای دیدن اینکه این نگاشت چگونه کار می‌کند، با یک مثال شروع می‌کنیم. تصور کنید
+یک صفت و چند impl را این‌گونه اعلان می‌کنیم:</p>
+<pre><code class="language-rust">trait Clone { }
+impl Clone for usize { }
+impl&lt;T&gt; Clone for Vec&lt;T&gt; where T: Clone { }</code></pre>
+<p>می‌توانیم این اعلان‌ها را به برخی بندهای Horn، با نمادگذاری شبیه Prolog، به این شکل نگاشت کنیم:</p>
+<pre><code class="language-text">Clone(usize).
+Clone(Vec&lt;?T&gt;) :- Clone(?T).
+
+// The notation `A :- B` means "A is true if B is true".
+// Or, put another way, B implies A.
+</code></pre>
+<p>در اصطلاحات Prolog، می‌توانیم بگوییم <code>Clone(Foo)</code> – که در آن <code>Foo</code> یک
+نوع Rust است – یک <em>گزاره</em> (predicate) است که این ایده را نمایش می‌دهد که نوع
+<code>Foo</code> صفت <code>Clone</code> را پیاده‌سازی می‌کند. این قواعد <strong>بندهای برنامه</strong> هستند؛ آن‌ها
+شرایطی را بیان می‌کنند که تحت آن می‌توان آن گزاره را اثبات کرد (یعنی
+درست دانست). پس قاعدهٔ اول فقط می‌گوید «Clone برای <code>usize</code> پیاده‌سازی شده است». قاعدهٔ بعدی می‌گوید «برای هر نوع <code>?T</code>، Clone برای
+<code>Vec&lt;?T&gt;</code> پیاده‌سازی شده است اگر clone برای <code>?T</code> پیاده‌سازی شده باشد». بنابراین
+مثلاً اگر بخواهیم <code>Clone(Vec&lt;Vec&lt;usize&gt;&gt;)</code> را اثبات کنیم، این کار را
+با اعمال بازگشتی قواعد انجام می‌دهیم:</p>
+<ul>
+<li><code>Clone(Vec&lt;Vec&lt;usize&gt;&gt;)</code> قابل اثبات است اگر:
+<ul>
+<li><code>Clone(Vec&lt;usize&gt;)</code> قابل اثبات باشد، که قابل اثبات است اگر:
+<ul>
+<li><code>Clone(usize)</code> قابل اثبات باشد. (که هست، پس همه‌چیز خوب است.)</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>اما حالا فرض کنید می‌خواستیم <code>Clone(Vec&lt;Bar&gt;)</code> را اثبات کنیم. این
+شکست می‌خورد (در نهایت، من impl از <code>Clone</code> برای <code>Bar</code> نداده‌ام):</p>
+<ul>
+<li><code>Clone(Vec&lt;Bar&gt;)</code> قابل اثبات است اگر:
+<ul>
+<li><code>Clone(Bar)</code> قابل اثبات باشد. (اما نیست، چون هیچ قاعدهٔ قابل‌اعمالی وجود ندارد.)</li>
+</ul>
+</li>
+</ul>
+<p>به‌آسانی می‌توانیم مثال بالا را برای صفت‌های جنریکی که
+بیش از یک نوع ورودی دارند گسترش دهیم. پس صفت <code>Eq&lt;T&gt;</code> را تصور کنید که اعلام می‌کند
+<code>Self</code> با مقداری از نوع <code>T</code> قابل مقایسهٔ برابری است:</p>
+<pre><code class="language-rust ignore">trait Eq&lt;T&gt; { ... }
+impl Eq&lt;usize&gt; for usize { }
+impl&lt;T: Eq&lt;U&gt;&gt; Eq&lt;Vec&lt;U&gt;&gt; for Vec&lt;T&gt; { }</code></pre>
+<p>این را می‌توان این‌گونه نگاشت کرد:</p>
+<pre><code class="language-text">Eq(usize, usize).
+Eq(Vec&lt;?T&gt;, Vec&lt;?U&gt;) :- Eq(?T, ?U).
+</code></pre>
+<p>تا اینجا خوب است.</p>
+<h2 id="type-checking-normal-functions"><a class="header" href="#type-checking-normal-functions">بررسی نوع توابع عادی</a></h2>
+<p>خب، حالا که چند قاعدهٔ منطقی تعریف کرده‌ایم که می‌توانند
+بیان کنند صفت‌ها چه زمانی پیاده‌سازی شده‌اند و نوع‌های وابسته را مدیریت کنند،
+بیایید کمی تمرکزمان را روی <strong>بررسی نوع</strong> (type-checking) بگذاریم. بررسی نوع
+جالب است چون همان چیزی است که goalهایی را که باید
+اثبات کنیم به ما می‌دهد. یعنی هرچه تا اینجا دیدیم دربارهٔ این بود که چگونه
+قواعدی را که با آن‌ها می‌توانیم goalها را اثبات کنیم از صفت‌ها و implهای
+برنامه به دست آوریم؛ اما ما به این هم علاقه‌مندیم که goalهایی را که
+باید اثبات کنیم چگونه به دست می‌آیند، و آن‌ها از بررسی نوع می‌آیند.</p>
+<p>بررسی نوع تابع <code>foo()</code> را در اینجا در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">fn foo() { bar::&lt;usize&gt;() }
+fn bar&lt;U: Eq&lt;U&gt;&gt;() { }</code></pre>
+<p>البته این تابع بسیار ساده است: تنها کاری که می‌کند فراخوانی
+<code>bar::&lt;usize&gt;()</code> است. حالا با نگاه به تعریف <code>bar()</code> می‌بینیم
+که یک بند where دارد: <code>U: Eq&lt;U&gt;</code>. پس این یعنی <code>foo()</code> باید
+ثابت کند <code>usize: Eq&lt;usize&gt;</code> تا نشان دهد می‌تواند <code>bar()</code> را
+با <code>usize</code> به‌عنوان آرگومان نوع فراخوانی کند.</p>
+<p>اگر بخواهیم، می‌توانیم یک گزارهٔ Prolog بنویسیم که شرایطی را تعریف می‌کند که تحت آن <code>bar()</code> قابل فراخوانی است. می‌گوییم این
+شرایط «خوش‌ساخت» (well-formed) بودن نامیده می‌شوند:</p>
+<pre><code class="language-text">barWellFormed(?U) :- Eq(?U, ?U).
+</code></pre>
+<p>سپس می‌توانیم بگوییم <code>foo()</code> بررسی نوع را می‌گذراند اگر ارجاع به
+<code>bar::&lt;usize&gt;</code> (یعنی <code>bar()</code> اعمال‌شده بر نوع <code>usize</code>)
+خوش‌ساخت باشد:</p>
+<pre><code class="language-text">fooTypeChecks :- barWellFormed(usize).
+</code></pre>
+<p>اگر بخواهیم goal به نام <code>fooTypeChecks</code> را اثبات کنیم، موفق می‌شود:</p>
+<ul>
+<li><code>fooTypeChecks</code> قابل اثبات است اگر:
+<ul>
+<li><code>barWellFormed(usize)</code>، که قابل اثبات است اگر:
+<ul>
+<li><code>Eq(usize, usize)</code>، که به‌خاطر یک impl قابل اثبات است.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>خب، تا اینجا خوب است. بیایید به سراغ بررسی نوع یک تابع پیچیده‌تر برویم.</p>
+<h2 id="type-checking-generic-functions-beyond-horn-clauses"><a class="header" href="#type-checking-generic-functions-beyond-horn-clauses">بررسی نوع توابع جنریک: فراتر از بندهای Horn</a></h2>
+<p>در بخش قبل، از بندهای Horn استاندارد Prolog (به‌علاوهٔ مفهوم
+برابری نوع در Rust) برای بررسی نوع چند تابع ساده Rust استفاده کردیم. اما این فقط
+وقتی کار می‌کند که توابع غیرجنریک را بررسی نوع کنیم. اگر بخواهیم یک
+تابع جنریک را بررسی نوع کنیم، معلوم می‌شود به مفهومی قوی‌تر از goal نیاز داریم نسبت به آنچه Prolog
+می‌تواند ارائه دهد. برای دیدن منظورم، بیایید
+مثال قبلی را بازسازی کنیم تا <code>foo</code> جنریک شود:</p>
+<pre><code class="language-rust ignore">fn foo&lt;T: Eq&lt;T&gt;&gt;() { bar::&lt;T&gt;() }
+fn bar&lt;U: Eq&lt;U&gt;&gt;() { }</code></pre>
+<p>برای بررسی نوع بدنهٔ <code>foo</code>، باید بتوانیم نوع
+<code>T</code> را «انتزاعی» نگه داریم.  یعنی باید بررسی کنیم که بدنهٔ <code>foo</code>
+<em>برای همهٔ نوع‌های <code>T</code></em> از نظر نوع ایمن است، نه فقط برای یک نوع مشخص. ممکن است
+این را این‌گونه بیان کنیم:</p>
+<pre><code class="language-text">fooTypeChecks :-
+  // for all types T...
+  forall&lt;T&gt; {
+    // ...if we assume that Eq(T, T) is provable...
+    if (Eq(T, T)) {
+      // ...then we can prove that `barWellFormed(T)` holds.
+      barWellFormed(T)
+    }
+  }.
+</code></pre>
+<p>این نمادگذاری‌ای که اینجا به کار می‌برم همان نمادگذاری‌ای است که در
+پیاده‌سازی نمونهٔ اولیهٔ خودم به کار برده‌ام؛ شبیه نمادگذاری ریاضی استاندارد است اما کمی Rust‌پسند. به هر حال، مشکل این است که بندهای
+Horn استاندارد اجازهٔ سورگذاری عمومی (<code>forall</code>) یا
+استلزام (<code>if</code>) را در goalها نمی‌دهند (هرچند بسیاری از موتورهای Prolog به‌عنوان
+افزونه از آن‌ها پشتیبانی می‌کنند). به همین دلیل باید بندهایی را بپذیریم که
+«first-order hereditary harrop» (FOHH) نامیده می‌شوند – این نام بلند اساساً یعنی «بندهای Horn استاندارد با <code>forall</code> و <code>if</code> در
+بدنه». اما خوب است نام درست را بدانیم، چون
+کارهای زیادی وجود دارد که توضیح می‌دهند بندهای FOHH را چگونه کارا مدیریت کنیم؛ برای نمونه
+مقالهٔ عالی گوپالان ناداتور
+<a href="https://rust-lang.github.io/chalk/book/bibliography.html#pphhf">«A Proof Procedure for the Logic of Hereditary Harrop Formulas»</a>
+را در <a href="https://rust-lang.github.io/chalk/book/bibliography.html">کتاب‌نامهٔ کتاب Chalk</a> ببینید.</p>
+<p>معلوم می‌شود پشتیبانی از FOHH واقعاً آن‌قدرها هم سخت نیست. و
+وقتی بتوانیم این کار را بکنیم، به‌آسانی می‌توانیم قاعدهٔ بررسی نوع برای توابع جنریکی مانند <code>foo</code> را در منطق خود توصیف کنیم.</p>
+<h2 id="source"><a class="header" href="#source">منبع</a></h2>
+<p>این صفحه نسخهٔ اندکی اقتباس‌شده از یک
+<a href="http://smallcultfollowing.com/babysteps/blog/2017/01/26/lowering-rust-traits-to-logic/">نوشتهٔ وبلاگ از نیکلاس ماتساکیس</a> است.</p><nav class="page-nav"><a href="chalk.html">→ حل صفت مبتنی بر Chalk</a><a href="goals-and-clauses.html">هدف‌ها و بندها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

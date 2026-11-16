@@ -1,0 +1,91 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>کد پایه — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="arc-mutex/arc-base"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="base-code"><a class="header" href="#base-code">کد پایه</a></h1>
+<p>اکنون که چیدمان پیاده‌سازی <code>Arc</code> را تعیین کرده‌ایم، بیایید مقداری کد پایه بنویسیم.</p>
+<h2 id="constructing-the-arc"><a class="header" href="#constructing-the-arc">ساخت Arc</a></h2>
+<p>نخست به راهی برای ساختن یک <code>Arc&lt;T&gt;</code> نیاز داریم.</p>
+<p>این کار نسبتاً ساده است، چون فقط باید <code>ArcInner&lt;T&gt;</code> را در یک box قرار دهیم و یک اشاره‌گر <code>NonNull&lt;T&gt;</code> به آن بگیریم.</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">impl&lt;T&gt; Arc&lt;T&gt; {
+    pub fn new(data: T) -&gt; Arc&lt;T&gt; {
+        // We start the reference count at 1, as that first reference is the
+        // current pointer.
+        let boxed = Box::new(ArcInner {
+            rc: AtomicUsize::new(1),
+            data,
+        });
+        Arc {
+            // It is okay to call `.unwrap()` here as we get a pointer from
+            // `Box::into_raw` which is guaranteed to not be null.
+            ptr: NonNull::new(Box::into_raw(boxed)).unwrap(),
+            phantom: PhantomData,
+        }
+    }
+}</code></pre>
+<h2 id="send-and-sync"><a class="header" href="#send-and-sync">Send و Sync</a></h2>
+<p>چون در حال ساختن یک ابزار همروندی هستیم، باید بتوانیم آن را بین نخ‌ها ارسال کنیم. بنابراین می‌توانیم صفت‌های نشانگر <code>Send</code> و <code>Sync</code> را پیاده‌سازی کنیم. برای اطلاعات بیشتر دربارهٔ آن‌ها، <a href="../send-and-sync.html">بخش مربوط به <code>Send</code> و <code>Sync</code></a> را ببینید.</p>
+<p>این کار مجاز است، چون:</p>
+<ul>
+<li>فقط وقتی می‌توانید ارجاع تغییرپذیر به مقدار درون یک <code>Arc</code> بگیرید که آن <code>Arc</code> تنها <code>Arc</code>ی باشد که به آن داده اشاره می‌کند (که فقط در <code>Drop</code> رخ می‌دهد)</li>
+<li>برای شمارش مشترک و تغییرپذیر ارجاع‌ها از اتمیک‌ها استفاده می‌کنیم</li>
+</ul>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">unsafe impl&lt;T: Sync + Send&gt; Send for Arc&lt;T&gt; {}
+unsafe impl&lt;T: Sync + Send&gt; Sync for Arc&lt;T&gt; {}</code></pre>
+<p>به کران <code>T: Sync + Send</code> نیاز داریم، چون اگر این کران‌ها را قرار نمی‌دادیم، می‌شد مقادیر ناایمن برای نخ‌ها را از طریق یک <code>Arc</code> از مرز نخ‌ها عبور داد، که ممکن بود باعث رقابت داده‌ای (data race) یا ناسالمی (unsoundness) شود.</p>
+<p>برای مثال، اگر این کران‌ها وجود نداشتند، <code>Arc&lt;Rc&lt;u32&gt;&gt;</code> نوعی <code>Sync</code> یا <code>Send</code> می‌شد؛ یعنی می‌توانستید <code>Rc</code> را از درون <code>Arc</code> کلون کنید و (بدون ساختن یک <code>Rc</code> کاملاً جدید) آن را به نخی دیگر بفرستید، که چون <code>Rc</code> ایمن برای نخ نیست، رقابت داده‌ای ایجاد می‌کرد.</p>
+<h2 id="getting-the-arcinner"><a class="header" href="#getting-the-arcinner">گرفتن <code>ArcInner</code></a></h2>
+<p>برای ارجاع‌زدایی اشاره‌گر <code>NonNull&lt;T&gt;</code> به یک <code>&amp;T</code> می‌توانیم <code>NonNull::as_ref</code> را فراخوانی کنیم. برخلاف تابع <code>as_ref</code> معمول، این تابع unsafe است، بنابراین باید آن را این‌گونه فراخوانی کنیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">unsafe { self.ptr.as_ref() }</code></pre>
+<p>این قطعه را چند بار در این کد به کار می‌بریم (معمولاً همراه با یک اتصال <code>let</code>).</p>
+<p>این unsafe بودن اشکالی ندارد، چون تا زمانی که این <code>Arc</code> زنده است، تضمین داریم که اشاره‌گر درونی معتبر است.</p>
+<h2 id="deref"><a class="header" href="#deref">Deref</a></h2>
+<p>بسیار خوب. اکنون می‌توانیم <code>Arc</code> بسازیم (و به‌زودی خواهیم توانست آن‌ها را درست کلون و نابود کنیم)، اما چگونه به داده‌ٔ درون آن دسترسی پیدا کنیم؟</p>
+<p>اکنون به یک پیاده‌سازی از <code>Deref</code> نیاز داریم.</p>
+<p>باید این صفت را import کنیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">use std::ops::Deref;</code></pre>
+<p>و این هم پیاده‌سازی:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">impl&lt;T&gt; Deref for Arc&lt;T&gt; {
+    type Target = T;
+
+    fn deref(&amp;self) -&gt; &amp;T {
+        let inner = unsafe { self.ptr.as_ref() };
+        &amp;inner.data
+    }
+}</code></pre>
+<p>ساده است، نه؟ این کد فقط اشاره‌گر <code>NonNull</code> به <code>ArcInner&lt;T&gt;</code> را ارجاع‌زدایی می‌کند و سپس ارجاعی به داده‌ٔ درون آن می‌گیرد.</p>
+<h2 id="code"><a class="header" href="#code">کد</a></h2>
+<p>این هم تمام کد این بخش:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">use std::ops::Deref;
+
+impl&lt;T&gt; Arc&lt;T&gt; {
+    pub fn new(data: T) -&gt; Arc&lt;T&gt; {
+        // We start the reference count at 1, as that first reference is the
+        // current pointer.
+        let boxed = Box::new(ArcInner {
+            rc: AtomicUsize::new(1),
+            data,
+        });
+        Arc {
+            // It is okay to call `.unwrap()` here as we get a pointer from
+            // `Box::into_raw` which is guaranteed to not be null.
+            ptr: NonNull::new(Box::into_raw(boxed)).unwrap(),
+            phantom: PhantomData,
+        }
+    }
+}
+
+unsafe impl&lt;T: Sync + Send&gt; Send for Arc&lt;T&gt; {}
+unsafe impl&lt;T: Sync + Send&gt; Sync for Arc&lt;T&gt; {}
+
+
+impl&lt;T&gt; Deref for Arc&lt;T&gt; {
+    type Target = T;
+
+    fn deref(&amp;self) -&gt; &amp;T {
+        let inner = unsafe { self.ptr.as_ref() };
+        &amp;inner.data
+    }
+}</code></pre><nav class="page-nav"><a href="arc-layout.html">→ چیدمان</a><a href="arc-clone.html">کلون‌کردن ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../nomicon/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

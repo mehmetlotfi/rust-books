@@ -1,0 +1,200 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>ابزارهای رایج — کتاب Clippy</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="development/common_tools_writing_lints"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Clippy</a><small class="en-title" dir="ltr">The Clippy Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="common-tools-for-writing-lints"><a class="header" href="#common-tools-for-writing-lints">ابزارهای رایج برای نوشتن lintها</a></h1>
+<p>ممکن است برای انجام عملیات رایج به نکته‌های زیر نیاز داشته باشید.</p>
+<ul>
+<li><a href="#common-tools-for-writing-lints">ابزارهای رایج برای نوشتن lintها</a>
+<ul>
+<li><a href="#retrieving-the-type-of-expression">دریافت نوع یک عبارت</a></li>
+<li><a href="#checking-if-an-expr-is-calling-a-specific-method">بررسی اینکه آیا یک expr متد مشخصی را فراخوانی می‌کند</a></li>
+<li><a href="#checking-for-a-specific-type">بررسی یک نوع مشخص</a></li>
+<li><a href="#checking-if-a-type-implements-a-specific-trait">بررسی اینکه آیا یک نوع صفت مشخصی را پیاده‌سازی می‌کند</a></li>
+<li><a href="#checking-if-a-type-defines-a-specific-method">بررسی اینکه آیا یک نوع متد مشخصی را تعریف می‌کند</a></li>
+<li><a href="#dealing-with-macros-and-expansions">کار با ماکروها</a></li>
+</ul>
+</li>
+</ul>
+<p>پیوندهای مفید از راهنمای توسعهٔ Rustc:</p>
+<ul>
+<li><a href="https://rustc-dev-guide.rust-lang.org/compiler-src.html#the-main-stages-of-compilation">مراحل کامپایل</a></li>
+<li><a href="https://rustc-dev-guide.rust-lang.org/diagnostics/diagnostic-items.html">آیتم‌های تشخیصی</a></li>
+<li><a href="https://rustc-dev-guide.rust-lang.org/type-checking.html">بررسی نوع</a></li>
+<li><a href="https://rustc-dev-guide.rust-lang.org/ty.html">ماژول Ty</a></li>
+</ul>
+<h2 id="retrieving-the-type-of-expression"><a class="header" href="#retrieving-the-type-of-expression">دریافت نوع یک عبارت</a></h2>
+<p>گاهی ممکن است بخواهید نوع <code>Ty</code> یک عبارت <code>Expr</code> را به دست آورید، مثلاً برای پاسخ به پرسش‌های زیر:</p>
+<ul>
+<li>این عبارت با کدام نوع متناظر است (با استفاده از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html"><code>TyKind</code></a> آن)؟</li>
+<li>آیا یک نوع دارای اندازه (sized) است؟</li>
+<li>آیا یک نوع اولیه (primitive) است؟</li>
+<li>آیا صفتی را پیاده‌سازی می‌کند؟</li>
+</ul>
+<p>این عملیات با استفاده از متد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TypeckResults.html#method.expr_ty"><code>expr_ty()</code></a> از ساختار <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TypeckResults.html"><code>TypeckResults</code></a> انجام می‌شود که به ساختار زیربنایی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html"><code>Ty</code></a> دسترسی می‌دهد.</p>
+<p>نمونهٔ استفاده:</p>
+<pre><code class="language-rust">impl LateLintPass&lt;'_&gt; for MyStructLint {
+    fn check_expr(&amp;mut self, cx: &amp;LateContext&lt;'_&gt;, expr: &amp;Expr&lt;'_&gt;) {
+        // Get type of `expr`
+        let ty = cx.typeck_results().expr_ty(expr);
+        // Match its kind to enter its type
+        match ty.kind() {
+            ty::Adt(adt_def, _) if adt_def.is_struct() =&gt; println!("Our `expr` is a struct!"),
+            _ =&gt; ()
+        }
+    }
+}</code></pre>
+<p>به‌طور مشابه، در میان متدهای <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TypeckResults.html"><code>TypeckResults</code></a>، متد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TypeckResults.html#method.pat_ty"><code>pat_ty()</code></a> را دارید که نوع را از یک الگو دریافت می‌کند.</p>
+<p>دو نکتهٔ قابل توجه در اینجا:</p>
+<ul>
+<li><code>cx</code> همان بافت lint یعنی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/struct.LateContext.html"><code>LateContext</code></a> است. دو ساختار داده‌ای که در این بافت بیشترین کاربرد را دارند <code>tcx</code> و <code>TypeckResults</code> هستند که توسط <code>LateContext::typeck_results</code> برگردانده می‌شود و به ما اجازه می‌دهند به تعریف نوع‌ها و دیگر مراحل کامپایل مانند HIR برویم.</li>
+<li>مقدار بازگشتی <code>typeck_results</code> از نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TypeckResults.html"><code>TypeckResults</code></a> است و توسط مرحلهٔ بررسی نوع ایجاد می‌شود؛ این مقدار اطلاعات مفیدی مانند نوع عبارت‌ها، روش‌های تحلیل (resolve) متدها و غیره را در بر دارد.</li>
+</ul>
+<h2 id="checking-if-an-expr-is-calling-a-specific-method"><a class="header" href="#checking-if-an-expr-is-calling-a-specific-method">بررسی اینکه آیا یک expr متد مشخصی را فراخوانی می‌کند</a></h2>
+<p>با شروع از یک <code>expr</code>، می‌توانید بررسی کنید که آیا متد مشخصی مانند <code>some_method</code> را فراخوانی می‌کند:</p>
+<pre><code class="language-rust">impl&lt;'tcx&gt; LateLintPass&lt;'tcx&gt; for MyStructLint {
+    fn check_expr(&amp;mut self, cx: &amp;LateContext&lt;'tcx&gt;, expr: &amp;'tcx hir::Expr&lt;'_&gt;) {
+        // Check our expr is calling a method
+        if let hir::ExprKind::MethodCall(path, _, _self_arg, ..) = &amp;expr.kind
+            // Check the name of this method is `some_method`
+            &amp;&amp; path.ident.name == sym::some_method
+            // Optionally, check the type of the self argument.
+            // - See "Checking for a specific type"
+        {
+                // ...
+        }
+    }
+}</code></pre>
+<h2 id="checking-for-a-specific-type"><a class="header" href="#checking-for-a-specific-type">بررسی یک نوع مشخص</a></h2>
+<p>سه روش برای بررسی اینکه نوع یک عبارت همان نوع موردنظر ماست وجود دارد. همهٔ این روش‌ها فقط نوع پایه را بررسی می‌کنند و آرگومان‌های جنریک باید جداگانه بررسی شوند.</p>
+<pre><code class="language-rust">use clippy_utils::{paths, sym};
+use clippy_utils::res::MaybeDef;
+use rustc_attr_ir::lang_items::LangItem;
+
+impl LateLintPass&lt;'_&gt; for MyStructLint {
+    fn check_expr(&amp;mut self, cx: &amp;LateContext&lt;'_&gt;, expr: &amp;Expr&lt;'_&gt;) {
+        // Getting the expression type
+        let ty = cx.typeck_results().expr_ty(expr);
+
+        // 1. Using diagnostic items
+        // The last argument is the diagnostic item to check for
+        if ty.is_diag_item(cx, sym::Option) {
+            // The type is an `Option`
+        }
+
+        // 2. Using lang items
+        if ty.is_lang_item(cx, LangItem::RangeFull) {
+            // The type is a full range like `.drain(..)`
+        }
+
+        // 3. Using the type path
+        // This method should be avoided if possible
+        if paths::RESULT.matches_ty(cx, ty) {
+            // The type is a `core::result::Result`
+        }
+    }
+}</code></pre>
+<p>در صورت امکان از آیتم‌های تشخیصی (diagnostic items) و lang itemها استفاده کنید.</p>
+<h2 id="checking-if-a-type-implements-a-specific-trait"><a class="header" href="#checking-if-a-type-implements-a-specific-trait">بررسی اینکه آیا یک نوع صفت مشخصی را پیاده‌سازی می‌کند</a></h2>
+<p>سه روش برای این کار وجود دارد که بسته به این است که صفت موردنظر دارای diagnostic item، lang item یا هیچ‌کدام باشد.</p>
+<pre><code class="language-rust">use clippy_utils::sym;
+use clippy_utils::ty::implements_trait;
+
+impl LateLintPass&lt;'_&gt; for MyStructLint {
+    fn check_expr(&amp;mut self, cx: &amp;LateContext&lt;'_&gt;, expr: &amp;Expr&lt;'_&gt;) {
+
+        // 1. Get the `DefId` of the trait.
+        // via lang items
+        let trait_id = cx.tcx.lang_items().drop_trait();
+        // via diagnostic items
+        let trait_id = cx.tcx.get_diagnostic_item(sym::Eq);
+
+        // 2. Check for the trait implementation via the `implements_trait` util.
+        let ty = cx.typeck_results().expr_ty(expr);
+        if trait_id.is_some_and(|id| implements_trait(cx, ty, id, &amp;[])) {
+            // `ty` implements the trait.
+        }
+
+        // 3. If the trait requires additional generic arguments
+        let trait_id = cx.tcx.lang_items().eq_trait();
+        if trait_id.is_some_and(|id| implements_trait(cx, ty, id, &amp;[ty])) {
+            // `ty` implements `PartialEq&lt;Self&gt;`
+        }
+    }
+}</code></pre>
+<blockquote>
+<p>در صورتی که صفت موردنظر diagnostic item یا lang item دارد، استفاده از آن‌ها را ترجیح دهید.</p>
+</blockquote>
+<p>به lang itemها از طریق بافت نوع <code>tcx</code> دسترسی پیدا می‌کنیم. <code>tcx</code> از نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.TyCtxt.html"><code>TyCtxt</code></a> است و در crate با نام <code>rustc_middle</code> تعریف شده است. فهرستی از مسیرهای تعریف‌شده برای Clippy را می‌توانید در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/clippy_utils/paths/index.html">paths.rs</a> بیابید.</p>
+<h2 id="checking-if-a-type-defines-a-specific-method"><a class="header" href="#checking-if-a-type-defines-a-specific-method">بررسی اینکه آیا یک نوع متد مشخصی را تعریف می‌کند</a></h2>
+<p>برای بررسی اینکه آیا نوع ما متدی به نام <code>some_method</code> را تعریف می‌کند:</p>
+<pre><code class="language-rust">use clippy_utils::ty::is_type_lang_item;
+use clippy_utils::{sym, return_ty};
+
+impl&lt;'tcx&gt; LateLintPass&lt;'tcx&gt; for MyTypeImpl {
+    fn check_impl_item(&amp;mut self, cx: &amp;LateContext&lt;'tcx&gt;, impl_item: &amp;'tcx ImplItem&lt;'_&gt;) {
+        // Check if item is a method/function
+        if let ImplItemKind::Fn(ref signature, _) = impl_item.kind
+            // Check the method is named `some_method`
+            //
+            // Add `some_method` to `clippy_utils::sym` if it's not already there
+            &amp;&amp; impl_item.ident.name == sym::some_method
+            // We can also check it has a parameter `self`
+            &amp;&amp; signature.decl.implicit_self.has_implicit_self()
+            // We can go further and even check if its return type is `String`
+            &amp;&amp; return_ty(cx, impl_item.hir_id).is_lang_item(cx, LangItem::String)
+        {
+            // ...
+        }
+    }
+}</code></pre>
+<h2 id="dealing-with-macros-and-expansions"><a class="header" href="#dealing-with-macros-and-expansions">کار با ماکروها و گسترش‌ها</a></h2>
+<p>به یاد داشته باشید که ماکروها پیش از این گسترش یافته‌اند و desugaring نیز پیش از این روی نمایش کدی که در Clippy با آن کار می‌کنید اعمال شده است. این موضوع متأسفانه باعث بروز تعداد زیادی مثبت کاذب می‌شود، زیرا گسترش ماکروها «نامرئی» هستند مگر اینکه به‌طور فعال آن‌ها را بررسی کنید. به‌طور کلی، Clippy باید کدی را که گسترش ماکرو دارد نادیده بگیرد، چون چنین کدی می‌تواند به شیوه‌هایی پویا باشد که دیدنشان دشوار یا غیرممکن است. برای کار با ماکروها از توابع زیر استفاده کنید:</p>
+<ul>
+<li>
+<p><code>span.from_expansion()</code>: تشخیص می‌دهد که آیا یک span از گسترش ماکرو یا desugaring آمده است. بررسی این مورد معمولاً نخستین گام در یک lint است.</p>
+<pre><code class="language-rust ignore">if expr.span.from_expansion() {
+    // just forget it
+    return;
+}</code></pre>
+</li>
+<li>
+<p><code>span.ctxt()</code>: بافت یک span نشان می‌دهد که آیا از گسترش آمده است یا نه، و اگر آمده، کدام فراخوانی ماکرو آن را گسترش داده است. گاهی بررسی برابر بودن بافت دو span مفید است.</p>
+<pre><code class="language-rust ignore">// expands to `1 + 0`, but don't lint
+1 + mac!()</code></pre>
+<pre><code class="language-rust ignore">if left.span.ctxt() != right.span.ctxt() {
+    // the coder most likely cannot modify this expression
+    return;
+}</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>توجه: کدی که از گسترش نیامده باشد در بافت «ریشه» قرار دارد. بنابراین می‌توان فرض کرد همهٔ spanهایی که <code>from_expansion</code> برای آن‌ها <code>true</code> برمی‌گرداند بافت یکسانی دارند. به همین دلیل، استفادهٔ صرف از <code>span.from_expansion()</code> اغلب کافی است.</p>
+</blockquote>
+</li>
+<li>
+<p><code>span.in_external_macro(sm)</code>: تشخیص می‌دهد که آیا span داده‌شده از ماکرویی آمده است که در یک crate خارجی تعریف شده است. اگر می‌خواهید lint روی کد تولیدشده با ماکرو هم کار کند، این بررسی خط دفاع بعدی برای پرهیز از ماکروهایی است که در crate فعلی تعریف نشده‌اند. lint کردن کدی که برنامه‌نویس نمی‌تواند آن را تغییر دهد معنایی ندارد.</p>
+<p>مثلاً ممکن است بخواهید از آن استفاده کنید تا lint روی ماکروهای crateهای دیگر شروع به کار نکند</p>
+<pre><code class="language-rust">use a_crate_with_macros::foo;
+
+// `foo` is defined in `a_crate_with_macros`
+foo!("bar");
+
+// if we lint the `match` of `foo` call and test its span
+assert_eq!(match_span.in_external_macro(cx.sess().source_map()), true);</code></pre>
+</li>
+<li>
+<p><code>span.ctxt()</code>: بافت یک span نشان می‌دهد که آیا از گسترش آمده است یا نه، و اگر آمده، چه چیزی آن را گسترش داده است</p>
+<p>یکی از کاربردهای <code>SpanContext</code> بررسی این است که آیا دو span در یک بافت قرار دارند یا نه. برای مثال، در <code>a == b</code>، <code>a</code> و <code>b</code> بافت یکسانی دارند. در یک <code>macro_rules!</code> با <code>a == $b</code>، عبارت <code>$b</code> به عبارتی با بافتی متفاوت از <code>a</code> گسترش می‌یابد.</p>
+<pre><code class="language-rust ignore">macro_rules! m {
+    ($a:expr, $b:expr) =&gt; {
+        if $a.is_some() {
+            $b;
+        }
+    }
+}
+
+let x: Option&lt;u32&gt; = Some(42);
+m!(x, x.unwrap());
+
+// These spans are not from the same context
+// x.is_some() is from inside the macro
+// x.unwrap() is from outside the macro
+assert_eq!(x_is_some_span.ctxt(), x_unwrap_span.ctxt());</code></pre>
+</li>
+</ul><nav class="page-nav"><a href="macro_expansions.html">→ گسترش ماکرو</a><a href="llm_usage.html">استفاده از LLM ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../clippy/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

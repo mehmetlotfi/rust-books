@@ -1,0 +1,1810 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>قابلیت‌های ناپایدار — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/unstable"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="unstable-features"><a class="header" href="#unstable-features">Unstable Features</a></h1>
+<p>قابلیت‌های آزمایشی Cargo فقط در <a href="../../book/appendix-07-nightly-rust.html">کانال nightly</a> در دسترس‌اند. توصیه می‌شود این قابلیت‌ها را امتحان کنید تا ببینید نیازهایتان را برآورده می‌کنند یا نه و آیا مشکلی هست. برای اطلاعات بیشتر دربارهٔ هر قابلیت، issueهای پیگیری (tracking) پیوندخورده در زیر را ببینید، و اگر خواهان به‌روزرسانی‌های آینده هستید دکمهٔ subscribe در GitHub را بزنید.</p>
+<p>پس از مدتی، اگر قابلیت نگرانی عمده‌ای نداشته باشد، می‌تواند <a href="https://doc.crates.io/contrib/process/unstable.html#stabilization">پایدار (stabilize)</a> شود، که آن را پس از رسیدن انتشار nightly فعلی به کانال stable (بین ۶ تا ۱۲ هفته) در stable در دسترس می‌کند.</p>
+<p>بسته به نحوهٔ کار قابلیت، سه روش مختلف برای فعال‌کردن قابلیت‌های ناپایدار وجود دارد:</p>
+<ul>
+<li>
+<p>نحو جدید در <code>Cargo.toml</code> یک کلید <code>cargo-features</code> در بالای
+<code>Cargo.toml</code>، پیش از هر جدولی، لازم دارد. برای مثال:</p>
+<pre><code class="language-toml"># This specifies which new Cargo.toml features are enabled.
+cargo-features = ["test-dummy-unstable"]
+
+[package]
+name = "my-package"
+version = "0.1.0"
+im-a-teapot = true  # This is a new option enabled by test-dummy-unstable.
+</code></pre>
+</li>
+<li>
+<p>پرچم‌ها، گزینه‌ها و زیردستورهای جدید خط فرمان نیاز دارند گزینهٔ <code>-Z unstable-options</code> هم داده شود. برای مثال، گزینهٔ جدید
+<code>--artifact-dir</code> فقط در nightly در دسترس است:</p>
+<p><code>cargo +nightly build --artifact-dir=out -Z unstable-options</code></p>
+</li>
+<li>
+<p>پرچم‌های خط فرمان <code>-Z</code> برای فعال‌کردن قابلیت‌های جدیدی به‌کار می‌روند که ممکن است رابطی نداشته باشند، یا رابطشان هنوز طراحی نشده، یا برای قابلیت‌های پیچیده‌تری که چند بخش Cargo را تحت‌تأثیر قرار می‌دهند. برای مثال، قابلیت
+<a href="#mtime-on-use">mtime-on-use</a> را می‌توان با این فعال کرد:</p>
+<p><code>cargo +nightly build -Z mtime-on-use</code></p>
+<p>برای دیدن فهرست پرچم‌های موجود <code>cargo -Z help</code> را اجرا کنید.</p>
+<p>هر چیزی را که با پرچم <code>-Z</code> می‌توان پیکربندی کرد، می‌توان در <a href="config.html">فایل پیکربندی</a> cargo (<code>.cargo/config.toml</code>) و در جدول <code>unstable</code> هم تنظیم کرد. برای
+مثال:</p>
+<pre><code class="language-toml">[unstable]
+mtime-on-use = true
+build-std = ["core", "alloc"]
+</code></pre>
+</li>
+</ul>
+<p>هر قابلیت جدیدی که در ادامه شرح داده شده باید توضیح دهد چگونه از آن استفاده می‌شود.</p>
+<p><em>برای جدیدترین nightly، <a href="unstable.html">نسخهٔ nightly</a> این صفحه را ببینید.</em></p>
+<h2 id="list-of-unstable-features"><a class="header" href="#list-of-unstable-features">فهرست قابلیت‌های ناپایدار</a></h2>
+<ul>
+<li>Unstable-specific features
+<ul>
+<li><a href="#allow-features">-Z allow-features</a> — راهی برای محدود‌کردن اینکه کدام قابلیت‌های ناپایدار استفاده شوند فراهم می‌کند.</li>
+</ul>
+</li>
+<li>Build scripts and linking
+<ul>
+<li><a href="#metabuild">Metabuild</a> — اسکریپت‌های ساخت اعلانی (declarative) فراهم می‌کند.</li>
+<li><a href="#multiple-build-scripts">Multiple Build Scripts</a> — استفاده از چند اسکریپت ساخت را ممکن می‌کند.</li>
+<li><a href="#any-build-script-metadata">Any Build Script Metadata</a> — اجازه می‌دهد هر اسکریپت ساخت از طریق <code>cargo::metadata=key=value</code> متغیرهای محیطی مشخص کند</li>
+</ul>
+</li>
+<li>Resolver and features
+<ul>
+<li><a href="#no-index-update">no-index-update</a> — از به‌روزرسانی cache فهرست توسط cargo جلوگیری می‌کند.</li>
+<li><a href="#avoid-dev-deps">avoid-dev-deps</a> — از گنجاندن dev-dependencies در حل وابستگی توسط حل‌کننده جلوگیری می‌کند.</li>
+<li><a href="#minimal-versions">minimal-versions</a> — حل‌کننده را مجبور می‌کند به‌جای بالاترین نسخه از پایین‌ترین نسخهٔ سازگار استفاده کند.</li>
+<li><a href="#direct-minimal-versions">direct-minimal-versions</a> — حل‌کننده را مجبور می‌کند به‌جای بالاترین نسخه از پایین‌ترین نسخهٔ سازگار استفاده کند.</li>
+<li><a href="#public-dependency">public-dependency</a> — اجازه می‌دهد وابستگی‌ها به‌صورت عمومی یا خصوصی طبقه‌بندی شوند.</li>
+<li><a href="#msrv-policy">msrv-policy</a> — حل‌کننده و انتخاب نسخهٔ آگاه از MSRV</li>
+<li><a href="#prerelease">prerelease</a> — اجازه می‌دهد نسخه‌های پیش‌انتشار با <code>update --precise</code> انتخاب شوند</li>
+<li><a href="#sbom">sbom</a> — فایل‌های پیش‌نیاز SBOM را برای آرتیفکت‌های کامپایل‌شده تولید می‌کند</li>
+<li><a href="#feature-unification">feature-unification</a> — حالت‌های جدید یکپارچه‌سازی featureها را در workspaceها فعال می‌کند</li>
+<li><a href="#lockfile-publish-time">lockfile-publish-time</a> — حل‌کننده را به بسته‌های قدیمی‌تر از زمان مشخص‌شده محدود می‌کند</li>
+</ul>
+</li>
+<li>Output behavior
+<ul>
+<li><a href="#artifact-dir">artifact-dir</a> — پوشه‌ای اضافه می‌کند که آرتیفکت‌ها در آن کپی می‌شوند.</li>
+<li><a href="#different-binary-name">Different binary name</a> — به فایل دودویی ساخته‌شده نامی جدا از نام crate می‌دهد.</li>
+<li><a href="#root-dir">root-dir</a> — پوشهٔ ریشه‌ای را که مسیرها نسبت به آن چاپ می‌شوند کنترل می‌کند</li>
+</ul>
+</li>
+<li>Compile behavior
+<ul>
+<li><a href="#mtime-on-use">mtime-on-use</a> — هر بار که یک وابستگی استفاده شود زمان آخرین تغییر آن را به‌روز می‌کند تا سازوکاری برای حذف آرتیفکت‌های استفاده‌نشده فراهم شود.</li>
+<li><a href="#build-std">build-std</a> — به‌جای استفاده از فایل‌های دودویی از پیش ساخته‌شده، کتابخانهٔ استاندارد را می‌سازد.</li>
+<li><a href="#build-std-features">build-std-features</a> — featureهایی را که با کتابخانهٔ استاندارد استفاده می‌شوند تنظیم می‌کند.</li>
+<li><a href="#binary-dep-depinfo">binary-dep-depinfo</a> — باعث می‌شود فایل dep-info وابستگی‌های دودویی را هم دنبال کند.</li>
+<li><a href="#checksum-freshness">checksum-freshness</a> — در صورت استفاده، تصمیم دربارهٔ لزوم بازسازی crate به‌جای mtime فایل بر اساس checksum فایل‌ها گرفته می‌شود.</li>
+<li><a href="#panic-abort-tests">panic-abort-tests</a> — اجرای تست‌ها با راهبرد panic از نوع «abort» را ممکن می‌کند.</li>
+<li><a href="#host-config">host-config</a> — امکان تنظیم پیکربندی‌هایی شبیه <code>[target]</code> را برای اهداف ساخت میزبان فراهم می‌کند.</li>
+<li><a href="#embed-metadata">embed-metadata</a> — اگر روی <code>no</code> تنظیم شود، cargo پرچم <code>-Zembed-metadata=no</code> را به کامپایلر می‌دهد که از جاسازی فراداده در آرتیفکت‌های rlib و dylib جلوگیری می‌کند تا فضای دیسک ذخیره شود.</li>
+<li><a href="#target-applies-to-host">target-applies-to-host</a> — تعیین می‌کند آیا برخی پرچم‌ها به اهداف ساخت میزبان داده شوند یا نه.</li>
+<li><a href="#gc">gc</a> — پاک‌سازی (garbage collection) cache سراسری.</li>
+<li><a href="#open-namespaces">open-namespaces</a> — اجازه می‌دهد چند بسته در یک فضای نام API مشترک شرکت کنند</li>
+<li><a href="#panic-immediate-abort">panic-immediate-abort</a> — پرچم <code>-Cpanic=immediate-abort</code> را به کامپایلر می‌دهد.</li>
+<li><a href="#compile-time-deps">compile-time-deps</a> — قابلیت دائماً ناپایدار برای rust-analyzer</li>
+<li><a href="#fine-grain-locking">fine-grain-locking</a> — به‌جای قفل‌کردن کل cache ساخت، از قفل‌گذاری ریزدانه استفاده می‌کند</li>
+<li><a href="#json-target-spec">json-target-spec</a> — استفاده از مشخصات هدف سفارشی با فایل <code>.json</code> را مجاز می‌کند.</li>
+<li><a href="#hint-msrv">hint-msrv</a> — به Cargo اجازه می‌دهد <code>-Zhint-msrv</code> را تنظیم کند</li>
+<li><a href="#mem-stats">mem-stats</a> — اوج مصرف حافظه را برای هر واحد ساخت در <code>--timings</code> گزارش می‌کند.</li>
+</ul>
+</li>
+<li>rustdoc
+<ul>
+<li><a href="#rustdoc-map">rustdoc-map</a> — نگاشت‌هایی فراهم می‌کند تا مستندات به سایت‌های خارجی مثل <a href="https://docs.rs/">docs.rs</a> پیوند دهند.</li>
+<li><a href="#scrape-examples">scrape-examples</a> — مثال‌ها را درون مستندات نشان می‌دهد.</li>
+<li><a href="#output-format-for-rustdoc">output-format</a> — اجازه می‌دهد مستندات در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc_json_types/">قالب JSON</a> آزمایشی هم تولید شوند.</li>
+<li><a href="#rustdoc-depinfo">rustdoc-depinfo</a> — از فایل‌های dep-info در تشخیص نیاز به بازسازی rustdoc استفاده می‌کند.</li>
+<li><a href="#rustdoc-mergeable-info">rustdoc-mergeable-info</a> — از فایل‌های اطلاعات بین‌crate قابل‌ادغام rustdoc استفاده می‌کند.</li>
+</ul>
+</li>
+<li><code>Cargo.toml</code> extensions
+<ul>
+<li><a href="#profile-rustflags-option">Profile <code>rustflags</code> option</a> — مستقیماً به rustc داده می‌شود.</li>
+<li><a href="#profile-hint-mostly-unused-option">Profile <code>hint-mostly-unused</code> option</a> — اشاره می‌کند که یک وابستگی عمدتاً استفاده نمی‌شود، تا زمان کامپایل بهینه شود.</li>
+<li><a href="#package-min-opt-level-hint">Package <code>min-opt-level</code> hint</a> — حداقل عددی سطح بهینه‌سازی را برای یک بسته درخواست می‌کند.</li>
+<li><a href="#codegen-backend">codegen-backend</a> — backend تولید کد مورد استفادهٔ rustc را انتخاب می‌کند.</li>
+<li><a href="#per-package-target">per-package-target</a> — <code>--target</code> مورد استفاده برای هر بستهٔ جداگانه را تنظیم می‌کند.</li>
+<li><a href="#artifact-dependencies">artifact dependencies</a> — اجازه می‌دهد آرتیفکت‌های ساخت در آرتیفکت‌های ساخت دیگر گنجانده شوند و برای اهداف مختلف ساخته شوند.</li>
+<li><a href="#path-bases">path bases</a> — پوشه‌های پایهٔ نام‌دار برای وابستگی‌های path.</li>
+<li><a href="#feature-metadata">feature-metadata</a> — نحو جدولی برای تعریف featureها.</li>
+<li><a href="#unstable-editions"><code>unstable-editions</code></a> — استفاده از ویرایش‌هایی را که هنوز پایدار نیستند مجاز می‌کند.</li>
+<li><a href="#builtin-dependencies">builtin-dependencies</a> — تعیین وابستگی به crateهای کتابخانهٔ استاندارد را مجاز می‌کند.</li>
+</ul>
+</li>
+<li>Information and metadata
+<ul>
+<li><a href="#unit-graph">unit-graph</a> — JSON ساختار گراف داخلی Cargo را تولید می‌کند.</li>
+<li><a href="#rustc---print"><code>cargo rustc --print</code></a> — rustc را با <code>--print</code> فراخوانی می‌کند تا اطلاعاتی از rustc نمایش دهد.</li>
+<li><a href="#build-analysis">Build analysis</a> — معیارهای دقیق ساخت را در اجراهای مختلف ثبت و ذخیره می‌کند و دستورهای جدیدی برای پرس‌وجو از ساخت‌های گذشته دارد.</li>
+<li><a href="#rustc-unicode"><code>rustc-unicode</code></a> — قالب خطای یونیکد <code>rustc</code> را در پیام‌های خطای Cargo فعال می‌کند</li>
+</ul>
+</li>
+<li>Configuration
+<ul>
+<li><a href="#cargo-config"><code>cargo config</code></a> — زیردستور جدیدی برای مشاهدهٔ فایل‌های پیکربندی اضافه می‌کند.</li>
+</ul>
+</li>
+<li>Registries
+<ul>
+<li><a href="#publish-timeout">publish-timeout</a> — مهلت بین بارگذاری crate و در دسترس قرار‌گرفتن آن در فهرست را کنترل می‌کند</li>
+</ul>
+</li>
+<li>Other
+<ul>
+<li><a href="#gitoxide">gitoxide</a> — برای مجموعه‌ای از عملیات به‌جای <code>git2</code> از <code>gitoxide</code> استفاده می‌کند.</li>
+<li><a href="#script">script</a> — پشتیبانی از بسته‌های تک‌فایلی <code>.rs</code> را فعال می‌کند.</li>
+<li><a href="#native-completions">native-completions</a> — تکمیل خودکار shell در cargo را به تکمیل بومی (native) منتقل می‌کند.</li>
+<li><a href="#package-message-format">Package message format</a> — قالب پیام برای <code>cargo package</code>.</li>
+<li><a href="#fix-edition"><code>fix-edition</code></a> — یک کمک‌کنندهٔ دائماً ناپایدار برای مهاجرت ویرایش.</li>
+<li><a href="https://github.com/crate-ci/cargo-plumbing">Plumbing subcommands</a> — دستورهای سطح پایین که مثل <code>cargo metadata</code> نقش API برای Cargo دارند</li>
+</ul>
+</li>
+</ul>
+<h2 id="allow-features"><a class="header" href="#allow-features">allow-features</a></h2>
+<p>این پرچم دائماً ناپایدار باعث می‌شود فقط مجموعهٔ فهرست‌شده‌ای از قابلیت‌های ناپایدار قابل‌استفاده باشد. به‌طور مشخص، اگر
+<code>-Zallow-features=foo,bar</code> را بدهید، همچنان می‌توانید <code>-Zfoo</code>
+و <code>-Zbar</code> را به <code>cargo</code> بدهید، اما نمی‌توانید <code>-Zbaz</code> بدهید. می‌توانید
+رشتهٔ خالی (<code>-Zallow-features=</code>) بدهید تا همهٔ قابلیت‌های ناپایدار غیرمجاز شوند.</p>
+<p><code>-Zallow-features</code> همچنین محدود می‌کند که کدام قابلیت‌های ناپایدار می‌توانند به ورودی <code>cargo-features</code> در <code>Cargo.toml</code> داده شوند. برای مثال، اگر بخواهید
+این را مجاز کنید</p>
+<pre><code class="language-toml">cargo-features = ["test-dummy-unstable"]
+</code></pre>
+<p>که در آن <code>test-dummy-unstable</code> ناپایدار است، آن feature هم با
+<code>-Zallow-features=</code> غیرمجاز می‌شود و با
+<code>-Zallow-features=test-dummy-unstable</code> مجاز.</p>
+<p>فهرست featureهایی که به <code>-Zallow-features</code> در cargo داده می‌شود به هر ابزار Rust که cargo فراخوانی می‌کند (مثل <code>rustc</code> یا
+<code>rustdoc</code>) هم داده می‌شود. بنابراین اگر <code>cargo -Zallow-features=</code> را اجرا کنید، هیچ قابلیت ناپایدار
+Cargo <em>یا</em> Rust قابل‌استفاده نیست.</p>
+<h2 id="no-index-update"><a class="header" href="#no-index-update">no-index-update</a></h2>
+<ul>
+<li>Original Issue: <a href="https://github.com/rust-lang/cargo/issues/3479">#3479</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/7404">#7404</a></li>
+</ul>
+<p>پرچم <code>-Z no-index-update</code> تضمین می‌کند Cargo سعی نمی‌کند
+فهرست registry را به‌روز کند. این برای ابزارهایی مثل Crater است که دستورهای Cargo زیادی صادر می‌کنند و می‌خواهید از تأخیر شبکه برای به‌روزرسانی فهرست در هر بار پرهیز کنید.</p>
+<h2 id="mtime-on-use"><a class="header" href="#mtime-on-use">mtime-on-use</a></h2>
+<ul>
+<li>Original Issue: <a href="https://github.com/rust-lang/cargo/pull/6477">#6477</a></li>
+<li>issue پیگیری کلی استفاده از cache: <a href="https://github.com/rust-lang/cargo/issues/7150">#7150</a></li>
+</ul>
+<p>پرچم <code>-Z mtime-on-use</code> آزمایشی است برای اینکه Cargo زمان mtime فایل‌های استفاده‌شده را به‌روز کند تا ابزارهایی مثل cargo-sweep راحت‌تر بتوانند تشخیص دهند کدام فایل‌ها کهنه‌اند. در بسیاری از گردش‌کارها لازم است این روی <em>همهٔ</em> فراخوانی‌های cargo تنظیم شود.
+برای عملی‌تر‌شدن، تنظیم پرچم <code>unstable.mtime_on_use</code> در <code>.cargo/config.toml</code>
+یا متغیر محیطی متناظر، <code>-Z mtime-on-use</code> را روی همهٔ فراخوانی‌های cargo در nightly اعمال می‌کند. (در stable پرچم config نادیده گرفته می‌شود)</p>
+<h2 id="avoid-dev-deps"><a class="header" href="#avoid-dev-deps">avoid-dev-deps</a></h2>
+<ul>
+<li>Original Issue: <a href="https://github.com/rust-lang/cargo/issues/4988">#4988</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/5133">#5133</a></li>
+</ul>
+<p>هنگام اجرای دستورهایی مثل <code>cargo install</code> یا <code>cargo build</code>، Cargo
+فعلاً لازم دارد dev-dependencies دانلود شوند، حتی اگر استفاده نشوند. پرچم <code>-Z avoid-dev-deps</code> به Cargo اجازه می‌دهد از دانلود
+dev-dependencies در صورت نیاز‌نداشتن به آن‌ها پرهیز کند. اگر dev-dependencies رد شوند، فایل <code>Cargo.lock</code>
+تولید نخواهد شد.</p>
+<h2 id="minimal-versions"><a class="header" href="#minimal-versions">minimal-versions</a></h2>
+<ul>
+<li>Original Issue: <a href="https://github.com/rust-lang/cargo/issues/4100">#4100</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/5657">#5657</a></li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>استفاده از این قابلیت توصیه نمی‌شود. چون نسخه‌های حداقلی را برای همهٔ
+وابستگی‌های تعدّی اعمال می‌کند، کاربردش محدود است چون
+همهٔ وابستگی‌های خارجی کران پایین نسخه را درست اعلام نمی‌کنند. قرار است در آینده
+تغییر کند تا فقط برای وابستگی‌های مستقیم نسخه‌های حداقلی را اعمال کند.</p>
+</blockquote>
+<p>وقتی فایل <code>Cargo.lock</code> تولید می‌شود، پرچم <code>-Z minimal-versions</code>
+وابستگی‌ها را به کمترین نسخهٔ SemVer حل می‌کند که نیازمندی‌ها را برآورده کند
+(به‌جای بیشترین نسخه).</p>
+<p>کاربرد مورد نظر این پرچم این است که در یکپارچه‌سازی پیوسته (CI) بررسی شود که نسخه‌های مشخص‌شده در Cargo.toml بازتاب درستی از
+حداقل نسخه‌هایی هستند که واقعاً استفاده می‌کنید. یعنی اگر Cargo.toml می‌گوید
+<code>foo = "1.0.0"</code>، به‌طور تصادفی به قابلیت‌هایی که فقط در
+<code>foo 1.5.0</code> افزوده شده‌اند وابسته نشوید.</p>
+<h2 id="direct-minimal-versions"><a class="header" href="#direct-minimal-versions">direct-minimal-versions</a></h2>
+<ul>
+<li>Original Issue: <a href="https://github.com/rust-lang/cargo/issues/4100">#4100</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/5657">#5657</a></li>
+</ul>
+<p>وقتی فایل <code>Cargo.lock</code> تولید می‌شود، پرچم <code>-Z direct-minimal-versions</code>
+وابستگی‌ها را فقط برای وابستگی‌های مستقیم به کمترین نسخهٔ SemVer حل می‌کند که نیازمندی‌ها را برآورده کند
+(به‌جای بیشترین نسخه).</p>
+<p>کاربرد مورد نظر این پرچم این است که در یکپارچه‌سازی پیوسته (CI) بررسی شود که نسخه‌های مشخص‌شده در Cargo.toml بازتاب درستی از
+حداقل نسخه‌هایی هستند که واقعاً استفاده می‌کنید. یعنی اگر Cargo.toml می‌گوید
+<code>foo = "1.0.0"</code>، به‌طور تصادفی به قابلیت‌هایی که فقط در
+<code>foo 1.5.0</code> افزوده شده‌اند وابسته نشوید.</p>
+<p>وابستگی‌های غیرمستقیم به‌طور عادی حل می‌شوند تا گیر اعتبارسنجی نسخهٔ حداقلی آن‌ها نکنند.</p>
+<h2 id="artifact-dir"><a class="header" href="#artifact-dir">artifact-dir</a></h2>
+<ul>
+<li>Original Issue: <a href="https://github.com/rust-lang/cargo/issues/4875">#4875</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/6790">#6790</a></li>
+</ul>
+<p>این قابلیت به شما اجازه می‌دهد پوشه‌ای را مشخص کنید که آرتیفکت‌ها پس از ساخت در آن کپی شوند. معمولاً آرتیفکت‌ها فقط در پوشه‌های
+<code>target/release</code> یا <code>target/debug</code> نوشته می‌شوند. اما تعیین نام دقیق فایل می‌تواند دشوار باشد چون باید خروجی JSON را تجزیه کرد. پرچم <code>--artifact-dir</code>
+دسترسی قابل‌پیش‌بینی به آرتیفکت‌ها را آسان‌تر می‌کند. توجه کنید که آرتیفکت‌ها کپی می‌شوند،
+پس نسخه‌های اصلی هنوز در پوشهٔ <code>target</code> هستند.
+مثال:</p>
+<pre><code class="language-sh">cargo +nightly build --artifact-dir=out -Z unstable-options
+</code></pre>
+<p>این را می‌توان در فایل‌های <code>.cargo/config.toml</code> هم مشخص کرد.</p>
+<pre><code class="language-toml">[build]
+artifact-dir = "out"
+</code></pre>
+<h2 id="root-dir"><a class="header" href="#root-dir">root-dir</a></h2>
+<ul>
+<li>Original Issue: <a href="https://github.com/rust-lang/cargo/issues/9887">#9887</a></li>
+<li>issue پیگیری: ندارد (فعلاً برای پایدارسازی برنامه‌ریزی نشده)</li>
+</ul>
+<p>پرچم <code>-Zroot-dir</code> پوشهٔ ریشه‌ای را تعیین می‌کند که مسیرها نسبت به آن چاپ می‌شوند.
+این هم پیام‌های تشخیصی را تحت‌تأثیر قرار می‌دهد و هم مسیرهایی را که ماکروی <code>file!()</code> تولید می‌کند.</p>
+<h2 id="metabuild"><a class="header" href="#metabuild">Metabuild</a></h2>
+<ul>
+<li>issue پیگیری: <a href="https://github.com/rust-lang/rust/issues/49803">rust-lang/rust#49803</a></li>
+<li>RFC: <a href="https://github.com/rust-lang/rfcs/blob/master/text/2196-metabuild.md">#2196</a></li>
+</ul>
+<p>Metabuild قابلیتی برای داشتن اسکریپت‌های ساخت اعلانی است. به‌جای نوشتن
+اسکریپت <code>build.rs</code>، فهرستی از وابستگی‌های ساخت را در کلید
+<code>metabuild</code> در <code>Cargo.toml</code> مشخص می‌کنید. یک اسکریپت ساخت به‌طور خودکار تولید می‌شود
+که هر وابستگی ساخت را به‌ترتیب اجرا می‌کند. بسته‌های metabuild سپس می‌توانند
+فراداده را از <code>Cargo.toml</code> بخوانند تا رفتارشان را مشخص کنند.</p>
+<p><code>cargo-features</code> را در بالای <code>Cargo.toml</code> بیاورید، کلید <code>metabuild</code> را در
+<code>package</code> بگذارید، وابستگی‌ها را در <code>build-dependencies</code> فهرست کنید و هر فراداده‌ای را که بسته‌های metabuild لازم دارند زیر <code>package.metadata</code> اضافه کنید. مثال:</p>
+<pre><code class="language-toml">cargo-features = ["metabuild"]
+
+[package]
+name = "mypackage"
+version = "0.0.1"
+metabuild = ["foo", "bar"]
+
+[build-dependencies]
+foo = "1.0"
+bar = "1.0"
+
+[package.metadata.foo]
+extra-info = "qwerty"
+</code></pre>
+<p>بسته‌های metabuild باید تابع عمومی‌ای به نام <code>metabuild</code> داشته باشند که
+همان کارهایی را انجام دهد که یک اسکریپت <code>build.rs</code> معمولی انجام می‌داد.</p>
+<h2 id="multiple-build-scripts"><a class="header" href="#multiple-build-scripts">Multiple Build Scripts</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/14903">#14903</a></li>
+<li>Original Pull Request: <a href="https://github.com/rust-lang/cargo/pull/15630">#15630</a></li>
+</ul>
+<p>قابلیت Multiple Build Scripts به شما اجازه می‌دهد در بسته‌تان چند اسکریپت ساخت داشته باشید.</p>
+<p><code>cargo-features</code> را در بالای <code>Cargo.toml</code> بیاورید و <code>multiple-build-scripts</code> را برای فعال‌کردن قابلیت اضافه کنید.
+مسیر اسکریپت‌های ساخت را به‌صورت آرایه در <code>package.build</code> بگذارید. برای مثال:</p>
+<pre><code class="language-toml">cargo-features = ["multiple-build-scripts"]
+
+[package]
+name = "mypackage"
+version = "0.0.1"
+build = ["foo.rs", "bar.rs"]
+</code></pre>
+<p><strong>دسترسی به پوشه‌های خروجی</strong>: پوشهٔ خروجی هر اسکریپت ساخت با <code>&lt;script-name&gt;_OUT_DIR</code> در دسترس است
+که در آن <code>&lt;script-name&gt;</code> نام فایل اسکریپت ساخت بدون پسوند است، دقیقاً همان‌طور که هست.
+برای مثال <code>bar_OUT_DIR</code> برای اسکریپتی در <code>foo/bar.rs</code>. (فقط هنگام کامپایل تنظیم می‌شود و با ماکروی <code>env!</code> قابل‌دسترسی است)</p>
+<h2 id="any-build-script-metadata"><a class="header" href="#any-build-script-metadata">فراداده برای هر اسکریپت ساخت (Any Build Script Metadata)</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/3544">#14903</a></li>
+</ul>
+<p>اجازه می‌دهد هر اسکریپت ساخت از طریق <code>cargo::metadata=key=value</code> متغیرهای محیطی مشخص کند</p>
+<p>اسکریپت‌های ساخت وابسته می‌توانند این جفت‌های کلید/مقدار را با خواندن متغیر محیطی <code>CARGO_DEP_&lt;dep&gt;_&lt;key&gt;</code> هنگام اجرا بخوانند.
+برای اسکریپت‌های ساخت crateهایی که <code>links</code> دارند، هم <code>DEP_&lt;links&gt;_&lt;key&gt;</code> و هم <code>CARGO_DEP_&lt;dep&gt;_&lt;key&gt;</code> تنظیم می‌شوند.</p>
+<p>توجه کنید که <code>dep</code> و <code>key</code> در <code>CARGO_DEP_&lt;dep&gt;_&lt;key&gt;</code> به حروف بزرگ تبدیل می‌شوند و خط‌تیره‌ها (<code>-</code>) با زیرخط (<code>_</code>) جایگزین.</p>
+<h2 id="public-dependency"><a class="header" href="#public-dependency">public-dependency</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/rust/issues/44663">#44663</a></li>
+</ul>
+<p>قابلیت «public-dependency» اجازه می‌دهد وابستگی‌ها «عمومی» یا «خصوصی» علامت‌گذاری شوند. وقتی این قابلیت فعال باشد، اطلاعات اضافی به rustc داده می‌شود تا
+lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#exported-private-dependencies">exported_private_dependencies</a> درست کار کند.</p>
+<p>برای فعال‌کردن این قابلیت، می‌توانید از <code>-Zpublic-dependency</code> استفاده کنید</p>
+<pre><code class="language-sh">cargo +nightly run -Zpublic-dependency
+</code></pre>
+<p>یا جدول <code>[unstable]</code>، برای مثال،</p>
+<pre><code class="language-toml"># .cargo/config.toml
+[unstable]
+public-dependency = true
+</code></pre>
+<p><code>public-dependency</code> را می‌توان در <code>cargo-features</code> هم فعال کرد، <strong>هرچند این منسوخ است و به‌زودی حذف می‌شود</strong>.</p>
+<pre><code class="language-toml">cargo-features = ["public-dependency"]
+
+[dependencies]
+my_dep = { version = "1.2.3", public = true }
+private_dep = "2.0.0" # Will be 'private' by default
+</code></pre>
+<p>Documentation updates:</p>
+<ul>
+<li>برای بخش «جدول <code>dependencies</code>» در workspace، <code>public</code> را به‌عنوان فیلد پشتیبانی‌نشده برای <code>workspace.dependencies</code> بیاورید</li>
+<li>حداقل MSRV لازم برای استفاده از <code>public</code> برابر 1.83 است (<a href="https://github.com/rust-lang/cargo/pull/14507">#14507</a> را ببینید)</li>
+</ul>
+<h2 id="msrv-policy"><a class="header" href="#msrv-policy">msrv-policy</a></h2>
+<ul>
+<li><a href="https://rust-lang.github.io/rfcs/3537-msrv-resolver.html">RFC: MSRV-aware Resolver</a></li>
+<li><a href="https://github.com/rust-lang/cargo/issues/9930">#9930</a> (MSRV-aware resolver)</li>
+</ul>
+<p>قابلیت ناپایدار فراگیر برای قابلیت‌های cargo آگاه از MSRV تحت <a href="https://github.com/rust-lang/rfcs/pull/2495">RFC 2495</a>.</p>
+<h3 id="msrv-aware-cargo-add"><a class="header" href="#msrv-aware-cargo-add">MSRV-aware cargo add</a></h3>
+<p>این در نسخهٔ 1.79 در <a href="https://github.com/rust-lang/cargo/pull/13608">#13608</a> پایدار شد.</p>
+<h3 id="msrv-aware-resolver"><a class="header" href="#msrv-aware-resolver">MSRV-aware resolver</a></h3>
+<p>این در نسخهٔ 1.84 در <a href="https://github.com/rust-lang/cargo/pull/14639">#14639</a> پایدار شد.</p>
+<h3 id="convert-incompatible_toolchain-error-into-a-lint"><a class="header" href="#convert-incompatible_toolchain-error-into-a-lint">تبدیل خطای <code>incompatible_toolchain</code> به lint</a></h3>
+<p>Unimplemented</p>
+<h3 id="--update-rust-version-flag-for-cargo-add-cargo-update"><a class="header" href="#--update-rust-version-flag-for-cargo-add-cargo-update">پرچم <code>--update-rust-version</code> برای <code>cargo add</code> و <code>cargo update</code></a></h3>
+<p>Unimplemented</p>
+<h3 id="packagerust-version--toolchain"><a class="header" href="#packagerust-version--toolchain"><code>package.rust-version = "toolchain"</code></a></h3>
+<p>Unimplemented</p>
+<h3 id="update-cargo-new-template-to-set-packagerust-version--toolchain"><a class="header" href="#update-cargo-new-template-to-set-packagerust-version--toolchain">به‌روزرسانی قالب <code>cargo new</code> برای تنظیم <code>package.rust-version = "toolchain"</code></a></h3>
+<p>Unimplemented</p>
+<h2 id="prerelease"><a class="header" href="#prerelease">prerelease</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/13290">#13290</a></li>
+<li>RFC: <a href="https://github.com/rust-lang/rfcs/pull/3493">#3493</a></li>
+</ul>
+<p>پرچم <code>-Zprerelease</code> اجازه می‌دهد نسخه‌های پیش‌انتشار با <code>update --precise</code> انتخاب شوند،
+حتی وقتی پیش‌انتشار در <code>Cargo.toml</code> پروژه مشخص نشده باشد.</p>
+<p>برای مثال این <code>Cargo.toml</code> را در نظر بگیرید.</p>
+<pre><code class="language-toml">[dependencies]
+my-dependency = "0.1.1"
+</code></pre>
+<p>می‌توان <code>my-dependency</code> را با <code>update -Zprerelease my-dependency --precise 0.1.2-pre.0</code> به یک پیش‌انتشار به‌روز کرد.
+دلیلش این است که <code>0.1.2-pre.0</code> با <code>0.1.1</code> سازگار تلقی می‌شود.
+به همین شکل نمی‌توان از <code>0.1.1</code> به <code>0.2.0-pre.0</code> ارتقا داد.
+دستورهای <code>cargo</code> بعدی هم باید <code>-Zprerelease</code> را بدهند تا پیش‌انتشار قفل‌شده حفظ شود.
+بدون این پرچم، Cargo دوباره <code>0.1.2-pre.0</code> را با <code>0.1.1</code> ناسازگار می‌داند
+و ممکن است <code>my-dependency</code> را به <code>0.1.1</code> برگرداند یا با خطای حل وابستگی شکست بخورد.</p>
+<h2 id="sbom"><a class="header" href="#sbom">sbom</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/pull/13709">#13709</a></li>
+<li>RFC: <a href="https://github.com/rust-lang/rfcs/pull/3553">#3553</a></li>
+</ul>
+<p>پیکربندی ساخت <code>sbom</code> اجازه می‌دهد به‌اصطلاح فایل‌های پیش‌نیاز SBOM
+کنار هر آرتیفکت کامپایل‌شده تولید شوند. ابزار SBOM (فهرست مواد نرم‌افزار) می‌تواند
+این فایل‌های تولیدشده را به کار بگیرد تا اطلاعات مهمی را از فرایند ساخت cargo جمع کند که به روش دیگری دشوار یا غیرممکن است.</p>
+<p>برای فعال‌کردن این قابلیت یا فیلد <code>sbom</code> را در <code>.cargo/config.toml</code> تنظیم کنید</p>
+<pre><code class="language-toml">[unstable]
+sbom = true
+
+[build]
+sbom = true
+</code></pre>
+<p>یا متغیر محیطی <code>CARGO_BUILD_SBOM</code> را روی <code>true</code> بگذارید. این قابلیت
+پشت پرچم <code>-Z sbom</code> در دسترس است.</p>
+<p>فایل‌های خروجی تولیدشده قالب JSON دارند و از الگوی نام‌گذاری
+<code>&lt;artifact&gt;.cargo-sbom.json</code> پیروی می‌کنند. فایل JSON اطلاعاتی دربارهٔ وابستگی‌ها،
+هدف، featureها و کامپایلر <code>rustc</code> مورد استفاده دارد.</p>
+<p>فایل‌های پیش‌نیاز SBOM برای همهٔ خروجی‌های اجرایی و قابل‌لینک تولید می‌شوند
+که به پوشه‌های target یا artifact منتقل (uplift) می‌شوند.</p>
+<h3 id="environment-variables-cargo-sets-for-crates"><a class="header" href="#environment-variables-cargo-sets-for-crates">متغیرهای محیطی‌ای که Cargo برای crateها تنظیم می‌کند</a></h3>
+<ul>
+<li><code>CARGO_SBOM_PATH</code> – فهرستی از فایل‌های پیش‌نیاز SBOM تولیدشده که با جداکنندهٔ PATH پلتفرم جدا شده‌اند. فهرست را می‌توان با <code>std::env::split_paths</code> تقسیم کرد.</li>
+</ul>
+<h3 id="sbom-pre-cursor-schema"><a class="header" href="#sbom-pre-cursor-schema">SBOM pre-cursor schema</a></h3>
+<pre><code class="language-json5">{
+  // Schema version.
+  "version": 1,
+  // Index into the crates array for the root crate.
+  "root": 0,
+  // Array of all crates. There may be duplicates of the same crate if that
+  // crate is compiled differently (different opt-level, features, etc).
+  "crates": [
+    {
+      // Fully qualified package ID specification
+      "id": "path+file:///sample-package#0.1.0",
+      // List of target kinds: bin, lib, rlib, dylib, cdylib, staticlib, proc-macro, example, test, bench, custom-build
+      "kind": ["bin"],
+      // Enabled feature flags.
+      "features": [],
+      // Dependencies for this crate.
+      "dependencies": [
+        {
+          // Index in to the crates array.
+          "index": 1,
+          // Dependency kind:
+          // Normal: A dependency linked to the artifact produced by this crate.
+          // Build: A compile-time dependency used to build this crate (build-script or proc-macro).
+          "kind": "normal"
+        },
+        {
+          // A crate can depend on another crate with both normal and build edges.
+          "index": 1,
+          "kind": "build"
+        }
+      ]
+    },
+    {
+      "id": "registry+https://github.com/rust-lang/crates.io-index#zerocopy@0.8.16",
+      "kind": ["bin"],
+      "features": [],
+      "dependencies": []
+    }
+  ],
+  // Information about rustc used to perform the compilation.
+  "rustc": {
+    // Compiler version
+    "version": "1.86.0-nightly",
+    // Compiler wrapper
+    "wrapper": null,
+    // Compiler workspace wrapper
+    "workspace_wrapper": null,
+    // Commit hash for rustc
+    "commit_hash": "bef3c3b01f690de16738b1c9f36470fbfc6ac623",
+    // Host target tuple
+    "host": "x86_64-pc-windows-msvc",
+    // Verbose version string: `rustc -vV`
+    "verbose_version": "rustc 1.86.0-nightly (bef3c3b01 2025-02-04)\nbinary: rustc\ncommit-hash: bef3c3b01f690de16738b1c9f36470fbfc6ac623\ncommit-date: 2025-02-04\nhost: x86_64-pc-windows-msvc\nrelease: 1.86.0-nightly\nLLVM version: 19.1.7\n"
+  }
+}
+</code></pre>
+<h2 id="build-std"><a class="header" href="#build-std">build-std</a></h2>
+<ul>
+<li>مخزن پیگیری: <a href="https://github.com/rust-lang/wg-cargo-std-aware">https://github.com/rust-lang/wg-cargo-std-aware</a></li>
+</ul>
+<p>قابلیت <code>build-std</code> به Cargo اجازه می‌دهد خود کتابخانهٔ استاندارد را به‌عنوان
+بخشی از کامپایل گراف crateها کامپایل کند. این قابلیت پیش‌تر هم با نام
+«std-aware Cargo» شناخته می‌شد. این قابلیت هنوز در مراحل بسیار اولیهٔ توسعه است
+و می‌تواند افزودنی بسیار بزرگ به Cargo باشد. مستندسازی این قابلیت بسیار بزرگ است، حتی در شکل حداقلی‌ای که امروز دارد، پس اگر
+می‌خواهید به‌روز بمانید باید <a href="https://github.com/rust-lang/wg-cargo-std-aware">مخزن پیگیری</a> و issueهای آن را دنبال کنید.</p>
+<p>قابلیت پیاده‌سازی‌شدهٔ امروز پشت پرچم <code>-Z build-std</code> است. این
+پرچم نشان می‌دهد Cargo باید کتابخانهٔ استاندارد را از کد منبع
+و با همان profile ساخت اصلی کامپایل کند. توجه کنید برای کارکردن این، باید
+کد منبع کتابخانهٔ استاندارد را در اختیار داشته باشید، و فعلاً
+تنها روش پشتیبانی‌شده برای این کار افزودن مؤلفهٔ <code>rust-src</code> در rustup است:</p>
+<pre><code class="language-console">$ rustup component add rust-src --toolchain nightly
+</code></pre>
+<p>Usage looks like:</p>
+<pre><code class="language-console">$ cargo new foo
+$ cd foo
+$ cargo +nightly run -Z build-std --target x86_64-unknown-linux-gnu
+   Compiling core v0.0.0 (...)
+   ...
+   Compiling foo v0.1.0 (...)
+    Finished dev [unoptimized + debuginfo] target(s) in 21.00s
+     Running `target/x86_64-unknown-linux-gnu/debug/foo`
+Hello, world!
+</code></pre>
+<p>در اینجا کتابخانهٔ استاندارد را در حالت debug و با debug assertions دوباره کامپایل کردیم
+(مثل کامپایل <code>src/main.rs</code>) و همه‌چیز در پایان به هم لینک شد.</p>
+<p>استفاده از <code>-Z build-std</code> به‌طور ضمنی crateهای پایدار <code>core</code>، <code>std</code>،
+<code>alloc</code> و <code>proc_macro</code> را کامپایل می‌کند. اگر از <code>cargo test</code> استفاده کنید، crate با نام
+<code>test</code> را هم کامپایل می‌کند. اگر با محیطی کار می‌کنید که از برخی
+این crateها پشتیبانی نمی‌کند، می‌توانید به <code>-Zbuild-std</code> هم آرگومان بدهید:</p>
+<pre><code class="language-console">$ cargo +nightly build -Z build-std=core,alloc
+</code></pre>
+<p>مقدار اینجا فهرستی از crateهای کتابخانهٔ استاندارد است که باید ساخته شوند و با ویرگول جدا می‌شود.</p>
+<h3 id="requirements"><a class="header" href="#requirements">Requirements</a></h3>
+<p>در خلاصه، فهرست نیازمندی‌های امروز برای استفاده از <code>-Z build-std</code> این‌هاست:</p>
+<ul>
+<li>باید کد منبع libstd را با <code>rustup component add rust-src</code> نصب کنید</li>
+<li>باید هم Cargo و هم rustc را از نوع nightly به‌کار ببرید</li>
+<li>پرچم <code>-Z build-std</code> باید به همهٔ فراخوانی‌های <code>cargo</code> داده شود.</li>
+</ul>
+<h3 id="reporting-bugs-and-helping-out"><a class="header" href="#reporting-bugs-and-helping-out">گزارش باگ‌ها و کمک‌کردن</a></h3>
+<p>قابلیت <code>-Z build-std</code> در مراحل بسیار اولیهٔ توسعه است! این
+قابلیت در Cargo تاریخچهٔ بسیار طولانی و دامنهٔ بسیار بزرگی دارد، و
+این فقط آغاز راه است. اگر می‌خواهید باگی گزارش کنید، لطفاً آن را به یکی از این‌ها گزارش دهید:</p>
+<ul>
+<li>Cargo — <a href="https://github.com/rust-lang/cargo/issues/new">https://github.com/rust-lang/cargo/issues/new</a> — برای باگ‌های پیاده‌سازی</li>
+<li>مخزن پیگیری —
+<a href="https://github.com/rust-lang/wg-cargo-std-aware/issues/new">https://github.com/rust-lang/wg-cargo-std-aware/issues/new</a> — برای پرسش‌های طراحی بزرگ‌تر.</li>
+</ul>
+<p>همچنین اگر قابلیتی را می‌خواهید که هنوز پیاده‌سازی نشده و/یا اگر
+چیزی آن‌طور که می‌خواهید کار نمی‌کند، <a href="https://github.com/rust-lang/wg-cargo-std-aware/issues">issue tracker</a> مخزن پیگیری را ببینید، و اگر آنجا نبود issue جدیدی ثبت کنید!</p>
+<h2 id="build-std-features"><a class="header" href="#build-std-features">build-std-features</a></h2>
+<ul>
+<li>مخزن پیگیری: <a href="https://github.com/rust-lang/wg-cargo-std-aware">https://github.com/rust-lang/wg-cargo-std-aware</a></li>
+</ul>
+<p>این پرچم همتای پرچم قابلیت <code>-Zbuild-std</code> است. featureهایی را که
+هنگام ساخت کتابخانهٔ استاندارد برای خود آن فعال‌اند پیکربندی می‌کند. featureهای فعال پیش‌فرض فعلاً <code>backtrace</code> و
+<code>panic-unwind</code> هستند. این پرچم فهرستی جداشده با ویرگول می‌گیرد و در صورت ارائه،
+فهرست پیش‌فرض featureهای فعال را بازنویسی می‌کند.</p>
+<h2 id="binary-dep-depinfo"><a class="header" href="#binary-dep-depinfo">binary-dep-depinfo</a></h2>
+<ul>
+<li>Tracking rustc issue: <a href="https://github.com/rust-lang/rust/issues/63012">#63012</a></li>
+</ul>
+<p>پرچم <code>-Z binary-dep-depinfo</code> باعث می‌شود Cargo همین پرچم را به
+<code>rustc</code> منتقل کند و rustc مسیر همهٔ وابستگی‌های دودویی را در فایل «dep info» (با پسوند <code>.d</code>) بگنجاند. Cargo سپس از
+آن اطلاعات برای تشخیص تغییر استفاده می‌کند (اگر هر وابستگی دودویی تغییر کند،
+crate دوباره ساخته می‌شود). کاربرد اصلی آن ساخت خود کامپایلر است،
+که وابستگی‌های ضمنی به کتابخانهٔ استاندارد دارد که در غیر این صورت برای تشخیص تغییر ردیابی نمی‌شدند.</p>
+<h2 id="checksum-freshness"><a class="header" href="#checksum-freshness">checksum-freshness</a></h2>
+<ul>
+<li>Tracking issue: <a href="https://github.com/rust-lang/cargo/issues/14136">#14136</a></li>
+</ul>
+<p>پرچم <code>-Z checksum-freshness</code> استفاده از mtime فایل‌ها را در fingerprintهای cargo
+با مقدار checksum فایل جایگزین می‌کند. این بیش از همه در سیستم‌هایی با پیاده‌سازی ضعیف
+mtime، یا در CI/CD مفید است. الگوریتم checksum ممکن است بدون اطلاع قبلی بین نسخه‌های cargo تغییر کند. fingerprintها را cargo برای تشخیص اینکه crate چه وقت باید دوباره ساخته شود به‌کار می‌برد.</p>
+<p>فعلاً فایل‌هایی که اسکریپت ساخت مصرف می‌کند همچنان از mtime استفاده می‌کنند، حتی وقتی <code>checksum-freshness</code>
+فعال باشد. این به‌عنوان راه‌حل بلندمدت در نظر گرفته نشده است.</p>
+<pre><code class="language-toml"># .cargo/config.toml
+[unstable]
+checksum-freshness = true
+
+[build]
+fingerprint = "content"
+</code></pre>
+<h3 id="buildfingerprint"><a class="header" href="#buildfingerprint"><code>build.fingerprint</code></a></h3>
+<ul>
+<li>Type: string</li>
+<li>Default: <code>"mtime"</code></li>
+<li>Environment: <code>CARGO_BUILD_FINGERPRINT</code></li>
+</ul>
+<p>روشی را که برای تشخیص نیاز به ساخت بر اساس تغییر ورودی‌های منبع به‌کار می‌رود انتخاب می‌کند.</p>
+<ul>
+<li><code>mtime</code>: زمان آخرین تغییر ورودی</li>
+<li><code>content</code>: checksum ورودی</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>این بر دستور <code>cargo::rerun-if-changed</code> در اسکریپت ساخت اثر نمی‌گذارد.</p>
+</blockquote>
+<h2 id="panic-abort-tests"><a class="header" href="#panic-abort-tests">panic-abort-tests</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/rust/issues/67650">#67650</a></li>
+<li>Original Pull Request: <a href="https://github.com/rust-lang/cargo/pull/7460">#7460</a></li>
+</ul>
+<p>پرچم <code>-Z panic-abort-tests</code> پشتیبانی nightly را برای کامپایل crateهای test harness با <code>-Cpanic=abort</code> فعال می‌کند. بدون این پرچم Cargo تست‌ها
+و هر چیزی را که به آن‌ها وابسته است با <code>-Cpanic=unwind</code> کامپایل می‌کند، چون تنها راهی است که crate با نام
+<code>test</code> می‌داند چگونه کار کند. اما از <a href="https://github.com/rust-lang/rust/pull/64158">rust-lang/rust#64158</a> به بعد،
+crate با نام <code>test</code> از <code>-C panic=abort</code> با یک تست در هر فرایند پشتیبانی می‌کند و می‌تواند به
+پرهیز از کامپایل چندبارهٔ گراف crateها کمک کند.</p>
+<p>فعلاً روشن نیست این قابلیت در Cargo چگونه پایدار خواهد شد، اما
+می‌خواهیم به نحوی پایدارش کنیم!</p>
+<h2 id="target-applies-to-host"><a class="header" href="#target-applies-to-host">target-applies-to-host</a></h2>
+<ul>
+<li>Original Pull Request: <a href="https://github.com/rust-lang/cargo/pull/9322">#9322</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/9453">#9453</a></li>
+</ul>
+<p>از نظر تاریخی، رفتار Cargo دربارهٔ اینکه آیا گزینه‌های پیکربندی <code>linker</code> و <code>rustflags</code>
+از متغیرهای محیطی و
+<a href="config.html#target"><code>[target]</code></a> برای اسکریپت‌های ساخت، پلاگین‌ها،
+و آرتیفکت‌های دیگری که <em>همیشه</em> برای پلتفرم میزبان ساخته می‌شوند رعایت شوند
+تا حدی ناسازگار بوده است.
+وقتی <code>--target</code> داده <em>نشود</em>، Cargo همان <code>linker</code> و
+<code>rustflags</code> را برای اسکریپت‌های ساخت مثل همهٔ آرتیفکت‌های کامپایل دیگر رعایت می‌کند. اما وقتی
+<code>--target</code> داده <em>شود</em>، Cargo <code>linker</code> را از
+<a href="config.html#targettuplelinker"><code>[target.&lt;host tuple&gt;]</code></a> رعایت می‌کند و
+هیچ پیکربندی <code>rustflags</code> را برنمی‌دارد.
+این رفتار دوگانه گیج‌کننده است، و همچنین پیکربندی درست ساخت‌هایی را دشوار می‌کند که در آن‌ها host tuple و <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)">target tuple</a> یکی‌اند،
+اما آرتیفکت‌هایی که قرار است روی میزبان ساخت اجرا شوند هنوز باید
+متفاوت پیکربندی شوند.</p>
+<p><code>-Ztarget-applies-to-host</code> تنظیم سطح بالای
+<code>target-applies-to-host</code> را در فایل‌های پیکربندی Cargo فعال می‌کند که
+به کاربران اجازه می‌دهد رفتار متفاوت (و منسجم‌تری) را برای این ویژگی‌ها انتخاب کنند. وقتی <code>target-applies-to-host</code> در فایل پیکربندی تنظیم نشده یا روی
+<code>true</code> باشد، رفتار موجود Cargo حفظ می‌شود (هرچند <code>-Zhost-config</code> را ببینید که این پیش‌فرض را تغییر می‌دهد). وقتی
+روی <code>false</code> باشد، هیچ گزینه‌ای از <code>[target.&lt;host tuple&gt;]</code>،
+<code>RUSTFLAGS</code> یا <code>[build]</code> برای آرتیفکت‌های میزبان رعایت نمی‌شود، صرف‌نظر از اینکه
+<code>--target</code> به Cargo داده شده باشد یا نه. برای سفارشی‌سازی آرتیفکت‌هایی که قرار است روی میزبان اجرا شوند، از <code>[host]</code> استفاده کنید (<a href="#host-config"><code>host-config</code></a>).</p>
+<p>در آینده ممکن است <code>target-applies-to-host</code> پیش‌فرضش <code>false</code> شود
+تا رفتار پیش‌فرض معقول‌تر و منسجم‌تری ارائه دهد.</p>
+<pre><code class="language-toml"># config.toml
+target-applies-to-host = false
+</code></pre>
+<pre><code class="language-console">cargo +nightly -Ztarget-applies-to-host build --target x86_64-unknown-linux-gnu
+</code></pre>
+<h2 id="host-config"><a class="header" href="#host-config">host-config</a></h2>
+<ul>
+<li>Original Pull Request: <a href="https://github.com/rust-lang/cargo/pull/9322">#9322</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/9452">#9452</a></li>
+</ul>
+<p>کلید <code>host</code> در فایل پیکربندی را می‌توان برای دادن پرچم‌ها به اهداف ساخت میزبان به‌کار برد،
+مثل اسکریپت‌های ساخت که هنگام cross compile باید روی سیستم میزبان اجرا شوند نه سیستم هدف. هم جدول‌های عمومی و هم جدول‌های مخصوص معماری میزبان را پشتیبانی می‌کند. جدول‌های منطبق با معماری میزبان بر جدول‌های عمومی میزبان اولویت دارند.</p>
+<p>نیازمند آن است که گزینه‌های خط فرمان <code>-Zhost-config</code> و <code>-Ztarget-applies-to-host</code>
+تنظیم شده باشند، و <code>target-applies-to-host = false</code> در فایل پیکربندی Cargo تنظیم شده باشد.</p>
+<pre><code class="language-toml"># config.toml
+[host]
+linker = "/path/to/host/linker"
+runner = "host-runner"
+[host.x86_64-unknown-linux-gnu]
+linker = "/path/to/host/arch/linker"
+runner = "host-arch-runner"
+rustflags = ["-Clink-arg=--verbose"]
+[target.x86_64-unknown-linux-gnu]
+linker = "/path/to/target/linker"
+</code></pre>
+<p>تنظیم <code>host.runner</code> اجرای اهداف ساخت میزبان، مثل اسکریپت‌های ساخت، را در بر می‌گیرد،
+شبیه اینکه <code>target.&lt;tuple&gt;.runner</code> اجرای <code>cargo run</code>/<code>test</code>/<code>bench</code> را در بر می‌گیرد.</p>
+<p>جدول عمومی <code>host</code> بالا هنگام ساخت روی میزبان
+<code>x86_64-unknown-linux-gnu</code> کاملاً نادیده گرفته می‌شود، چون جدول <code>host.x86_64-unknown-linux-gnu</code>
+اولویت دارد.</p>
+<p>تنظیم <code>-Zhost-config</code> پیش‌فرض <code>target-applies-to-host</code> را از <code>true</code> به
+<code>false</code> تغییر می‌دهد.</p>
+<pre><code class="language-console">cargo +nightly -Ztarget-applies-to-host -Zhost-config build --target x86_64-unknown-linux-gnu
+</code></pre>
+<h2 id="unit-graph"><a class="header" href="#unit-graph">unit-graph</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/8002">#8002</a></li>
+</ul>
+<p>پرچم <code>--unit-graph</code> را می‌توان به هر دستور ساخت (<code>build</code>، <code>check</code>،
+<code>run</code>، <code>test</code>، <code>bench</code>، <code>doc</code> و غیره) داد تا یک شیء JSON در stdout تولید شود که
+نمایندهٔ گراف واحد (unit graph) داخلی Cargo است. در واقع چیزی ساخته نمی‌شود
+و دستور بلافاصله پس از چاپ برمی‌گردد. هر «واحد» با یک
+اجرای کامپایلر متناظر است. این اشیا همچنین مشخص می‌کنند هر واحد به کدام واحد وابسته است.</p>
+<pre><code>cargo +nightly build --unit-graph -Z unstable-options
+</code></pre>
+<p>این ساختار دید کامل‌تری از رابطهٔ وابستگی همان‌طور که
+Cargo می‌بیند ارائه می‌دهد. به‌ویژه، فیلد «features» از حل‌کنندهٔ جدید featureها پشتیبانی می‌کند که در آن یک وابستگی ممکن است چند بار با featureهای متفاوت ساخته شود. <code>cargo metadata</code> اساساً نمی‌تواند رابطهٔ
+featureها بین انواع مختلف وابستگی را نشان دهد، و featureها اکنون به این بستگی دارند که
+کدام دستور اجرا شده و کدام بسته‌ها و اهداف انتخاب شده‌اند. علاوه بر این می‌تواند
+جزئیات وابستگی‌های درون‌بسته‌ای مثل اسکریپت‌های ساخت یا تست‌ها را ارائه دهد.</p>
+<p>در ادامه شرح ساختار JSON آمده است:</p>
+<pre><code class="language-javascript">{
+  /* Version of the JSON output structure. If any backwards incompatible
+     changes are made, this value will be increased.
+  */
+  "version": 1,
+  /* Array of all build units. */
+  "units": [
+    {
+      /* An opaque string which indicates the package.
+         Information about the package can be obtained from `cargo metadata`.
+      */
+      "pkg_id": "my-package 0.1.0 (path+file:///path/to/my-package)",
+      /* The Cargo target. See the `cargo metadata` documentation for more
+         information about these fields.
+         https://doc.rust-lang.org/cargo/commands/cargo-metadata.html
+      */
+      "target": {
+        "kind": ["lib"],
+        "crate_types": ["lib"],
+        "name": "my_package",
+        "src_path": "/path/to/my-package/src/lib.rs",
+        "edition": "2018",
+        "test": true,
+        "doctest": true
+      },
+      /* The profile settings for this unit.
+         These values may not match the profile defined in the manifest.
+         Units can use modified profile settings. For example, the "panic"
+         setting can be overridden for tests to force it to "unwind".
+      */
+      "profile": {
+        /* The profile name these settings are derived from. */
+        "name": "dev",
+        /* The optimization level as a string. */
+        "opt_level": "0",
+        /* The LTO setting as a string. */
+        "lto": "false",
+        /* The codegen units as an integer.
+           `null` if it should use the compiler's default.
+        */
+        "codegen_units": null,
+        /* The debug information level as an integer.
+           `null` if it should use the compiler's default (0).
+        */
+        "debuginfo": 2,
+        /* Whether or not debug-assertions are enabled. */
+        "debug_assertions": true,
+        /* Whether or not overflow-checks are enabled. */
+        "overflow_checks": true,
+        /* Whether or not rpath is enabled. */
+        "rpath": false,
+        /* Whether or not incremental is enabled. */
+        "incremental": true,
+        /* The panic strategy, "unwind" or "abort". */
+        "panic": "unwind"
+      },
+      /* Which platform this target is being built for.
+         A value of `null` indicates it is for the host.
+         Otherwise it is a string of the target tuple (such as
+         "x86_64-unknown-linux-gnu").
+      */
+      "platform": null,
+      /* The "mode" for this unit. Valid values:
+
+         * "test" --- Build using `rustc` as a test.
+         * "build" --- Build using `rustc`.
+         * "check" --- Build using `rustc` in "check" mode.
+         * "doc" --- Build using `rustdoc`.
+         * "doctest" --- Test using `rustdoc`.
+         * "run-custom-build" --- Represents the execution of a build script.
+      */
+      "mode": "build",
+      /* Array of features enabled on this unit as strings. */
+      "features": ["somefeat"],
+      /* Whether or not this is a standard-library unit,
+         part of the unstable build-std feature.
+         If not set, treat as `false`.
+      */
+      "is_std": false,
+      /* Array of dependencies of this unit. */
+      "dependencies": [
+        {
+          /* Index in the "units" array for the dependency. */
+          "index": 1,
+          /* The name that this dependency will be referred as. */
+          "extern_crate_name": "unicode_xid",
+          /* Whether or not this dependency is "public",
+             part of the unstable public-dependency feature.
+             If not set, the public-dependency feature is not enabled.
+          */
+          "public": false,
+          /* Whether or not this dependency is injected into the prelude,
+             currently used by the build-std feature.
+             If not set, treat as `false`.
+          */
+          "noprelude": false
+        }
+      ]
+    },
+    // ...
+  ],
+  /* Array of indices in the "units" array that are the "roots" of the
+     dependency graph.
+  */
+  "roots": [0],
+}
+</code></pre>
+<h2 id="profile-rustflags-option"><a class="header" href="#profile-rustflags-option">Profile <code>rustflags</code> option</a></h2>
+<ul>
+<li>issue اولیه: <a href="https://github.com/rust-lang/cargo/issues/7878">rust-lang/cargo#7878</a></li>
+<li>issue پیگیری: <a href="https://github.com/rust-lang/cargo/issues/10271">rust-lang/cargo#10271</a></li>
+</ul>
+<p>این قابلیت گزینهٔ جدیدی در بخش <code>[profile]</code> فراهم می‌کند تا پرچم‌هایی را مشخص کند
+که مستقیماً به rustc داده می‌شوند.
+می‌توان آن را این‌طور فعال کرد:</p>
+<pre><code class="language-toml">cargo-features = ["profile-rustflags"]
+
+[package]
+# ...
+
+[profile.release]
+rustflags = [ "-C", "..." ]
+</code></pre>
+<p>برای تنظیم این در یک profile در پیکربندی Cargo، باید یا
+<code>-Z profile-rustflags</code> یا جدول <code>[unstable]</code> را برای فعال‌کردن آن به‌کار ببرید. برای مثال،</p>
+<pre><code class="language-toml"># .cargo/config.toml
+[unstable]
+profile-rustflags = true
+
+[profile.release]
+rustflags = [ "-C", "..." ]
+</code></pre>
+<h2 id="profile-hint-mostly-unused-option"><a class="header" href="#profile-hint-mostly-unused-option">Profile <code>hint-mostly-unused</code> option</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/15644">#15644</a></li>
+</ul>
+<p>این قابلیت گزینهٔ جدیدی در بخش <code>[profile]</code> فراهم می‌کند تا گزینهٔ
+<code>hint-mostly-unused</code> در rustc فعال شود. این بیش از همه برای
+وابستگی‌های مشخص مفید است:</p>
+<pre><code class="language-toml">[profile.dev.package.huge-mostly-unused-dependency]
+hint-mostly-unused = true
+</code></pre>
+<p>برای فعال‌کردن این قابلیت، <code>-Zprofile-hint-mostly-unused</code> را بدهید. اما از آنجا که
+این گزینه یک راهنمایی (hint) است، استفاده از آن بدون دادن <code>-Zprofile-hint-mostly-unused</code>
+فقط هشدار می‌دهد و گزینهٔ profile را نادیده می‌گیرد. نسخه‌های Cargo پیش از
+معرفی این قابلیت هشدار «unused manifest key» می‌دهند، اما در غیر این صورت
+بدون خطا کار می‌کنند. این امکان می‌دهد hint در <code>Cargo.toml</code> یک crate استفاده شود، بدون اینکه ساخت آن به Cargo جدیدتر منوط شود.</p>
+<p>یک crate همچنین می‌تواند این hint را به‌طور خودکار برای crateهایی که به آن وابسته‌اند ارائه دهد،
+با استفاده از جدول <code>[hints]</code> (که به همین شکل توسط Cargo قدیمی‌تر نادیده گرفته می‌شود):</p>
+<pre><code class="language-toml">[hints]
+mostly-unused = true
+</code></pre>
+<p>این باعث می‌شود crate به‌طور پیش‌فرض hint-mostly-unused داشته باشد، مگر اینکه با
+<code>profile</code> بازنویسی شود که اولویت دارد و فقط در
+crate سطح بالایی که ساخته می‌شود می‌تواند مشخص شود.</p>
+<h2 id="package-min-opt-level-hint"><a class="header" href="#package-min-opt-level-hint">Package <code>min-opt-level</code> hint</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/17334">#17334</a></li>
+<li>RFC: <a href="https://github.com/rust-lang/rfcs/pull/3924">#3924</a></li>
+</ul>
+<p>این قابلیت کلید <code>min-opt-level</code> را به جدول <code>[hints]</code> می‌افزاید. به یک
+بسته اجازه می‌دهد پایین‌ترین سطح بهینه‌سازی‌ای را که Cargo برای ساخت آن به‌کار می‌برد تعیین کند:</p>
+<pre><code class="language-toml">[hints]
+min-opt-level = 2
+</code></pre>
+<p>برای فعال‌کردن این قابلیت، <code>-Zhint-min-opt-level</code> را بدهید. بدون پرچم، Cargo
+هشدار می‌دهد و hint را نادیده می‌گیرد. نسخه‌های Cargo پیش از معرفی این
+قابلیت هشدار «unused manifest key» می‌دهند، اما در غیر این صورت بدون خطا کار می‌کنند. این یعنی استفاده از hint، MSRV بسته را تغییر نمی‌دهد.</p>
+<h3 id="documentation-updates"><a class="header" href="#documentation-updates">Documentation updates</a></h3>
+<h4 id="min-opt-level"><a class="header" href="#min-opt-level"><code>min-opt-level</code></a></h4>
+<p><em>به‌عنوان زیربخش جدیدی از <a href="./manifest.html#the-hints-section">«بخش <code>[hints]</code>»</a>،
+که برای هر hint یک زیربخش خواهد داشت</em></p>
+<p>hint با نام <code>min-opt-level</code> پایین‌ترین <a href="profiles.html#opt-level"><code>opt-level</code></a>
+را که Cargo برای ساخت این بسته به‌کار می‌برد تعیین می‌کند. برخی بسته‌ها بدون
+بهینه‌سازی بسیار کند هستند، یا ساختشان بدون آن بیشتر طول می‌کشد. چنین بسته‌ای می‌تواند حداقل سطح بهینه‌سازی را درخواست کند:</p>
+<pre><code class="language-toml"># In example-dependency's Cargo.toml
+[hints]
+min-opt-level = 2
+</code></pre>
+<p>مقادیر معتبر <code>0</code>، <code>1</code>، <code>2</code> و <code>3</code> هستند. Cargo دربارهٔ هر مقدار دیگر
+هشدار می‌دهد و آن را نادیده می‌گیرد. سطح‌های <code>"s"</code> و <code>"z"</code> معتبر نیستند، چون با
+سطح‌های عددی قابل‌مقایسه نیستند و انتخاب آن‌ها با بستهٔ سطح بالاست.</p>
+<p>وقتی <a href="profiles.html">profile</a> انتخاب‌شده <code>opt-level</code> پایین‌تر از hint داشته باشد،
+Cargo بسته را به‌جای آن در سطح hint می‌سازد. وقتی profile
+<code>opt-level</code> بالاتری داشته باشد، Cargo سطح بالاتر را نگه می‌دارد. این چه <code>opt-level</code> profile پیش‌فرض باشد و چه کاربر تنظیم کرده باشد صدق می‌کند. همچنین برای
+پیش‌فرض <code>opt-level = 0</code> در
+<a href="profiles.html#build-dependencies">وابستگی‌های ساخت</a> هم صدق می‌کند.</p>
+<p>بستهٔ سطح بالا می‌تواند hint را با <a href="profiles.html#overrides">بازنویسی (override)</a> profile باطل کند. هر <code>opt-level</code> که در جدول <code>package</code>، در
+بستهٔ <code>"*"</code> یا در جدول <code>build-override</code> تنظیم شده باشد بر hint اولویت دارد. تنظیم <code>opt-level = "s"</code> یا <code>"z"</code> در profile هم اولویت دارد،
+چون بسته‌ای که برای اندازه بهینه می‌شود معمولاً می‌خواهد وابستگی‌هایش هم همین کار را بکنند.</p>
+<pre><code class="language-toml"># Does not lower the `opt-level` below a dependency's hint.
+[profile.dev]
+opt-level = 0
+
+# Overrides the hint for the `example-dependency` package.
+[profile.dev.package.example-dependency]
+opt-level = 0
+
+# Overrides the hint for all dependencies.
+[profile.dev.package."*"]
+opt-level = 1
+</code></pre>
+<p>hint فقط بر بسته‌ای که آن را تنظیم می‌کند اعمال می‌شود، نه وابستگی‌هایش. اگر
+کد کند در یک وابستگی باشد، آن وابستگی باید hint خودش را تنظیم کند.</p>
+<p>این hint را فقط وقتی به‌کار ببرید که بهینه‌کردن بسته ساخت کامل را سریع‌تر کند،
+یا وقتی بسته بدون بهینه‌سازی چندین برابر کندتر است.</p>
+<h2 id="rustdoc-map"><a class="header" href="#rustdoc-map">rustdoc-map</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/8296">#8296</a></li>
+</ul>
+<p>این قابلیت تنظیمات پیکربندی‌ای اضافه می‌کند که به <code>rustdoc</code> داده می‌شوند تا
+بتواند برای وابستگی‌هایی که مستنداتشان جای دیگری میزبانی می‌شود و
+در آن مستند نشده‌اند پیوند تولید کند. ابتدا این را به <code>.cargo/config</code> بیفزایید:</p>
+<pre><code class="language-toml">[doc.extern-map.registries]
+crates-io = "https://docs.rs/"
+</code></pre>
+<p>سپس هنگام ساخت مستندات، از پرچم‌های زیر استفاده کنید تا پیوندهای
+وابستگی‌ها به <a href="https://docs.rs/">docs.rs</a> اشاره کنند:</p>
+<pre><code>cargo +nightly doc --no-deps -Zrustdoc-map
+</code></pre>
+<p>جدول <code>registries</code> نگاشتی از نام registry به URL مقصد پیوند دارد.
+URL می‌تواند نشانگرهای <code>{pkg_name}</code> و <code>{version}</code> داشته باشد که با مقادیر متناظر
+جایگزین می‌شوند. اگر هیچ‌کدام مشخص نشود، Cargo پیش‌فرضاً
+<code>{pkg_name}/{version}/</code> را به انتهای URL اضافه می‌کند.</p>
+<p>تنظیم پیکربندی دیگری برای تغییر مسیر پیوندهای کتابخانهٔ استاندارد هست. به‌طور پیش‌فرض، rustdoc پیوندهایی به <a href="https://doc.rust-lang.org/nightly/">https://doc.rust-lang.org/nightly/</a> می‌سازد. برای
+تغییر این رفتار، از تنظیم <code>doc.extern-map.std</code> استفاده کنید:</p>
+<pre><code class="language-toml">[doc.extern-map]
+std = "local"
+</code></pre>
+<p>مقدار <code>"local"</code> یعنی پیوند به مستنداتی که در sysroot مربوط به <code>rustc</code> هست. اگر از rustup استفاده می‌کنید، این مستندات را می‌توان با
+<code>rustup component add rust-docs</code> نصب کرد.</p>
+<p>مقدار پیش‌فرض <code>"remote"</code> است.</p>
+<p>مقدار می‌تواند URL محل سفارشی هم باشد.</p>
+<h2 id="per-package-target"><a class="header" href="#per-package-target">per-package-target</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/pull/9406">#9406</a></li>
+<li>Original Pull Request: <a href="https://github.com/rust-lang/cargo/pull/9030">#9030</a></li>
+<li>Original Issue: <a href="https://github.com/rust-lang/cargo/pull/7004">#7004</a></li>
+</ul>
+<p>قابلیت <code>per-package-target</code> دو کلید به manifest می‌افزاید:
+<code>package.default-target</code> و <code>package.forced-target</code>. اولی باعث می‌شود
+بسته به‌طور پیش‌فرض (یعنی وقتی آرگومان <code>--target</code> داده نشده)
+برای هدفی مشخص کامپایل شود. دومی باعث می‌شود بسته همیشه برای آن هدف کامپایل شود.</p>
+<p>Example:</p>
+<pre><code class="language-toml">[package]
+forced-target = "wasm32-unknown-unknown"
+</code></pre>
+<p>در این مثال، crate همیشه برای
+<code>wasm32-unknown-unknown</code> ساخته می‌شود، مثلاً چون قرار است به‌عنوان
+پلاگین یک برنامهٔ اصلی که روی هدف میزبان (یا هدفی که در خط فرمان داده شده) اجرا می‌شود به‌کار رود.</p>
+<h2 id="artifact-dependencies"><a class="header" href="#artifact-dependencies">artifact-dependencies</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/pull/9096">#9096</a></li>
+<li>Original Pull Request: <a href="https://github.com/rust-lang/cargo/pull/9992">#9992</a></li>
+</ul>
+<p>وابستگی‌های آرتیفکتی (Artifact dependencies) به بسته‌های Cargo اجازه می‌دهند به crateهای <code>bin</code>، <code>cdylib</code> و <code>staticlib</code> وابسته شوند
+و از آرتیفکت‌هایی که آن crateها می‌سازند در زمان کامپایل استفاده کنند.</p>
+<p>برای فعال‌کردن این قابلیت <code>cargo</code> را با <code>-Z bindeps</code> اجرا کنید.</p>
+<h3 id="artifact-dependencies-dependency-declarations"><a class="header" href="#artifact-dependencies-dependency-declarations">artifact-dependencies: Dependency declarations</a></h3>
+<p>Artifact-dependencies کلیدهای زیر را به تعریف وابستگی در <code>Cargo.toml</code> می‌افزاید:</p>
+<ul>
+<li>
+<p><code>artifact</code> — این <a href="cargo-targets.html">هدف Cargo</a> را که باید ساخته شود مشخص می‌کند.
+معمولاً بدون این فیلد، Cargo فقط هدف <code>[lib]</code> را از یک وابستگی می‌سازد.
+این فیلد اجازه می‌دهد مشخص شود کدام هدف ساخته و در زمان ساخت به‌صورت فایل دودویی در دسترس قرار گیرد:</p>
+<ul>
+<li><code>"bin"</code> — فایل‌های دودویی اجرایی کامپایل‌شده، متناظر با همهٔ بخش‌های <code>[[bin]]</code> در manifest وابستگی.</li>
+<li><code>"bin:&lt;bin-name&gt;"</code> — فایل دودویی اجرایی کامپایل‌شده، متناظر با یک هدف دودویی مشخص که با <code>&lt;bin-name&gt;</code> داده شده.</li>
+<li><code>"cdylib"</code> — کتابخانهٔ پویای سازگار با C، متناظر با بخش <code>[lib]</code> با <code>crate-type = ["cdylib"]</code> در manifest وابستگی.</li>
+<li><code>"staticlib"</code> — کتابخانهٔ ایستای سازگار با C، متناظر با بخش <code>[lib]</code> با <code>crate-type = ["staticlib"]</code> در manifest وابستگی.</li>
+</ul>
+<p>مقدار <code>artifact</code> می‌تواند رشته باشد، یا آرایه‌ای از رشته‌ها برای مشخص‌کردن چند هدف.</p>
+<p>Example:</p>
+<pre><code class="language-toml">[dependencies]
+bar = { version = "1.0", artifact = "staticlib" }
+zoo = { version = "1.0", artifact = ["bin:cat", "bin:dog"]}
+</code></pre>
+</li>
+<li>
+<p><code>lib</code> — مقدار بولی که مشخص می‌کند کتابخانهٔ وابستگی هم به‌عنوان وابستگی عادی <code>lib</code> در Rust ساخته شود یا نه.
+این فیلد فقط وقتی می‌تواند مشخص شود که <code>artifact</code> مشخص شده باشد.</p>
+<p>پیش‌فرض این فیلد وقتی <code>artifact</code> مشخص شده <code>false</code> است.
+اگر <code>true</code> باشد، هدف <code>[lib]</code> وابستگی هم برای پلتفرم هدفی که بستهٔ اعلام‌کننده برای آن ساخته می‌شود ساخته می‌شود.
+این به بسته اجازه می‌دهد علاوه بر وابستگی آرتیفکتی، از وابستگی در کد Rust مثل یک وابستگی عادی هم استفاده کند.</p>
+<p>Example:</p>
+<pre><code class="language-toml">[dependencies]
+bar = { version = "1.0", artifact = "bin", lib = true }
+</code></pre>
+</li>
+<li>
+<p><code>target</code> — پلتفرم هدفی که وابستگی برای آن ساخته می‌شود.
+این فیلد فقط وقتی می‌تواند مشخص شود که <code>artifact</code> مشخص شده باشد.</p>
+<p>پیش‌فرض در صورت مشخص‌نشدن به نوع وابستگی بستگی دارد.
+وابستگی‌های ساخت برای هدف میزبان ساخته می‌شوند.
+بقیهٔ وابستگی‌ها برای همان اهدافی ساخته می‌شوند که بستهٔ اعلام‌کننده برای آن‌ها ساخته می‌شود.</p>
+<p>برای وابستگی ساخت، می‌توان مقدار ویژهٔ <code>"target"</code> را هم داد که یعنی وابستگی برای همان اهدافی ساخته شود که بسته برای آن‌ها ساخته می‌شود.</p>
+<pre><code class="language-toml">[build-dependencies]
+bar = { version = "1.0", artifact = "cdylib", target = "wasm32-unknown-unknown"}
+same-target = { version = "1.0", artifact = "bin", target = "target" }
+</code></pre>
+</li>
+</ul>
+<h3 id="artifact-dependencies-environment-variables"><a class="header" href="#artifact-dependencies-environment-variables">artifact-dependencies: Environment variables</a></h3>
+<p>پس از ساخت یک وابستگی آرتیفکتی، Cargo متغیرهای محیطی زیر را در اختیار می‌گذارد که می‌توانید برای دسترسی به آرتیفکت استفاده کنید:</p>
+<ul>
+<li>
+<p><code>CARGO_&lt;ARTIFACT-TYPE&gt;_DIR_&lt;DEP&gt;</code> — پوشه‌ای که همهٔ آرتیفکت‌های وابستگی را در بر دارد.</p>
+<p><code>&lt;ARTIFACT-TYPE&gt;</code> همان <code>artifact</code> مشخص‌شده برای وابستگی است (با حروف بزرگ مثل <code>CDYLIB</code>، <code>STATICLIB</code> یا <code>BIN</code>) و <code>&lt;DEP&gt;</code> نام وابستگی است.
+مثل متغیرهای محیطی دیگر Cargo، نام وابستگی‌ها به حروف بزرگ تبدیل می‌شوند و خط‌تیره‌ها با زیرخط جایگزین.</p>
+<p>اگر manifest شما نام وابستگی را تغییر دهد، <code>&lt;DEP&gt;</code> با نامی که شما مشخص می‌کنید متناظر است، نه نام اصلی بسته.</p>
+</li>
+<li>
+<p><code>CARGO_&lt;ARTIFACT-TYPE&gt;_FILE_&lt;DEP&gt;_&lt;NAME&gt;</code> — مسیر کامل آرتیفکت.</p>
+<p><code>&lt;ARTIFACT-TYPE&gt;</code> همان <code>artifact</code> مشخص‌شده برای وابستگی است (با حروف بزرگ مثل بالا)، <code>&lt;DEP&gt;</code> نام وابستگی است (با همان تبدیل بالا)، و <code>&lt;NAME&gt;</code> نام آرتیفکت در وابستگی است.</p>
+<p>توجه کنید که <code>&lt;NAME&gt;</code> به هیچ شکلی نسبت به <code>name</code> مشخص‌شده در crate عرضه‌کنندهٔ آرتیفکت، یا نام crate در صورت مشخص‌نشدن، تغییر نمی‌کند؛ برای مثال ممکن است با حروف کوچک باشد یا خط‌تیره داشته باشد.</p>
+<p>برای راحتی، اگر نام آرتیفکت با نام بستهٔ اصلی یکی باشد، cargo علاوه بر آن نسخه‌ای از این متغیر را بدون پسوند <code>_&lt;NAME&gt;</code> هم فراهم می‌کند.
+برای مثال اگر crate با نام <code>cmake</code> فایل دودویی‌ای به نام <code>cmake</code> عرضه کند، Cargo هر دو <code>CARGO_BIN_FILE_CMAKE</code> و <code>CARGO_BIN_FILE_CMAKE_cmake</code> را فراهم می‌کند.</p>
+</li>
+</ul>
+<p>برای هر نوع وابستگی، این متغیرها به همان بخش فرایند ساخت داده می‌شوند که به آن نوع وابستگی دسترسی دارد:</p>
+<ul>
+<li>برای build-dependencies، این متغیرها به اسکریپت <code>build.rs</code> داده می‌شوند و با <a href="https://doc.rust-lang.org/std/env/fn.var_os.html"><code>std::env::var_os</code></a> قابل‌دسترسی‌اند.
+(مثل هر مسیر فایل در سیستم‌عامل، ممکن است UTF-8 معتبر باشند یا نباشند.)</li>
+<li>برای وابستگی‌های عادی، این متغیرها هنگام کامپایل crate داده می‌شوند و با ماکروی <a href="https://doc.rust-lang.org/std/macro.env.html"><code>env!</code></a> قابل‌دسترسی‌اند.</li>
+<li>برای dev-dependencies، این متغیرها هنگام کامپایل مثال‌ها، تست‌ها و benchmarkها داده می‌شوند و با ماکروی <a href="https://doc.rust-lang.org/std/macro.env.html"><code>env!</code></a> قابل‌دسترسی‌اند.</li>
+</ul>
+<h3 id="artifact-dependencies-examples"><a class="header" href="#artifact-dependencies-examples">artifact-dependencies: Examples</a></h3>
+<h4 id="example-use-a-binary-executable-from-a-build-script"><a class="header" href="#example-use-a-binary-executable-from-a-build-script">مثال: استفاده از فایل اجرایی دودویی در اسکریپت ساخت</a></h4>
+<p>در فایل <code>Cargo.toml</code> می‌توانید وابستگی به یک فایل دودویی را مشخص کنید تا برای اسکریپت ساخت در دسترس باشد:</p>
+<pre><code class="language-toml">[build-dependencies]
+some-build-tool = { version = "1.0", artifact = "bin" }
+</code></pre>
+<p>سپس درون اسکریپت ساخت می‌توان فایل دودویی را در زمان ساخت اجرا کرد:</p>
+<pre><code class="language-rust">fn main() {
+    let build_tool = std::env::var_os("CARGO_BIN_FILE_SOME_BUILD_TOOL").unwrap();
+    let status = std::process::Command::new(build_tool)
+        .arg("do-stuff")
+        .status()
+        .unwrap();
+    if !status.success() {
+        eprintln!("failed!");
+        std::process::exit(1);
+    }
+}</code></pre>
+<h4 id="example-use-cdylib-artifact-in-build-script"><a class="header" href="#example-use-cdylib-artifact-in-build-script">مثال: استفاده از آرتیفکت <em>cdylib</em> در اسکریپت ساخت</a></h4>
+<p>فایل <code>Cargo.toml</code> در بستهٔ مصرف‌کننده، که کتابخانهٔ <code>bar</code> را به‌صورت <code>cdylib</code>
+برای یک هدف ساخت مشخص می‌سازد…</p>
+<pre><code class="language-toml">[build-dependencies]
+bar = { artifact = "cdylib", version = "1.0", target = "wasm32-unknown-unknown" }
+</code></pre>
+<p>…به‌همراه اسکریپت ساخت در <code>build.rs</code>.</p>
+<pre><code class="language-rust">fn main() {
+    wasm::run_file(std::env::var("CARGO_CDYLIB_FILE_BAR").unwrap());
+}</code></pre>
+<h4 id="example-use-binary-artifact-and-its-library-in-a-binary"><a class="header" href="#example-use-binary-artifact-and-its-library-in-a-binary">مثال: استفاده از آرتیفکت <em>دودویی</em> و کتابخانهٔ آن در یک فایل دودویی</a></h4>
+<p>فایل <code>Cargo.toml</code> در بستهٔ مصرف‌کننده، که فایل دودویی <code>bar</code> را برای گنجاندن
+به‌عنوان آرتیفکت می‌سازد و در عین حال آن را به‌عنوان کتابخانه هم در دسترس قرار می‌دهد…</p>
+<pre><code class="language-toml">[dependencies]
+bar = { artifact = "bin", version = "1.0", lib = true }
+</code></pre>
+<p>…به‌همراه فایل اجرایی با <code>main.rs</code>.</p>
+<pre><code class="language-rust">fn main() {
+    bar::init();
+    command::run(env!("CARGO_BIN_FILE_BAR"));
+}</code></pre>
+<h2 id="publish-timeout"><a class="header" href="#publish-timeout">publish-timeout</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/11222">11222</a></li>
+</ul>
+<p>کلید <code>publish.timeout</code> در فایل پیکربندی را می‌توان برای کنترل مدتی به‌کار برد که
+<code>cargo publish</code> بین ارسال یک بسته به registry و در دسترس‌شدن آن در فهرست محلی منتظر می‌ماند.</p>
+<p>مهلت <code>0</code> از انجام هر بررسی جلوگیری می‌کند. پیش‌فرض فعلی
+<code>60</code> ثانیه است.</p>
+<p>نیازمند تنظیم گزینه‌های خط فرمان <code>-Zpublish-timeout</code> است.</p>
+<pre><code class="language-toml"># config.toml
+[publish]
+timeout = 300  # in seconds
+</code></pre>
+<h2 id="cargo-config"><a class="header" href="#cargo-config"><code>cargo config</code></a></h2>
+<ul>
+<li>Original Issue: <a href="https://github.com/rust-lang/cargo/issues/2362">#2362</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/9301">#9301</a></li>
+</ul>
+<p>زیردستور <code>cargo config</code> راهی برای نمایش فایل‌های پیکربندی‌ای که cargo بارگذاری می‌کند فراهم می‌کند. فعلاً شامل زیردستور <code>get</code> است که
+می‌تواند یک مقدار پیکربندی اختیاری برای نمایش بگیرد.</p>
+<pre><code class="language-console">cargo +nightly -Zunstable-options config get build.rustflags
+</code></pre>
+<p>اگر مقدار پیکربندی داده نشود، همهٔ مقادیر پیکربندی را نمایش می‌دهد. برای گزینه‌های بیشتر خروجی
+<code>--help</code> را ببینید.</p>
+<h2 id="rustc---print"><a class="header" href="#rustc---print">rustc <code>--print</code></a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/9357">#9357</a></li>
+</ul>
+<p><code>cargo rustc --print=VAL</code> پرچم <code>--print</code> را به <code>rustc</code> منتقل می‌کند تا
+اطلاعاتی از <code>rustc</code> استخراج شود. این <code>rustc</code> را با پرچم
+<a href="../../rustc/command-line-arguments.html#--print-print-compiler-information"><code>--print</code></a>
+متناظر اجرا می‌کند و سپس بدون کامپایل بلافاصله خارج می‌شود. در دسترس‌گذاشتن این به‌صورت پرچم cargo
+به cargo اجازه می‌دهد هدف و RUSTFLAGS درست را بر اساس
+پیکربندی فعلی تزریق کند.</p>
+<p>کاربرد اصلی اجرای <code>cargo rustc --print=cfg</code> برای گرفتن مقادیر پیکربندی
+برای هدف مناسب است، که تحت‌تأثیر هر RUSTFLAGS دیگر هم قرار می‌گیرد.</p>
+<h2 id="different-binary-name"><a class="header" href="#different-binary-name">Different binary name</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/9778">#9778</a></li>
+<li>PR: <a href="https://github.com/rust-lang/cargo/pull/9627">#9627</a></li>
+</ul>
+<p>قابلیت <code>different-binary-name</code> اجازه می‌دهد نام فایل دودویی را بدون رعایت
+محدودیت‌های نام crate تعیین کنید. برای مثال، نام crate فقط باید از نویسه‌های <code>alphanumeric</code>
+یا <code>-</code> یا <code>_</code> استفاده کند و نمی‌تواند خالی باشد.</p>
+<p>پارامتر <code>filename</code> <strong>نباید</strong> پسوند فایل دودویی را شامل شود؛ <code>cargo</code> خودش پسوند مناسب را تشخیص می‌دهد و برای فایل دودویی به‌کار می‌برد.</p>
+<p>پارامتر <code>filename</code> فقط در بخش <code>[[bin]]</code> در manifest در دسترس است.</p>
+<pre><code class="language-toml">cargo-features = ["different-binary-name"]
+
+[package]
+name =  "foo"
+version = "0.0.1"
+
+[[bin]]
+name = "foo"
+filename = "007bar"
+path = "src/main.rs"
+</code></pre>
+<h2 id="scrape-examples"><a class="header" href="#scrape-examples">scrape-examples</a></h2>
+<ul>
+<li>RFC: <a href="https://github.com/rust-lang/rfcs/pull/3123">#3123</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/9910">#9910</a></li>
+</ul>
+<p>پرچم <code>-Z rustdoc-scrape-examples</code> به Rustdoc می‌گوید crateهای workspace فعلی را برای
+فراخوانی تابع‌ها جست‌وجو کند. آن نقاط فراخوانی سپس به‌عنوان مستندات گنجانده می‌شوند. می‌توانید پرچم را
+این‌طور به‌کار ببرید:</p>
+<pre><code>cargo doc -Z unstable-options -Z rustdoc-scrape-examples
+</code></pre>
+<p>به‌طور پیش‌فرض، Cargo مثال‌ها را از اهداف مثال بسته‌هایی که مستند می‌شوند استخراج می‌کند. می‌توانید با پرچم <code>doc-scrape-examples</code> استخراج از هر هدف را جداگانه فعال یا غیرفعال کنید، مثلاً:</p>
+<pre><code class="language-toml"># Enable scraping examples from a library
+[lib]
+doc-scrape-examples = true
+
+# Disable scraping examples from an example target
+[[example]]
+name = "my-example"
+doc-scrape-examples = false
+</code></pre>
+<p><strong>نکته دربارهٔ تست‌ها:</strong> فعال‌کردن <code>doc-scrape-examples</code> روی اهداف تست فعلاً اثری ندارد. استخراج
+مثال از تست‌ها در دست انجام است.</p>
+<p><strong>نکته دربارهٔ dev-dependencies:</strong> مستندسازی یک کتابخانه معمولاً به dev-dependencies آن crate نیاز ندارد. اما
+اهداف مثال به dev-deps نیاز دارند. برای سازگاری رو‌به‌عقب، <code>-Z rustdoc-scrape-examples</code> برای <code>cargo doc</code> نیاز جدیدی به dev-deps ایجاد <em>نمی‌کند</em>. بنابراین در شرایط زیر مثال‌ها از اهداف مثال استخراج <em>نمی‌شوند</em>:</p>
+<ol>
+<li>هیچ هدفی که مستند می‌شود به dev-deps نیاز ندارد، و</li>
+<li>دست‌کم یک crate که اهدافش مستند می‌شوند dev-deps دارد، و</li>
+<li>پارامتر <code>doc-scrape-examples</code> برای همهٔ اهداف <code>[[example]]</code> تنظیم نشده یا false است.</li>
+</ol>
+<p>اگر می‌خواهید مثال‌ها از اهداف مثال استخراج شوند، نباید یکی از شرایط بالا برقرار باشد.
+برای مثال، می‌توانید <code>doc-scrape-examples</code> را برای یک هدف مثال روی true بگذارید، و این به Cargo می‌فهماند
+که با ساخته‌شدن dev-deps برای <code>cargo doc</code> مشکلی ندارید.</p>
+<h2 id="output-format-for-rustdoc"><a class="header" href="#output-format-for-rustdoc">output-format برای rustdoc</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/13283">#13283</a></li>
+</ul>
+<p>این پرچم قالب خروجی <code>cargo rustdoc</code> و <code>cargo doc</code> را تعیین می‌کند و <code>html</code> یا <code>json</code> می‌پذیرد، و به ابزارها راهی می‌دهد که بر <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc_json_types/">قالب JSON آزمایشی rustdoc</a> تکیه کنند.</p>
+<p>می‌توانید پرچم را این‌طور به‌کار ببرید:</p>
+<pre><code>cargo rustdoc -Z unstable-options --output-format json
+cargo doc -Z unstable-options --output-format json
+</code></pre>
+<h2 id="codegen-backend"><a class="header" href="#codegen-backend">codegen-backend</a></h2>
+<p>قابلیت <code>codegen-backend</code> امکان انتخاب backend تولید کد مورد استفادهٔ rustc را از طریق یک profile فراهم می‌کند.</p>
+<p>Example:</p>
+<pre><code class="language-toml">[package]
+name = "foo"
+
+[dependencies]
+serde = "1.0.117"
+
+[profile.dev.package.foo]
+codegen-backend = "cranelift"
+</code></pre>
+<p>برای تنظیم این در یک profile در پیکربندی Cargo، باید یا
+<code>-Z codegen-backend</code> یا جدول <code>[unstable]</code> را برای فعال‌کردن آن به‌کار ببرید. برای مثال،</p>
+<pre><code class="language-toml"># .cargo/config.toml
+[unstable]
+codegen-backend = true
+
+[profile.dev.package.foo]
+codegen-backend = "cranelift"
+</code></pre>
+<h2 id="gitoxide"><a class="header" href="#gitoxide">gitoxide</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/11813">#11813</a></li>
+</ul>
+<p>با قابلیت ناپایدار «gitoxide»، همهٔ عملیات git یا عملیات مشخص‌شده توسط
+crate با نام <code>gitoxide</code> به‌جای <code>git2</code> انجام می‌شود.</p>
+<p>در حالی که <code>-Zgitoxide</code> همهٔ قابلیت‌های فعلاً پیاده‌سازی‌شده را فعال می‌کند، می‌توان با نحو <code>-Zgitoxide=operation[,operationN]</code> عملیات git را جداگانه انتخاب کرد
+تا با <code>gitoxide</code> اجرا شوند.</p>
+<p>عملیات معتبر عبارت‌اند از:</p>
+<ul>
+<li><code>fetch</code> - همهٔ دریافت‌ها (fetch) با <code>gitoxide</code> انجام می‌شوند، که شامل وابستگی‌های git و فهرست crateها می‌شود.</li>
+<li><code>checkout</code> <em>(برنامه‌ریزی‌شده)</em> - checkout درخت کاری، با پشتیبانی از فیلترها و زیرماژول‌ها.</li>
+</ul>
+<h2 id="git"><a class="header" href="#git">git</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/13285">#13285</a></li>
+</ul>
+<p>با قابلیت ناپایدار «git»، هم <code>gitoxide</code> و هم <code>git2</code> دریافت‌های سطحی (shallow) از فهرست crateها
+و وابستگی‌های git انجام می‌دهند.</p>
+<p>در حالی که <code>-Zgit</code> همهٔ قابلیت‌های فعلاً پیاده‌سازی‌شده را فعال می‌کند، می‌توان با نحو <code>-Zgit=operation[,operationN]</code> انتخاب کرد چه زمانی
+دریافت سطحی انجام شود.</p>
+<p>عملیات معتبر عبارت‌اند از:</p>
+<ul>
+<li><code>shallow-index</code> - انجام clone سطحی فهرست.</li>
+<li><code>shallow-deps</code> - انجام clone سطحی وابستگی‌های git.</li>
+</ul>
+<p><strong>جزئیات دربارهٔ clone سطحی</strong></p>
+<ul>
+<li>برای فعال‌کردن clone سطحی، <code>-Zgit=shallow-deps</code> را برای دریافت وابستگی‌های git یا <code>-Zgit=shallow-index</code> را برای دریافت فهرست registry اضافه کنید.</li>
+<li>Shallow-cloned and shallow-checked-out git repositories reside at their own <code>-shallow</code> suffixed directories, i.e,
+<ul>
+<li><code>~/.cargo/registry/index/*-shallow</code></li>
+<li><code>~/.cargo/git/db/*-shallow</code></li>
+<li><code>~/.cargo/git/checkouts/*-shallow</code></li>
+</ul>
+</li>
+<li>وقتی قابلیت ناپایدار روشن باشد، دریافت/clone یک مخزن git همیشه سطحی است. این تقریباً معادل <code>git fetch --depth 1</code> در همه‌جاست.</li>
+<li>حتی با وجود <code>Cargo.lock</code> یا مشخص‌کردن commit به‌صورت <code>{ rev = "…" }</code>، gitoxide و libgit2 همچنان به‌اندازهٔ کافی هوشمندند که بدون unshallow‌کردن مخزن موجود، دریافت سطحی کنند.</li>
+</ul>
+<h2 id="script"><a class="header" href="#script">script</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/12207">#12207</a></li>
+</ul>
+<p>Cargo می‌تواند فایل‌های <code>.rs</code> را مستقیماً این‌طور اجرا کند:</p>
+<pre><code class="language-console">$ cargo +nightly -Zscript file.rs
+</code></pre>
+<p>که در آن <code>file.rs</code> می‌تواند به سادگی این باشد:</p>
+<pre><code class="language-rust">fn main() {}</code></pre>
+<p>کاربر می‌تواند به‌صورت اختیاری یک manifest را در یک code fence با نام <code>cargo</code> در یک توضیح سطح ماژول مشخص کند، مثل:</p>
+<pre><code class="language-rust">#!/usr/bin/env -S cargo +nightly -Zscript
+---cargo
+[dependencies]
+clap = { version = "4.2", features = ["derive"] }
+---
+
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[clap(version)]
+struct Args {
+    #[clap(short, long, help = "Path to config")]
+    config: Option&lt;std::path::PathBuf&gt;,
+}
+
+fn main() {
+    let args = Args::parse();
+    println!("{:?}", args);
+}</code></pre>
+<h3 id="single-file-packages"><a class="header" href="#single-file-packages">Single-file packages</a></h3>
+<p>علاوه بر بسته‌های چندفایلی امروزی (فایل <code>Cargo.toml</code> با فایل‌های <code>.rs</code> دیگر)، مفهوم بسته‌های تک‌فایلی را اضافه می‌کنیم که ممکن است manifest تعبیه‌شده داشته باشند. هیچ تمایز الزامی‌ای بین بستهٔ تک‌فایلی
+<code>.rs</code> و هر فایل <code>.rs</code> دیگر وجود ندارد.</p>
+<p>بسته‌های تک‌فایلی را می‌توان با <code>--manifest-path</code> انتخاب کرد، مثل
+<code>cargo test --manifest-path foo.rs</code>. برخلاف <code>Cargo.toml</code>، این فایل‌ها خودکار کشف نمی‌شوند.</p>
+<p>بستهٔ تک‌فایلی می‌تواند manifest تعبیه‌شده داشته باشد. manifest تعبیه‌شده
+با <code>TOML</code> در «frontmatter» زبان Rust ذخیره می‌شود، یعنی یک code fence مارک‌داون که <code>cargo</code>
+در ابتدای infostring آن در بالای فایل است.</p>
+<p>فیلدهای manifest که استنتاج می‌شوند / پیش‌فرض دارند:</p>
+<ul>
+<li><code>package.name = &lt;slugified file stem&gt;</code></li>
+<li><code>package.edition = &lt;current&gt;</code> to avoid always having to add an embedded
+manifest at the cost of potentially breaking scripts on rust upgrades
+<ul>
+<li>وقتی <code>edition</code> مشخص نشده باشد هشدار بده تا از این موضوع آگاهی ایجاد شود</li>
+</ul>
+</li>
+</ul>
+<p>Disallowed manifest fields:</p>
+<ul>
+<li><code>[workspace]</code>, <code>[lib]</code>, <code>[[bin]]</code>, <code>[[example]]</code>, <code>[[test]]</code>, <code>[[bench]]</code></li>
+<li><code>package.workspace</code>, <code>package.build</code>, <code>package.links</code>, <code>package.autolib</code>, <code>package.autobins</code>, <code>package.autoexamples</code>, <code>package.autotests</code>, <code>package.autobenches</code></li>
+</ul>
+<p><code>CARGO_TARGET_DIR</code> پیش‌فرض برای بسته‌های تک‌فایلی در <code>$CARGO_HOME/target/&lt;hash&gt;</code> است:</p>
+<ul>
+<li>از تداخل چند بستهٔ تک‌فایلی در یک پوشه جلوگیری می‌کند</li>
+<li>از مشکلات فقط‌خواندنی‌بودن پوشهٔ والد بستهٔ تک‌فایلی جلوگیری می‌کند</li>
+<li>از شلوغ‌شدن پوشهٔ کاربر جلوگیری می‌کند</li>
+</ul>
+<p>lockfile بسته‌های تک‌فایلی در <code>CARGO_TARGET_DIR</code> قرار می‌گیرد. در آینده، وقتی workspaceها پشتیبانی شوند، این به کاربر اجازه می‌دهد lockfile پایدار داشته باشد.</p>
+<h3 id="manifest-commands"><a class="header" href="#manifest-commands">Manifest-commands</a></h3>
+<p>می‌توانید یک manifest را مستقیماً به دستور <code>cargo</code> بدهید، بدون زیردستور،
+مثل <code>foo/Cargo.toml</code> یا یک بستهٔ تک‌فایلی مثل <code>foo.rs</code>. این بیشتر
+برای قرار‌گرفتن در خط‌های <code>#!</code> است.</p>
+<p>اولویت تفسیر <code>cargo &lt;subcommand&gt;</code> این است</p>
+<ol>
+<li>داخلی یا بستهٔ تک‌فایلی (xor)</li>
+<li>Aliases</li>
+<li>External subcommands</li>
+</ol>
+<p>یک پارامتر وقتی manifest-command شناخته می‌شود که یکی از این‌ها را داشته باشد:</p>
+<ul>
+<li>Path separators</li>
+<li>پسوند <code>.rs</code></li>
+<li>نام فایل <code>Cargo.toml</code> باشد</li>
+</ul>
+<p>تفاوت‌های <code>cargo run --manifest-path &lt;path&gt;</code> و <code>cargo &lt;path&gt;</code></p>
+<ul>
+<li><code>cargo &lt;path&gt;</code> با پیکربندی <code>&lt;path&gt;</code> اجرا می‌شود نه پوشهٔ فعلی، بیشتر شبیه <code>cargo install --path &lt;path&gt;</code></li>
+<li><code>cargo &lt;path&gt;</code> یک سطح پایین‌تر از سطح پرگویی پیش‌فرض عادی است. برای خروجی عادی <code>-v</code> بدهید.</li>
+</ul>
+<p>هنگام اجرای بسته‌ای با manifest تعبیه‌شده،
+<a href="https://doc.rust-lang.org/std/os/unix/process/trait.CommandExt.html#tymethod.arg0"><code>arg0</code></a> مسیر اسکریپت خواهد بود.
+برای گرفتن مسیر فایل اجرایی، <a href="https://doc.rust-lang.org/std/env/fn.current_exe.html"><code>current_exe</code></a> را ببینید.</p>
+<h3 id="documentation-updates-1"><a class="header" href="#documentation-updates-1">Documentation Updates</a></h3>
+<h2 id="gc"><a class="header" href="#gc">gc</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/12633">#12633</a></li>
+</ul>
+<p>پرچم <code>-Zgc</code> برای فعال‌کردن برخی قابلیت‌های مربوط به garbage-collection در cache سراسری cargo درون پوشهٔ خانگی cargo به‌کار می‌رود.</p>
+<h4 id="automatic-gc-configuration"><a class="header" href="#automatic-gc-configuration">Automatic gc configuration</a></h4>
+<p>پرچم <code>-Zgc</code> به Cargo اجازه می‌دهد گزینه‌های پیکربندی اضافی مربوط به garbage collection را بخواند.
+تنظیمات موجود عبارت‌اند از:</p>
+<pre><code class="language-toml"># Example config.toml file.
+
+# Sub-table for defining specific settings for cleaning the global cache.
+[cache.global-clean]
+# Anything older than this duration will be deleted in the source cache.
+max-src-age = "1 month"
+# Anything older than this duration will be deleted in the compressed crate cache.
+max-crate-age = "3 months"
+# Any index older than this duration will be deleted from the index cache.
+max-index-age = "3 months"
+# Any git checkout older than this duration will be deleted from the checkout cache.
+max-git-co-age = "1 month"
+# Any git clone older than this duration will be deleted from the git cache.
+max-git-db-age = "3 months"
+</code></pre>
+<p>توجه کنید که گزینهٔ <a href="config.html#cacheauto-clean-frequency"><code>cache.auto-clean-frequency</code></a> در Rust 1.88 پایدار شد.</p>
+<h3 id="manual-garbage-collection-with-cargo-clean"><a class="header" href="#manual-garbage-collection-with-cargo-clean">garbage collection دستی با <code>cargo clean</code></a></h3>
+<p>حذف دستی را می‌توان با دستور <code>cargo clean gc -Zgc</code> انجام داد.
+حذف محتویات cache با دادن یکی از گزینه‌های cache انجام می‌شود:</p>
+<ul>
+<li><code>--max-src-age=DURATION</code> — فایل‌های cache منبع را که از سن داده‌شده به بعد استفاده نشده‌اند حذف می‌کند.</li>
+<li><code>--max-crate-age=DURATION</code> — فایل‌های cache مربوط به crate را که از سن داده‌شده به بعد استفاده نشده‌اند حذف می‌کند.</li>
+<li><code>--max-index-age=DURATION</code> — فهرست‌های registry را که از سن داده‌شده به بعد استفاده نشده‌اند حذف می‌کند (از جمله فایل‌های <code>.crate</code> و <code>src</code> آن‌ها).</li>
+<li><code>--max-git-co-age=DURATION</code> — checkoutهای وابستگی‌های git را که از سن داده‌شده به بعد استفاده نشده‌اند حذف می‌کند.</li>
+<li><code>--max-git-db-age=DURATION</code> — cloneهای وابستگی‌های git را که از سن داده‌شده به بعد استفاده نشده‌اند حذف می‌کند.</li>
+<li><code>--max-download-age=DURATION</code> — هر داده cache دانلودشده را که از سن داده‌شده به بعد استفاده نشده حذف می‌کند.</li>
+<li><code>--max-src-size=SIZE</code> — قدیمی‌ترین فایل‌های cache منبع را تا وقتی cache زیر اندازهٔ داده‌شده برسد حذف می‌کند.</li>
+<li><code>--max-crate-size=SIZE</code> — قدیمی‌ترین فایل‌های cache مربوط به crate را تا وقتی cache زیر اندازهٔ داده‌شده برسد حذف می‌کند.</li>
+<li><code>--max-git-size=SIZE</code> — قدیمی‌ترین cacheهای وابستگی git را تا وقتی cache زیر اندازهٔ داده‌شده برسد حذف می‌کند.</li>
+<li><code>--max-download-size=SIZE</code> — قدیمی‌ترین داده‌های cache دانلودشده را تا وقتی cache زیر اندازهٔ داده‌شده برسد حذف می‌کند.</li>
+</ul>
+<p>DURATION به شکل «N seconds/minutes/days/weeks/months» مشخص می‌شود که N عدد صحیح است.</p>
+<p>SIZE به شکل «N <em>suffix</em>» مشخص می‌شود که <em>suffix</em> یکی از B، kB، MB، GB، kiB، MiB یا GiB است و N عدد صحیح یا اعشاری است. اگر پسوندی مشخص نشود، عدد تعداد بایت است.</p>
+<pre><code class="language-sh">cargo clean gc -Zgc
+cargo clean gc -Zgc --max-download-age=1week
+cargo clean gc -Zgc --max-git-size=0 --max-download-size=100MB
+</code></pre>
+<h2 id="open-namespaces"><a class="header" href="#open-namespaces">open-namespaces</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/13576">#13576</a></li>
+</ul>
+<p>اجازه می‌دهد چند بسته در یک فضای نام API مشترک شرکت کنند</p>
+<p>این را می‌توان این‌طور فعال کرد:</p>
+<pre><code class="language-toml">cargo-features = ["open-namespaces"]
+
+[package]
+# ...
+</code></pre>
+<h2 id="panic-immediate-abort"><a class="header" href="#panic-immediate-abort">panic-immediate-abort</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/16042">#16042</a></li>
+<li>issue پیگیری بالادستی: <a href="https://github.com/rust-lang/rust/issues/147286">rust-lang/rust#147286</a></li>
+</ul>
+<p>تنظیم profile با نام <code>panic</code> را گسترش می‌دهد تا از راهبرد panic با نام
+<a href="../../rustc/codegen-options/index.html#panic"><code>immediate-abort</code></a> پشتیبانی کند.
+این را می‌توان این‌طور فعال کرد:</p>
+<pre><code class="language-toml"># Cargo.toml
+cargo-features = ["panic-immediate-abort"]
+
+[package]
+# ...
+
+[profile.release]
+panic = "immediate-abort"
+</code></pre>
+<p>برای تنظیم این در یک profile در پیکربندی Cargo،
+باید یا پرچم خط فرمان <code>-Z panic-immediate-abort</code>
+یا جدول <code>[unstable]</code> را برای فعال‌کردن آن به‌کار ببرید.
+برای مثال،</p>
+<pre><code class="language-toml"># .cargo/config.toml
+[unstable]
+panic-immediate-abort = true
+
+[profile.release]
+panic = "immediate-abort"
+</code></pre>
+<h2 id="fine-grain-locking"><a class="header" href="#fine-grain-locking">fine-grain-locking</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/4282">#4282</a></li>
+</ul>
+<p>به‌جای قفل‌کردن کل cache ساخت، از قفل‌گذاری ریزدانه استفاده می‌کند.</p>
+<h2 id="path-bases"><a class="header" href="#path-bases">Path Bases</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/14355">#14355</a></li>
+</ul>
+<p>یک وابستگی <code>path</code> می‌تواند به‌صورت اختیاری با تنظیم کلید <code>base</code> روی
+نام یک path base از جدول <code>[path-bases]</code> در <a href="config.html">پیکربندی</a> یا یکی از
+<a href="#built-in-path-bases">path baseهای داخلی</a>، یک مبنا مشخص کند.
+مقدار آن path base (در صورت لزوم همراه با جداکنندهٔ مسیر) به ابتدای مقدار <code>path</code> افزوده می‌شود
+تا مکان واقعی‌ای که Cargo وابستگی را در آن جست‌وجو می‌کند به دست آید.</p>
+<p>برای مثال، اگر <code>Cargo.toml</code> این را در بر داشته باشد:</p>
+<pre><code class="language-toml">cargo-features = ["path-bases"]
+
+[dependencies]
+foo = { base = "dev", path = "foo" }
+</code></pre>
+<p>با فرض اینکه جدول <code>[path-bases]</code> در پیکربندی این را داشته باشد:</p>
+<pre><code class="language-toml">[path-bases]
+dev = "/home/user/dev/rust/libraries/"
+</code></pre>
+<p>این یک وابستگی <code>path</code> به نام <code>foo</code> تولید می‌کند که در
+<code>/home/user/dev/rust/libraries/foo</code> قرار دارد.</p>
+<p>path baseها می‌توانند مطلق یا نسبی باشند. path baseهای نسبی نسبت به پوشهٔ والد فایل پیکربندی‌ای هستند که آن path base را اعلام کرده است.</p>
+<p>نام یک path base باید فقط از نویسه‌های <a href="https://doc.rust-lang.org/std/primitive.char.html#method.is_alphanumeric">alphanumeric</a>
+یا <code>-</code> یا <code>_</code> استفاده کند، باید با یک نویسهٔ <a href="https://doc.rust-lang.org/std/primitive.char.html#method.is_alphabetic">alphabetic</a>
+شروع شود، و نباید خالی باشد.</p>
+<p>اگر نام path baseای که در وابستگی استفاده شده نه در پیکربندی باشد و نه یکی از path baseهای داخلی، Cargo خطا می‌دهد.</p>
+<h4 id="built-in-path-bases"><a class="header" href="#built-in-path-bases">Built-in path bases</a></h4>
+<p>Cargo path baseهای ضمنی‌ای فراهم می‌کند که بدون نیاز به مشخص‌کردن آن‌ها در جدول <code>[path-bases]</code> قابل‌استفاده‌اند.</p>
+<ul>
+<li><code>workspace</code> - اگر پروژه <a href="workspaces.html">workspace یا عضو workspace</a> باشد،
+این path base پوشهٔ والد <code>Cargo.toml</code> ریشهٔ workspace تعریف می‌شود.</li>
+</ul>
+<p>اگر نام یک path base داخلی در پیکربندی هم اعلام شود، Cargo مقدار پیکربندی را ترجیح می‌دهد. این به Cargo اجازه می‌دهد path baseهای داخلی جدیدی بدون مشکل سازگاری اضافه کند (چون استفاده‌های موجود نام داخلی را پوشش می‌دهند).</p>
+<h2 id="native-completions"><a class="header" href="#native-completions">native-completions</a></h2>
+<ul>
+<li>Original Issue: <a href="https://github.com/rust-lang/cargo/issues/6645">#6645</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/14520">#14520</a></li>
+</ul>
+<p>این قابلیت اسکریپت‌های تکمیل خودکار دست‌نویس را به Rust بومی منتقل می‌کند و افزودن، گسترش و تست تکمیل‌های جدید را برای ما آسان‌تر می‌کند. این قابلیت با کانال nightly و بدون نیاز به گزینه‌های اضافی <code>-Z</code> فعال می‌شود.</p>
+<p>حوزه‌هایی که بازخورد دربارهٔ آن‌ها اهمیت ویژه دارد</p>
+<ul>
+<li>آرگومان‌هایی که نیاز به escape یا quoting دارند و درست مدیریت نمی‌شوند</li>
+<li>نادرستی در اطلاعات</li>
+<li>باگ‌ها در تجزیهٔ خط فرمان</li>
+<li>آرگومان‌هایی که تکمیل‌هایشان را گزارش نمی‌کنند</li>
+<li>اگر مشکلی شناخته‌شده دردسرساز است</li>
+</ul>
+<p>بازخورد را می‌توان تقسیم کرد به</p>
+<ul>
+<li>What completion candidates are reported
+<ul>
+<li>Known issues: <a href="https://github.com/rust-lang/cargo/issues/14520">#14520</a>, <a href="https://github.com/rust-lang/cargo/labels/A-completions"><code>A-completions</code></a></li>
+<li><a href="https://github.com/rust-lang/cargo/issues/new">گزارش issue</a> یا <a href="https://github.com/rust-lang/cargo/issues/14520">بحث دربارهٔ رفتار</a></li>
+</ul>
+</li>
+<li>Shell integration, command-line parsing, and completion filtering
+<ul>
+<li>مشکلات شناخته‌شده: <a href="https://github.com/clap-rs/clap/issues/3166">clap#3166</a>، <a href="https://github.com/clap-rs/clap/labels/A-completion">برچسب <code>A-completions</code> در clap</a></li>
+<li><a href="https://github.com/clap-rs/clap/issues/new/choose">گزارش issue</a> یا <a href="https://github.com/clap-rs/clap/discussions/new/choose">بحث دربارهٔ رفتار</a></li>
+</ul>
+</li>
+</ul>
+<p>در صورت تردید، می‌توانید این را در <a href="https://github.com/rust-lang/cargo/issues/14520">#14520</a> یا در <a href="https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo">zulip</a> مطرح کنید</p>
+<h3 id="how-to-use-native-completions-feature"><a class="header" href="#how-to-use-native-completions-feature">چگونه از قابلیت native-completions استفاده کنیم:</a></h3>
+<ul>
+<li>
+<p>bash: عبارت <code>source &lt;(CARGO_COMPLETE=bash cargo +nightly)</code> را به <code>~/.local/share/bash-completion/completions/cargo</code> اضافه کنید.</p>
+</li>
+<li>
+<p>zsh:
+عبارت <code>source &lt;(CARGO_COMPLETE=zsh cargo +nightly)</code> را به <code>.zshrc</code> خود اضافه کنید.</p>
+</li>
+<li>
+<p>fish: عبارت <code>source (CARGO_COMPLETE=fish cargo +nightly | psub)</code> را به <code>$XDG_CONFIG_HOME/fish/completions/cargo.fish</code> اضافه کنید</p>
+</li>
+<li>
+<p>elvish:
+عبارت <code>eval (E:CARGO_COMPLETE=elvish cargo +nightly | slurp)</code> را به <code>$XDG_CONFIG_HOME/elvish/rc.elv</code> اضافه کنید</p>
+</li>
+<li>
+<p>powershell:
+عبارت <code>CARGO_COMPLETE=powershell cargo +nightly | Invoke-Expression</code> را به <code>$PROFILE</code> اضافه کنید.</p>
+</li>
+</ul>
+<h2 id="feature-unification"><a class="header" href="#feature-unification">feature unification</a></h2>
+<ul>
+<li>RFC: <a href="https://github.com/rust-lang/rfcs/blob/master/text/3692-feature-unification.md">#3692</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/14774">#14774</a></li>
+</ul>
+<p><code>-Z feature-unification</code> گزینهٔ پیکربندی <code>resolver.feature-unification</code> را فعال می‌کند
+تا نحوهٔ یکپارچه‌سازی featureها در یک workspace را کنترل کند.
+اگر پرچم ناپایدار <code>-Z feature-unification</code> فعال نباشد،
+پیکربندی <code>resolver.feature-unification</code> نادیده گرفته می‌شود.</p>
+<h3 id="resolverfeature-unification"><a class="header" href="#resolverfeature-unification"><code>resolver.feature-unification</code></a></h3>
+<ul>
+<li>Type: string</li>
+<li>Default: <code>"selected"</code></li>
+<li>Environment: <code>CARGO_RESOLVER_FEATURE_UNIFICATION</code></li>
+</ul>
+<p>مشخص می‌کند کدام بسته‌ها در <a href="../reference/features.html#feature-unification">یکپارچه‌سازی featureها</a> شرکت می‌کنند.</p>
+<ul>
+<li><code>selected</code>: featureهای وابستگی از همهٔ بسته‌های مشخص‌شده برای ساخت فعلی ادغام می‌شوند.</li>
+<li><code>workspace</code>: featureهای وابستگی در همهٔ اعضای workspace ادغام می‌شوند،
+صرف‌نظر از اینکه کدام بسته‌ها برای ساخت فعلی مشخص شده‌اند.</li>
+<li><code>package</code>: featureهای وابستگی به‌صورت بسته‌به‌بسته در نظر گرفته می‌شوند،
+و وقتی بسته‌ها مجموعه‌های متفاوتی از featureها را فعال می‌کنند، ساخت‌های تکراری وابستگی‌ها ترجیح داده می‌شود.</li>
+</ul>
+<h2 id="lockfile-publish-time"><a class="header" href="#lockfile-publish-time">lockfile-publish-time</a></h2>
+<ul>
+<li>Original Issue: <a href="https://github.com/rust-lang/cargo/issues/5221">#5221</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/16271">#16271</a></li>
+</ul>
+<p>با <code>cargo generate-lockfile -Zunstable-options --publish-time &lt;time&gt;</code>،
+حل بسته‌ها هیچ بسته‌ای را که جدیدتر از زمان مشخص‌شده باشد در نظر نمی‌گیرد.</p>
+<h2 id="package-message-format"><a class="header" href="#package-message-format">Package message format</a></h2>
+<ul>
+<li>Original Issue: <a href="https://github.com/rust-lang/cargo/issues/11666">#11666</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/15353">#15353</a></li>
+</ul>
+<p>پرچم <code>--message-format</code> در <code>cargo package</code> قالب پیام خروجی را کنترل می‌کند.
+فعلاً فقط با پرچم <code>--list</code> کار می‌کند و قالب فهرست فایل‌ها را تحت‌تأثیر قرار می‌دهد،
+و <code>-Zunstable-options</code> لازم دارد.
+برای اطلاعات بیشتر <a href="../commands/cargo-package.html#option-cargo-package---message-format"><code>cargo package --message-format</code></a> را ببینید.</p>
+<h2 id="rustdoc-depinfo"><a class="header" href="#rustdoc-depinfo">rustdoc depinfo</a></h2>
+<ul>
+<li>Original Issue: <a href="https://github.com/rust-lang/cargo/issues/12266">#12266</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/15370">#15370</a></li>
+</ul>
+<p>پرچم <code>-Z rustdoc-depinfo</code> از فایل‌های dep-info در rustdoc استفاده می‌کند تا تعیین کند
+آیا مستندات باید دوباره تولید شوند. این را می‌توان با
+<code>-Z checksum-freshness</code> ترکیب کرد تا به‌جای mtime فایل، تغییر checksum تشخیص داده شود.</p>
+<h2 id="embed-metadata"><a class="header" href="#embed-metadata">embed-metadata</a></h2>
+<ul>
+<li>Original Pull Request: <a href="https://github.com/rust-lang/cargo/pull/15378">#15378</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/15495">#15495</a></li>
+</ul>
+<p>رفتار پیش‌فرض Rust جاسازی فراداده crate در آرتیفکت‌های <code>rlib</code> و <code>dylib</code> است.
+از آنجا که Cargo پرچم <code>--emit=metadata</code> را هم به این آرتیفکت‌های میانی می‌دهد تا کامپایل pipelined ممکن شود، این یعنی مقدار زیادی فراداده روی دیسک تکرار می‌شود و فضای دیسک پوشهٔ target را هدر می‌دهد.</p>
+<p>اگر <code>-Zembed-metadata=no</code> را به Cargo بدهید، Cargo پرچم <code>-Zembed-metadata=no</code> را به کامپایلر می‌دهد که به آن می‌گوید فراداده را درون آرتیفکت‌های rlib و dylib جاسازی نکند. در این حالت فراداده فقط در فایل‌های <code>.rmeta</code> ذخیره می‌شود.</p>
+<pre><code class="language-console">cargo +nightly -Zembed-metadata=no build
+</code></pre>
+<blockquote>
+<p>توجه کنید که برنامه این است که این پرچم در آینده حذف شود، چون رفتار <code>no</code> باید پیش‌فرض شود.</p>
+</blockquote>
+<h2 id="unstable-editions"><a class="header" href="#unstable-editions"><code>unstable-editions</code></a></h2>
+<p>مقدار <code>unstable-editions</code> در فهرست <code>cargo-features</code> به manifest با نام <code>Cargo.toml</code> اجازه می‌دهد ویرایشی را مشخص کند که هنوز پایدار نیست.</p>
+<pre><code class="language-toml">cargo-features = ["unstable-editions"]
+
+[package]
+name = "my-package"
+edition = "future"
+</code></pre>
+<p>وقتی ویرایش‌های جدید معرفی می‌شوند، تا پایدار‌شدن ویرایش، قابلیت <code>unstable-editions</code> لازم است.</p>
+<p>ویرایش ویژهٔ «future» جایی برای قابلیت‌های جدیدی است که در حال توسعه‌اند و دائماً ناپایدار است. ویرایش «future» به‌خودی‌خود رفتار جدیدی هم ندارد. هر تغییر در ویرایش future به opt-in نیاز دارد، مثل attribute با نام <code>#![feature(...)]</code>.</p>
+<h2 id="fix-edition"><a class="header" href="#fix-edition"><code>fix-edition</code></a></h2>
+<p><code>-Zfix-edition</code> یک پرچم دائماً ناپایدار برای کمک به تست مهاجرت ویرایش‌هاست، به‌ویژه با استفاده از crater. فقط با زیردستور <code>cargo fix</code> کار می‌کند. دو شکل مختلف دارد:</p>
+<ul>
+<li><code>-Zfix-edition=start=$INITIAL</code> — این شکل بررسی می‌کند آیا ویرایش فعلی با عدد داده‌شده برابر است. اگر نه، با موفقیت خارج می‌شود (چون می‌خواهیم ویرایش‌های قدیمی‌تر را نادیده بگیریم). اگر بله، معادل <code>cargo check</code> را اجرا می‌کند. این برای استفاده با toolchain «start» در crater است تا خط مبنایی برای toolchain «قبل» تعیین شود.</li>
+<li><code>-Zfix-edition=end=$INITIAL,$NEXT</code> — این شکل بررسی می‌کند آیا ویرایش فعلی با مقدار داده‌شدهٔ <code>$INITIAL</code> برابر است. اگر نه، با موفقیت خارج می‌شود. اگر بله، مهاجرت ویرایش را به ویرایش مشخص‌شده در <code>$NEXT</code> انجام می‌دهد. سپس <code>Cargo.toml</code> را تغییر می‌دهد تا <code>cargo-features = ["unstable-edition"]</code> مناسب را اضافه کند، فیلد <code>edition</code> را به‌روز می‌کند و معادل <code>cargo check</code> را اجرا می‌کند تا تأیید کند مهاجرت روی ویرایش جدید کار می‌کند.</li>
+</ul>
+<p>برای مثال:</p>
+<pre><code class="language-console">cargo +nightly fix -Zfix-edition=end=2024,future
+</code></pre>
+<h2 id="section-timings"><a class="header" href="#section-timings">section-timings</a></h2>
+<ul>
+<li>Original Pull Request: <a href="https://github.com/rust-lang/cargo/pull/15780">#15780</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/15817">#15817</a></li>
+</ul>
+<p>این قابلیت می‌تواند خروجی <code>cargo build --timings</code> را گسترش دهد. به rustc می‌گوید
+زمان‌بندی بخش‌های جداگانهٔ کامپایل را تولید کند، که سپس در خروجی HTML/JSON زمان‌بندی نمایش داده می‌شود.</p>
+<pre><code class="language-console">cargo +nightly -Zsection-timings build --timings
+</code></pre>
+<h2 id="mem-stats"><a class="header" href="#mem-stats">mem-stats</a></h2>
+<p>جدول «اوج مصرف حافظه به‌ازای هر واحد» را به گزارش <code>cargo build --timings</code> اضافه می‌کند،
+که اوج resident set size فرایند هر واحد ساخت (<code>rustc</code>،
+<code>rustdoc</code> و اسکریپت‌های ساخت) را نشان می‌دهد.</p>
+<pre><code class="language-console">cargo +nightly -Zmem-stats build --timings
+</code></pre>
+<p>اوج حافظه در یونیکس (<code>ru_maxrss</code> در <code>wait4</code>) و ویندوز
+(<code>GetProcessMemoryInfo</code>) اندازه‌گیری می‌شود؛ در پلتفرم‌های دیگر جدول حذف می‌شود.</p>
+<h2 id="build-analysis"><a class="header" href="#build-analysis">Build analysis</a></h2>
+<ul>
+<li>issue اولیه: <a href="https://github.com/rust-lang/rust-project-goals/pull/332">rust-lang/rust-project-goals#332</a></li>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/15844">#15844</a></li>
+</ul>
+<p>قابلیت <code>-Zbuild-analysis</code> معیارهای دقیق ساخت را روی دیسک ثبت و ذخیره می‌کند،
+و دستورهای جدیدی برای پرس‌وجو از ساخت‌های گذشته دارد.</p>
+<p>وقتی فعال باشد،
+Cargo لاگ‌های ساخت را با قالب JSONL در پوشهٔ <code>$CARGO_HOME/log/</code> می‌نویسد.
+هر فراخوانی cargo یک فایل لاگ با نامی شامل شناسهٔ جلسهٔ یکتا تولید می‌کند.
+این لاگ‌ها اطلاعات زمان‌بندی، دلایل بازسازی و فراداده‌های دیگر ساخت را دارند
+که با زیردستورهای <code>cargo report</code> قابل‌تحلیل‌اند.</p>
+<p>برای فعال‌کردن تحلیل ساخت، <a href="config.html">پیکربندی Cargo</a> زیر را اضافه کنید:</p>
+<pre><code class="language-toml"># Example config.toml file.
+
+[unstable]
+build-analysis = true
+
+# Enable the build metric collection
+[build.analysis]
+enabled = true
+</code></pre>
+<p>تنظیم آن روی toolchain پایدار فقط هشدار پیکربندی ناشناخته می‌دهد،
+پس نگه‌داشتن آن در پیکربندی Cargo ایمن است.</p>
+<h3 id="cargo-report-commands"><a class="header" href="#cargo-report-commands"><code>cargo report</code> commands</a></h3>
+<p>دستورهای زیر تحت <code>-Zbuild-analysis</code> در دسترس‌اند:</p>
+<ul>
+<li><code>cargo report sessions</code> — جلسه‌های ساخت قبلی را فهرست می‌کند.
+از آن برای پیدا‌کردن شناسهٔ جلسه برای دستورهای گزارش دیگر استفاده کنید.</li>
+<li><code>cargo report timings</code> — گزارش زمان‌بندی HTML را از یک جلسهٔ قبلی تولید می‌کند،
+شبیه <code>cargo build --timings</code> اما بدون ساخت دوباره.</li>
+<li><code>cargo report rebuilds</code> — گزارش می‌دهد چرا crateها دوباره ساخته شدند،
+و به تشخیص بازکامپایل‌های غیرمنتظره کمک می‌کند.</li>
+</ul>
+<h2 id="compile-time-deps"><a class="header" href="#compile-time-deps">compile-time-deps</a></h2>
+<p>این پرچم دائماً ناپایدار فقط proc-macroها و اسکریپت‌های ساخت (و وابستگی‌های لازم آن‌ها) را می‌سازد،
+و اسکریپت‌های ساخت را اجرا می‌کند.</p>
+<p>برای استفادهٔ ابزارهایی مثل rust-analyzer است و هرگز پایدار نخواهد شد.</p>
+<p>Example:</p>
+<pre><code class="language-console">cargo +nightly build --compile-time-deps -Z unstable-options
+cargo +nightly check --compile-time-deps --all-targets -Z unstable-options
+</code></pre>
+<h2 id="rustc-unicode"><a class="header" href="#rustc-unicode"><code>rustc-unicode</code></a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/rust/issues/148607">rust#148607</a></li>
+</ul>
+<p>قالب خطای یونیکد <code>rustc</code> را در پیام‌های خطای Cargo فعال می‌کند</p>
+<h2 id="rustdoc-mergeable-info"><a class="header" href="#rustdoc-mergeable-info">rustdoc mergeable info</a></h2>
+<ul>
+<li>Original Pull Request: <a href="https://github.com/rust-lang/cargo/pull/16309">#16309</a></li>
+<li>Tracking issue: <a href="https://github.com/rust-lang/cargo/issues/16306">#16306</a></li>
+<li>issue پیگیری rustc: <a href="https://github.com/rust-lang/rust/issues/130676">rust-lang/rust#130676</a></li>
+</ul>
+<p>پرچم <code>-Z rustdoc-mergeable-info</code> از اطلاعات crate قابل‌ادغام rustdoc استفاده می‌کند،
+تا <code>cargo doc</code> بتواند اطلاعات بین‌crate
+(مثل فهرست جست‌وجو، فهرست فایل‌های منبع و غیره)
+را از پوشه‌های خروجی جداگانه ادغام کند،
+و <code>rustdoc</code> را به‌صورت موازی اجرا کند.</p>
+<h2 id="json-target-spec"><a class="header" href="#json-target-spec">json-target-spec</a></h2>
+<ul>
+<li>issue پیگیری: <a href="https://github.com/rust-lang/rust/issues/151528">rust-lang/rust#151528</a></li>
+</ul>
+<p>پرچم خط فرمان <code>-Z json-target-spec</code> امکان استفاده از <a href="../../rustc/targets/custom.html">فایل‌های JSON مشخصات هدف سفارشی</a> را به‌عنوان هدف فراهم می‌کند.</p>
+<pre><code class="language-console">cargo +nightly build --target my-target.json -Z json-target-spec
+</code></pre>
+<p>این معمولاً باید با <a href="#build-std">build-std</a> ترکیب شود.</p>
+<h2 id="hint-msrv"><a class="header" href="#hint-msrv">hint-msrv</a></h2>
+<ul>
+<li>issue پیگیری: <a href="https://github.com/rust-lang/rust/issues/157574">rust-lang/rust#157574</a></li>
+</ul>
+<p>پرچم خط فرمان <code>-Z hint-msrv</code> به Cargo اجازه می‌دهد <code>package.rust-version</code> را به rustc بدهد که می‌تواند بر اینکه کدام lintها تولید شوند اثر بگذارد.</p>
+<p>می‌توانید این را در <code>~/.cargo/config.toml</code> سراسری خود تنظیم کنید، و Cargo در nightly
+آن را به‌طور خودکار به‌کار می‌برد، در حالی که Cargo پایدار گزینهٔ ناپایدار را بی‌صدا نادیده می‌گیرد:</p>
+<pre><code class="language-toml">[unstable]
+hint-msrv = true
+</code></pre>
+<h2 id="builtin-dependencies"><a class="header" href="#builtin-dependencies">builtin-dependencies</a></h2>
+<ul>
+<li>issue پیگیری: <a href="https://github.com/rust-lang/cargo/issues/16960">rust-lang/cargo#16960</a></li>
+</ul>
+<ul>
+<li>RFC: <a href="https://rust-lang.github.io/rfcs/3875-build-std-explicit-dependencies.html">rust-lang/rfcs#3875</a></li>
+</ul>
+<p>اجازه می‌دهد وابستگی به crateهای کتابخانهٔ استاندارد مشخص شود، به این شکل:</p>
+<pre><code class="language-toml">[dependencies]
+std = { builtin = true, optional = true }
+core = { builtin = true}
+</code></pre>
+<p>مشخص‌کردن صریح وابستگی‌های داخلی (builtin) با <code>-Zbuild-std</code> خوب جور می‌شود و
+برای crateهای <code>#[no_std]</code> هم مفید است. برای جزئیات بیشتر RFC را ببینید.</p>
+<p>مشخصات Package ID می‌تواند با شکل <code>builtin://.#&lt;name&gt;</code> به بسته‌های داخلی ارجاع دهد. برای مثال <code>builtin://.#core</code> بستهٔ داخلی
+core را مشخص می‌کند و آن را از بسته‌های با نام «core» از منابع دیگر متمایز می‌کند.</p>
+<h1 id="stabilized-and-removed-features"><a class="header" href="#stabilized-and-removed-features">قابلیت‌های پایدارشده و حذف‌شده</a></h1>
+<h2 id="compile-progress"><a class="header" href="#compile-progress">Compile progress</a></h2>
+<p>قابلیت compile-progress در انتشار 1.30 پایدار شد.
+نوارهای پیشرفت اکنون به‌طور پیش‌فرض فعال‌اند.
+برای اطلاعات بیشتر دربارهٔ کنترل این قابلیت <a href="config.html#termprogresswhen"><code>term.progress</code></a> را ببینید.</p>
+<h2 id="edition"><a class="header" href="#edition">Edition</a></h2>
+<p>مشخص‌کردن <code>edition</code> در <code>Cargo.toml</code> در انتشار 1.31 پایدار شد.
+برای اطلاعات بیشتر دربارهٔ مشخص‌کردن این فیلد <a href="manifest.html#the-edition-field">فیلد edition</a> را ببینید.</p>
+<h2 id="rename-dependency"><a class="header" href="#rename-dependency">rename-dependency</a></h2>
+<p>مشخص‌کردن وابستگی‌های تغییرنام‌یافته در <code>Cargo.toml</code> در انتشار 1.31 پایدار شد.
+برای اطلاعات بیشتر دربارهٔ تغییر نام وابستگی‌ها <a href="specifying-dependencies.html#renaming-dependencies-in-cargotoml">تغییر نام وابستگی‌ها</a> را ببینید.</p>
+<h2 id="alternate-registries"><a class="header" href="#alternate-registries">Alternate Registries</a></h2>
+<p>پشتیبانی از registryهای جایگزین در انتشار 1.34 پایدار شد.
+برای اطلاعات بیشتر دربارهٔ registryهای جایگزین <a href="registries.html">فصل Registryها</a> را ببینید.</p>
+<h2 id="offline-mode"><a class="header" href="#offline-mode">Offline Mode</a></h2>
+<p>قابلیت offline در انتشار 1.36 پایدار شد.
+برای اطلاعات بیشتر دربارهٔ استفاده از حالت آفلاین <a href="../commands/cargo.html#option-cargo---offline">پرچم <code>--offline</code></a> را ببینید.</p>
+<h2 id="publish-lockfile"><a class="header" href="#publish-lockfile">publish-lockfile</a></h2>
+<p>قابلیت <code>publish-lockfile</code> در انتشار 1.37 حذف شد.
+اگر بسته هدف دودویی داشته باشد، فایل <code>Cargo.lock</code> همیشه هنگام انتشار بسته گنجانده می‌شود. <code>cargo install</code> پرچم <code>--locked</code> را لازم دارد
+تا از فایل <code>Cargo.lock</code> استفاده کند.
+برای اطلاعات بیشتر <a href="../commands/cargo-package.html"><code>cargo package</code></a> و
+<a href="../commands/cargo-install.html"><code>cargo install</code></a> را ببینید.</p>
+<h2 id="default-run"><a class="header" href="#default-run">default-run</a></h2>
+<p>قابلیت <code>default-run</code> در انتشار 1.37 پایدار شد.
+برای اطلاعات بیشتر دربارهٔ مشخص‌کردن هدف پیش‌فرض برای اجرا <a href="manifest.html#the-default-run-field">فیلد <code>default-run</code></a> را ببینید.</p>
+<h2 id="cache-messages"><a class="header" href="#cache-messages">cache-messages</a></h2>
+<p>cache پیام‌های کامپایلر در انتشار 1.40 پایدار شد.
+هشدارهای کامپایلر اکنون به‌طور پیش‌فرض cache می‌شوند و هنگام اجرای دوبارهٔ Cargo خودکار بازپخش می‌شوند.</p>
+<h2 id="install-upgrade"><a class="header" href="#install-upgrade">install-upgrade</a></h2>
+<p>قابلیت <code>install-upgrade</code> در انتشار 1.41 پایدار شد.
+<a href="../commands/cargo-install.html"><code>cargo install</code></a> اکنون اگر بسته‌ها قدیمی به نظر برسند به‌طور خودکار آن‌ها را ارتقا می‌دهد. برای اطلاعات بیشتر مستندات <a href="../commands/cargo-install.html"><code>cargo install</code></a> را ببینید.</p>
+<h2 id="profile-overrides"><a class="header" href="#profile-overrides">Profile Overrides</a></h2>
+<p>بازنویسی‌های profile (Profile overrides) در انتشار 1.41 پایدار شدند.
+برای اطلاعات بیشتر دربارهٔ استفاده از بازنویسی‌ها <a href="profiles.html#overrides">بازنویسی‌های Profile</a> را ببینید.</p>
+<h2 id="config-profiles"><a class="header" href="#config-profiles">Config Profiles</a></h2>
+<p>مشخص‌کردن profileها در فایل‌های پیکربندی Cargo و متغیرهای محیطی در انتشار 1.43 پایدار شد.
+برای اطلاعات بیشتر دربارهٔ مشخص‌کردن <a href="profiles.html">profileها</a> در فایل‌های پیکربندی <a href="config.html#profile">جدول <code>[profile]</code> در config</a> را ببینید.</p>
+<h2 id="crate-versions"><a class="header" href="#crate-versions">crate-versions</a></h2>
+<p>پرچم <code>-Z crate-versions</code> در انتشار 1.47 پایدار شد.
+نسخهٔ crate اکنون به‌طور خودکار در نوار کناری مستندات <a href="../commands/cargo-doc.html"><code>cargo doc</code></a> گنجانده می‌شود.</p>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<p>پرچم <code>-Z features</code> در انتشار 1.51 پایدار شد.
+برای اطلاعات بیشتر دربارهٔ استفاده از حل‌کنندهٔ جدید featureها <a href="features.html#feature-resolver-version-2">نسخهٔ 2 حل‌کنندهٔ feature</a> را ببینید.</p>
+<h2 id="package-features"><a class="header" href="#package-features">package-features</a></h2>
+<p>پرچم <code>-Z package-features</code> در انتشار 1.51 پایدار شد.
+برای اطلاعات بیشتر دربارهٔ استفاده از گزینه‌های خط فرمان featureها <a href="features.html#resolver-version-2-command-line-flags">پرچم‌های خط فرمان حل‌کنندهٔ نسخهٔ 2</a> را ببینید.</p>
+<h2 id="resolver"><a class="header" href="#resolver">Resolver</a></h2>
+<p>قابلیت <code>resolver</code> در <code>Cargo.toml</code> در انتشار 1.51 پایدار شد.
+برای اطلاعات بیشتر دربارهٔ مشخص‌کردن حل‌کننده‌ها <a href="resolver.html#resolver-versions">نسخه‌های حل‌کننده</a> را ببینید.</p>
+<h2 id="extra-link-arg"><a class="header" href="#extra-link-arg">extra-link-arg</a></h2>
+<p>قابلیت <code>extra-link-arg</code> برای مشخص‌کردن آرگومان‌های اضافی لینکر در اسکریپت‌های ساخت در انتشار 1.56 پایدار شد. برای اطلاعات بیشتر دربارهٔ مشخص‌کردن آرگومان‌های اضافی لینکر <a href="build-scripts.html#outputs-of-the-build-script">مستندات اسکریپت ساخت</a> را ببینید.</p>
+<h2 id="configurable-env"><a class="header" href="#configurable-env">configurable-env</a></h2>
+<p>قابلیت <code>configurable-env</code> برای مشخص‌کردن متغیرهای محیطی در پیکربندی Cargo در انتشار 1.56 پایدار شد. برای اطلاعات بیشتر دربارهٔ پیکربندی متغیرهای محیطی <a href="config.html#env">مستندات config</a> را ببینید.</p>
+<h2 id="rust-version"><a class="header" href="#rust-version">rust-version</a></h2>
+<p>فیلد <code>rust-version</code> در <code>Cargo.toml</code> در انتشار 1.56 پایدار شد.
+برای اطلاعات بیشتر دربارهٔ استفاده از فیلد <code>rust-version</code> و گزینهٔ <code>--ignore-rust-version</code> <a href="manifest.html#the-rust-version-field">فیلد rust-version</a> را ببینید.</p>
+<h2 id="patch-in-config"><a class="header" href="#patch-in-config">patch-in-config</a></h2>
+<p>پرچم <code>-Z patch-in-config</code> و پشتیبانی متناظر از بخش
+<code>[patch]</code> در فایل‌های پیکربندی Cargo در انتشار 1.56 پایدار شد. برای اطلاعات بیشتر <a href="config.html#patch">فیلد patch</a> را ببینید.</p>
+<h2 id="edition-2021"><a class="header" href="#edition-2021">edition 2021</a></h2>
+<p>ویرایش 2021 در انتشار 1.56 پایدار شد.
+برای اطلاعات بیشتر دربارهٔ تنظیم ویرایش <a href="manifest.html#the-edition-field">فیلد <code>edition</code></a> را ببینید.
+برای اطلاعات بیشتر دربارهٔ مهاجرت پروژه‌های موجود <a href="../commands/cargo-fix.html"><code>cargo fix --edition</code></a> و <a href="https://doc.rust-lang.org/edition-guide/index.html">راهنمای ویرایش‌ها</a> را ببینید.</p>
+<h2 id="custom-named-profiles"><a class="header" href="#custom-named-profiles">Custom named profiles</a></h2>
+<p>profileهای نام‌دار سفارشی در انتشار 1.57 پایدار شدند. برای اطلاعات بیشتر <a href="profiles.html#custom-profiles">فصل Profileها</a> را ببینید.</p>
+<h2 id="profile-strip-option"><a class="header" href="#profile-strip-option">Profile <code>strip</code> option</a></h2>
+<p>گزینهٔ <code>strip</code> در profile در انتشار 1.59 پایدار شد. برای اطلاعات بیشتر <a href="profiles.html#strip">فصل Profileها</a> را ببینید.</p>
+<h2 id="future-incompat-report"><a class="header" href="#future-incompat-report">Future incompat report</a></h2>
+<p>پشتیبانی از تولید گزارش future-incompat در انتشار 1.59 پایدار شد. برای اطلاعات بیشتر <a href="future-incompat-report.html">فصل گزارش future incompat</a> را ببینید.</p>
+<h2 id="namespaced-features"><a class="header" href="#namespaced-features">Namespaced features</a></h2>
+<p>featureهای فضای نام‌دار (Namespaced features) در انتشار 1.60 پایدار شدند.
+برای اطلاعات بیشتر <a href="features.html#optional-dependencies">فصل Featureها</a> را ببینید.</p>
+<h2 id="weak-dependency-features"><a class="header" href="#weak-dependency-features">Weak dependency features</a></h2>
+<p>featureهای وابستگی ضعیف (Weak dependency features) در انتشار 1.60 پایدار شدند.
+برای اطلاعات بیشتر <a href="features.html#dependency-features">فصل Featureها</a> را ببینید.</p>
+<h2 id="timings"><a class="header" href="#timings">timings</a></h2>
+<p>گزینهٔ <code>-Ztimings</code> در انتشار 1.60 با نام <code>--timings</code> پایدار شد.
+گزینهٔ قالب خروجی زمان‌بندی
+(مثلاً <code>--timings=html</code> و خروجی قابل‌خواندن برای ماشین <code>--timings=json</code>)
+در 1.94.0-nightly حذف شده است.</p>
+<h2 id="config-cli"><a class="header" href="#config-cli">config-cli</a></h2>
+<p>گزینهٔ خط فرمان <code>--config</code> در انتشار 1.63 پایدار شد. برای اطلاعات بیشتر
+<a href="config.html#command-line-overrides">مستندات config</a> را ببینید.</p>
+<h2 id="multitarget"><a class="header" href="#multitarget">multitarget</a></h2>
+<p>گزینهٔ <code>-Z multitarget</code> در انتشار 1.64 پایدار شد.
+برای اطلاعات بیشتر دربارهٔ تنظیم <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)">سه‌تایی‌های پلتفرم هدف</a> پیش‌فرض <a href="config.html#buildtarget"><code>build.target</code></a> را ببینید.</p>
+<h2 id="crate-type"><a class="header" href="#crate-type">crate-type</a></h2>
+<p>پرچم <code>--crate-type</code> برای <code>cargo rustc</code> در انتشار 1.64 پایدار شد. برای اطلاعات بیشتر
+<a href="../commands/cargo-rustc.html">مستندات <code>cargo rustc</code></a> را ببینید.</p>
+<h2 id="workspace-inheritance"><a class="header" href="#workspace-inheritance">Workspace Inheritance</a></h2>
+<p>وراثت workspace (Workspace Inheritance) در انتشار 1.64 پایدار شد.
+برای اطلاعات بیشتر <a href="workspaces.html#the-package-table">workspace.package</a>،
+<a href="workspaces.html#the-dependencies-table">workspace.dependencies</a>،
+و <a href="specifying-dependencies.html#inheriting-a-dependency-from-a-workspace">inheriting-a-dependency-from-a-workspace</a> را ببینید.</p>
+<h2 id="terminal-width"><a class="header" href="#terminal-width">terminal-width</a></h2>
+<p>گزینهٔ <code>-Z terminal-width</code> در انتشار 1.68 پایدار شد.
+پهنای ترمینال همیشه وقتی از ترمینالی اجرا می‌شود که Cargo بتواند پهنا را خودکار تشخیص دهد به کامپایلر داده می‌شود.</p>
+<h2 id="sparse-registry"><a class="header" href="#sparse-registry">sparse-registry</a></h2>
+<p>پشتیبانی از sparse registry در انتشار 1.68 پایدار شد.
+برای اطلاعات بیشتر <a href="registries.html#registry-protocols">پروتکل‌های Registry</a> را ببینید.</p>
+<h3 id="cargo-logout"><a class="header" href="#cargo-logout"><code>cargo logout</code></a></h3>
+<p>دستور <a href="../commands/cargo-logout.html"><code>cargo logout</code></a> در انتشار 1.70 پایدار شد.</p>
+<h2 id="doctest-in-workspace"><a class="header" href="#doctest-in-workspace"><code>doctest-in-workspace</code></a></h2>
+<p>گزینهٔ <code>-Z doctest-in-workspace</code> برای <code>cargo test</code> در انتشار 1.72 پایدار و به‌طور پیش‌فرض فعال شد. برای اطلاعات بیشتر دربارهٔ پوشهٔ کاری کامپایل و اجرای تست‌ها
+<a href="../commands/cargo-test.html#working-directory-of-tests">مستندات <code>cargo test</code></a> را ببینید.</p>
+<h2 id="keep-going"><a class="header" href="#keep-going">keep-going</a></h2>
+<p>گزینهٔ <code>--keep-going</code> در انتشار 1.74 پایدار شد. برای جزئیات بیشتر، به‌عنوان نمونه
+<a href="../commands/cargo-build.html#option-cargo-build---keep-going">پرچم <code>--keep-going</code></a> در <code>cargo build</code> را ببینید.</p>
+<h2 id="lints"><a class="header" href="#lints"><code>[lints]</code></a></h2>
+<p><a href="manifest.html#the-lints-section"><code>[lints]</code></a> (که با <code>-Zlints</code> فعال می‌شد) در انتشار 1.74 پایدار شد.</p>
+<h2 id="credential-process"><a class="header" href="#credential-process">credential-process</a></h2>
+<p>قابلیت <code>-Z credential-process</code> در انتشار 1.74 پایدار شد.</p>
+<p>برای جزئیات <a href="registry-authentication.html">احراز هویت registry</a> را ببینید.</p>
+<h2 id="registry-auth"><a class="header" href="#registry-auth">registry-auth</a></h2>
+<p>قابلیت <code>-Z registry-auth</code> در انتشار 1.74 پایدار شد، با این نیاز اضافی که باید ارائه‌دهندهٔ اعتبارنامه پیکربندی شده باشد.</p>
+<p>برای جزئیات <a href="registry-authentication.html">احراز هویت registry</a> را ببینید.</p>
+<h2 id="check-cfg"><a class="header" href="#check-cfg">check-cfg</a></h2>
+<p>قابلیت <code>-Z check-cfg</code> در انتشار 1.80 با تبدیل‌شدن به رفتار پیش‌فرض پایدار شد.</p>
+<p>برای اطلاعات دربارهٔ مشخص‌کردن cfgهای سفارشی <a href="build-scripts.html#rustc-check-cfg">مستندات اسکریپت ساخت</a> را ببینید.</p>
+<h2 id="edition-2024"><a class="header" href="#edition-2024">Edition 2024</a></h2>
+<p>ویرایش 2024 در انتشار 1.85 پایدار شد.
+برای اطلاعات بیشتر دربارهٔ تنظیم ویرایش <a href="manifest.html#the-edition-field">فیلد <code>edition</code></a> را ببینید.
+برای اطلاعات بیشتر دربارهٔ مهاجرت پروژه‌های موجود <a href="../commands/cargo-fix.html"><code>cargo fix --edition</code></a> و <a href="https://doc.rust-lang.org/edition-guide/index.html">راهنمای ویرایش‌ها</a> را ببینید.</p>
+<h2 id="automatic-garbage-collection"><a class="header" href="#automatic-garbage-collection">Automatic garbage collection</a></h2>
+<p>پشتیبانی از حذف خودکار فایل‌های قدیمی در Rust 1.88 پایدار شد.
+اطلاعات بیشتر را می‌توانید در <a href="config.html#cache">فصل config</a> بیابید.</p>
+<h2 id="doctest-xcompile"><a class="header" href="#doctest-xcompile">doctest-xcompile</a></h2>
+<p>cross-compile کردن doctestها از Rust 1.89 به بعد بی‌قید و شرط فعال است. اجرای doctestها با <code>cargo test</code> اکنون پرچم <code>--target</code> را رعایت می‌کند.</p>
+<h2 id="package-workspace"><a class="header" href="#package-workspace">package-workspace</a></h2>
+<p>انتشار چندبسته‌ای (Multi-package publishing) در Rust 1.90.0 پایدار شد.</p>
+<h2 id="build-dir"><a class="header" href="#build-dir">build-dir</a></h2>
+<p>پشتیبانی از <code>build.build-dir</code> در انتشار 1.91 پایدار شد.
+برای اطلاعات دربارهٔ تغییر build-dir <a href="config.html#buildbuild-dir">مستندات config</a> را ببینید</p>
+<h2 id="build-plan"><a class="header" href="#build-plan">Build-plan</a></h2>
+<p>آرگومان <code>--build-plan</code> برای دستور <code>build</code> در 1.93.0-nightly حذف شد.
+برای دلیل حذف آن <a href="https://github.com/rust-lang/cargo/issues/7614">https://github.com/rust-lang/cargo/issues/7614</a> را ببینید.</p>
+<h2 id="config-include"><a class="header" href="#config-include">config-include</a></h2>
+<p>پشتیبانی از گنجاندن فایل‌های پیکربندی اضافی از طریق کلید config با نام <code>include</code>
+در 1.93.0 پایدار شد.
+برای اطلاعات بیشتر <a href="config.html#include">مستندات config برای <code>include</code></a> را ببینید.</p>
+<h2 id="pubtime"><a class="header" href="#pubtime">pubtime</a></h2>
+<p>فیلد <code>pubtime</code> در فهرست در Rust 1.94.0 پایدار شد.</p>
+<h2 id="feature-metadata"><a class="header" href="#feature-metadata">feature-metadata</a></h2>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/14157">#14157</a></li>
+<li>RFC: <a href="https://github.com/rust-lang/rfcs/blob/master/text/3416-feature-metadata.md">#3416</a></li>
+</ul>
+<p>این امکان می‌دهد featureها با یک جدول فراداده تعریف شوند.</p>
+<pre><code class="language-toml">cargo-features = ["feature-metadata"]
+
+[package]
+# ...
+
+[features]
+# same as `foo = []`
+foo = { enables = [] }
+</code></pre>
+<p>فیلد الزامی <code>enables</code> معادل نحو آرایه‌ای از رشته‌هاست.</p>
+<p>با فعال‌بودن <code>feature-metadata</code>، <code>cargo metadata --format-version 1</code> فیلد <code>features_v2</code> را کنار فیلد موجود <code>features</code> شامل می‌شود. این فیلد هر
+feature را به‌صورت شیئی با آرایهٔ <code>enables</code> و فیلدهای فراداده‌ای دیگر بازتاب می‌دهد:</p>
+<pre><code class="language-json">"features_v2": {
+  "foo": { "enables": [] },
+  "serde": {
+    "enables": ["dep:serde"],
+    "doc": "Enables support for serialization via serde."
+  }
+}
+</code></pre>
+<p>برای فیلدهای فراداده‌ای دیگر، زیربخش‌های زیر را ببینید.</p>
+<h3 id="feature-documentation"><a class="header" href="#feature-documentation">feature-documentation</a></h3>
+<ul>
+<li>Tracking Issue: <a href="https://github.com/rust-lang/cargo/issues/17445">#17445</a></li>
+<li>RFC: <a href="https://github.com/rust-lang/rfcs/blob/master/text/3485-feature-documentation.md">#3485</a></li>
+</ul>
+<p>این یک فیلد <code>doc</code> به جدول feature می‌افزاید،
+که مستندات feature را فراهم می‌کند.</p>
+<pre><code class="language-toml">cargo-features = ["feature-metadata"]
+
+[package]
+# ...
+
+[features.serde]
+enables = []
+doc = "Enables support for serialization and deserialization via serde."
+</code></pre>
+<p>مستندات را ابزارها می‌توانند مصرف و نمایش دهند.
+می‌تواند رشتهٔ چندخطی TOML باشد، چند بند داشته باشد و از نشانه‌گذاری Markdown استفاده کند،
+مشابه توضیحات مستندات (doc comments) در Rust.
+ابزارها ممکن است در برخی زمینه‌ها فقط بند اول را نمایش دهند، پس باید
+نسبتاً کوتاه باشد و بدون بقیهٔ توضیح هم معنا داشته باشد.</p>
+<h2 id="lockfile-path"><a class="header" href="#lockfile-path">lockfile-path</a></h2>
+<p>پشتیبانی از فیلد config با نام <code>resolver.lockfile-path</code> در Rust 1.97.0 پایدار شد.</p>
+<h2 id="warnings"><a class="header" href="#warnings">warnings</a></h2>
+<p>فیلد config با نام <code>build.warnings</code> در Rust 1.97 پایدار شد.</p>
+<h2 id="update-breaking"><a class="header" href="#update-breaking">update-breaking</a></h2>
+<p>پرچم <code>cargo update -Zunstable-options --breaking</code> در 1.99-nightly حذف شد.
+برای دلیل حذف آن <a href="https://github.com/rust-lang/cargo/pull/17333">https://github.com/rust-lang/cargo/pull/17333</a> را ببینید.</p>
+<h2 id="build-dir-new-layout"><a class="header" href="#build-dir-new-layout">build-dir-new-layout</a></h2>
+<p>چیدمان جدید سیستم‌فایل build-dir در انتشار 1.100.0 پایدار شد.</p>
+<h2 id="lintscargo"><a class="header" href="#lintscargo"><code>[lints.cargo]</code></a></h2>
+<p>سیستم linting در Cargo و جدول <code>[lints.cargo]</code> در Rust 1.100 پایدار شدند.
+برای اطلاعات دربارهٔ پیکربندی lintهای Cargo <a href="lints.html">فصل lintها</a> و <a href="manifest.html#the-lints-section">بخش lintها</a> را ببینید.</p>
+<h2 id="min-publish-age"><a class="header" href="#min-publish-age">min-publish-age</a></h2>
+<p>پیکربندی حداقل سن انتشار (publish-age) برای حل وابستگی در Rust 1.100 پایدار شد.
+برای اطلاعات بیشتر <a href="config.html#registryglobal-min-publish-age">پیکربندی حداقل سن انتشار</a>
+و <a href="resolver.html#publish-age">رفتار حل‌کننده</a> را ببینید.</p>
+<h2 id="asymmetric-token"><a class="header" href="#asymmetric-token">asymmetric-token</a></h2>
+<p>پرچم <code>-Z asymmetric-token</code> و ارائه‌دهندهٔ اعتبارنامه <code>cargo:paseto</code> در 1.100-nightly حذف شدند.
+برای دلیل حذف آن‌ها <a href="https://github.com/rust-lang/cargo/pull/17333">https://github.com/rust-lang/cargo/pull/17333</a> را ببینید.</p>
+<h2 id="trim-paths"><a class="header" href="#trim-paths">trim-paths</a></h2>
+<p>گزینهٔ profile با نام <code>trim-paths</code> در Rust 1.101 پایدار شد.
+برای اطلاعات بیشتر <a href="profiles.html#trim-paths">تنظیم profile با نام <code>trim-paths</code></a> را ببینید.</p><nav class="page-nav"><a href="lints.html">→ Lintها</a><a href="../commands/index.html">دستورهای Cargo ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

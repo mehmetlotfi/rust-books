@@ -1,0 +1,126 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>مجموعه‌ها — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="collections/index"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="collections"><a class="header" href="#collections">مجموعه‌ها</a></h1>
+<p>سرانجام در برنامهٔ خود به ساختارهای داده‌ای پویا (که مجموعه یا collection هم نامیده می‌شوند) نیاز پیدا خواهید کرد. <code>std</code> مجموعه‌ای از collectionهای رایج را فراهم می‌کند: <a href="https://doc.rust-lang.org/std/vec/struct.Vec.html"><code>Vec</code></a>، <a href="https://doc.rust-lang.org/std/string/struct.String.html"><code>String</code></a>، <a href="https://doc.rust-lang.org/std/collections/struct.HashMap.html"><code>HashMap</code></a> و غیره. همهٔ collectionهایی که در <code>std</code> پیاده‌سازی شده‌اند از یک تخصیص‌دهندهٔ سراسری حافظهٔ پویا (که هیپ یا heap هم نامیده می‌شود) استفاده می‌کنند.</p>
+<p>از آن‌جا که <code>core</code> طبق تعریف از تخصیص حافظه عاری است، این پیاده‌سازی‌ها در آن در دسترس نیستند، اما می‌توان آن‌ها را در crate به نام <code>alloc</code> یافت که همراه کامپایلر عرضه می‌شود.</p>
+<p>اگر به collection نیاز دارید، پیاده‌سازی مبتنی بر heap تنها گزینهٔ شما نیست. می‌توانید از collectionهای <em>با ظرفیت ثابت</em> نیز استفاده کنید؛ یکی از این پیاده‌سازی‌ها در crate به نام <a href="https://crates.io/crates/heapless"><code>heapless</code></a> یافت می‌شود.</p>
+<p>در این بخش این دو پیاده‌سازی را بررسی و با هم مقایسه می‌کنیم.</p>
+<h2 id="using-alloc"><a class="header" href="#using-alloc">استفاده از <code>alloc</code></a></h2>
+<p>crate به نام <code>alloc</code> همراه توزیع استاندارد Rust عرضه می‌شود. برای وارد کردن این crate می‌توانید آن را مستقیماً با <code>use</code> به کار ببرید، <em>بدون</em> آن‌که آن را به‌عنوان وابستگی در فایل <code>Cargo.toml</code> خود اعلام کنید.</p>
+<pre><code class="language-rust ignore">#![feature(alloc)]
+
+extern crate alloc;
+
+use alloc::vec::Vec;</code></pre>
+<p>برای استفاده از هر مجموعه‌ای (collection)، ابتدا باید از attribute با نام <code>global_allocator</code> استفاده کنید تا تخصیص‌دهندهٔ سراسری‌ای را که برنامه‌تان به کار می‌برد تعریف کنید. لازم است تخصیص‌دهنده‌ای که انتخاب می‌کنید trait با نام <a href="https://doc.rust-lang.org/core/alloc/trait.GlobalAlloc.html"><code>GlobalAlloc</code></a> را پیاده‌سازی کند.</p>
+<p>برای کامل بودن مطلب و مستقل نگه‌داشتن هرچه بیشتر این بخش، یک تخصیص‌دهندهٔ ساده از نوع اشاره‌گر bump پیاده‌سازی می‌کنیم و آن را به‌عنوان تخصیص‌دهندهٔ سراسری به کار می‌بریم. با این حال، <em>قویاً</em> توصیه می‌کنیم در برنامهٔ خود به‌جای این تخصیص‌دهنده از یک تخصیص‌دهندهٔ آزموده‌شده از crates.io استفاده کنید.</p>
+<pre><code class="language-rust ignore">// Bump pointer allocator implementation
+
+use core::alloc::{GlobalAlloc, Layout};
+use core::cell::UnsafeCell;
+use core::ptr;
+
+use cortex_m::interrupt;
+
+// Bump pointer allocator for *single* core systems
+struct BumpPointerAlloc {
+    head: UnsafeCell&lt;usize&gt;,
+    end: usize,
+}
+
+unsafe impl Sync for BumpPointerAlloc {}
+
+unsafe impl GlobalAlloc for BumpPointerAlloc {
+    unsafe fn alloc(&amp;self, layout: Layout) -&gt; *mut u8 {
+        // `interrupt::free` is a critical section that makes our allocator safe
+        // to use from within interrupts
+        interrupt::free(|_| {
+            let head = self.head.get();
+            let size = layout.size();
+            let align = layout.align();
+            let align_mask = !(align - 1);
+
+            // move start up to the next alignment boundary
+            let start = (*head + align - 1) &amp; align_mask;
+
+            if start + size &gt; self.end {
+                // a null pointer signal an Out Of Memory condition
+                ptr::null_mut()
+            } else {
+                *head = start + size;
+                start as *mut u8
+            }
+        })
+    }
+
+    unsafe fn dealloc(&amp;self, _: *mut u8, _: Layout) {
+        // this allocator never deallocates memory
+    }
+}
+
+// Declaration of the global memory allocator
+// NOTE the user must ensure that the memory region `[0x2000_0100, 0x2000_0200]`
+// is not used by other parts of the program
+#[global_allocator]
+static HEAP: BumpPointerAlloc = BumpPointerAlloc {
+    head: UnsafeCell::new(0x2000_0100),
+    end: 0x2000_0200,
+};</code></pre>
+<p>افزون بر انتخاب تخصیص‌دهندهٔ سراسری، کاربر باید با attribute <em>ناپایدار</em> <code>alloc_error_handler</code> مشخص کند که خطاهای کمبود حافظه (Out Of Memory یا OOM) چگونه مدیریت شوند.</p>
+<pre><code class="language-rust ignore">#![feature(alloc_error_handler)]
+
+use cortex_m::asm;
+
+#[alloc_error_handler]
+fn on_oom(_layout: Layout) -&gt; ! {
+    asm::bkpt();
+
+    loop {}
+}</code></pre>
+<p>وقتی همهٔ این موارد برقرار شد، کاربر سرانجام می‌تواند از مجموعه‌های موجود در <code>alloc</code> استفاده کند.</p>
+<pre><code class="language-rust ignore">#[entry]
+fn main() -&gt; ! {
+    let mut xs = Vec::new();
+
+    xs.push(42);
+    assert!(xs.pop(), Some(42));
+
+    loop {
+        // ..
+    }
+}</code></pre>
+<p>اگر از collectionهای crate به نام <code>std</code> استفاده کرده باشید، این‌ها برایتان آشنا خواهند بود، چون دقیقاً همان پیاده‌سازی هستند.</p>
+<h2 id="using-heapless"><a class="header" href="#using-heapless">استفاده از <code>heapless</code></a></h2>
+<p><code>heapless</code> به هیچ راه‌اندازی‌ای نیاز ندارد، چون collectionهای آن به تخصیص‌دهندهٔ سراسری حافظه وابسته نیستند. کافی است collectionهای آن را با <code>use</code> وارد کنید و نمونه‌سازی‌شان کنید:</p>
+<pre><code class="language-rust ignore">// heapless version: v0.4.x
+use heapless::Vec;
+use heapless::consts::*;
+
+#[entry]
+fn main() -&gt; ! {
+    let mut xs: Vec&lt;_, U8&gt; = Vec::new();
+
+    xs.push(42).unwrap();
+    assert_eq!(xs.pop(), Some(42));
+    loop {}
+}</code></pre>
+<p>دو تفاوت میان این collectionها و collectionهای <code>alloc</code> را متوجه خواهید شد.</p>
+<p>نخست، باید ظرفیت collection را از قبل اعلام کنید. collectionهای <code>heapless</code> هرگز تخصیص مجدد نمی‌شوند و ظرفیت ثابت دارند؛ این ظرفیت بخشی از امضای نوع collection است. در این مثال اعلام کرده‌ایم که <code>xs</code> ظرفیت 8 عنصر دارد، یعنی بردار حداکثر می‌تواند 8 عنصر نگه دارد. این موضوع با <code>U8</code> (به <a href="https://crates.io/crates/typenum"><code>typenum</code></a> نگاه کنید) در امضای نوع نشان داده می‌شود.</p>
+<p>دوم، متد <code>push</code> و بسیاری از متدهای دیگر یک <code>Result</code> برمی‌گردانند. از آن‌جا که collectionهای <code>heapless</code> ظرفیت ثابت دارند، همهٔ عملیاتی که عنصری را به collection اضافه می‌کنند ممکن است شکست بخورند. API این مشکل را با برگرداندن یک <code>Result</code> بازتاب می‌دهد که نشان می‌دهد عملیات موفق بوده یا نه. در مقابل، collectionهای <code>alloc</code> برای افزایش ظرفیت خود را روی heap تخصیص مجدد می‌کنند.</p>
+<p>از نسخهٔ v0.4.x به بعد، همهٔ collectionهای <code>heapless</code> همهٔ عناصر خود را به‌صورت درون‌خطی (inline) ذخیره می‌کنند. این یعنی عملیاتی مانند <code>let x = heapless::Vec::new();</code> collection را روی پشته (stack) تخصیص می‌دهد، اما می‌توان collection را روی یک متغیر <code>static</code> یا حتی روی heap (<code>Box&lt;Vec&lt;_, _&gt;&gt;</code>) نیز تخصیص داد.</p>
+<h2 id="trade-offs"><a class="header" href="#trade-offs">مبادله‌ها</a></h2>
+<p>هنگام انتخاب میان collectionهای تخصیص‌یافته روی heap و جابه‌جاپذیر (relocatable) و collectionهای با ظرفیت ثابت، این نکات را در نظر داشته باشید.</p>
+<h3 id="out-of-memory-and-error-handling"><a class="header" href="#out-of-memory-and-error-handling">کمبود حافظه و مدیریت خطا</a></h3>
+<p>در تخصیص‌های heap، کمبود حافظه (Out Of Memory) همیشه یک امکان است و می‌تواند در هر جایی رخ دهد که یک collection ممکن است نیاز به رشد پیدا کند: برای مثال، همهٔ فراخوانی‌های <code>alloc::Vec.push</code> به‌طور بالقوه می‌توانند وضعیت OOM ایجاد کنند. بنابراین برخی عملیات می‌توانند <em>به‌طور ضمنی</em> شکست بخورند. برخی collectionهای <code>alloc</code> متدهای <code>try_reserve</code> را ارائه می‌دهند که به شما اجازه می‌دهند هنگام رشد collection وضعیت‌های بالقوهٔ OOM را بررسی کنید، اما باید در استفاده از آن‌ها پیش‌دستانه عمل کنید.</p>
+<p>اگر فقط از collectionهای <code>heapless</code> استفاده کنید و از تخصیص‌دهندهٔ حافظه برای هیچ کار دیگری استفاده نکنید، وضعیت OOM غیرممکن است. در عوض باید موضوع تمام‌شدن ظرفیت collectionها را مورد به مورد مدیریت کنید. یعنی باید با <em>همهٔ</em> <code>Result</code>هایی که متدهایی مانند <code>Vec.push</code> برمی‌گردانند سروکار داشته باشید.</p>
+<p>اشکال‌زدایی خطاهای OOM می‌تواند دشوارتر از مثلاً <code>unwrap</code> کردن همهٔ <code>Result</code>هایی باشد که <code>heapless::Vec.push</code> برمی‌گرداند، چون محل مشاهده‌شدهٔ خطا ممکن است <em>با</em> محل علت مشکل مطابقت نداشته باشد. برای مثال، حتی <code>vec.reserve(1)</code> هم می‌تواند OOM ایجاد کند اگر تخصیص‌دهنده تقریباً تمام شده باشد، چون collection دیگری حافظه را نشت داده است (نشت حافظه در Rust ایمن هم ممکن است).</p>
+<h3 id="memory-usage"><a class="header" href="#memory-usage">مصرف حافظه</a></h3>
+<p>استدلال دربارهٔ مصرف حافظهٔ collectionهای تخصیص‌یافته روی heap دشوار است، چون ظرفیت collectionهای بلندعمر می‌تواند در زمان اجرا تغییر کند. برخی عملیات ممکن است collection را به‌طور ضمنی تخصیص مجدد کنند و مصرف حافظه‌اش را افزایش دهند، و برخی collectionها متدهایی مانند <code>shrink_to_fit</code> را ارائه می‌دهند که به‌طور بالقوه می‌توانند حافظهٔ مصرفی collection را کاهش دهند – در نهایت تخصیص‌دهنده تصمیم می‌گیرد که واقعاً تخصیص حافظه را کوچک کند یا نه. افزون بر این، ممکن است تخصیص‌دهنده مجبور شود با تکه‌تکه‌شدن حافظه (fragmentation) کنار بیاید که می‌تواند مصرف حافظهٔ <em>ظاهری</em> را افزایش دهد.</p>
+<p>از سوی دیگر، اگر فقط از collectionهای با ظرفیت ثابت استفاده کنید، بیشتر آن‌ها را در متغیرهای <code>static</code> نگه دارید و حداکثر اندازه‌ای برای پشتهٔ فراخوانی (call stack) تعیین کنید، آن‌گاه لینکر تشخیص خواهد داد که آیا می‌کوشید از حافظه‌ای بیش از آنچه به‌طور فیزیکی در دسترس است استفاده کنید.</p>
+<p>افزون بر این، collectionهای با ظرفیت ثابتی که روی stack تخصیص یافته‌اند با پرچم <a href="../../unstable/compiler-flags/emit-stack-sizes.html"><code>-Z emit-stack-sizes</code></a> گزارش می‌شوند، یعنی ابزارهایی که مصرف stack را تحلیل می‌کنند (مانند <a href="https://crates.io/crates/stack-sizes"><code>stack-sizes</code></a>) آن‌ها را در تحلیل خود لحاظ خواهند کرد.</p>
+<p>با این حال، collectionهای با ظرفیت ثابت را <em>نمی‌توان</em> کوچک کرد، که می‌تواند به ضرایب بار (load factor؛ نسبت اندازهٔ collection به ظرفیتش) پایین‌تری نسبت به آنچه collectionهای جابه‌جاپذیر به دست می‌آورند بینجامد.</p>
+<h3 id="worst-case-execution-time-wcet"><a class="header" href="#worst-case-execution-time-wcet">بدترین زمان اجرا (WCET)</a></h3>
+<p>اگر برنامه‌های حساس به زمان یا برنامه‌های بی‌درنگ سخت (hard real time) می‌سازید، آن‌گاه شاید بسیار به بدترین زمان اجرای بخش‌های مختلف برنامه‌تان اهمیت می‌دهید.</p>
+<p>collectionهای <code>alloc</code> می‌توانند تخصیص مجدد شوند، بنابراین WCET عملیاتی که ممکن است collection را رشد دهند زمان تخصیص مجدد collection را نیز شامل می‌شود، که خودش به ظرفیت <em>زمان اجرای</em> collection بستگی دارد. این موضوع تعیین WCET عملیاتی مانند <code>alloc::Vec.push</code> را دشوار می‌کند، چون هم به تخصیص‌دهندهٔ مورد استفاده و هم به ظرفیت زمان اجرای آن بستگی دارد.</p>
+<p>از سوی دیگر، collectionهای با ظرفیت ثابت هرگز تخصیص مجدد نمی‌شوند، بنابراین همهٔ عملیات زمان اجرای قابل پیش‌بینی دارند. برای مثال، <code>heapless::Vec.push</code> در زمان ثابت اجرا می‌شود.</p>
+<h3 id="ease-of-use"><a class="header" href="#ease-of-use">سهولت استفاده</a></h3>
+<p><code>alloc</code> نیاز به راه‌اندازی یک تخصیص‌دهندهٔ سراسری دارد، در حالی که <code>heapless</code> ندارد. با این حال، <code>heapless</code> از شما می‌خواهد ظرفیت هر collection را که نمونه‌سازی می‌کنید انتخاب کنید.</p>
+<p>API مربوط به <code>alloc</code> تقریباً برای هر توسعه‌دهندهٔ Rust آشناست. API مربوط به <code>heapless</code> می‌کوشد از نزدیک از API مربوط به <code>alloc</code> تقلید کند، اما به‌دلیل مدیریت صریح خطا هرگز دقیقاً مثل آن نخواهد بود – ممکن است برخی توسعه‌دهندگان احساس کنند مدیریت صریح خطا زیاده‌روی یا بیش از حد دست‌وپاگیر است.</p><nav class="page-nav"><a href="../../embedded/concurrency/index.html">→ همروندی</a><a href="../../embedded/design-patterns/index.html">الگوهای طراحی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

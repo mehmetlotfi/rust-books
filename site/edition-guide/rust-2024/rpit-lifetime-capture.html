@@ -1,0 +1,182 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>قوانین ضبط طول عمر در RPIT — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2024/rpit-lifetime-capture"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="rpit-lifetime-capture-rules"><a class="header" href="#rpit-lifetime-capture-rules">قواعد capture طول عمر در RPIT</a></h1>
+<p>این فصل تغییرات مربوط به <strong>قواعد Capture طول عمر 2024</strong> را که در <a href="https://github.com/rust-lang/rfcs/pull/3498">RFC 3498</a> معرفی شد شرح می‌دهد، از جمله اینکه چگونه از <em>capture دقیق</em> (precise capturing) نوع مات (opaque) که در <a href="https://github.com/rust-lang/rfcs/pull/3617">RFC 3617</a> معرفی شد برای مهاجرت کد خود استفاده کنید.</p>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<ul>
+<li>در Rust 2024، وقتی قید <code>use&lt;..&gt;</code> وجود نداشته باشد، <em>همهٔ</em> پارامترهای جنریک در دامنه، از جمله پارامترهای طول عمر، به‌طور ضمنی capture می‌شوند.</li>
+<li>استفاده از ترفند <code>Captures</code> (قیدهای <code>Captures&lt;..&gt;</code>) و ترفند outlives (مثلاً قیدهای <code>'_</code>) را می‌توان با قیدهای <code>use&lt;..&gt;</code> جایگزین کرد (در همهٔ ویرایش‌ها) یا به‌طور کامل حذف کرد (در Rust 2024).</li>
+</ul>
+<h2 id="details"><a class="header" href="#details">جزئیات</a></h2>
+<h3 id="capturing"><a class="header" href="#capturing">Capture کردن</a></h3>
+<p><em>Capture کردن</em> یک پارامتر جنریک در یک نوع مات RPIT (یعنی impl Trait در جایگاه بازگشتی) اجازه می‌دهد آن پارامتر در نوع پنهان متناظر استفاده شود. در Rust 1.82 قیدهای <code>use&lt;..&gt;</code> را اضافه کردیم که اجازه می‌دهند به‌صراحت مشخص شود کدام پارامترهای جنریک capture شوند. این قیدها برای مهاجرت کد شما به Rust 2024 مفید خواهند بود و در این فصل نیز برای توضیح نحوهٔ کار قواعد capture ضمنی مختص هر ویرایش مفید خواهند بود. این قیدهای <code>use&lt;..&gt;</code> به این شکل هستند:</p>
+<pre><code class="language-rust">fn capture&lt;'a, T&gt;(x: &amp;'a (), y: T) -&gt; impl Sized + use&lt;'a, T&gt; {
+    //                                ~~~~~~~~~~~~~~~~~~~~~~~
+    //                             This is the RPIT opaque type.
+    //
+    //                                It captures `'a` and `T`.
+    (x, y)
+  //~~~~~~
+  // The hidden type is: `(&amp;'a (), T)`.
+  //
+  // This type can use `'a` and `T` because they were captured.
+}</code></pre>
+<p>پارامترهای جنریکی که capture می‌شوند بر نحوهٔ استفاده از نوع مات اثر می‌گذارند. برای مثال، این یک خطا است، چون طول عمر capture شده است با اینکه نوع پنهان از آن طول عمر استفاده نمی‌کند:</p>
+<pre><code class="language-rust compile_fail">fn capture&lt;'a&gt;(_: &amp;'a ()) -&gt; impl Sized + use&lt;'a&gt; {}
+
+fn test&lt;'a&gt;(x: &amp;'a ()) -&gt; impl Sized + 'static {
+    capture(x)
+    //~^ ERROR lifetime may not live long enough
+}</code></pre>
+<p>در مقابل، این درست است:</p>
+<pre><code class="language-rust">fn capture&lt;'a&gt;(_: &amp;'a ()) -&gt; impl Sized + use&lt;&gt; {}
+
+fn test&lt;'a&gt;(x: &amp;'a ()) -&gt; impl Sized + 'static {
+    capture(x) //~ OK
+}</code></pre>
+<h3 id="edition-specific-rules-when-no-use-bound-is-present"><a class="header" href="#edition-specific-rules-when-no-use-bound-is-present">قواعد مختص ویرایش وقتی قید <code>use&lt;..&gt;</code> وجود ندارد</a></h3>
+<p>اگر قید <code>use&lt;..&gt;</code> وجود نداشته باشد، کامپایلر از قواعد مختص ویرایش استفاده می‌کند تا تصمیم بگیرد کدام پارامترهای جنریک در دامنه را به‌طور ضمنی capture کند.</p>
+<p>در همهٔ ویرایش‌ها، وقتی قید <code>use&lt;..&gt;</code> وجود نداشته باشد، همهٔ پارامترهای جنریک نوع و ثابت (const) در دامنه به‌طور ضمنی capture می‌شوند. برای مثال:</p>
+<pre><code class="language-rust">fn f_implicit&lt;T, const C: usize&gt;() -&gt; impl Sized {}
+//                                    ~~~~~~~~~~
+//                         No `use&lt;..&gt;` bound is present here.
+//
+// In all editions, the above is equivalent to:
+fn f_explicit&lt;T, const C: usize&gt;() -&gt; impl Sized + use&lt;T, C&gt; {}</code></pre>
+<p>در Rust 2021 و ویرایش‌های قبلی‌تر، وقتی قید <code>use&lt;..&gt;</code> وجود نداشته باشد، پارامترهای جنریک طول عمر فقط زمانی capture می‌شوند که از نظر نحوی درون یک قید در نوع‌های مات RPIT در امضای توابع ساده و توابع وابسته و متدها درون implهای ذاتی (inherent) ظاهر شوند. با این حال، از Rust 2024 به بعد، این پارامترهای جنریک طول عمر در دامنه بدون قید و شرط capture می‌شوند. برای مثال:</p>
+<pre><code class="language-rust">fn f_implicit(_: &amp;()) -&gt; impl Sized {}
+// In Rust 2021 and earlier, the above is equivalent to:
+fn f_2021(_: &amp;()) -&gt; impl Sized + use&lt;&gt; {}
+// In Rust 2024 and later, it's equivalent to:
+fn f_2024(_: &amp;()) -&gt; impl Sized + use&lt;'_&gt; {}</code></pre>
+<p>این کار رفتار را با نوع‌های مات RPIT در امضای توابع وابسته و متدها درون implهای صفت، استفاده از RPIT درون تعریف‌های صفت (RPITIT) و نوع‌های مات <code>Future</code> که توسط <code>async fn</code> ساخته می‌شوند هماهنگ می‌کند؛ همهٔ این‌ها وقتی قید <code>use&lt;..&gt;</code> وجود نداشته باشد، در همهٔ ویرایش‌ها همهٔ پارامترهای جنریک طول عمر در دامنه را به‌طور ضمنی capture می‌کنند.</p>
+<h3 id="outer-generic-parameters"><a class="header" href="#outer-generic-parameters">پارامترهای جنریک بیرونی</a></h3>
+<p>هنگام تصمیم‌گیری دربارهٔ آنچه به‌طور ضمنی capture می‌شود، پارامترهای جنریک از یک impl بیرونی نیز در دامنه محسوب می‌شوند. برای مثال:</p>
+<pre><code class="language-rust">struct S&lt;T, const C: usize&gt;((T, [(); C]));
+impl&lt;T, const C: usize&gt; S&lt;T, C&gt; {
+//   ~~~~~~~~~~~~~~~~~
+// These generic parameters are in scope.
+    fn f_implicit&lt;U&gt;() -&gt; impl Sized {}
+    //            ~       ~~~~~~~~~~
+    //            ^ This generic is in scope too.
+    //                    ^
+    //                    |
+    //     No `use&lt;..&gt;` bound is present here.
+    //
+    // In all editions, it's equivalent to:
+    fn f_explicit&lt;U&gt;() -&gt; impl Sized + use&lt;T, U, C&gt; {}
+}</code></pre>
+<h3 id="lifetimes-from-higher-ranked-binders"><a class="header" href="#lifetimes-from-higher-ranked-binders">طول عمرها از بایندرهای رتبه‌بالاتر</a></h3>
+<p>به همین ترتیب، پارامترهای جنریک طول عمر که توسط بایندر رتبه‌بالاتر <code>for&lt;..&gt;</code> وارد دامنه می‌شوند، در دامنه محسوب می‌شوند. برای مثال:</p>
+<pre><code class="language-rust">trait Tr&lt;'a&gt; { type Ty; }
+impl Tr&lt;'_&gt; for () { type Ty = (); }
+
+fn f_implicit() -&gt; impl for&lt;'a&gt; Tr&lt;'a, Ty = impl Copy&gt; {}
+// In Rust 2021 and earlier, the above is equivalent to:
+fn f_2021() -&gt; impl for&lt;'a&gt; Tr&lt;'a, Ty = impl Copy + use&lt;&gt;&gt; {}
+// In Rust 2024 and later, it's equivalent to:
+//fn f_2024() -&gt; impl for&lt;'a&gt; Tr&lt;'a, Ty = impl Copy + use&lt;'a&gt;&gt; {}
+//                                        ~~~~~~~~~~~~~~~~~~~~
+// However, note that the capturing of higher-ranked lifetimes in
+// nested opaque types is not yet supported.</code></pre>
+<h3 id="argument-position-impl-trait-apit"><a class="header" href="#argument-position-impl-trait-apit">impl Trait در جایگاه آرگومان (APIT)</a></h3>
+<p>پارامترهای جنریک ناشناس (یعنی بدون نام) که با استفاده از APIT (یعنی impl Trait در جایگاه آرگومان) ساخته می‌شوند در دامنه محسوب می‌شوند. برای مثال:</p>
+<pre><code class="language-rust">fn f_implicit(_: impl Sized) -&gt; impl Sized {}
+//               ~~~~~~~~~~
+//           This is called APIT.
+//
+// The above is *roughly* equivalent to:
+fn f_explicit&lt;_0: Sized&gt;(_: _0) -&gt; impl Sized + use&lt;_0&gt; {}</code></pre>
+<p>توجه داشته باشید که حالت اول <em>دقیقاً</em> با حالت دوم هم‌ارز نیست، چون با نام‌گذاری پارامتر جنریک، اکنون می‌توان از نحو turbofish برای فراهم کردن یک آرگومان برای آن استفاده کرد. هیچ راهی برای گنجاندن صریح یک پارامتر جنریک ناشناس در یک قید <code>use&lt;..&gt;</code> وجود ندارد، مگر اینکه آن را به یک پارامتر جنریک نام‌دار تبدیل کنید.</p>
+<h2 id="migration"><a class="header" href="#migration">مهاجرت</a></h2>
+<h3 id="migrating-while-avoiding-overcapturing"><a class="header" href="#migrating-while-avoiding-overcapturing">مهاجرت با پرهیز از capture بیش‌ازحد</a></h3>
+<p>lint با نام <code>impl_trait_overcaptures</code> نوع‌های مات RPIT را که در Rust 2024 طول عمرهای اضافی را capture می‌کنند علامت‌گذاری می‌کند. این lint بخشی از گروه lint با نام <code>rust-2024-compatibility</code> است که هنگام اجرای <code>cargo fix --edition</code> به‌طور خودکار اعمال می‌شود. در بیشتر موارد، این lint می‌تواند در جاهای لازم به‌طور خودکار قیدهای <code>use&lt;..&gt;</code> را درج کند تا در Rust 2024 هیچ طول عمر اضافی capture نشود.</p>
+<p>برای مهاجرت کد خود به سازگاری با Rust 2024، این دستور را اجرا کنید:</p>
+<pre><code class="language-sh">cargo fix --edition
+</code></pre>
+<p>برای مثال، این کد را تغییر می‌دهد:</p>
+<pre><code class="language-rust">fn f&lt;'a&gt;(x: &amp;'a ()) -&gt; impl Sized { *x }</code></pre>
+<p>…into:</p>
+<pre><code class="language-rust">fn f&lt;'a&gt;(x: &amp;'a ()) -&gt; impl Sized + use&lt;&gt; { *x }</code></pre>
+<p>بدون این قید <code>use&lt;&gt;</code>، در Rust 2024 نوع مات پارامتر طول عمر <code>'a</code> را capture می‌کرد. با افزودن این قید، lint مهاجرت معناشناسی موجود را حفظ می‌کند.</p>
+<h3 id="migrating-cases-involving-apit"><a class="header" href="#migrating-cases-involving-apit">مهاجرت موارد مربوط به APIT</a></h3>
+<p>در برخی موارد، lint نمی‌تواند تغییر را به‌طور خودکار اعمال کند، چون باید به یک پارامتر جنریک نامی داده شود تا بتواند درون یک قید <code>use&lt;..&gt;</code> ظاهر شود. در این موارد، lint به شما هشدار می‌دهد که ممکن است لازم باشد تغییری به‌صورت دستی اعمال شود. برای مثال، با فرض این کد:</p>
+<pre><code class="language-rust edition2021">fn f&lt;'a&gt;(x: &amp;'a (), y: impl Sized) -&gt; impl Sized { (*x, y) }
+//   ^^                ~~~~~~~~~~
+//               This is a use of APIT.
+//
+//~^ WARN `impl Sized` will capture more lifetimes than possibly intended in edition 2024
+//~| NOTE specifically, this lifetime is in scope but not mentioned in the type's bounds
+<span class="boring">
+</span><span class="boring">fn test&lt;'a&gt;(x: &amp;'a (), y: ()) -&gt; impl Sized + 'static {
+</span><span class="boring">    f(x, y)
+</span><span class="boring">}</span></code></pre>
+<p>کد به‌دلیل استفاده از APIT و این واقعیت که پارامتر نوع جنریک باید در قید <code>use&lt;..&gt;</code> نام‌گذاری شود، نمی‌تواند به‌طور خودکار تبدیل شود. برای تبدیل این کد به Rust 2024 بدون capture کردن طول عمر، باید آن پارامتر نوع را نام‌گذاری کنید. برای مثال:</p>
+<pre><code class="language-rust"><span class="boring">#![deny(impl_trait_overcaptures)]
+</span>fn f&lt;'a, T: Sized&gt;(x: &amp;'a (), y: T) -&gt; impl Sized + use&lt;T&gt; { (*x, y) }
+//       ~~~~~~~~
+// The type parameter has been named here.
+<span class="boring">
+</span><span class="boring">fn test&lt;'a&gt;(x: &amp;'a (), y: ()) -&gt; impl Sized + use&lt;&gt; {
+</span><span class="boring">    f(x, y)
+</span><span class="boring">}</span></code></pre>
+<p>توجه داشته باشید که این کار API تابع را اندکی تغییر می‌دهد، چون اکنون می‌توان با نحو turbofish یک آرگومان نوع را به‌صراحت برای این پارامتر فراهم کرد. اگر این مطلوب نیست، می‌توانید به‌جای آن بررسی کنید که آیا می‌توانید به‌سادگی همچنان قید <code>use&lt;..&gt;</code> را حذف کنید و اجازه دهید طول عمر capture شود. اگر ممکن است در آینده بخواهید از آن طول عمر در نوع پنهان استفاده کنید و بخواهید برای آن جا باز بگذارید، این کار می‌تواند به‌ویژه مطلوب باشد.</p>
+<h3 id="migrating-away-from-the-captures-trick"><a class="header" href="#migrating-away-from-the-captures-trick">مهاجرت از ترفند <code>Captures</code></a></h3>
+<p>پیش از معرفی قیدهای capture دقیق <code>use&lt;..&gt;</code> در Rust 1.82، capture صحیح یک طول عمر در یک نوع مات RPIT اغلب نیازمند استفاده از ترفند <code>Captures</code> بود. برای مثال:</p>
+<pre><code class="language-rust">#[doc(hidden)]
+pub trait Captures&lt;T: ?Sized&gt; {}
+impl&lt;T: ?Sized, U: ?Sized&gt; Captures&lt;T&gt; for U {}
+
+fn f&lt;'a, T&gt;(x: &amp;'a (), y: T) -&gt; impl Sized + Captures&lt;(&amp;'a (), T)&gt; {
+//                                           ~~~~~~~~~~~~~~~~~~~~~
+//                            This is called the `Captures` trick.
+    (x, y)
+}
+<span class="boring">
+</span><span class="boring">fn test&lt;'t, 'x&gt;(t: &amp;'t (), x: &amp;'x ()) {
+</span><span class="boring">    f(t, x);
+</span><span class="boring">}</span></code></pre>
+<p>با نحو قید <code>use&lt;..&gt;</code>، دیگر نیازی به ترفند <code>Captures</code> نیست و در همهٔ ویرایش‌ها می‌توان آن را با کد زیر جایگزین کرد:</p>
+<pre><code class="language-rust">fn f&lt;'a, T&gt;(x: &amp;'a (), y: T) -&gt; impl Sized + use&lt;'a, T&gt; {
+    (x, y)
+}
+<span class="boring">
+</span><span class="boring">fn test&lt;'t, 'x&gt;(t: &amp;'t (), x: &amp;'x ()) {
+</span><span class="boring">    f(t, x);
+</span><span class="boring">}</span></code></pre>
+<p>در Rust 2024، اغلب می‌توان قید <code>use&lt;..&gt;</code> را به‌طور کامل حذف کرد و کد بالا را می‌توان به‌سادگی این‌گونه نوشت:</p>
+<pre><code class="language-rust edition2024">fn f&lt;'a, T&gt;(x: &amp;'a (), y: T) -&gt; impl Sized {
+    (x, y)
+}
+<span class="boring">
+</span><span class="boring">fn test&lt;'t, 'x&gt;(t: &amp;'t (), x: &amp;'x ()) {
+</span><span class="boring">    f(t, x);
+</span><span class="boring">}</span></code></pre>
+<p>برای این کار مهاجرت خودکاری وجود ندارد و ترفند <code>Captures</code> همچنان در Rust 2024 کار می‌کند، اما ممکن است بخواهید مهاجرت دستی کد را از این ترفند قدیمی در نظر بگیرید.</p>
+<h3 id="migrating-away-from-the-outlives-trick"><a class="header" href="#migrating-away-from-the-outlives-trick">مهاجرت از ترفند outlives</a></h3>
+<p>پیش از معرفی قیدهای capture دقیق <code>use&lt;..&gt;</code> در Rust 1.82، وقتی لازم بود یک طول عمر در نوع پنهان یک نوع مات استفاده شود، رایج بود که از «ترفند outlives» استفاده شود. برای مثال:</p>
+<pre><code class="language-rust">fn f&lt;'a, T: 'a&gt;(x: &amp;'a (), y: T) -&gt; impl Sized + 'a {
+    //    ~~~~                                 ~~~~
+    //    ^                     This is the outlives trick.
+    //    |
+    // This bound is needed only for the trick.
+    (x, y)
+//  ~~~~~~
+// The hidden type is `(&amp;'a (), T)`.
+}</code></pre>
+<p>این ترفند از ترفند <code>Captures</code> کمتر پیچیده و پرزرق‌وبرق بود، اما درستی کمتری هم داشت. همان‌طور که در مثال بالا می‌بینیم، با اینکه هر مؤلفهٔ طول عمر درون <code>T</code> مستقل از طول عمر <code>'a</code> است، برای اینکه ترفند کار کند ناچاریم قید <code>T: 'a</code> را اضافه کنیم. این کار محدودیت‌های بی‌مورد و شگفت‌آوری برای فراخواننده‌ها ایجاد می‌کرد.</p>
+<p>با استفاده از capture دقیق، می‌توانید کد بالا را در همهٔ ویرایش‌ها به‌جای آن این‌گونه بنویسید:</p>
+<pre><code class="language-rust">fn f&lt;T&gt;(x: &amp;(), y: T) -&gt; impl Sized + use&lt;'_, T&gt; {
+    (x, y)
+}
+<span class="boring">
+</span><span class="boring">fn test&lt;'t, 'x&gt;(t: &amp;'t (), x: &amp;'x ()) {
+</span><span class="boring">   f(t, x);
+</span><span class="boring">}</span></code></pre>
+<p>در Rust 2024، اغلب می‌توان قید <code>use&lt;..&gt;</code> را به‌طور کامل حذف کرد و کد بالا را می‌توان به‌سادگی این‌گونه نوشت:</p>
+<pre><code class="language-rust edition2024">fn f&lt;T&gt;(x: &amp;(), y: T) -&gt; impl Sized {
+    (x, y)
+}
+<span class="boring">
+</span><span class="boring">fn test&lt;'t, 'x&gt;(t: &amp;'t (), x: &amp;'x ()) {
+</span><span class="boring">   f(t, x);
+</span><span class="boring">}</span></code></pre>
+<p>برای این کار مهاجرت خودکاری وجود ندارد و ترفند outlives همچنان در Rust 2024 کار می‌کند، اما ممکن است بخواهید مهاجرت دستی کد را از این ترفند قدیمی در نظر بگیرید.</p><nav class="page-nav"><a href="language.html">→ زبان</a><a href="temporary-if-let-scope.html">دامنهٔ موقت if let ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

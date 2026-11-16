@@ -1,0 +1,129 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>اشکال‌زدایی bootstrap — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="building/bootstrapping/debugging-bootstrap"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="debugging-bootstrap"><a class="header" href="#debugging-bootstrap">اشکال‌زدایی bootstrap</a></h1>
+<p>دو راه اصلی برای اشکال‌زدایی (و پروفایل‌گیری از) bootstrap وجود دارد. راه اول لاگ‌گیری با println و راه دوم feature با نام <code>tracing</code> است.</p>
+<h2 id="println-logging"><a class="header" href="#println-logging">لاگ‌گیری با <code>println</code></a></h2>
+<p>Bootstrap لاگ‌گیری گسترده و بدون ساختار دارد. بیشتر آن پشت پرچم <code>--verbose</code> قرار گرفته است (برای جزئیات بیشتر از <code>-vv</code> استفاده کنید).</p>
+<p>اگر می‌خواهید خروجی مفصل دستورهای Cargo اجراشده و انواع دیگر لاگ‌های جزئی را ببینید، هنگام فراخوانی bootstrap پرچم <code>-v</code> یا <code>-vv</code> را بدهید. توجه کنید که لاگ‌ها بدون ساختارند و ممکن است حجیم و طاقت‌فرسا باشند.</p>
+<pre><code>$ ./x dist rustc --dry-run -vv
+learning about cargo
+running: RUSTC_BOOTSTRAP="1" "/home/jyn/src/rust2/build/x86_64-unknown-linux-gnu/stage0/bin/cargo" "metadata" "--format-version" "1" "--no-deps" "--manifest-path" "/home/jyn/src/rust2/Cargo.toml" (failure_mode=Exit) (created at src/bootstrap/src/core/metadata.rs:81:25, executed at src/bootstrap/src/core/metadata.rs:92:50)
+running: RUSTC_BOOTSTRAP="1" "/home/jyn/src/rust2/build/x86_64-unknown-linux-gnu/stage0/bin/cargo" "metadata" "--format-version" "1" "--no-deps" "--manifest-path" "/home/jyn/src/rust2/library/Cargo.toml" (failure_mode=Exit) (created at src/bootstrap/src/core/metadata.rs:81:25, executed at src/bootstrap/src/core/metadata.rs:92:50)
+...
+</code></pre>
+<h2 id="tracing-in-bootstrap"><a class="header" href="#tracing-in-bootstrap"><code>tracing</code> در bootstrap</a></h2>
+<p>Bootstrap یک feature شرطی با نام <code>tracing</code> دارد که قابلیت‌های زیر را فراهم می‌کند:</p>
+<ul>
+<li>لاگ‌گیری ساخت‌یافته را با استفاده از رویدادها و spanهای <a href="https://docs.rs/tracing/0.1.41/tracing/index.html"><code>tracing</code></a> فعال می‌کند.</li>
+<li>یک <a href="https://www.chromium.org/developers/how-tos/trace-event-profiling-tool/">فایل trace مرورگر Chrome</a> تولید می‌کند که می‌توان از آن برای مصورسازی سلسله‌مراتب و مدت‌زمان stepها و دستورهای اجراشده استفاده کرد.
+<ul>
+<li>می‌توانید فایل تولیدشده <code>chrome-trace.json</code> را با Chrome در زبانه <code>chrome://tracing</code> یا مثلاً با <a href="https://ui.perfetto.dev/">Perfetto</a> باز کنید.</li>
+</ul>
+</li>
+<li>نمودارهای <a href="https://graphviz.org/doc/info/lang.html">GraphViz</a> تولید می‌کند که وابستگی‌های میان stepهای اجراشده را نشان می‌دهند.
+<ul>
+<li>می‌توانید فایل تولیدشده <code>step-graph-*.dot</code> را مثلاً با <a href="https://github.com/jrfonseca/xdot.py">xdot</a> باز کنید تا نمودار stepها را ببینید، یا مثلاً با <code>dot -Tsvg</code> فایل GraphViz را به SVG تبدیل کنید.</li>
+</ul>
+</li>
+<li>یک خلاصه اجرای دستورها تولید می‌کند که نشان می‌دهد کدام دستورها اجرا شده‌اند، چند اجرای آن‌ها از کش استفاده کرده و کدام دستورها کندترین اجرا را داشته‌اند.
+<ul>
+<li>فایل تولیدشده <code>command-stats.txt</code> قالبی ساده و خوانا برای انسان دارد.</li>
+</ul>
+</li>
+</ul>
+<p>لاگ‌های ساخت‌یافته در خروجی خطای استاندارد (<code>stderr</code>) نوشته می‌شوند، در حالی که خروجی‌های دیگر در فایل‌هایی در پوشه <code>&lt;build-dir&gt;/bootstrap-trace/&lt;pid&gt;</code> ذخیره می‌شوند. برای راحتی، bootstrap همچنین یک symlink به آخرین پوشه خروجی trace تولیدشده در <code>&lt;build-dir&gt;/bootstrap-trace/latest</code> می‌سازد.</p>
+<blockquote>
+<p>توجه کنید که اگر bootstrap را با <code>--dry-run</code> اجرا کنید، پوشه خروجی tracing ممکن است تغییر کند. Bootstrap همیشه در پایان اجرا مسیری را که فایل‌های خروجی tracing در آن ذخیره شده‌اند چاپ می‌کند.</p>
+</blockquote>
+<h3 id="enabling-tracing-output"><a class="header" href="#enabling-tracing-output">فعال‌سازی خروجی <code>tracing</code></a></h3>
+<p>برای فعال کردن feature شرطی <code>tracing</code>، bootstrap را با متغیر محیطی <code>BOOTSTRAP_TRACING</code> اجرا کنید.</p>
+<pre><code class="language-bash">$ BOOTSTRAP_TRACING=trace ./x build library --stage 1
+</code></pre>
+<p>نمونه خروجی<sup class="footnote-reference" id="fr-unstable-1"><a href="#footnote-unstable">1</a></sup>:</p>
+<pre><code>$ BOOTSTRAP_TRACING=trace ./x build library --stage 1 --dry-run
+Building bootstrap
+    Finished `dev` profile [unoptimized] target(s) in 0.05s
+15:56:52.477  INFO &gt; tool::LibcxxVersionTool {target: x86_64-unknown-linux-gnu} (builder/mod.rs:1715)
+15:56:52.575  INFO &gt; compile::Assemble {target_compiler: Compiler { stage: 0, host: x86_64-unknown-linux-gnu, forced_compiler: false }} (builder/mod.rs:1715)
+15:56:52.575  INFO &gt; tool::Compiletest {compiler: Compiler { stage: 0, host: x86_64-unknown-linux-gnu, forced_compiler: false }, target: x86_64-unknown-linux-gnu} (builder/mod.rs:1715)
+15:56:52.576  INFO  &gt; tool::ToolBuild {build_compiler: Compiler { stage: 0, host: x86_64-unknown-linux-gnu, forced_compiler: false }, target: x86_64-unknown-linux-gnu, tool: "compiletest", path: "src/tools/compiletest", mode: ToolBootstrap, source_type: InTree, extra_features: [], allow_features: "internal_output_capture", cargo_args: [], artifact_kind: Binary} (builder/mod.rs:1715)
+15:56:52.576  INFO   &gt; builder::Libdir {compiler: Compiler { stage: 0, host: x86_64-unknown-linux-gnu, forced_compiler: false }, target: x86_64-unknown-linux-gnu} (builder/mod.rs:1715)
+15:56:52.576  INFO    &gt; compile::Sysroot {compiler: Compiler { stage: 0, host: x86_64-unknown-linux-gnu, forced_compiler: false }, force_recompile: false} (builder/mod.rs:1715)
+15:56:52.578  INFO &gt; compile::Assemble {target_compiler: Compiler { stage: 0, host: x86_64-unknown-linux-gnu, forced_compiler: false }} (builder/mod.rs:1715)
+15:56:52.578  INFO &gt; tool::Compiletest {compiler: Compiler { stage: 0, host: x86_64-unknown-linux-gnu, forced_compiler: false }, target: x86_64-unknown-linux-gnu} (builder/mod.rs:1715)
+15:56:52.578  INFO  &gt; tool::ToolBuild {build_compiler: Compiler { stage: 0, host: x86_64-unknown-linux-gnu, forced_compiler: false }, target: x86_64-unknown-linux-gnu, tool: "compiletest", path: "src/tools/compiletest", mode: ToolBootstrap, source_type: InTree, extra_features: [], allow_features: "internal_output_capture", cargo_args: [], artifact_kind: Binary} (builder/mod.rs:1715)
+15:56:52.578  INFO   &gt; builder::Libdir {compiler: Compiler { stage: 0, host: x86_64-unknown-linux-gnu, forced_compiler: false }, target: x86_64-unknown-linux-gnu} (builder/mod.rs:1715)
+15:56:52.578  INFO    &gt; compile::Sysroot {compiler: Compiler { stage: 0, host: x86_64-unknown-linux-gnu, forced_compiler: false }, force_recompile: false} (builder/mod.rs:1715)
+    Finished `release` profile [optimized] target(s) in 0.11s
+Tracing/profiling output has been written to &lt;src-root&gt;/build/bootstrap-trace/latest
+Build completed successfully in 0:00:00
+</code></pre>
+<h4 id="controlling-tracing-output"><a class="header" href="#controlling-tracing-output">کنترل خروجی tracing</a></h4>
+<p>متغیر محیطی <code>BOOTSTRAP_TRACING</code> یک <a href="https://docs.rs/tracing-subscriber/0.3.19/tracing_subscriber/filter/struct.EnvFilter.html">فیلتر <code>tracing_subscriber</code></a> می‌پذیرد. اگر <code>BOOTSTRAP_TRACING=trace</code> را تنظیم کنید، همه لاگ‌ها فعال می‌شوند، اما این می‌تواند طاقت‌فرسا باشد. بنابراین می‌توانید با فیلتر، حجم داده‌های لاگ‌شده را کم کنید.</p>
+<p>دو روش مستقل از هم برای کنترل نوع لاگ‌های tracing مورد نظر شما وجود دارد:</p>
+<ol>
+<li>می‌توانید <strong>سطح</strong> لاگ را مشخص کنید، مثلاً <code>debug</code> یا <code>trace</code>.
+<ul>
+<li>اگر سطحی را انتخاب کنید، همه رویدادها/spanهایی که سطح اولویت برابر یا بالاتر دارند نمایش داده می‌شوند.</li>
+</ul>
+</li>
+<li>همچنین می‌توانید <strong>هدف</strong> لاگ را کنترل کنید، مثلاً <code>bootstrap</code> یا <code>bootstrap::core::config</code> یا یک هدف سفارشی مانند <code>CONFIG_HANDLING</code> یا <code>STEP</code>.
+<ul>
+<li>هدف‌های سفارشی برای محدود کردن نوع spanهای مورد علاقه شما به کار می‌روند، زیرا خروجی <code>BOOTSTRAP_TRACING=trace</code> می‌تواند بسیار پرحجم باشد. در حال حاضر می‌توانید از این هدف‌های سفارشی استفاده کنید:
+<ul>
+<li><code>CONFIG_HANDLING</code>: spanهای مربوط به مدیریت پیکربندی را نشان می‌دهد.</li>
+<li><code>STEP</code>: همه stepهای اجراشده را نشان می‌دهد. دستورهای اجراشده سطح رویداد <code>info</code> دارند.</li>
+<li><code>COMMAND</code>: همه دستورهای اجراشده را نشان می‌دهد. دستورهای اجراشده سطح رویداد <code>trace</code> دارند.</li>
+<li><code>IO</code>: عملیات I/O انجام‌شده را نشان می‌دهد. دستورهای اجراشده سطح رویداد <code>trace</code> دارند.
+<ul>
+<li>توجه کنید که در حال حاضر بسیاری از عملیات I/O ردیابی نمی‌شوند.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<p>البته می‌توانید آن‌ها را با هم ترکیب کنید (لاگ‌های هدف‌های سفارشی معمولاً علاوه بر آن پشت سطح لاگ <code>TRACE</code> قرار دارند):</p>
+<pre><code class="language-bash">$ BOOTSTRAP_TRACING=CONFIG_HANDLING=trace,STEP=info,COMMAND=trace ./x build library --stage 1
+</code></pre>
+<p>توجه کنید که سطحی که با <code>BOOTSTRAP_TRACING</code> تعیین می‌کنید روی spanهایی که در فایل trace مرورگر Chrome ثبت می‌شوند نیز اثر دارد.</p>
+<p>همچنین می‌توانید متغیر محیطی <code>BOOTSTRAP_TRACING_SKIP_TIME=1</code> را بدهید تا زمان‌نگاشت (timestamp) در خروجی tracing نیاید. این برای مقایسه/diff گرفتن stepهای اجراشده میان دو نسخه از bootstrap مفید است.</p>
+<h5 id="fixme96176-specific-tracing-for-compiler-vs-compiler_for"><a class="header" href="#fixme96176-specific-tracing-for-compiler-vs-compiler_for">FIXME(#96176): tracing اختصاصی برای <code>compiler()</code> در برابر <code>compiler_for()</code></a></h5>
+<p>هدف‌های اضافی <code>COMPILER</code> و <code>COMPILER_FOR</code> برای کمک به ردیابی کاری که <code>builder.compiler()</code> و <code>builder.compiler_for()</code> انجام می‌دهند به کار می‌روند. اگر <a href="https://github.com/rust-lang/rust/issues/96176">#96176</a> حل شود، باید حذف شوند.</p>
+<h3 id="using-tracing-in-bootstrap"><a class="header" href="#using-tracing-in-bootstrap">استفاده از <code>tracing</code> در bootstrap</a></h3>
+<p>هم ماکروهای <code>tracing::*</code> و هم ماکروی proc-macro به نام attribute <code>tracing::instrument</code> باید پشت feature با نام <code>tracing</code> قرار بگیرند. نمونه‌ها:</p>
+<pre><code class="language-rs">#[cfg(feature = "tracing")]
+use tracing::instrument;
+
+struct Foo;
+
+impl Step for Foo {
+    type Output = ();
+
+    #[cfg_attr(feature = "tracing", instrument(level = "trace", name = "Foo::should_run", skip_all))]
+    fn should_run(run: ShouldRun&lt;'_&gt;) -&gt; ShouldRun&lt;'_&gt; {
+        trace!(?run, "entered Foo::should_run");
+
+        todo!()
+    }
+
+    fn run(self, builder: &amp;Builder&lt;'_&gt;) -&gt; Self::Output {
+        trace!(?run, "entered Foo::run");
+
+        todo!()
+    }    
+}
+</code></pre>
+<p>برای <code>#[instrument]</code> توصیه می‌شود:</p>
+<ul>
+<li>برای جزئی‌نگری بیشتر آن را پشت سطح <code>trace</code> قرار دهید، و برای تابع‌های هسته‌ای احتمالاً سطح <code>debug</code>.</li>
+<li>با <code>name = ".."</code> صریحاً یک نام instrumentation انتخاب کنید تا مثلاً <code>run</code> مربوط به stepهای مختلف از هم تمایز یابند.</li>
+<li>مراقب باشید tracing باعث رفتار متفاوت نشود، مثلاً ساختن چیزهای اضافی فقط وقتی زیرساخت tracing فعال است.</li>
+</ul>
+<h3 id="rust-analyzer-integration"><a class="header" href="#rust-analyzer-integration">یکپارچگی با rust-analyzer؟</a></h3>
+<p>متأسفانه، چون bootstrap یک <code>rust-analyzer.linkedProjects</code> است، نمی‌توانید از r-a بخواهید خود bootstrap را با feature با نام <code>tracing</code> فعال بررسی/ساخت کند تا تکمیل‌های مربوط را بگیرید، زیرا پشتیبانی لازم وجود ندارد، همان‌گونه که در <a href="https://github.com/rust-lang/rust-analyzer/issues/8521">https://github.com/rust-lang/rust-analyzer/issues/8521</a> توضیح داده شده است.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-unstable">
+<p>این خروجی همواره در معرض تغییرات بیشتر است. <a href="#fr-unstable-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="writing-tools-in-bootstrap.html">→ نوشتن ابزار در Bootstrap</a><a href="bootstrap-in-dependencies.html">cfg(bootstrap) در وابستگی‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../rustc-dev-guide/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

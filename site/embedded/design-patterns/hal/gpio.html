@@ -1,0 +1,171 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>GPIO — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="design-patterns/hal/gpio"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="recommendations-for-gpio-interfaces"><a class="header" href="#recommendations-for-gpio-interfaces">توصیه‌هایی برای رابط‌های GPIO</a></h1>
+<p><a id="c-zst-pin"></a></p>
+<h2 id="pin-types-are-zero-sized-by-default-c-zst-pin"><a class="header" href="#pin-types-are-zero-sized-by-default-c-zst-pin">نوع‌های پایه به‌طور پیش‌فرض اندازهٔ صفر دارند (C-ZST-PIN)</a></h2>
+<p>رابط‌های GPIO که HAL در اختیار می‌گذارد باید برای هر پایه در هر رابط یا درگاه، نوع‌های اختصاصی با اندازهٔ صفر فراهم کنند، که وقتی همهٔ تخصیص‌های پایه به‌صورت ایستا معلوم باشند، انتزاعی با هزینهٔ صفر برای GPIO به دست می‌دهد.</p>
+<p>هر رابط یا درگاه GPIO باید یک متد <code>split</code> پیاده‌سازی کند که ساختاری شامل همهٔ پایه‌ها برگرداند.</p>
+<p>مثال:</p>
+<pre><code class="language-rust">pub struct PA0;
+pub struct PA1;
+// ...
+
+pub struct PortA;
+
+impl PortA {
+    pub fn split(self) -&gt; PortAPins {
+        PortAPins {
+            pa0: PA0,
+            pa1: PA1,
+            // ...
+        }
+    }
+}
+
+pub struct PortAPins {
+    pub pa0: PA0,
+    pub pa1: PA1,
+    // ...
+}</code></pre>
+<p><a id="c-erased-pin"></a></p>
+<h2 id="pin-types-provide-methods-to-erase-pin-and-port-c-erased-pin"><a class="header" href="#pin-types-provide-methods-to-erase-pin-and-port-c-erased-pin">نوع‌های پایه متدهایی برای پاک‌کردن اطلاعات پایه و درگاه فراهم می‌کنند (C-ERASED-PIN)</a></h2>
+<p>پایه‌ها باید متدهای پاک‌سازی نوع (type erasure) فراهم کنند که ویژگی‌هایشان را از زمان کامپایل به زمان اجرا منتقل می‌کند و انعطاف بیشتری در برنامه‌ها ممکن می‌سازد.</p>
+<p>مثال:</p>
+<pre><code class="language-rust">/// Port A, pin 0.
+pub struct PA0;
+
+impl PA0 {
+    pub fn erase_pin(self) -&gt; PA {
+        PA { pin: 0 }
+    }
+}
+
+/// A pin on port A.
+pub struct PA {
+    /// The pin number.
+    pin: u8,
+}
+
+impl PA {
+    pub fn erase_port(self) -&gt; Pin {
+        Pin {
+            port: Port::A,
+            pin: self.pin,
+        }
+    }
+}
+
+pub struct Pin {
+    port: Port,
+    pin: u8,
+    // (these fields can be packed to reduce the memory footprint)
+}
+
+enum Port {
+    A,
+    B,
+    C,
+    D,
+}</code></pre>
+<p><a id="c-pin-state"></a></p>
+<h2 id="pin-state-should-be-encoded-as-type-parameters-c-pin-state"><a class="header" href="#pin-state-should-be-encoded-as-type-parameters-c-pin-state">وضعیت پایه باید به‌صورت پارامترهای نوع رمزگذاری شود (C-PIN-STATE)</a></h2>
+<p>بسته به تراشه یا خانواده، پایه‌ها ممکن است با ویژگی‌های مختلف به‌صورت ورودی یا خروجی پیکربندی شوند. این وضعیت باید در سامانهٔ نوع رمزگذاری شود تا از استفاده از پایه‌ها در وضعیت‌های نادرست جلوگیری شود.</p>
+<p>وضعیت اضافی مختص تراشه (مثلاً قدرت راه‌اندازی یا drive strength) نیز ممکن است با استفاده از پارامترهای نوع اضافی به همین شیوه رمزگذاری شود.</p>
+<p>متدهای تغییر وضعیت پایه باید به‌صورت متدهای <code>into_input</code> و <code>into_output</code> فراهم شوند.</p>
+<p>افزون بر این، متدهای <code>with_{input,output}_state</code> باید فراهم شوند که یک پایه را به‌طور موقت در وضعیتی متفاوت پیکربندی مجدد می‌کنند، بی‌آنکه آن را منتقل کنند.</p>
+<p>متدهای زیر باید برای هر نوع پایه فراهم شوند (یعنی هم نوع‌های پایهٔ پاک‌شده و هم پاک‌نشده باید همین API را ارائه دهند):</p>
+<ul>
+<li><code>pub fn into_input&lt;N: InputState&gt;(self, input: N) -&gt; Pin&lt;N&gt;</code></li>
+<li><code>pub fn into_output&lt;N: OutputState&gt;(self, output: N) -&gt; Pin&lt;N&gt;</code></li>
+<li>
+<pre><code class="language-ignore">pub fn with_input_state&lt;N: InputState, R&gt;(
+    &amp;mut self,
+    input: N,
+    f: impl FnOnce(&amp;mut PA1&lt;N&gt;) -&gt; R,
+) -&gt; R
+</code></pre>
+</li>
+<li>
+<pre><code class="language-ignore">pub fn with_output_state&lt;N: OutputState, R&gt;(
+    &amp;mut self,
+    output: N,
+    f: impl FnOnce(&amp;mut PA1&lt;N&gt;) -&gt; R,
+) -&gt; R
+</code></pre>
+</li>
+</ul>
+<p>وضعیت پایه باید با صفت‌های مهرشده (sealed trait) کران‌دار شود. کاربران HAL نباید نیازی به افزودن وضعیت خودشان داشته باشند. این صفت‌ها می‌توانند متدهای مختص HAL را که برای پیاده‌سازی API وضعیت پایه لازم‌اند فراهم کنند.</p>
+<p>مثال:</p>
+<pre><code class="language-rust"><span class="boring">use std::marker::PhantomData;
+</span>mod sealed {
+    pub trait Sealed {}
+}
+
+pub trait PinState: sealed::Sealed {}
+pub trait OutputState: sealed::Sealed {}
+pub trait InputState: sealed::Sealed {
+    // ...
+}
+
+pub struct Output&lt;S: OutputState&gt; {
+    _p: PhantomData&lt;S&gt;,
+}
+
+impl&lt;S: OutputState&gt; PinState for Output&lt;S&gt; {}
+impl&lt;S: OutputState&gt; sealed::Sealed for Output&lt;S&gt; {}
+
+pub struct PushPull;
+pub struct OpenDrain;
+
+impl OutputState for PushPull {}
+impl OutputState for OpenDrain {}
+impl sealed::Sealed for PushPull {}
+impl sealed::Sealed for OpenDrain {}
+
+pub struct Input&lt;S: InputState&gt; {
+    _p: PhantomData&lt;S&gt;,
+}
+
+impl&lt;S: InputState&gt; PinState for Input&lt;S&gt; {}
+impl&lt;S: InputState&gt; sealed::Sealed for Input&lt;S&gt; {}
+
+pub struct Floating;
+pub struct PullUp;
+pub struct PullDown;
+
+impl InputState for Floating {}
+impl InputState for PullUp {}
+impl InputState for PullDown {}
+impl sealed::Sealed for Floating {}
+impl sealed::Sealed for PullUp {}
+impl sealed::Sealed for PullDown {}
+
+pub struct PA1&lt;S: PinState&gt; {
+    _p: PhantomData&lt;S&gt;,
+}
+
+impl&lt;S: PinState&gt; PA1&lt;S&gt; {
+    pub fn into_input&lt;N: InputState&gt;(self, input: N) -&gt; PA1&lt;Input&lt;N&gt;&gt; {
+        todo!()
+    }
+
+    pub fn into_output&lt;N: OutputState&gt;(self, output: N) -&gt; PA1&lt;Output&lt;N&gt;&gt; {
+        todo!()
+    }
+
+    pub fn with_input_state&lt;N: InputState, R&gt;(
+        &amp;mut self,
+        input: N,
+        f: impl FnOnce(&amp;mut PA1&lt;N&gt;) -&gt; R,
+    ) -&gt; R {
+        todo!()
+    }
+
+    pub fn with_output_state&lt;N: OutputState, R&gt;(
+        &amp;mut self,
+        output: N,
+        f: impl FnOnce(&amp;mut PA1&lt;N&gt;) -&gt; R,
+    ) -&gt; R {
+        todo!()
+    }
+}
+
+// Same for `PA` and `Pin`, and other pin types.</code></pre><nav class="page-nav"><a href="../../../embedded/design-patterns/hal/predictability.html">→ پیش‌بینی‌پذیری</a><a href="../../../embedded/c-tips/index.html">نکاتی برای توسعه‌دهندگان C نهفته ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../embedded/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

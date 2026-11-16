@@ -1,0 +1,441 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>اعتبارسنجی ارجاع‌ها با طول عمر — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch10-03-lifetime-syntax"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="validating-references-with-lifetimes"><a class="header" href="#validating-references-with-lifetimes">اعتبارسنجی ارجاع‌ها با طول عمر</a></h2>
+<p>طول عمر (lifetime) نوع دیگری از جنریک است که پیش‌تر از آن استفاده کرده‌ایم. طول عمرها به‌جای اینکه اطمینان دهند یک نوع رفتار مورد نظر ما را دارد، تضمین می‌کنند که ارجاع‌ها تا زمانی که به آن‌ها نیاز داریم معتبر باشند.</p>
+<p>یکی از جزئیاتی که در بخش <a href="ch04-02-references-and-borrowing.html#references-and-borrowing">«ارجاع‌ها و قرض‌گیری»</a><!-- ignore --> در فصل ۴ درباره‌اش صحبت نکردیم این است که هر ارجاع در Rust یک طول عمر دارد، یعنی دامنه‌ای که آن ارجاع در آن معتبر است. بیشتر اوقات طول عمرها ضمنی هستند و استنباط می‌شوند، همان‌طور که بیشتر اوقات نوع‌ها نیز استنباط می‌شوند. ما فقط زمانی ملزم به حاشیه‌نویسی نوع‌ها هستیم که چندین نوع ممکن باشد. به شیوه‌ای مشابه، وقتی طول عمر ارجاع‌ها می‌تواند به چند شکل مختلف به هم مرتبط باشد، باید طول عمرها را حاشیه‌نویسی کنیم. Rust از ما می‌خواهد این روابط را با استفاده از پارامترهای طول عمر جنریک حاشیه‌نویسی کنیم تا مطمئن شود ارجاع‌های واقعی که در زمان اجرا استفاده می‌شوند قطعاً معتبر خواهند بود.</p>
+<p>حاشیه‌نویسی طول عمر مفهومی نیست که بیشتر زبان‌های برنامه‌نویسی دیگر داشته باشند، بنابراین احساس ناآشنایی خواهد کرد. اگرچه در این فصل طول عمرها را به‌طور کامل پوشش نمی‌دهیم، رایج‌ترین شیوه‌هایی را که ممکن است با نحو طول عمر مواجه شوید بررسی می‌کنیم تا با این مفهوم راحت شوید.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="preventing-dangling-references-with-lifetimes"></a></p>
+<h3 id="dangling-references"><a class="header" href="#dangling-references">ارجاع‌های معلق</a></h3>
+<p>هدف اصلی طول عمرها جلوگیری از ارجاع‌های معلق (dangling references) است که اگر اجازه‌ی وجود داشتن می‌یافتند، باعث می‌شدند برنامه به داده‌ای غیر از داده‌ی مورد نظر خود ارجاع دهد. برنامه‌ی لیست ۱۰-۱۶ را در نظر بگیرید که یک دامنه‌ی بیرونی و یک دامنه‌ی درونی دارد.</p>
+<figure class="listing" id="listing-10-16">
+<pre><code class="language-rust ignore does_not_compile">fn main() {
+    let r;
+
+    {
+        let x = 5;
+        r = &amp;x;
+    }
+
+    println!("r: {r}");
+}</code></pre>
+<figcaption><a href="#listing-10-16">لیست ۱۰-۱۶</a>: تلاش برای استفاده از ارجاعی که مقدارش از دامنه خارج شده است</figcaption>
+</figure>
+<blockquote>
+<p>نکته: مثال‌های لیست‌های ۱۰-۱۶، ۱۰-۱۷ و ۱۰-۲۳ متغیرها را بدون مقدار اولیه تعریف می‌کنند، به‌طوری که نام متغیر در دامنه‌ی بیرونی وجود دارد. در نگاه اول، ممکن است این با اینکه Rust مقدار null ندارد در تضاد به نظر برسد. اما اگر سعی کنیم پیش از دادن مقدار از یک متغیر استفاده کنیم، خطای زمان کامپایل دریافت می‌کنیم که نشان می‌دهد Rust واقعاً مقادیر null را مجاز نمی‌داند.</p>
+</blockquote>
+<p>دامنه‌ی بیرونی متغیری به نام <code>r</code> را بدون مقدار اولیه تعریف می‌کند و دامنه‌ی درونی متغیری به نام <code>x</code> را با مقدار اولیه‌ی <code>5</code>. در دامنه‌ی درونی، تلاش می‌کنیم مقدار <code>r</code> را ارجاعی به <code>x</code> قرار دهیم. سپس دامنه‌ی درونی به پایان می‌رسد و تلاش می‌کنیم مقدار <code>r</code> را چاپ کنیم. این کد کامپایل نخواهد شد، زیرا مقداری که <code>r</code> به آن ارجاع می‌دهد پیش از آنکه بخواهیم از آن استفاده کنیم از دامنه خارج شده است. پیام خطا این است:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling chapter10 v0.1.0 (file:///projects/chapter10)
+error[E0597]: `x` does not live long enough
+ --&gt; src/main.rs:6:13
+  |
+5 |         let x = 5;
+  |             - binding `x` declared here
+6 |         r = &amp;x;
+  |             ^^ borrowed value does not live long enough
+7 |     }
+  |     - `x` dropped here while still borrowed
+8 |
+9 |     println!("r: {r}");
+  |                   - borrow later used here
+
+For more information about this error, try `rustc --explain E0597`.
+error: could not compile `chapter10` (bin "chapter10") due to 1 previous error
+</code></pre>
+<p>پیام خطا می‌گوید متغیر <code>x</code> «به اندازه‌ی کافی عمر نمی‌کند» (does not live long enough). دلیلش این است که <code>x</code> وقتی دامنه‌ی درونی در خط ۷ به پایان می‌رسد از دامنه خارج می‌شود. اما <code>r</code> هنوز برای دامنه‌ی بیرونی معتبر است؛ چون دامنه‌اش بزرگ‌تر است می‌گوییم «بیشتر عمر می‌کند». اگر Rust اجازه می‌داد این کد کار کند، <code>r</code> به حافظه‌ای ارجاع می‌داد که هنگام خروج <code>x</code> از دامنه آزاد شده است، و هر کاری که با <code>r</code> می‌کردیم درست کار نمی‌کرد. پس Rust چگونه تشخیص می‌دهد که این کد نامعتبر است؟ از یک borrow checker (بررسی‌کننده‌ی قرض‌گیری) استفاده می‌کند.</p>
+<h3 id="the-borrow-checker"><a class="header" href="#the-borrow-checker">بررسی‌کننده‌ی قرض‌گیری</a></h3>
+<p>کامپایلر Rust یک <em>borrow checker</em> دارد که دامنه‌ها را مقایسه می‌کند تا مشخص کند آیا همه‌ی قرض‌گیری‌ها معتبر هستند یا نه. لیست ۱۰-۱۷ همان کد لیست ۱۰-۱۶ را نشان می‌دهد، اما با حاشیه‌نویسی‌هایی که طول عمر متغیرها را نشان می‌دهند.</p>
+<figure class="listing" id="listing-10-17">
+<pre><code class="language-rust ignore does_not_compile">fn main() {
+    let r;                // ---------+-- 'a
+                          //          |
+    {                     //          |
+        let x = 5;        // -+-- 'b  |
+        r = &amp;x;           //  |       |
+    }                     // -+       |
+                          //          |
+    println!("r: {r}");   //          |
+}                         // ---------+</code></pre>
+<figcaption><a href="#listing-10-17">لیست ۱۰-۱۷</a>: حاشیه‌نویسی طول عمر &lt;code&gt;&lt;/x-listing&gt;r&lt;/code&gt; و &lt;code&gt;x&lt;/code&gt; که به ترتیب &lt;code&gt;'a&lt;/code&gt; و &lt;code&gt;'b&lt;/code&gt; نام دارند</figcaption>
+</figure>
+<p>در اینجا طول عمر <code>r</code> را با <code>'a</code> و طول عمر <code>x</code> را با <code>'b</code> حاشیه‌نویسی کرده‌ایم. همان‌طور که می‌بینید، بلوک درونی <code>'b</code> بسیار کوچک‌تر از بلوک طول عمر بیرونی <code>'a</code> است. در زمان کامپایل، Rust اندازه‌ی دو طول عمر را مقایسه می‌کند و می‌بیند که <code>r</code> طول عمر <code>'a</code> دارد اما به حافظه‌ای با طول عمر <code>'b</code> ارجاع می‌دهد. برنامه رد می‌شود چون <code>'b</code> کوتاه‌تر از <code>'a</code> است: موضوعِ ارجاع به اندازه‌ی خود ارجاع عمر نمی‌کند.</p>
+<p>لیست ۱۰-۱۸ کد را طوری اصلاح می‌کند که ارجاع معلق نداشته باشد و بدون هیچ خطایی کامپایل شود.</p>
+<figure class="listing" id="listing-10-18">
+<pre><code class="language-rust">fn main() {
+    let x = 5;            // ----------+-- 'b
+                          //           |
+    let r = &amp;x;           // --+-- 'a  |
+                          //   |       |
+    println!("r: {r}");   //   |       |
+                          // --+       |
+}                         // ----------+</code></pre>
+<figcaption><a href="#listing-10-18">لیست ۱۰-۱۸</a>: یک ارجاع معتبر، چون داده طول عمر بیشتری از ارجاع دارد</figcaption>
+</figure>
+<p>در اینجا <code>x</code> طول عمر <code>'b</code> دارد که در این مورد بزرگ‌تر از <code>'a</code> است. این یعنی <code>r</code> می‌تواند به <code>x</code> ارجاع دهد، زیرا Rust می‌داند تا زمانی که <code>x</code> معتبر است، ارجاع موجود در <code>r</code> همیشه معتبر خواهد بود.</p>
+<p>حالا که می‌دانید طول عمر ارجاع‌ها کجا هستند و Rust چگونه طول عمرها را تحلیل می‌کند تا اطمینان یابد ارجاع‌ها همیشه معتبر خواهند بود، بیایید طول عمرهای جنریک را در پارامترها و مقادیر بازگشتی توابع بررسی کنیم.</p>
+<h3 id="generic-lifetimes-in-functions"><a class="header" href="#generic-lifetimes-in-functions">طول عمرهای جنریک در توابع</a></h3>
+<p>تابعی می‌نویسیم که طولانی‌ترین یکی از دو برش رشته‌ای (string slice) را برمی‌گرداند. این تابع دو برش رشته‌ای می‌گیرد و یک برش رشته‌ای برمی‌گرداند. پس از پیاده‌سازی تابع <code>longest</code>، کد لیست ۱۰-۱۹ باید <code>The longest string is abcd</code> را چاپ کند.</p>
+<figure class="listing" id="listing-10-19">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore">fn main() {
+    let string1 = String::from("abcd");
+    let string2 = "xyz";
+
+    let result = longest(string1.as_str(), string2);
+    println!("The longest string is {result}");
+}</code></pre>
+<figcaption><a href="#listing-10-19">لیست ۱۰-۱۹</a>: یک تابع &lt;code&gt;&lt;/x-listing&gt;main&lt;/code&gt; که تابع &lt;code&gt;longest&lt;/code&gt; را برای یافتن طولانی‌تر از دو برش رشته‌ای فراخوانی می‌کند</figcaption>
+</figure>
+<p>توجه کنید که می‌خواهیم تابع به‌جای رشته‌ها، برش‌های رشته‌ای را که ارجاع هستند بگیرد، چون نمی‌خواهیم تابع <code>longest</code> مالکیت پارامترهایش را بگیرد. برای بحث بیشتر درباره‌ی اینکه چرا پارامترهایی که در لیست ۱۰-۱۹ استفاده می‌کنیم همان‌هایی هستند که می‌خواهیم، به <a href="ch04-03-slices.html#string-slices-as-parameters">«برش‌های رشته‌ای به‌عنوان پارامتر»</a><!-- ignore --> در فصل ۴ مراجعه کنید.</p>
+<p>اگر سعی کنیم تابع <code>longest</code> را همان‌طور که در لیست ۱۰-۲۰ نشان داده شده پیاده‌سازی کنیم، کامپایل نخواهد شد.</p>
+<figure class="listing" id="listing-10-20">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">fn main() {
+</span><span class="boring">    let string1 = String::from("abcd");
+</span><span class="boring">    let string2 = "xyz";
+</span><span class="boring">
+</span><span class="boring">    let result = longest(string1.as_str(), string2);
+</span><span class="boring">    println!("The longest string is {result}");
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn longest(x: &amp;str, y: &amp;str) -&gt; &amp;str {
+    if x.len() &gt; y.len() { x } else { y }
+}</code></pre>
+<figcaption><a href="#listing-10-20">لیست ۱۰-۲۰</a>: پیاده‌سازی تابع &lt;code&gt;&lt;/x-listing&gt;longest&lt;/code&gt; که طولانی‌تر از دو برش رشته‌ای را برمی‌گرداند اما هنوز کامپایل نمی‌شود</figcaption>
+</figure>
+<p>در عوض، خطای زیر را دریافت می‌کنیم که درباره‌ی طول عمرها صحبت می‌کند:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling chapter10 v0.1.0 (file:///projects/chapter10)
+error[E0106]: missing lifetime specifier
+ --&gt; src/main.rs:9:33
+  |
+9 | fn longest(x: &amp;str, y: &amp;str) -&gt; &amp;str {
+  |               ----     ----     ^ expected named lifetime parameter
+  |
+  = help: this function's return type contains a borrowed value, but the signature does not say whether it is borrowed from `x` or `y`
+help: consider introducing a named lifetime parameter
+  |
+9 | fn longest&lt;'a&gt;(x: &amp;'a str, y: &amp;'a str) -&gt; &amp;'a str {
+  |           ++++     ++          ++          ++
+
+For more information about this error, try `rustc --explain E0106`.
+error: could not compile `chapter10` (bin "chapter10") due to 1 previous error
+</code></pre>
+<p>متن راهنما نشان می‌دهد که نوع بازگشتی به یک پارامتر طول عمر جنریک نیاز دارد، زیرا Rust نمی‌تواند تشخیص دهد که ارجاع بازگشتی به <code>x</code> اشاره دارد یا <code>y</code>. در واقع ما هم نمی‌دانیم، چون بلوک <code>if</code> در بدنه‌ی این تابع ارجاعی به <code>x</code> و بلوک <code>else</code> ارجاعی به <code>y</code> برمی‌گرداند!</p>
+<p>وقتی این تابع را تعریف می‌کنیم، مقادیر مشخصی را که به آن ارسال خواهند شد نمی‌دانیم، بنابراین نمی‌دانیم حالت <code>if</code> اجرا خواهد شد یا حالت <code>else</code>. همچنین طول عمرهای مشخص ارجاع‌هایی را که ارسال می‌شوند نمی‌دانیم، پس نمی‌توانیم مانند لیست‌های ۱۰-۱۷ و ۱۰-۱۸ به دامنه‌ها نگاه کنیم تا مشخص کنیم ارجاعی که برمی‌گردانیم همیشه معتبر خواهد بود. borrow checker هم نمی‌تواند این را تشخیص دهد، زیرا نمی‌داند طول عمر <code>x</code> و <code>y</code> چه ارتباطی با طول عمر مقدار بازگشتی دارد. برای رفع این خطا، پارامترهای طول عمر جنریک اضافه می‌کنیم که رابطه‌ی بین ارجاع‌ها را تعریف می‌کنند تا borrow checker بتواند تحلیل خود را انجام دهد.</p>
+<h3 id="lifetime-annotation-syntax"><a class="header" href="#lifetime-annotation-syntax">نحو حاشیه‌نویسی طول عمر</a></h3>
+<p>حاشیه‌نویسی‌های طول عمر تغییری در مدت زندگی هیچ ارجاعی ایجاد نمی‌کنند. در عوض، روابط طول عمرِ چندین ارجاع را با یکدیگر توصیف می‌کنند، بدون اینکه بر طول عمرها تأثیر بگذارند. همان‌طور که توابع وقتی امضایشان یک پارامتر نوع جنریک مشخص می‌کند می‌توانند هر نوعی را بپذیرند، توابع با مشخص کردن یک پارامتر طول عمر جنریک می‌توانند ارجاع‌هایی با هر طول عمری را بپذیرند.</p>
+<p>حاشیه‌نویسی‌های طول عمر نحوی کمی غیرمعمول دارند: نام پارامترهای طول عمر باید با یک آپاستروف (<code>'</code>) شروع شود و معمولاً مانند نوع‌های جنریک همگی با حروف کوچک و بسیار کوتاه هستند. بیشتر افراد برای اولین حاشیه‌نویسی طول عمر از نام <code>'a</code> استفاده می‌کنند. ما حاشیه‌نویسی پارامتر طول عمر را بعد از <code>&amp;</code> یک ارجاع قرار می‌دهیم و با یک فاصله آن را از نوع ارجاع جدا می‌کنیم.</p>
+<p>در اینجا چند مثال آورده‌ایم: یک ارجاع به <code>i32</code> بدون پارامتر طول عمر، یک ارجاع به <code>i32</code> با پارامتر طول عمر <code>'a</code> و یک ارجاع تغییرپذیر به <code>i32</code> که آن هم طول عمر <code>'a</code> دارد:</p>
+<pre><code class="language-rust ignore">&amp;i32        // a reference
+&amp;'a i32     // a reference with an explicit lifetime
+&amp;'a mut i32 // a mutable reference with an explicit lifetime</code></pre>
+<p>یک حاشیه‌نویسی طول عمر به‌تنهایی معنای چندانی ندارد، چون حاشیه‌نویسی‌ها قرار است به Rust بگویند پارامترهای طول عمر جنریکِ چند ارجاع چگونه به هم مرتبط هستند. بیایید بررسی کنیم حاشیه‌نویسی‌های طول عمر در زمینه‌ی تابع <code>longest</code> چگونه با یکدیگر ارتباط پیدا می‌کنند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="lifetime-annotations-in-function-signatures"></a></p>
+<h3 id="in-function-signatures"><a class="header" href="#in-function-signatures">در امضای توابع</a></h3>
+<p>برای استفاده از حاشیه‌نویسی‌های طول عمر در امضای توابع، باید پارامترهای طول عمر جنریک را داخل براکت‌های زاویه‌ای بین نام تابع و فهرست پارامترها تعریف کنیم، همان‌طور که با پارامترهای نوع جنریک انجام دادیم.</p>
+<p>می‌خواهیم امضا محدودیت زیر را بیان کند: ارجاع بازگشتی تا زمانی معتبر خواهد بود که هر دو پارامتر معتبر باشند. این همان رابطه‌ی بین طول عمر پارامترها و مقدار بازگشتی است. طول عمر را <code>'a</code> می‌نامیم و آن را به هر ارجاع اضافه می‌کنیم، همان‌طور که در لیست ۱۰-۲۱ نشان داده شده است.</p>
+<figure class="listing" id="listing-10-21">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span><span class="boring">    let string1 = String::from("abcd");
+</span><span class="boring">    let string2 = "xyz";
+</span><span class="boring">
+</span><span class="boring">    let result = longest(string1.as_str(), string2);
+</span><span class="boring">    println!("The longest string is {result}");
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn longest&lt;'a&gt;(x: &amp;'a str, y: &amp;'a str) -&gt; &amp;'a str {
+    if x.len() &gt; y.len() { x } else { y }
+}</code></pre>
+<figcaption><a href="#listing-10-21">لیست ۱۰-۲۱</a>: تعریف تابع &lt;code&gt;&lt;/x-listing&gt;longest&lt;/code&gt; که مشخص می‌کند همه‌ی ارجاع‌های موجود در امضا باید طول عمر یکسان &lt;code&gt;'a&lt;/code&gt; داشته باشند</figcaption>
+</figure>
+<p>این کد باید کامپایل شود و وقتی با تابع <code>main</code> لیست ۱۰-۱۹ استفاده شود، نتیجه‌ی مورد نظر ما را تولید کند.</p>
+<p>امضای تابع اکنون به Rust می‌گوید که برای یک طول عمر <code>'a</code>، تابع دو پارامتر می‌گیرد که هر دو برش رشته‌ای هستند و دست‌کم به اندازه‌ی طول عمر <code>'a</code> زندگی می‌کنند. امضای تابع همچنین به Rust می‌گوید که برش رشته‌ای بازگشتی از تابع دست‌کم به اندازه‌ی طول عمر <code>'a</code> زندگی خواهد کرد. در عمل، این یعنی طول عمر ارجاعی که تابع <code>longest</code> برمی‌گرداند با کوچک‌تر بودن طول عمرِ مقادیری که آرگومان‌های تابع به آن‌ها ارجاع می‌دهند یکسان است. این همان روابطی است که می‌خواهیم Rust هنگام تحلیل این کد از آن‌ها استفاده کند.</p>
+<p>به یاد داشته باشید، وقتی پارامترهای طول عمر را در این امضای تابع مشخص می‌کنیم، طول عمر هیچ مقدار ارسالی یا بازگشتی را تغییر نمی‌دهیم. در عوض، مشخص می‌کنیم که borrow checker باید هر مقداری را که از این محدودیت‌ها پیروی نمی‌کند رد کند. توجه کنید که تابع <code>longest</code> لازم نیست دقیقاً بداند <code>x</code> و <code>y</code> چقدر زنده خواهند ماند؛ فقط لازم است بداند دامنه‌ای وجود دارد که بتوان آن را جایگزین <code>'a</code> کرد و این امضا را برآورده کند.</p>
+<p>وقتی طول عمرها را در توابع حاشیه‌نویسی می‌کنیم، حاشیه‌نویسی‌ها در امضای تابع قرار می‌گیرند، نه در بدنه‌ی آن. حاشیه‌نویسی‌های طول عمر بخشی از قرارداد تابع می‌شوند، درست مانند نوع‌های موجود در امضا. اینکه امضای توابع شامل قرارداد طول عمر باشد به این معناست که تحلیلی که کامپایلر Rust انجام می‌دهد می‌تواند ساده‌تر باشد. اگر مشکلی در نحوه‌ی حاشیه‌نویسی یا نحوه‌ی فراخوانی یک تابع وجود داشته باشد، خطاهای کامپایلر می‌توانند دقیق‌تر به بخشی از کد و محدودیت‌ها اشاره کنند. اما اگر کامپایلر Rust درباره‌ی روابط مورد نظر ما میان طول عمرها استنباط‌های بیشتری انجام می‌داد، ممکن بود فقط بتواند به محلی از کد ما اشاره کند که چندین گام با علت مشکل فاصله دارد.</p>
+<p>وقتی ارجاع‌های مشخص را به <code>longest</code> ارسال می‌کنیم، طول عمر مشخصی که جایگزین <code>'a</code> می‌شود بخشی از دامنه‌ی <code>x</code> است که با دامنه‌ی <code>y</code> همپوشانی دارد. به عبارت دیگر، طول عمر جنریک <code>'a</code> طول عمر مشخصی می‌گیرد که برابر با کوچک‌تر از طول عمرهای <code>x</code> و <code>y</code> است. چون ارجاع بازگشتی را با همان پارامتر طول عمر <code>'a</code> حاشیه‌نویسی کرده‌ایم، ارجاع بازگشتی نیز به اندازه‌ی کوچک‌تر از طول عمرهای <code>x</code> و <code>y</code> معتبر خواهد بود.</p>
+<p>بیایید با ارسال ارجاع‌هایی که طول عمرهای مشخص متفاوتی دارند ببینیم حاشیه‌نویسی‌های طول عمر چگونه تابع <code>longest</code> را محدود می‌کنند. لیست ۱۰-۲۲ یک مثال ساده است.</p>
+<figure class="listing" id="listing-10-22">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let string1 = String::from("long string is long");
+
+    {
+        let string2 = String::from("xyz");
+        let result = longest(string1.as_str(), string2.as_str());
+        println!("The longest string is {result}");
+    }
+}
+<span class="boring">
+</span><span class="boring">fn longest&lt;'a&gt;(x: &amp;'a str, y: &amp;'a str) -&gt; &amp;'a str {
+</span><span class="boring">    if x.len() &gt; y.len() { x } else { y }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-10-22">لیست ۱۰-۲۲</a>: استفاده از تابع &lt;code&gt;&lt;/x-listing&gt;longest&lt;/code&gt; با ارجاع به مقادیر &lt;code&gt;String&lt;/code&gt; که طول عمرهای مشخص متفاوتی دارند</figcaption>
+</figure>
+<p>در این مثال، <code>string1</code> تا پایان دامنه‌ی بیرونی معتبر است، <code>string2</code> تا پایان دامنه‌ی درونی معتبر است، و <code>result</code> به چیزی ارجاع می‌دهد که تا پایان دامنه‌ی درونی معتبر است. این کد را اجرا کنید و خواهید دید که borrow checker آن را تأیید می‌کند؛ کامپایل می‌شود و <code>The longest string is long string is long</code> را چاپ می‌کند.</p>
+<p>حالا مثالی را امتحان کنیم که نشان می‌دهد طول عمر ارجاع در <code>result</code> باید کوچک‌ترِ طول عمر دو آرگومان باشد. تعریف متغیر <code>result</code> را به بیرون دامنه‌ی درونی منتقل می‌کنیم اما انتساب مقدار به متغیر <code>result</code> را داخل دامنه‌ای که <code>string2</code> در آن است نگه می‌داریم. سپس <code>println!</code> را که از <code>result</code> استفاده می‌کند به بیرون دامنه‌ی درونی و پس از پایان آن منتقل می‌کنیم. کد لیست ۱۰-۲۳ کامپایل نخواهد شد.</p>
+<figure class="listing" id="listing-10-23">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">fn main() {
+    let string1 = String::from("long string is long");
+    let result;
+    {
+        let string2 = String::from("xyz");
+        result = longest(string1.as_str(), string2.as_str());
+    }
+    println!("The longest string is {result}");
+}
+<span class="boring">
+</span><span class="boring">fn longest&lt;'a&gt;(x: &amp;'a str, y: &amp;'a str) -&gt; &amp;'a str {
+</span><span class="boring">    if x.len() &gt; y.len() { x } else { y }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-10-23">لیست ۱۰-۲۳</a>: تلاش برای استفاده از &lt;code&gt;&lt;/x-listing&gt;result&lt;/code&gt; پس از خروج &lt;code&gt;string2&lt;/code&gt; از دامنه</figcaption>
+</figure>
+<p>وقتی سعی می‌کنیم این کد را کامپایل کنیم، این خطا را دریافت می‌کنیم:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling chapter10 v0.1.0 (file:///projects/chapter10)
+error[E0597]: `string2` does not live long enough
+ --&gt; src/main.rs:6:44
+  |
+5 |         let string2 = String::from("xyz");
+  |             ------- binding `string2` declared here
+6 |         result = longest(string1.as_str(), string2.as_str());
+  |                                            ^^^^^^^ borrowed value does not live long enough
+7 |     }
+  |     - `string2` dropped here while still borrowed
+8 |     println!("The longest string is {result}");
+  |                                      ------ borrow later used here
+
+For more information about this error, try `rustc --explain E0597`.
+error: could not compile `chapter10` (bin "chapter10") due to 1 previous error
+</code></pre>
+<p>این خطا نشان می‌دهد که برای اینکه <code>result</code> برای دستور <code>println!</code> معتبر باشد، <code>string2</code> باید تا پایان دامنه‌ی بیرونی معتبر باشد. Rust این را می‌داند، چون طول عمر پارامترهای تابع و مقادیر بازگشتی را با همان پارامتر طول عمر <code>'a</code> حاشیه‌نویسی کرده‌ایم.</p>
+<p>ما به‌عنوان انسان می‌توانیم به این کد نگاه کنیم و ببینیم که <code>string1</code> از <code>string2</code> بلندتر است و بنابراین <code>result</code> شامل ارجاعی به <code>string1</code> خواهد بود. چون <code>string1</code> هنوز از دامنه خارج نشده است، ارجاع به <code>string1</code> همچنان برای دستور <code>println!</code> معتبر خواهد بود. با این حال، کامپایلر نمی‌تواند ببیند که ارجاع در این مورد معتبر است. ما به Rust گفته‌ایم که طول عمر ارجاعی که تابع <code>longest</code> برمی‌گرداند با کوچک‌ترِ طول عمر ارجاع‌های ارسالی یکسان است. بنابراین borrow checker کد لیست ۱۰-۲۳ را به‌عنوان کدی که احتمالاً ارجاع نامعتبر دارد مجاز نمی‌داند.</p>
+<p>سعی کنید آزمایش‌های بیشتری طراحی کنید که مقادیر و طول عمر ارجاع‌های ارسالی به تابع <code>longest</code> و نحوه‌ی استفاده از ارجاع بازگشتی را تغییر دهند. پیش از کامپایل، فرضیه‌سازی کنید که آزمایش‌هایتان از borrow checker عبور می‌کنند یا نه؛ سپس بررسی کنید که آیا درست حدس زده‌اید!</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="thinking-in-terms-of-lifetimes"></a></p>
+<h3 id="relationships"><a class="header" href="#relationships">روابط</a></h3>
+<p>شیوه‌ای که باید پارامترهای طول عمر را مشخص کنید به کاری که تابعتان انجام می‌دهد بستگی دارد. برای مثال، اگر پیاده‌سازی تابع <code>longest</code> را طوری تغییر دهیم که به‌جای طولانی‌ترین برش رشته‌ای همیشه پارامتر اول را برگرداند، لازم نیست برای پارامتر <code>y</code> طول عمری مشخص کنیم. کد زیر کامپایل خواهد شد:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span><span class="boring">    let string1 = String::from("abcd");
+</span><span class="boring">    let string2 = "efghijklmnopqrstuvwxyz";
+</span><span class="boring">
+</span><span class="boring">    let result = longest(string1.as_str(), string2);
+</span><span class="boring">    println!("The longest string is {result}");
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn longest&lt;'a&gt;(x: &amp;'a str, y: &amp;str) -&gt; &amp;'a str {
+    x
+}</code></pre>
+</figure>
+<p>ما یک پارامتر طول عمر <code>'a</code> را برای پارامتر <code>x</code> و نوع بازگشتی مشخص کرده‌ایم، اما برای پارامتر <code>y</code> نه، چون طول عمر <code>y</code> هیچ ارتباطی با طول عمر <code>x</code> یا مقدار بازگشتی ندارد.</p>
+<p>وقتی از یک تابع ارجاعی برمی‌گردانیم، پارامتر طول عمر نوع بازگشتی باید با پارامتر طول عمر یکی از پارامترها مطابقت داشته باشد. اگر ارجاع بازگشتی به یکی از پارامترها اشاره <em>نکند</em>، باید به مقداری اشاره کند که داخل همین تابع ساخته شده است. اما این یک ارجاع معلق خواهد بود، چون مقدار در پایان تابع از دامنه خارج می‌شود. این پیاده‌سازی آزمایشی تابع <code>longest</code> را که کامپایل نخواهد شد در نظر بگیرید:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">fn main() {
+</span><span class="boring">    let string1 = String::from("abcd");
+</span><span class="boring">    let string2 = "xyz";
+</span><span class="boring">
+</span><span class="boring">    let result = longest(string1.as_str(), string2);
+</span><span class="boring">    println!("The longest string is {result}");
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn longest&lt;'a&gt;(x: &amp;str, y: &amp;str) -&gt; &amp;'a str {
+    let result = String::from("really long string");
+    result.as_str()
+}</code></pre>
+</figure>
+<p>در اینجا، با اینکه یک پارامتر طول عمر <code>'a</code> برای نوع بازگشتی مشخص کرده‌ایم، این پیاده‌سازی کامپایل نخواهد شد چون طول عمر مقدار بازگشتی اصلاً به طول عمر پارامترها مرتبط نیست. پیام خطایی که دریافت می‌کنیم این است:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling chapter10 v0.1.0 (file:///projects/chapter10)
+error[E0515]: cannot return value referencing local variable `result`
+  --&gt; src/main.rs:11:5
+   |
+11 |     result.as_str()
+   |     ------^^^^^^^^^
+   |     |
+   |     returns a value referencing data owned by the current function
+   |     `result` is borrowed here
+
+For more information about this error, try `rustc --explain E0515`.
+error: could not compile `chapter10` (bin "chapter10") due to 1 previous error
+</code></pre>
+<p>مشکل این است که <code>result</code> در پایان تابع <code>longest</code> از دامنه خارج شده و پاکسازی می‌شود. ما همچنین سعی می‌کنیم ارجاعی به <code>result</code> را از تابع برگردانیم. هیچ راهی برای مشخص کردن پارامترهای طول عمر وجود ندارد که این ارجاع معلق را تغییر دهد، و Rust اجازه نمی‌دهد ارجاع معلق ایجاد کنیم. در این مورد، بهترین راه‌حل این است که به‌جای ارجاع، یک نوع داده‌ی دارای مالکیت (owned) برگردانیم تا تابع فراخواننده مسئول پاکسازی مقدار باشد.</p>
+<p>در نهایت، نحو طول عمر درباره‌ی اتصال طول عمرهای پارامترها و مقادیر بازگشتی مختلف توابع به یکدیگر است. وقتی این طول عمرها به هم متصل شوند، Rust اطلاعات کافی دارد تا عملیات ایمن از نظر حافظه را مجاز کند و عملیاتی را که اشاره‌گرهای معلق ایجاد می‌کنند یا به‌گونه‌ای دیگر ایمنی حافظه را نقض می‌کنند ممنوع کند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="lifetime-annotations-in-struct-definitions"></a></p>
+<h3 id="in-struct-definitions"><a class="header" href="#in-struct-definitions">در تعریف ساختارها</a></h3>
+<p>تاکنون ساختارهایی که تعریف کرده‌ایم همگی نوع‌های دارای مالکیت را نگه می‌دارند. می‌توانیم ساختارهایی تعریف کنیم که ارجاع نگه دارند، اما در آن صورت باید روی هر ارجاع در تعریف ساختار یک حاشیه‌نویسی طول عمر اضافه کنیم. لیست ۱۰-۲۴ ساختاری به نام <code>ImportantExcerpt</code> دارد که یک برش رشته‌ای نگه می‌دارد.</p>
+<figure class="listing" id="listing-10-24">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">struct ImportantExcerpt&lt;'a&gt; {
+    part: &amp;'a str,
+}
+
+fn main() {
+    let novel = String::from("Call me Ishmael. Some years ago...");
+    let first_sentence = novel.split('.').next().unwrap();
+    let i = ImportantExcerpt {
+        part: first_sentence,
+    };
+}</code></pre>
+<figcaption><a href="#listing-10-24">لیست ۱۰-۲۴</a>: یک ساختار که یک ارجاع نگه می‌دارد و به حاشیه‌نویسی طول عمر نیاز دارد</figcaption>
+</figure>
+<p>این ساختار یک فیلد واحد به نام <code>part</code> دارد که یک برش رشته‌ای را که ارجاع است نگه می‌دارد. مانند نوع‌های داده‌ی جنریک، نام پارامتر طول عمر جنریک را داخل براکت‌های زاویه‌ای بعد از نام ساختار تعریف می‌کنیم تا بتوانیم از پارامتر طول عمر در بدنه‌ی تعریف ساختار استفاده کنیم. این حاشیه‌نویسی یعنی یک نمونه از <code>ImportantExcerpt</code> نمی‌تواند بیشتر از ارجاعی که در فیلد <code>part</code> خود نگه می‌دارد عمر کند.</p>
+<p>تابع <code>main</code> در اینجا نمونه‌ای از ساختار <code>ImportantExcerpt</code> می‌سازد که ارجاعی به اولین جمله‌ی <code>String</code> متعلق به متغیر <code>novel</code> نگه می‌دارد. داده‌ی <code>novel</code> پیش از ایجاد نمونه‌ی <code>ImportantExcerpt</code> وجود دارد. علاوه بر این، <code>novel</code> تا پس از خروج <code>ImportantExcerpt</code> از دامنه، از دامنه خارج نمی‌شود، بنابراین ارجاع موجود در نمونه‌ی <code>ImportantExcerpt</code> معتبر است.</p>
+<h3 id="lifetime-elision"><a class="header" href="#lifetime-elision">حذف طول عمر (Lifetime Elision)</a></h3>
+<p>یاد گرفته‌اید که هر ارجاع یک طول عمر دارد و باید برای توابع یا ساختارهایی که از ارجاع استفاده می‌کنند پارامترهای طول عمر مشخص کنید. با این حال، تابعی در لیست ۴-۹ داشتیم که در لیست ۱۰-۲۵ دوباره نشان داده شده و بدون حاشیه‌نویسی طول عمر کامپایل می‌شد.</p>
+<figure class="listing" id="listing-10-25">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust">fn first_word(s: &amp;str) -&gt; &amp;str {
+    let bytes = s.as_bytes();
+
+    for (i, &amp;item) in bytes.iter().enumerate() {
+        if item == b' ' {
+            return &amp;s[0..i];
+        }
+    }
+
+    &amp;s[..]
+}
+<span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let my_string = String::from("hello world");
+</span><span class="boring">
+</span><span class="boring">    // first_word works on slices of `String`s
+</span><span class="boring">    let word = first_word(&amp;my_string[..]);
+</span><span class="boring">
+</span><span class="boring">    let my_string_literal = "hello world";
+</span><span class="boring">
+</span><span class="boring">    // first_word works on slices of string literals
+</span><span class="boring">    let word = first_word(&amp;my_string_literal[..]);
+</span><span class="boring">
+</span><span class="boring">    // Because string literals *are* string slices already,
+</span><span class="boring">    // this works too, without the slice syntax!
+</span><span class="boring">    let word = first_word(my_string_literal);
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-10-25">لیست ۱۰-۲۵</a>: تابعی که در لیست ۴-۹ تعریف کردیم و با وجود اینکه پارامتر و نوع بازگشتی ارجاع هستند، بدون حاشیه‌نویسی طول عمر کامپایل شد</figcaption>
+</figure>
+<p>دلیل اینکه این تابع بدون حاشیه‌نویسی طول عمر کامپایل می‌شود تاریخی است: در نسخه‌های اولیهٔ Rust (پیش از ۱٫۰) این کد کامپایل نمی‌شد، چون هر ارجاع به طول عمر صریح نیاز داشت. در آن زمان، امضای تابع به این شکل نوشته می‌شد:</p>
+<pre><code class="language-rust ignore">fn first_word&lt;'a&gt;(s: &amp;'a str) -&gt; &amp;'a str {</code></pre>
+<p>پس از نوشتن مقدار زیادی کد Rust، تیم Rust متوجه شد که برنامه‌نویسان Rust در موقعیت‌های مشخصی بارها و بارها همان حاشیه‌نویسی‌های طول عمر را وارد می‌کنند. این موقعیت‌ها قابل پیش‌بینی بودند و از چند الگوی قطعی پیروی می‌کردند. توسعه‌دهندگان این الگوها را در کد کامپایلر برنامه‌ریزی کردند تا borrow checker بتواند در این موقعیت‌ها طول عمرها را استنباط کند و به حاشیه‌نویسی‌های صریح نیازی نداشته باشد.</p>
+<p>این بخش از تاریخچه‌ی Rust مرتبط است، چون ممکن است الگوهای قطعی بیشتری پدیدار شوند و به کامپایلر اضافه شوند. در آینده ممکن است حتی به حاشیه‌نویسی‌های طول عمر کمتری نیاز باشد.</p>
+<p>الگوهایی که در تحلیل ارجاع‌ها در Rust برنامه‌ریزی شده‌اند <em>قواعد حذف طول عمر</em> (lifetime elision rules) نامیده می‌شوند. این‌ها قواعدی نیستند که برنامه‌نویسان باید از آن‌ها پیروی کنند؛ مجموعه‌ای از موارد خاص هستند که کامپایلر آن‌ها را در نظر می‌گیرد، و اگر کد شما با این موارد مطابقت داشته باشد، لازم نیست طول عمرها را صریحاً بنویسید.</p>
+<p>قواعد حذف، استنباط کامل ارائه نمی‌دهند. اگر پس از اعمال این قواعد توسط Rust هنوز درباره‌ی طول عمر ارجاع‌ها ابهام وجود داشته باشد، کامپایلر حدس نمی‌زند که طول عمر ارجاع‌های باقی‌مانده چه باید باشد. به‌جای حدس زدن، کامپایلر خطایی به شما می‌دهد که می‌توانید با افزودن حاشیه‌نویسی‌های طول عمر آن را رفع کنید.</p>
+<p>طول عمرهای روی پارامترهای تابع یا متد را <em>طول عمرهای ورودی</em> (input lifetimes) و طول عمرهای روی مقادیر بازگشتی را <em>طول عمرهای خروجی</em> (output lifetimes) می‌نامند.</p>
+<p>کامپایلر وقتی حاشیه‌نویسی‌های صریح وجود ندارد، از سه قاعده برای تشخیص طول عمر ارجاع‌ها استفاده می‌کند. قاعده‌ی اول به طول عمرهای ورودی و قاعده‌ی دوم و سوم به طول عمرهای خروجی اعمال می‌شود. اگر کامپایلر به انتهای این سه قاعده برسد و هنوز ارجاع‌هایی باشند که نتواند طول عمرشان را تشخیص دهد، کامپایلر با یک خطا متوقف می‌شود. این قواعد هم برای تعریف‌های <code>fn</code> و هم برای بلوک‌های <code>impl</code> اعمال می‌شوند.</p>
+<p>قاعده‌ی اول این است که کامپایلر به هر پارامتری که ارجاع است یک پارامتر طول عمر اختصاص می‌دهد. به عبارت دیگر، تابعی با یک پارامتر یک پارامتر طول عمر می‌گیرد: <code>fn foo&lt;'a&gt;(x: &amp;'a i32)</code>؛ تابعی با دو پارامتر دو پارامتر طول عمر جداگانه می‌گیرد: <code>fn foo&lt;'a, 'b&gt;(x: &amp;'a i32, y: &amp;'b i32)</code>؛ و به همین ترتیب.</p>
+<p>قاعدهٔ دوم این است که اگر دقیقاً یک پارامتر طول عمر ورودی وجود داشته باشد، آن طول عمر به همهٔ پارامترهای طول عمر خروجی اختصاص داده می‌شود: <code>fn foo&lt;'a&gt;(x: &amp;'a i32) -&gt; &amp;'a i32</code>.</p>
+<p>قاعده‌ی سوم این است که اگر چندین پارامتر طول عمر ورودی وجود داشته باشد، اما یکی از آن‌ها <code>&amp;self</code> یا <code>&amp;mut self</code> باشد چون این یک متد است، طول عمر <code>self</code> به همه‌ی پارامترهای طول عمر خروجی اختصاص داده می‌شود. این قاعده‌ی سوم خواندن و نوشتن متدها را بسیار دلپذیرتر می‌کند، چون به نمادهای کمتری نیاز است.</p>
+<p>بیایید وانمود کنیم که کامپایلر هستیم. این قواعد را اعمال می‌کنیم تا طول عمر ارجاع‌ها را در امضای تابع <code>first_word</code> در لیست ۱۰-۲۵ تشخیص دهیم. امضا بدون هیچ طول عمری که به ارجاع‌ها مرتبط باشد شروع می‌شود:</p>
+<pre><code class="language-rust ignore">fn first_word(s: &amp;str) -&gt; &amp;str {</code></pre>
+<p>سپس کامپایلر قاعده‌ی اول را اعمال می‌کند که مشخص می‌کند هر پارامتر طول عمر مخصوص به خود را می‌گیرد. طبق معمول آن را <code>'a</code> می‌نامیم، بنابراین اکنون امضا این است:</p>
+<pre><code class="language-rust ignore">fn first_word&lt;'a&gt;(s: &amp;'a str) -&gt; &amp;str {</code></pre>
+<p>قاعده‌ی دوم اعمال می‌شود، چون دقیقاً یک طول عمر ورودی وجود دارد. قاعده‌ی دوم مشخص می‌کند که طول عمر تنها پارامتر ورودی به طول عمر خروجی اختصاص داده شود، بنابراین امضا اکنون این است:</p>
+<pre><code class="language-rust ignore">fn first_word&lt;'a&gt;(s: &amp;'a str) -&gt; &amp;'a str {</code></pre>
+<p>اکنون همه‌ی ارجاع‌های موجود در این امضای تابع طول عمر دارند و کامپایلر می‌تواند بدون نیاز به اینکه برنامه‌نویس طول عمرها را در این امضای تابع حاشیه‌نویسی کند، تحلیل خود را ادامه دهد.</p>
+<p>بیایید مثال دیگری را ببینیم، این بار با تابع <code>longest</code> که وقتی در لیست ۱۰-۲۰ شروع به کار با آن کردیم هیچ پارامتر طول عمری نداشت:</p>
+<pre><code class="language-rust ignore">fn longest(x: &amp;str, y: &amp;str) -&gt; &amp;str {</code></pre>
+<p>قاعده‌ی اول را اعمال می‌کنیم: هر پارامتر طول عمر مخصوص به خود را می‌گیرد. این بار به‌جای یک پارامتر، دو پارامتر داریم، بنابراین دو طول عمر داریم:</p>
+<pre><code class="language-rust ignore">fn longest&lt;'a, 'b&gt;(x: &amp;'a str, y: &amp;'b str) -&gt; &amp;str {</code></pre>
+<p>می‌بینید که قاعده‌ی دوم اعمال نمی‌شود، چون بیش از یک طول عمر ورودی وجود دارد. قاعده‌ی سوم هم اعمال نمی‌شود، چون <code>longest</code> یک تابع است نه یک متد، بنابراین هیچ‌یک از پارامترها <code>self</code> نیستند. پس از بررسی هر سه قاعده، هنوز طول عمر نوع بازگشتی را تشخیص نداده‌ایم. به همین دلیل بود که هنگام تلاش برای کامپایل کد لیست ۱۰-۲۰ خطا گرفتیم: کامپایلر قواعد حذف طول عمر را بررسی کرد اما هنوز نتوانست همه‌ی طول عمرهای ارجاع‌های موجود در امضا را تشخیص دهد.</p>
+<p>چون قاعده‌ی سوم واقعاً فقط در امضای متدها اعمال می‌شود، در ادامه طول عمرها را در آن زمینه بررسی می‌کنیم تا ببینیم چرا قاعده‌ی سوم باعث می‌شود به‌ندرت نیاز باشد طول عمرها را در امضای متدها حاشیه‌نویسی کنیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="lifetime-annotations-in-method-definitions"></a></p>
+<h3 id="in-method-definitions"><a class="header" href="#in-method-definitions">در تعریف متدها</a></h3>
+<p>وقتی متدهایی را روی یک ساختار با طول عمر پیاده‌سازی می‌کنیم، از همان نحو پارامترهای نوع جنریک استفاده می‌کنیم، همان‌طور که در لیست ۱۰-۱۱ نشان داده شد. اینکه پارامترهای طول عمر را کجا تعریف و استفاده کنیم بستگی دارد به اینکه آیا به فیلدهای ساختار مرتبط هستند یا به پارامترها و مقادیر بازگشتی متد.</p>
+<p>نام‌های طول عمر برای فیلدهای ساختار همیشه باید بعد از کلیدواژه‌ی <code>impl</code> تعریف و سپس بعد از نام ساختار استفاده شوند، چون این طول عمرها بخشی از نوع ساختار هستند.</p>
+<p>در امضای متدها داخل بلوک <code>impl</code>، ارجاع‌ها ممکن است به طول عمر ارجاع‌های موجود در فیلدهای ساختار گره بخورند یا ممکن است مستقل باشند. علاوه بر این، قواعد حذف طول عمر اغلب باعث می‌شوند حاشیه‌نویسی‌های طول عمر در امضای متدها ضروری نباشند. بیایید چند مثال با ساختار <code>ImportantExcerpt</code> که در لیست ۱۰-۲۴ تعریف کردیم ببینیم.</p>
+<p>ابتدا از متدی به نام <code>level</code> استفاده می‌کنیم که تنها پارامترش یک ارجاع به <code>self</code> است و مقدار بازگشتی‌اش یک <code>i32</code> است که ارجاع به چیزی نیست:</p>
+<pre><code class="language-rust"><span class="boring">struct ImportantExcerpt&lt;'a&gt; {
+</span><span class="boring">    part: &amp;'a str,
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl&lt;'a&gt; ImportantExcerpt&lt;'a&gt; {
+    fn level(&amp;self) -&gt; i32 {
+        3
+    }
+}
+<span class="boring">
+</span><span class="boring">impl&lt;'a&gt; ImportantExcerpt&lt;'a&gt; {
+</span><span class="boring">    fn announce_and_return_part(&amp;self, announcement: &amp;str) -&gt; &amp;str {
+</span><span class="boring">        println!("Attention please: {announcement}");
+</span><span class="boring">        self.part
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let novel = String::from("Call me Ishmael. Some years ago...");
+</span><span class="boring">    let first_sentence = novel.split('.').next().unwrap();
+</span><span class="boring">    let i = ImportantExcerpt {
+</span><span class="boring">        part: first_sentence,
+</span><span class="boring">    };
+</span><span class="boring">}</span></code></pre>
+<p>تعریف پارامتر طول عمر بعد از <code>impl</code> و استفاده از آن بعد از نام نوع لازم است، اما به‌دلیل قاعده‌ی اول حذف، لازم نیست طول عمر ارجاع به <code>self</code> را حاشیه‌نویسی کنیم.</p>
+<p>در اینجا مثالی است که قاعده‌ی سوم حذف طول عمر در آن اعمال می‌شود:</p>
+<pre><code class="language-rust"><span class="boring">struct ImportantExcerpt&lt;'a&gt; {
+</span><span class="boring">    part: &amp;'a str,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl&lt;'a&gt; ImportantExcerpt&lt;'a&gt; {
+</span><span class="boring">    fn level(&amp;self) -&gt; i32 {
+</span><span class="boring">        3
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl&lt;'a&gt; ImportantExcerpt&lt;'a&gt; {
+    fn announce_and_return_part(&amp;self, announcement: &amp;str) -&gt; &amp;str {
+        println!("Attention please: {announcement}");
+        self.part
+    }
+}
+<span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let novel = String::from("Call me Ishmael. Some years ago...");
+</span><span class="boring">    let first_sentence = novel.split('.').next().unwrap();
+</span><span class="boring">    let i = ImportantExcerpt {
+</span><span class="boring">        part: first_sentence,
+</span><span class="boring">    };
+</span><span class="boring">}</span></code></pre>
+<p>دو طول عمر ورودی وجود دارد، بنابراین Rust قاعده‌ی اول حذف طول عمر را اعمال می‌کند و به هر دوی <code>&amp;self</code> و <code>announcement</code> طول عمر مخصوص خودشان را می‌دهد. سپس، چون یکی از پارامترها <code>&amp;self</code> است، نوع بازگشتی طول عمر <code>&amp;self</code> را می‌گیرد و همه‌ی طول عمرها محاسبه شده‌اند.</p>
+<h3 id="the-static-lifetime"><a class="header" href="#the-static-lifetime">طول عمر ایستا</a></h3>
+<p>یک طول عمر خاص که باید درباره‌اش صحبت کنیم <code>'static</code> است که نشان می‌دهد ارجاع مورد نظر <em>می‌تواند</em> در تمام مدت اجرای برنامه زنده بماند. همه‌ی literalهای رشته‌ای طول عمر <code>'static</code> دارند و می‌توانیم آن را به این صورت حاشیه‌نویسی کنیم:</p>
+<pre><code class="language-rust">let s: &amp;'static str = "I have a static lifetime.";</code></pre>
+<p>متن این رشته مستقیماً در فایل باینری برنامه ذخیره می‌شود که همیشه در دسترس است. بنابراین طول عمر همه‌ی literalهای رشته‌ای <code>'static</code> است.</p>
+<p>ممکن است در پیام‌های خطا پیشنهادهایی برای استفاده از طول عمر <code>'static</code> ببینید. اما پیش از اینکه <code>'static</code> را به‌عنوان طول عمر یک ارجاع مشخص کنید، فکر کنید که آیا ارجاعی که دارید واقعاً در تمام طول عمر برنامه‌تان زنده است یا نه، و آیا می‌خواهید چنین باشد. بیشتر اوقات، پیام خطایی که طول عمر <code>'static</code> را پیشنهاد می‌کند ناشی از تلاش برای ایجاد یک ارجاع معلق یا عدم تطابق طول عمرهای موجود است. در چنین مواردی، راه‌حل رفع همان مشکلات است، نه مشخص کردن طول عمر <code>'static</code>.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="generic-type-parameters-trait-bounds-and-lifetimes-together"></a></p>
+<h2 id="generic-type-parameters-trait-bounds-and-lifetimes"><a class="header" href="#generic-type-parameters-trait-bounds-and-lifetimes">پارامترهای نوع جنریک، قیدهای صفت و طول عمرها</a></h2>
+<p>بیایید به‌طور خلاصه نحو مشخص کردن پارامترهای نوع جنریک، قیدهای صفت (trait bounds) و طول عمرها را همگی در یک تابع ببینیم!</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span><span class="boring">    let string1 = String::from("abcd");
+</span><span class="boring">    let string2 = "xyz";
+</span><span class="boring">
+</span><span class="boring">    let result = longest_with_an_announcement(
+</span><span class="boring">        string1.as_str(),
+</span><span class="boring">        string2,
+</span><span class="boring">        "Today is someone's birthday!",
+</span><span class="boring">    );
+</span><span class="boring">    println!("The longest string is {result}");
+</span><span class="boring">}
+</span><span class="boring">
+</span>use std::fmt::Display;
+
+fn longest_with_an_announcement&lt;'a, T&gt;(
+    x: &amp;'a str,
+    y: &amp;'a str,
+    ann: T,
+) -&gt; &amp;'a str
+where
+    T: Display,
+{
+    println!("Announcement! {ann}");
+    if x.len() &gt; y.len() { x } else { y }
+}</code></pre>
+<p>این همان تابع <code>longest</code> از لیست ۱۰-۲۱ است که طولانی‌تر از دو برش رشته‌ای را برمی‌گرداند. اما اکنون یک پارامتر اضافی به نام <code>ann</code> از نوع جنریک <code>T</code> دارد که می‌تواند توسط هر نوعی که صفت <code>Display</code> را پیاده‌سازی می‌کند، همان‌طور که در عبارت <code>where</code> مشخص شده، پر شود. این پارامتر اضافی با <code>{}</code> چاپ می‌شود، و به همین دلیل قید صفت <code>Display</code> ضروری است. چون طول عمرها نوعی جنریک هستند، تعریف پارامتر طول عمر <code>'a</code> و پارامتر نوع جنریک <code>T</code> در همان فهرست داخل براکت‌های زاویه‌ای بعد از نام تابع قرار می‌گیرند.</p>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<p>در این فصل مطالب زیادی را پوشش دادیم! اکنون که با پارامترهای نوع جنریک، صفت‌ها و قیدهای صفت، و پارامترهای طول عمر جنریک آشنا شده‌اید، آماده‌اید کدی بنویسید که تکرار ندارد و در موقعیت‌های بسیار متفاوتی کار می‌کند. پارامترهای نوع جنریک به شما امکان می‌دهند کد را برای نوع‌های مختلف به‌کار ببرید. صفت‌ها و قیدهای صفت تضمین می‌کنند که حتی اگر نوع‌ها جنریک باشند، رفتاری را که کد نیاز دارد خواهند داشت. یاد گرفتید که چگونه از حاشیه‌نویسی‌های طول عمر استفاده کنید تا اطمینان یابید این کد انعطاف‌پذیر ارجاع معلق نخواهد داشت. و همه‌ی این تحلیل‌ها در زمان کامپایل انجام می‌شود، که بر کارایی زمان اجرا تأثیری ندارد!</p>
+<p>باور کنید یا نه، مطالب بسیار بیشتری درباره‌ی موضوعاتی که در این فصل بحث شد برای یادگیری وجود دارد: فصل ۱۸ درباره‌ی اشیاء صفت (trait objects) بحث می‌کند که راه دیگری برای استفاده از صفت‌ها هستند. همچنین سناریوهای پیچیده‌تری وجود دارند که شامل حاشیه‌نویسی‌های طول عمر می‌شوند و فقط در سناریوهای بسیار پیشرفته به آن‌ها نیاز خواهید داشت؛ برای آن موارد باید <a href="../reference/trait-bounds.html">مرجع Rust</a> را بخوانید. اما در ادامه، یاد خواهید گرفت که چگونه در Rust آزمون بنویسید تا مطمئن شوید کدتان آن‌طور که باید کار می‌کند.</p><nav class="page-nav"><a href="ch10-02-traits.html">→ تعریف رفتار مشترک با صفت‌ها</a><a href="ch11-00-testing.html">نوشتن آزمون‌های خودکار ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

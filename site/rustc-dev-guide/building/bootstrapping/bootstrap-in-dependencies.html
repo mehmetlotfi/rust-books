@@ -1,0 +1,34 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>cfg(bootstrap) در وابستگی‌ها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="building/bootstrapping/bootstrap-in-dependencies"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="cfgbootstrap-in-compiler-dependencies"><a class="header" href="#cfgbootstrap-in-compiler-dependencies"><code>cfg(bootstrap)</code> در وابستگی‌های کامپایلر</a></h1>
+<p>کامپایلر Rust از چند crate خارجی استفاده می‌کند که ممکن است با خود کامپایلر به وابستگی چرخه‌ای برسند: کامپایلر برای ساخت شدن به نسخه به‌روز یک crate نیاز دارد، اما آن crate به نسخه به‌روز کامپایلر نیاز دارد. این صفحه توضیح می‌دهد که چگونه می‌توان با <code>#[cfg(bootstrap)]</code> این چرخه را شکست.</p>
+<h2 id="enabling-cfgbootstrap"><a class="header" href="#enabling-cfgbootstrap">فعال‌سازی <code>#[cfg(bootstrap)]</code></a></h2>
+<p>معمولاً استفاده از <code>#[cfg(bootstrap)]</code> در یک crate خارجی یک هشدار ایجاد می‌کند:</p>
+<pre><code>warning: unexpected `cfg` condition name: `bootstrap`
+ --&gt; src/main.rs:1:7
+  |
+1 | #[cfg(bootstrap)]
+  |       ^^^^^^^^^
+  |
+  = help: expected names are: `docsrs`, `feature`, and `test` and 31 more
+  = help: consider using a Cargo feature instead
+  = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+           [lints.rust]
+           unexpected_cfgs = { level = "warn", check-cfg = ['cfg(bootstrap)'] }
+  = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(bootstrap)");` to the top of the `build.rs`
+  = note: see &lt;https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html&gt; for more information about checking conditional configuration
+  = note: `#[warn(unexpected_cfgs)]` on by default
+</code></pre>
+<p>می‌توان با افزودن این خط‌ها به فایل <code>Cargo.toml</code> پروژه این هشدار را خاموش کرد:</p>
+<pre><code class="language-toml">[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(bootstrap)'] }
+</code></pre>
+<p>اکنون می‌توان <code>#[cfg(bootstrap)]</code> را در crate درست مانند خود کامپایلر به کار برد: وقتی از کامپایلر bootstrap استفاده می‌شود، کدی که با <code>#[cfg(bootstrap)]</code> علامت‌گذاری شده کامپایل می‌شود، و در غیر این صورت کدی که با <code>#[cfg(not(bootstrap))]</code> علامت‌گذاری شده کامپایل می‌شود.</p>
+<h2 id="the-update-dance"><a class="header" href="#the-update-dance">رقص به‌روزرسانی</a></h2>
+<p>به عنوان یک مثال مشخص، تغییری را در نظر می‌گیریم که در آن attribute با نام <code>#[naked]</code> به یک attribute ناایمن (unsafe) تبدیل شد و همین موضوع یک وابستگی چرخه‌ای با crate با نام <code>compiler-builtins</code> ایجاد کرد.</p>
+<h3 id="step-1-accept-the-new-behavior-in-the-compiler-139797"><a class="header" href="#step-1-accept-the-new-behavior-in-the-compiler-139797">گام ۱: پذیرفتن رفتار جدید در کامپایلر (<a href="https://github.com/rust-lang/rust/pull/139797">#139797</a>)</a></h3>
+<p>در این مثال می‌توان با غیرفعال کردن یک خطا، هم رفتار قدیمی و هم رفتار جدید را همزمان پذیرفت.</p>
+<h3 id="step-2-update-the-crate-821"><a class="header" href="#step-2-update-the-crate-821">گام ۲: به‌روزرسانی crate (<a href="https://github.com/rust-lang/compiler-builtins/pull/821">#821</a>)</a></h3>
+<p>حالا در crate از <code>#[cfg(bootstrap)]</code> برای استفاده از رفتار قدیمی و از <code>#[cfg(not(bootstrap))]</code> برای استفاده از رفتار جدید بهره بگیرید.</p>
+<h3 id="step-3-update-the-crate-version-used-by-the-compiler-139934"><a class="header" href="#step-3-update-the-crate-version-used-by-the-compiler-139934">گام ۳: به‌روزرسانی نسخه crate مورد استفاده کامپایلر (<a href="https://github.com/rust-lang/rust/pull/139934">#139934</a>)</a></h3>
+<p>برای <code>compiler-builtins</code> این کار به معنای افزایش شماره نسخه بود؛ در موارد دیگر ممکن است به‌روزرسانی یک git submodule باشد.</p>
+<h3 id="step-4-remove-the-old-behavior-from-the-compiler-139753"><a class="header" href="#step-4-remove-the-old-behavior-from-the-compiler-139753">گام ۴: حذف رفتار قدیمی از کامپایلر (<a href="https://github.com/rust-lang/rust/pull/139753">#139753</a>)</a></h3>
+<p>اکنون می‌توان از crate به‌روزشده استفاده کرد. در این مثال، این یعنی رفتار قدیمی را می‌توان حذف کرد.</p><nav class="page-nav"><a href="debugging-bootstrap.html">→ اشکال‌زدایی bootstrap</a><a href="../../part-2-intro.html">پیشگفتار ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../rustc-dev-guide/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

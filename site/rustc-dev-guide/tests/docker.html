@@ -1,0 +1,58 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>آزمون با Docker — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tests/docker"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="testing-with-docker"><a class="header" href="#testing-with-docker">تست با Docker</a></h1>
+<p>پوشهٔ <a href="https://github.com/rust-lang/rust/tree/HEAD/src/ci/docker"><code>src/ci/docker</code></a> شامل تعریف ایمیج‌های <a href="https://www.docker.com/">Docker</a> برای jobهای مبتنی بر لینوکس است که در GitHub Actions اجرا می‌شوند (jobهای غیرلینوکسی خارج از Docker اجرا می‌شوند).
+می‌توانید این jobها را روی رایانهٔ توسعهٔ محلی خود اجرا کنید، که
+برای تست محیط‌هایی متفاوت از سیستم محلی‌تان مفید است.
+باید Docker را روی سیستم لینوکس، ویندوز یا macOS نصب کنید (معمولاً لینوکس
+بسیار سریع‌تر از ویندوز یا macOS است، چون آن دو برای شبیه‌سازی محیط لینوکس از ماشین‌های مجازی استفاده می‌کنند).</p>
+<p>jobهایی که در CI اجرا می‌شوند با مجموعه‌ای از اسکریپت‌های bash پیکربندی شده‌اند، و بازتولید رفتارشان به‌صورت محلی همیشه ساده نیست.
+اگر می‌خواهید یک job را در CI به ساده‌ترین شکل ممکن به‌صورت محلی اجرا کنید، می‌توانید از کمک‌ابزار <code>citool</code> استفاده کنید که سعی می‌کند آنچه را در CI رخ می‌دهد تا حد ممکن بازتولید کند:</p>
+<pre><code class="language-bash">cargo run --manifest-path src/ci/citool/Cargo.toml run-local &lt;job-name&gt;
+# For example:
+cargo run --manifest-path src/ci/citool/Cargo.toml run-local dist-x86_64-linux-alt
+</code></pre>
+<p>اگر اسکریپت بالا برایتان کار نمی‌کند، می‌خواهید کنترل بیشتری بر اجرای ایمیج Docker داشته باشید، یا می‌خواهید بفهمید دقیقاً هنگام اجرای job در Docker چه رخ می‌دهد، ادامهٔ مطلب را بخوانید.</p>
+<h2 id="the-runsh-script"><a class="header" href="#the-runsh-script">اسکریپت <code>run.sh</code></a></h2>
+<p>اسکریپت <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/docker/run.sh"><code>src/ci/docker/run.sh</code></a> برای ساخت یک ایمیج Docker مشخص و اجرای آن،
+ساخت Rust درون ایمیج، و سپس یا اجرای تست‌ها یا آماده‌کردن مجموعه‌ای از آرشیوها برای توزیع به‌کار می‌رود.
+این اسکریپت درخت منبع Rust محلی شما را در حالت فقط‌خواندنی و پوشهٔ <code>obj</code> را در حالت خواندن-نوشتن mount می‌کند.
+همهٔ آرتیفکت‌های کامپایلر در پوشهٔ <code>obj</code> ذخیره می‌شوند.
+shell از پوشهٔ <code>obj</code> شروع می‌شود.
+از آنجا، <code>../src/ci/run.sh</code> را اجرا می‌کند که ساخت را همان‌طور که ایمیج Docker تعریف کرده شروع می‌کند.</p>
+<p>می‌توانید مستقیماً <code>src/ci/docker/run.sh &lt;image-name&gt;</code> را اجرا کنید.
+چند نکتهٔ مهم دربارهٔ اسکریپت <code>run.sh</code>:</p>
+<ul>
+<li>وقتی در CI اجرا می‌شود، اسکریپت انتظار دارد همهٔ زیرماژول‌ها checkout شده باشند.
+اگر زیرماژولی که job به آن دسترسی دارد در دسترس نباشد، ساخت با خطا مواجه می‌شود.
+بنابراین باید مطمئن شوید همهٔ زیرماژول‌های لازم به‌صورت محلی checkout شده‌اند.
+می‌توانید این را دستی با git انجام دهید، یا <code>build.submodules = true</code> را در <code>bootstrap.toml</code> تنظیم کنید و دستوری مثل <code>x build</code> را اجرا کنید تا bootstrap مهم‌ترین زیرماژول‌ها را دانلود کند.
+توجه کنید که ممکن است این برای job مشخص CI که می‌خواهید اجرا کنید کافی نباشد.</li>
+<li><code>&lt;image-name&gt;</code> با یک پوشهٔ واحد در یکی از پوشه‌های <code>src/ci/docker/host-*</code> متناظر است.
+توجه کنید که نام ایمیج لزوماً با نام job یکی نیست، چون برخی jobها همان ایمیج را اجرا می‌کنند اما با متغیرهای محیطی یا آرگومان‌های ساخت Docker متفاوت.
+این بخشی از پیچیدگی‌ای است که اجرای محلی jobهای CI را دشوار می‌کند.</li>
+<li>اگر یک job از نوع «dist» (jobای که با <code>dist-</code> شروع می‌شود) را اجرا می‌کنید، باید متغیر محیطی <code>DEPLOY=1</code> را تنظیم کنید.</li>
+<li>اگر یک job از نوع «alternative dist» (jobای که با <code>dist-</code> شروع و با <code>-alt</code> تمام می‌شود) را اجرا می‌کنید، باید متغیر محیطی <code>DEPLOY_ALT=1</code> را تنظیم کنید.</li>
+<li>برخی تست‌های std به پشتیبانی IPv6 نیاز دارند.
+Docker روی لینوکس به نظر می‌رسد آن را به‌طور پیش‌فرض غیرفعال دارد.
+پیش از ساخت container، دستورهای <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/scripts/enable-docker-ipv6.sh"><code>enable-docker-ipv6.sh</code></a> را اجرا کنید تا IPv6 فعال شود.
+این فقط یک بار لازم است.</li>
+</ul>
+<h3 id="interactive-mode"><a class="header" href="#interactive-mode">Interactive mode</a></h3>
+<p>گاهی می‌تواند مفید باشد یک ایمیج Docker مشخص را بسازید و سپس دستورهای سفارشی درون آن اجرا کنید، تا رفتار سیستم داده‌شده را آزمایش کنید.
+می‌توانید این کار را با حالت تعاملی انجام دهید، که
+با <code>src/ci/docker/run.sh --dev &lt;image-name&gt;</code> یک shell از نوع bash در container شروع می‌کند.</p>
+<p>وقتی درون container Docker هستید، می‌توانید دستورهای جداگانه‌ای را برای کارهای مشخص اجرا کنید.
+برای مثال می‌توانید <code>../x test tests/ui</code> را اجرا کنید تا فقط تست‌های UI اجرا شوند.</p>
+<p>چند نکتهٔ اضافی دربارهٔ استفاده از حالت تعاملی:</p>
+<ul>
+<li>container هنگام خروج از shell به‌طور خودکار حذف می‌شود، اما
+آرتیفکت‌های ساخت در پوشهٔ <code>obj</code> باقی می‌مانند.
+اگر بین ایمیج‌های مختلف Docker جابه‌جا می‌شوید، آرتیفکت‌های محیط‌های قبلی
+که در پوشهٔ <code>obj</code> ذخیره شده‌اند ممکن است سامانهٔ ساخت را گیج کنند.
+گاهی لازم می‌شود پیش از ساخت درون container بخش‌هایی از پوشهٔ <code>obj</code> یا همهٔ آن را حذف کنید.</li>
+<li>container حداقلی است و فقط مجموعهٔ کمینه‌ای از بسته‌ها را دارد.
+شاید بخواهید چیزهایی مثل <code>apt install less vim</code> را نصب کنید.</li>
+<li>می‌توانید چند shell درون container باز کنید.
+ابتدا به نام container (یک هش کوتاه) نیاز دارید که در prompt مربوط به shell نمایش داده می‌شود، یا می‌توانید
+بیرون از container دستور <code>docker container ls</code> را برای فهرست‌کردن containerهای موجود اجرا کنید.
+با نام container، دستور <code>docker exec -it &lt;CONTAINER&gt; /bin/bash</code> را اجرا کنید که در آن <code>&lt;CONTAINER&gt;</code> نام container مثل <code>4ba195e95cef</code> است.</li>
+</ul><nav class="page-nav"><a href="running.html">→ اجرای آزمون‌ها</a><a href="ci.html">آزمون با CI ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,240 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>ماکروها — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch20-05-macros"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="macros"><a class="header" href="#macros">ماکروها</a></h2>
+<p>ما در طول این کتاب از ماکروهایی مانند <code>println!</code> استفاده کرده‌ایم، اما هنوز به طور کامل بررسی نکرده‌ایم که یک ماکرو چیست و چگونه کار می‌کند. اصطلاح <em>ماکرو</em> به مجموعه‌ای از قابلیت‌ها در Rust اشاره دارد: ماکروهای <em>اعلانی</em> (declarative) با <code>macro_rules!</code> و سه نوع ماکرو <em>رویه‌ای</em> (procedural):</p>
+<ul>
+<li>ماکروهای سفارشی <code>#[derive]</code> که کدی را که با ویژگی <code>derive</code> برای ساختارها (structs) و شمارش‌ها (enums) اضافه می‌شود مشخص می‌کنند.</li>
+<li>ماکروهای شبیه ویژگی (Attribute-like) که ویژگی‌های سفارشی تعریف می‌کنند که می‌توانند روی هر آیتمی استفاده شوند.</li>
+<li>ماکروهای شبیه تابع (Function-like) که مانند فراخوانی تابع به نظر می‌رسند اما روی توکن‌هایی که به عنوان آرگومان مشخص شده‌اند عمل می‌کنند.</li>
+</ul>
+<p>ما به نوبت درباره هر یک از این‌ها صحبت خواهیم کرد، اما ابتدا بیایید نگاهی بیندازیم که چرا اصلاً به ماکروها نیاز داریم وقتی قبلاً توابع را داریم.</p>
+<h3 id="the-difference-between-macros-and-functions"><a class="header" href="#the-difference-between-macros-and-functions">تفاوت ماکروها و توابع</a></h3>
+<p>در اصل، ماکروها روشی برای نوشتن کدی هستند که کد دیگری را می‌نویسد، که به عنوان <em>فرابرنامه‌نویسی</em> (metaprogramming) شناخته می‌شود. در پیوست C، ما ویژگی <code>derive</code> را بررسی می‌کنیم که پیاده‌سازی ویژگی‌های مختلف را برای شما تولید می‌کند. همچنین ما از ماکروهای <code>println!</code> و <code>vec!</code> در طول کتاب استفاده کرده‌ایم. همه این ماکروها <em>توسعه</em> پیدا می‌کنند تا کدی بیشتر از کدی که به صورت دستی نوشته‌اید تولید کنند.</p>
+<p>برنامه‌نویسی فراداده (Metaprogramming) برای کاهش میزان کدی که باید بنویسید و نگهداری کنید مفید است، که این نیز یکی از وظایف توابع است. با این حال، ماکروها توانایی‌های اضافی‌ای دارند که توابع از آن‌ها برخوردار نیستند.</p>
+<p>یک امضای تابع باید تعداد و نوع پارامترهایی که تابع دارد را مشخص کند. از سوی دیگر، ماکروها می‌توانند تعداد متغیری از پارامترها را بپذیرند: می‌توانیم <code>println!("hello")</code> را با یک آرگومان یا <code>println!("hello {}", name)</code> را با دو آرگومان فراخوانی کنیم. همچنین، ماکروها قبل از اینکه کامپایلر معنی کد را تفسیر کند گسترش می‌یابند، بنابراین یک ماکرو می‌تواند، به عنوان مثال، یک ویژگی را روی یک نوع مشخص پیاده‌سازی کند. اما یک تابع نمی‌تواند، زیرا در زمان اجرا فراخوانی می‌شود و یک ویژگی باید در زمان کامپایل پیاده‌سازی شود.</p>
+<p>عیب پیاده‌سازی یک ماکرو به جای یک تابع این است که تعریف ماکروها پیچیده‌تر از تعریف توابع است زیرا شما در حال نوشتن کدی در Rust هستید که کد دیگری را در Rust می‌نویسد. به دلیل این واسطه‌گری، تعریف ماکروها به طور کلی سخت‌تر از توابع خوانده می‌شود، فهمیده می‌شود و نگهداری می‌شود.</p>
+<p>یکی دیگر از تفاوت‌های مهم بین ماکروها و توابع این است که شما باید ماکروها را <em>قبل</em> از فراخوانی آن‌ها در یک فایل تعریف کنید یا به دامنه بیاورید، برخلاف توابع که می‌توانید آن‌ها را در هر جایی تعریف کرده و در هر جایی فراخوانی کنید.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="declarative-macros-with-macro_rules-for-general-metaprogramming"></a></p>
+<h3 id="declarative-macros-for-general-metaprogramming"><a class="header" href="#declarative-macros-for-general-metaprogramming">ماکروهای اعلانی برای فرابرنامه‌نویسی عمومی</a></h3>
+<p>رایج‌ترین شکل استفاده از ماکروها در Rust، <em>ماکروهای اعلامی</em> (declarative macro) هستند. این نوع ماکروها گاهی با عنوان‌هایی مانند “ماکروهای بر پایه‌ی مثال”، “ماکروهای <code>macro_rules!</code>”، یا به‌سادگی “ماکروها” شناخته می‌شوند. در هسته‌ی خود، ماکروهای اعلامی به شما اجازه می‌دهند چیزی مشابه یک عبارت <code>match</code> در Rust بنویسید. همان‌طور که در فصل ۶ بیان شد، عبارات <code>match</code> ساختارهای کنترلی‌ای هستند که یک عبارت را می‌گیرند، مقدار حاصل از آن را با الگوها مقایسه می‌کنند، و سپس کدی که با الگوی مطابق مرتبط است را اجرا می‌کنند. ماکروها نیز یک مقدار را با الگوهایی مقایسه می‌کنند که با کد خاصی مرتبط‌اند: در این حالت، مقدار، کد منبع Rust است که به ماکرو داده می‌شود؛ الگوها با ساختار این کد منبع مقایسه می‌شوند؛ و کدی که با هر الگو مرتبط است، در صورت تطابق، جایگزین کدی می‌شود که به ماکرو داده شده است. تمام این فرآیند در زمان کامپایل اتفاق می‌افتد.</p>
+<p>برای تعریف یک ماکرو، از ساختار <code>macro_rules!</code> استفاده می‌کنید. بیایید بررسی کنیم چگونه از <code>macro_rules!</code> استفاده کنیم با نگاهی به نحوه تعریف ماکروی <code>vec!</code>. فصل ۸ پوشش داد که چگونه می‌توانیم از ماکروی <code>vec!</code> برای ایجاد یک بردار جدید با مقادیر خاص استفاده کنیم. به عنوان مثال، ماکروی زیر یک بردار جدید حاوی سه عدد صحیح ایجاد می‌کند:</p>
+<pre><code class="language-rust">let v: Vec&lt;u32&gt; = vec![1, 2, 3];</code></pre>
+<p>ما همچنین می‌توانیم از ماکروی <code>vec!</code> برای ساخت یک بردار شامل دو عدد صحیح یا یک بردار شامل پنج برش رشته استفاده کنیم. نمی‌توانیم از یک تابع برای انجام همین کار استفاده کنیم زیرا نمی‌دانیم تعداد یا نوع مقادیر از پیش چیست.</p>
+<p>فهرست 20-35 نسخه‌ای کمی ساده‌شده از تعریف ماکروی <code>vec!</code> را نشان می‌دهد.</p>
+<figure class="listing" id="listing-20-35">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">#[macro_export]
+macro_rules! vec {
+    ( $( $x:expr ),* ) =&gt; {
+        {
+            let mut temp_vec = Vec::new();
+            $(
+                temp_vec.push($x);
+            )*
+            temp_vec
+        }
+    };
+}</code></pre>
+<figcaption><a href="#listing-20-35">لیست ۲۰-۳۵</a>: نسخه‌ای ساده‌شده از تعریف ماکروی <code>vec!</code></figcaption>
+</figure>
+<blockquote>
+<p>نکته: تعریف واقعی ماکروی <code>vec!</code> در کتابخانه استاندارد شامل کدی برای پیش‌اختصاص دادن مقدار مناسبی از حافظه به‌صورت اولیه است. این کد یک بهینه‌سازی است که برای ساده‌تر شدن مثال، در این‌جا گنجانده نشده است.</p>
+</blockquote>
+<p>حاشیه‌نویسی <code>#[macro_export]</code> نشان می‌دهد که این ماکرو باید هر زمان که crate‌ای که ماکرو در آن تعریف شده است به دامنه آورده شود، در دسترس قرار گیرد. بدون این حاشیه‌نویسی، ماکرو نمی‌تواند به دامنه آورده شود.</p>
+<p>سپس تعریف ماکرو را با <code>macro_rules!</code> و نام ماکرویی که تعریف می‌کنیم <em>بدون</em> علامت تعجب شروع می‌کنیم. نام، که در اینجا <code>vec</code> است، با آکولادهایی دنبال می‌شود که بدنه تعریف ماکرو را مشخص می‌کنند.</p>
+<p>ساختار بدنه <code>vec!</code> مشابه ساختار یک عبارت <code>match</code> است. در اینجا یک بازو با الگوی <code>( $( $x:expr ),* )</code> داریم، که با <code>=&gt;</code> و بلوک کدی که با این الگو مرتبط است دنبال می‌شود. اگر الگو تطابق یابد، بلوک کد مرتبط گسترش می‌یابد. با توجه به اینکه این تنها الگو در این ماکرو است، تنها یک روش معتبر برای تطابق وجود دارد؛ هر الگوی دیگری باعث خطا خواهد شد. ماکروهای پیچیده‌تر ممکن است بیش از یک بازو داشته باشند.</p>
+<p>سینتکس الگوهای معتبر در تعریف ماکروها با سینتکس الگوهایی که در فصل ۱۹ بررسی کردیم متفاوت است، زیرا الگوهای ماکرو در برابر ساختار کد راست مطابقت داده می‌شوند، نه در برابر مقادیر. بیایید قدم‌به‌قدم بررسی کنیم که اجزای الگو در لیست ۲۰-۲۹ چه معنایی دارند؛ برای مشاهده‌ی کامل سینتکس الگوهای ماکرو، به <a href="../reference/macros-by-example.html">مرجع رسمی Rust</a> مراجعه کنید.</p>
+<p>ابتدا از یک جفت پرانتز برای در بر گرفتن کل الگو استفاده می‌کنیم. از علامت دلار (<code>$</code>) برای تعریف یک متغیر در سیستم ماکرو استفاده می‌شود که کد راستی را که با الگو مطابقت دارد، در خود نگه می‌دارد. علامت دلار نشان می‌دهد که این یک متغیر ماکرو است و نه یک متغیر معمولی در راست. سپس یک جفت پرانتز می‌آید که مقادیری را که با الگو مطابقت دارند، در خود می‌گیرد تا در کد جایگزین مورد استفاده قرار گیرند. درون <code>$()</code>، عبارت <code>$x:expr</code> قرار دارد، که هر عبارت راست را مطابقت می‌دهد و به آن نام <code>$x</code> می‌دهد.</p>
+<p>کامی که بعد از <code>$()</code> آمده است نشان می‌دهد که باید بین هر نمونه از کدی که با الگوی درون <code>$()</code> مطابقت دارد، یک کاراکتر ویرگول قرار داشته باشد. علامت <code>*</code> مشخص می‌کند که الگو صفر یا تعداد بیشتری از موردی را که قبل از <code>*</code> آمده، مطابقت می‌دهد.</p>
+<p>وقتی این ماکرو را با <code>vec![1, 2, 3];</code> فراخوانی می‌کنیم، الگوی <code>$x</code> سه بار با سه عبارت <code>1</code>، <code>2</code> و <code>3</code> تطابق پیدا می‌کند.</p>
+<p>حالا بیایید به الگویی که در بدنه کد مرتبط با این بازو وجود دارد نگاه کنیم: <code>temp_vec.push()</code> درون <code>$()*</code> برای هر بخشی که با <code>$()</code> در الگو تطابق دارد، صفر یا بیشتر بار بسته به اینکه الگو چند بار تطابق پیدا می‌کند، تولید می‌شود. <code>$x</code> با هر عبارتی که تطابق پیدا کند جایگزین می‌شود. وقتی این ماکرو را با <code>vec![1, 2, 3];</code> فراخوانی می‌کنیم، کدی که جایگزین این فراخوانی ماکرو می‌شود به شکل زیر خواهد بود:</p>
+<pre><code class="language-rust ignore">{
+    let mut temp_vec = Vec::new();
+    temp_vec.push(1);
+    temp_vec.push(2);
+    temp_vec.push(3);
+    temp_vec
+}</code></pre>
+<p>ما یک ماکرو تعریف کرده‌ایم که می‌تواند هر تعداد آرگومان از هر نوعی را بپذیرد و کدی برای ایجاد یک بردار که شامل عناصر مشخص‌شده است تولید کند.</p>
+<p>برای یادگیری بیشتر دربارهٔ نحوهٔ نوشتن ماکروها، به مستندات آنلاین یا منابع دیگر مراجعه کنید، مانند <a href="https://veykril.github.io/tlborm/">«The Little Book of Rust Macros»</a> که دنیل کیپ (Daniel Keep) آن را آغاز کرد و لوکاس ویرث (Lukas Wirth) ادامه داد.</p>
+<h3 id="procedural-macros-for-generating-code-from-attributes"><a class="header" href="#procedural-macros-for-generating-code-from-attributes">ماکروهای رویه‌ای (Procedural) برای تولید کد از ویژگی‌ها (Attributes)</a></h3>
+<p>نوع دوم ماکروها، ماکروهای رویه‌ای (procedural macros) هستند که رفتاری شبیه به توابع دارند (و در واقع نوعی رویه محسوب می‌شوند). <em>ماکروهای رویه‌ای</em> قطعه‌ای از کد را به عنوان ورودی دریافت می‌کنند، روی آن کد پردازش انجام می‌دهند و کدی را به عنوان خروجی تولید می‌کنند، در حالی که ماکروهای اعلامی (declarative) با الگوها مطابقت داده و کد را با کدی دیگر جایگزین می‌کنند. سه نوع از ماکروهای رویه‌ای وجود دارد: <code>derive</code> سفارشی، ماکروهای شبیه-صفت (attribute-like)، و ماکروهای شبیه-تابع (function-like)، و همگی به شکلی مشابه عمل می‌کنند.</p>
+<p>هنگام ایجاد ماکروهای رویه‌ای، تعریف آن‌ها باید در یک crate جداگانه قرار گیرد که نوع crate آن به‌صورت ویژه مشخص شده باشد. این الزام به دلایل فنی پیچیده‌ای است که امیدواریم در آینده برطرف شوند. در لیست 20-36، نحوه تعریف یک ماکرو رویه‌ای را نشان می‌دهیم که در آن <code>some_attribute</code> یک جایگزین برای نوع خاصی از ماکرو است.</p>
+<figure class="listing" id="listing-20-36">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust ignore">use proc_macro::TokenStream;
+
+#[some_attribute]
+pub fn some_name(input: TokenStream) -&gt; TokenStream {
+}</code></pre>
+<figcaption><a href="#listing-20-36">لیست ۲۰-۳۶</a>: نمونه‌ای از تعریف یک ماکرو رویه‌ای</figcaption>
+</figure>
+<p>تابعی که یک ماکروی رویه‌ای را تعریف می‌کند، یک <code>TokenStream</code> را به عنوان ورودی می‌گیرد و یک <code>TokenStream</code> را به عنوان خروجی تولید می‌کند. نوع <code>TokenStream</code> توسط crate به نام <code>proc_macro</code> تعریف شده است که با Rust همراه است و نمایانگر یک توالی از توکن‌ها است. این هسته ماکرو است: کد منبعی که ماکرو روی آن عمل می‌کند ورودی <code>TokenStream</code> را تشکیل می‌دهد و کدی که ماکرو تولید می‌کند خروجی <code>TokenStream</code> است. این تابع همچنین دارای یک ویژگی (attribute) متصل به خود است که مشخص می‌کند کدام نوع از ماکروی رویه‌ای را ایجاد می‌کنیم. ما می‌توانیم چندین نوع از ماکروهای رویه‌ای را در یک crate داشته باشیم.</p>
+<p>بیایید نگاهی به انواع مختلف ماکروهای رویه‌ای بیندازیم. ابتدا با یک ماکرو <code>derive</code> سفارشی شروع می‌کنیم و سپس تفاوت‌های جزئی که باعث تمایز شکل‌های دیگر می‌شوند را توضیح خواهیم داد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="how-to-write-a-custom-derive-macro"></a></p>
+<h3 id="custom-derive-macros"><a class="header" href="#custom-derive-macros">نحوه نوشتن یک ماکروی <code>derive</code> سفارشی</a></h3>
+<p>بیایید یک crate به نام <code>hello_macro</code> بسازیم که یک trait به نام <code>HelloMacro</code> با یک تابع وابسته به نام <code>hello_macro</code> تعریف می‌کند. به‌جای اینکه کاربرانمان را مجبور کنیم <code>HelloMacro</code> را برای هر یک از نوع‌هایشان پیاده‌سازی کنند، یک ماکروی رویه‌ای (procedural) ارائه می‌دهیم تا کاربران بتوانند نوع خود را با <code>#[derive(HelloMacro)]</code> حاشیه‌نویسی کنند و یک پیاده‌سازی پیش‌فرض از تابع <code>hello_macro</code> بگیرند. پیاده‌سازی پیش‌فرض <code>Hello, Macro! My name is TypeName!</code> را چاپ می‌کند، که در آن <code>TypeName</code> نام نوعی است که این trait روی آن تعریف شده است. به عبارت دیگر، crateای می‌نویسیم که به برنامه‌نویس دیگری امکان می‌دهد با استفاده از crate ما کدی مانند فهرست ۲۰-۳۷ بنویسد.</p>
+<figure class="listing" id="listing-20-37">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">use hello_macro::HelloMacro;
+use hello_macro_derive::HelloMacro;
+
+#[derive(HelloMacro)]
+struct Pancakes;
+
+fn main() {
+    Pancakes::hello_macro();
+}</code></pre>
+<figcaption><a href="#listing-20-37">لیست ۲۰-۳۷</a>: کدی که کاربر crate ما می‌تواند هنگام استفاده از ماکروی روندی ما بنویسد</figcaption>
+</figure>
+<p>این کد متن <code>Hello, Macro! My name is Pancakes!</code> را چاپ می‌کند وقتی کار ما تمام شود. اولین قدم این است که یک crate جدید از نوع کتابخانه بسازیم، به این صورت:</p>
+<pre><code class="language-console">$ cargo new hello_macro --lib
+</code></pre>
+<p>سپس، در لیست ۲۰-۳۸، <code>trait</code> مربوط به <code>HelloMacro</code> و تابع مرتبط با آن را تعریف خواهیم کرد.</p>
+<figure class="listing" id="listing-20-38">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">pub trait HelloMacro {
+    fn hello_macro();
+}</code></pre>
+<figcaption><a href="#listing-20-38">لیست ۲۰-۳۸</a>: A simple trait that we will use with the &lt;code&gt;&lt;/x-listing&gt;derive&lt;/code&gt; macro</figcaption>
+</figure>
+<p>ما یک <code>trait</code> و تابع مربوط به آن داریم. در این مرحله، کاربر crate ما می‌تواند این trait را به صورت دستی پیاده‌سازی کند تا به عملکرد مورد نظر دست یابد، همان‌طور که در لیست ۲۰-۳۹ نشان داده شده است.</p>
+<figure class="listing" id="listing-20-39">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore">use hello_macro::HelloMacro;
+
+struct Pancakes;
+
+impl HelloMacro for Pancakes {
+    fn hello_macro() {
+        println!("Hello, Macro! My name is Pancakes!");
+    }
+}
+
+fn main() {
+    Pancakes::hello_macro();
+}</code></pre>
+<figcaption><a href="#listing-20-39">لیست ۲۰-۳۹</a>: نحوه‌ای که کاربران می‌توانند پیاده‌سازی دستی trait به نام &lt;code&gt;&lt;/x-listing&gt;HelloMacro&lt;/code&gt; را انجام دهند</figcaption>
+</figure>
+<p>با این حال، آن‌ها باید بلوک پیاده‌سازی را برای هر نوعی که می‌خواهند با <code>hello_macro</code> استفاده کنند بنویسند؛ ما می‌خواهیم آن‌ها را از انجام این کار معاف کنیم.</p>
+<p>علاوه بر این، ما هنوز نمی‌توانیم برای تابع <code>hello_macro</code> یک پیاده‌سازی پیش‌فرض ارائه دهیم که نام نوعی که ویژگی روی آن پیاده‌سازی شده است را چاپ کند: Rust قابلیت‌های بازتاب (reflection) ندارد، بنابراین نمی‌تواند نام نوع را در زمان اجرا جستجو کند. ما به یک ماکرو نیاز داریم تا کد را در زمان کامپایل تولید کند.</p>
+<p>گام بعدی تعریف ماکروی رویه‌ای است. در زمان نگارش این مطلب، ماکروهای رویه‌ای باید در یک کرِیت جداگانه قرار داشته باشند. ممکن است این محدودیت در آینده برداشته شود. قرارداد ساختاردهی کرِیت‌ها و کرِیت‌های ماکرو به این صورت است: برای کرِیتی به نام <code>foo</code>، کرِیت ماکروی <code>derive</code> سفارشی با نام <code>foo_derive</code> شناخته می‌شود. بیایید یک کرِیت جدید با نام <code>hello_macro_derive</code> درون پروژه <code>hello_macro</code> خود ایجاد کنیم:</p>
+<pre><code class="language-console">$ cargo new hello_macro_derive --lib
+</code></pre>
+<p>دو crate ما به شدت به هم مرتبط هستند، بنابراین ما crate ماکروی رویه‌ای را درون دایرکتوری crate <code>hello_macro</code> ایجاد می‌کنیم. اگر تعریف ویژگی را در <code>hello_macro</code> تغییر دهیم، باید پیاده‌سازی ماکروی رویه‌ای در <code>hello_macro_derive</code> را نیز تغییر دهیم. این دو crate باید به طور جداگانه منتشر شوند و برنامه‌نویسانی که از این جعبه‌ها (crates) استفاده می‌کنند باید هر دو را به عنوان وابستگی اضافه کرده و آن‌ها را به دامنه بیاورند. در عوض، می‌توانستیم crate <code>hello_macro</code> از <code>hello_macro_derive</code> به عنوان یک وابستگی استفاده کند و کد ماکروی رویه‌ای را دوباره صادر کند. با این حال، روشی که پروژه را ساختاربندی کرده‌ایم، این امکان را فراهم می‌کند که برنامه‌نویسان از <code>hello_macro</code> حتی اگر عملکرد <code>derive</code> را نخواهند، استفاده کنند.</p>
+<p>ما باید crate <code>hello_macro_derive</code> را به عنوان یک crate ماکروی رویه‌ای اعلام کنیم. همچنین به عملکردهایی از جعبه‌ها (crates)ی <code>syn</code> و <code>quote</code> نیاز خواهیم داشت، همان‌طور که به زودی خواهید دید، بنابراین باید آن‌ها را به عنوان وابستگی اضافه کنیم. موارد زیر را به فایل <em>Cargo.toml</em> برای <code>hello_macro_derive</code> اضافه کنید:</p>
+<figure class="listing">
+<span class="file-name">Filename: hello_macro_derive/Cargo.toml</span>
+<pre><code class="language-toml">[lib]
+proc-macro = true
+
+[dependencies]
+syn = "2.0"
+quote = "1.0"
+</code></pre>
+</figure>
+<p>برای شروع تعریف ماکروی رویه‌ای، کد موجود در لیست 20-40 را در فایل <em>src/lib.rs</em> کرِیت <code>hello_macro_derive</code> قرار دهید. توجه داشته باشید که این کد تا زمانی که یک تعریف برای تابع <code>impl_hello_macro</code> اضافه نکنیم، کامپایل نخواهد شد.</p>
+<figure class="listing" id="listing-20-40">
+<span class="file-name">Filename: hello_macro_derive/src/lib.rs</span>
+<pre><code class="language-rust ignore does_not_compile">use proc_macro::TokenStream;
+use quote::quote;
+
+#[proc_macro_derive(HelloMacro)]
+pub fn hello_macro_derive(input: TokenStream) -&gt; TokenStream {
+    // Construct a representation of Rust code as a syntax tree
+    // that we can manipulate.
+    let ast = syn::parse(input).unwrap();
+
+    // Build the trait implementation.
+    impl_hello_macro(&amp;ast)
+}</code></pre>
+<figcaption><a href="#listing-20-40">لیست ۲۰-۴۰</a>: کدی که اکثر کرِیت‌های ماکروی رویه‌ای برای پردازش کد Rust نیاز دارند</figcaption>
+</figure>
+<p>توجه کنید که کد را به دو تابع تقسیم کرده‌ایم: <code>hello_macro_derive</code> که مسئول پردازش <code>TokenStream</code> است، و <code>impl_hello_macro</code> که مسئول تبدیل درخت نحوی است. این کار نوشتن یک ماکروی رویه‌ای را آسان‌تر می‌کند. کد تابع بیرونی (<code>hello_macro_derive</code> در اینجا) تقریباً برای تمام جعبه‌ها (crates)ی ماکروی رویه‌ای که می‌بینید یا ایجاد می‌کنید یکسان خواهد بود. کدی که در بدنه تابع داخلی (<code>impl_hello_macro</code> در اینجا) مشخص می‌کنید بسته به هدف ماکروی رویه‌ای شما متفاوت خواهد بود.</p>
+<p>سه crate جدید معرفی کرده‌ایم: <code>proc_macro</code>، <a href="https://crates.io/crates/syn"><code>syn</code></a><!-- ignore --> و <a href="https://crates.io/crates/quote"><code>quote</code></a><!-- ignore -->. crate با نام <code>proc_macro</code> همراه Rust می‌آید، بنابراین نیازی نبود آن را به وابستگی‌ها در فایل <em>Cargo.toml</em> اضافه کنیم. crate با نام <code>proc_macro</code> همان API کامپایلر است که به ما امکان می‌دهد کد Rust را از درون کد خودمان بخوانیم و دستکاری کنیم.</p>
+<p>crate <code>syn</code> کد Rust را از یک رشته به یک ساختار داده‌ای تبدیل می‌کند که می‌توانیم عملیات روی آن انجام دهیم. crate <code>quote</code> ساختارهای داده <code>syn</code> را دوباره به کد Rust تبدیل می‌کند. این جعبه‌ها (crates) پردازش هر نوع کد Rust که بخواهیم مدیریت کنیم را بسیار ساده‌تر می‌کنند: نوشتن یک تجزیه‌کننده کامل برای کد Rust کار ساده‌ای نیست.</p>
+<p>تابع <code>hello_macro_derive</code> زمانی فراخوانی می‌شود که یک کاربر از کتابخانه ما ویژگی <code>#[derive(HelloMacro)]</code> را روی یک نوع مشخص کند. این امر به این دلیل ممکن است که ما تابع <code>hello_macro_derive</code> را با <code>proc_macro_derive</code> حاشیه‌نویسی کرده‌ایم و نام <code>HelloMacro</code> را مشخص کرده‌ایم، که با نام ویژگی ما مطابقت دارد؛ این روش معمولی‌ای است که بیشتر ماکروهای رویه‌ای دنبال می‌کنند.</p>
+<p>تابع <code>hello_macro_derive</code> ابتدا <code>input</code> را از یک <code>TokenStream</code> به یک ساختار داده تبدیل می‌کند که سپس می‌توانیم آن را تفسیر کرده و عملیات‌هایی روی آن انجام دهیم. اینجاست که crate <code>syn</code> به کار می‌آید. تابع <code>parse</code> در <code>syn</code> یک <code>TokenStream</code> می‌گیرد و یک ساختار <code>DeriveInput</code> را که نمایانگر کد Rust تجزیه‌شده است، بازمی‌گرداند. لیست ۲۰-۳۳ بخش‌های مرتبط از ساختار <code>DeriveInput</code> را نشان می‌دهد که هنگام تجزیه کد <code>struct Pancakes;</code> دریافت می‌کنیم:</p>
+<figure class="listing" id="listing-20-41">
+<pre><code class="language-rust ignore">DeriveInput {
+    // --snip--
+
+    ident: Ident {
+        ident: "Pancakes",
+        span: #0 bytes(95..103)
+    },
+    data: Struct(
+        DataStruct {
+            struct_token: Struct,
+            fields: Unit,
+            semi_token: Some(
+                Semi
+            )
+        }
+    )
+}</code></pre>
+<figcaption><a href="#listing-20-41">لیست ۲۰-۴۱</a>: نمونه‌ای از &lt;code&gt;&lt;/x-listing&gt;DeriveInput&lt;/code&gt; که هنگام تجزیه کدی که ویژگی ماکرو در لیست 20-37 را دارد، دریافت می‌کنیم</figcaption>
+</figure>
+<p>فیلدهای این <code>struct</code> نشان می‌دهند که کدی که در Rust تجزیه کرده‌ایم یک ساختار واحد (unit struct) با <code>ident</code> (شناساگر، یعنی نام) به نام <code>Pancakes</code> است. فیلدهای بیشتری نیز در این <code>struct</code> وجود دارند که برای توصیف انواع مختلفی از کدهای Rust استفاده می‌شوند؛ برای اطلاعات بیشتر به <a href="https://docs.rs/syn/2.0/syn/struct.DeriveInput.html">مستندات <code>syn</code> درباره‌ی <code>DeriveInput</code></a> مراجعه کنید.</p>
+<p>به‌زودی تابع <code>impl_hello_macro</code> را تعریف خواهیم کرد؛ این تابع جایی است که کد جدید Rust را که می‌خواهیم به کد اضافه کنیم، تولید خواهیم کرد. اما پیش از آن، توجه داشته باشید که خروجی ماکروی <code>derive</code> ما نیز یک <code>TokenStream</code> است. این <code>TokenStream</code> بازگشتی به کدی که کاربران crate ما نوشته‌اند اضافه می‌شود، بنابراین زمانی که crate خود را کامپایل می‌کنند، عملکرد اضافه‌ای که ما در <code>TokenStream</code> تغییر‌یافته فراهم کرده‌ایم به کدشان افزوده خواهد شد.</p>
+<p>ممکن است متوجه شده باشید که ما از <code>unwrap</code> استفاده می‌کنیم تا در صورتی که فراخوانی تابع <code>syn::parse</code> شکست بخورد، تابع <code>hello_macro_derive</code> به وحشت بیفتد (<em>panic</em>). لازم است ماکروی رویه‌ای ما در صورت بروز خطا به وحشت بیفتد، زیرا توابع <code>proc_macro_derive</code> باید به جای <code>Result</code> یک <code>TokenStream</code> بازگردانند تا با API ماکروهای رویه‌ای سازگار باشند. برای ساده کردن این مثال از <code>unwrap</code> استفاده کرده‌ایم؛ در کد تولیدی، بهتر است پیام‌های خطای خاص‌تری درباره مشکل ایجاد شده با استفاده از <code>panic!</code> یا <code>expect</code> ارائه دهید.</p>
+<p>اکنون که کدی داریم که کد Rust حاشیه‌نویسی‌شده را از یک <code>TokenStream</code> به نمونه‌ای از <code>DeriveInput</code> تبدیل می‌کند، بیایید کدی را تولید کنیم که <code>trait</code> مربوط به <code>HelloMacro</code> را برای نوع حاشیه‌نویسی‌شده پیاده‌سازی می‌کند، همان‌طور که در لیستینگ 20-42 نشان داده شده است.</p>
+<figure class="listing" id="listing-20-42">
+<span class="file-name">Filename: hello_macro_derive/src/lib.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">use proc_macro::TokenStream;
+</span><span class="boring">use quote::quote;
+</span><span class="boring">
+</span><span class="boring">#[proc_macro_derive(HelloMacro)]
+</span><span class="boring">pub fn hello_macro_derive(input: TokenStream) -&gt; TokenStream {
+</span><span class="boring">    // Construct a representation of Rust code as a syntax tree
+</span><span class="boring">    // that we can manipulate
+</span><span class="boring">    let ast = syn::parse(input).unwrap();
+</span><span class="boring">
+</span><span class="boring">    // Build the trait implementation
+</span><span class="boring">    impl_hello_macro(&amp;ast)
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn impl_hello_macro(ast: &amp;syn::DeriveInput) -&gt; TokenStream {
+    let name = &amp;ast.ident;
+    let generated = quote! {
+        impl HelloMacro for #name {
+            fn hello_macro() {
+                println!("Hello, Macro! My name is {}!", stringify!(#name));
+            }
+        }
+    };
+    generated.into()
+}</code></pre>
+<figcaption><a href="#listing-20-42">لیست ۲۰-۴۲</a>: پیاده‌سازی trait مربوط به &lt;code&gt;&lt;/x-listing&gt;HelloMacro&lt;/code&gt; با استفاده از کد Rust تجزیه‌شده</figcaption>
+</figure>
+<p>با استفاده از <code>ast.ident</code> یک نمونه از struct با نام <code>Ident</code> می‌گیریم که نام (شناسه) نوع حاشیه‌نویسی‌شده را در خود دارد. struct در فهرست ۲۰-۴۱ نشان می‌دهد که وقتی تابع <code>impl_hello_macro</code> را روی کد فهرست ۲۰-۳۷ اجرا می‌کنیم، <code>ident</code> ای که به دست می‌آوریم فیلد <code>ident</code> را با مقدار <code>"Pancakes"</code> خواهد داشت. بنابراین متغیر <code>name</code> در فهرست ۲۰-۴۲ شامل یک نمونه از struct با نام <code>Ident</code> خواهد بود که هنگام چاپ، رشتهٔ <code>"Pancakes"</code> یعنی نام struct در فهرست ۲۰-۳۷ می‌شود.</p>
+<p>ماکروی <code>quote!</code> به ما اجازه می‌دهد کد Rust مورد نظر خود برای بازگرداندن را تعریف کنیم. کامپایلر به چیزی متفاوت از نتیجه مستقیم اجرای ماکروی <code>quote!</code> نیاز دارد، بنابراین باید آن را به یک <code>TokenStream</code> تبدیل کنیم. این کار را با فراخوانی متد <code>into</code> انجام می‌دهیم که این نمایش میانی را مصرف کرده و مقداری از نوع <code>TokenStream</code> مورد نیاز بازمی‌گرداند.</p>
+<p>ماکروی <code>quote!</code> همچنین برخی قابلیت‌های جالب الگوگذاری (templating) ارائه می‌دهد: می‌توانیم <code>#name</code> را وارد کنیم و <code>quote!</code> آن را با مقدار موجود در متغیر <code>name</code> جایگزین می‌کند. حتی می‌توانید تکرارهایی مشابه با نحوه کار ماکروهای معمولی انجام دهید. برای مقدمه‌ای جامع به <a href="https://docs.rs/quote">مستندات crate <code>quote</code></a> مراجعه کنید.</p>
+<p>ما می‌خواهیم ماکروی رویه‌ای ما یک پیاده‌سازی از ویژگی <code>HelloMacro</code> برای نوعی که کاربر حاشیه‌نویسی کرده است تولید کند، که می‌توانیم با استفاده از <code>#name</code> به آن دسترسی پیدا کنیم. پیاده‌سازی ویژگی شامل یک تابع به نام <code>hello_macro</code> است که بدنه آن قابلیت مورد نظر ما، یعنی چاپ <code>Hello, Macro! My name is</code> و سپس نام نوع حاشیه‌نویسی‌شده، را ارائه می‌دهد.</p>
+<p>ماکروی <code>stringify!</code> که در این‌جا استفاده شده، یکی از ماکروهای توکار در Rust است. این ماکرو یک عبارت Rust، مانند <code>1 + 2</code> را می‌گیرد و در زمان کامپایل آن را به یک رشتهٔ متنی (string literal)، مانند <code>"1 + 2"</code> تبدیل می‌کند. این رفتار با ماکروهایی مانند <code>format!</code> یا <code>println!</code> متفاوت است؛ چرا که آن‌ها ابتدا مقدار عبارت را ارزیابی می‌کنند و سپس نتیجه را به یک <code>String</code> تبدیل می‌کنند. از آن‌جا که امکان دارد ورودی <code>#name</code> یک عبارت باشد که باید به صورت متنی چاپ شود، از <code>stringify!</code> استفاده می‌کنیم. همچنین استفاده از <code>stringify!</code> باعث صرفه‌جویی در حافظه می‌شود زیرا <code>#name</code> را در زمان کامپایل به یک رشتهٔ متنی تبدیل می‌کند.</p>
+<p>در این مرحله، اجرای دستور <code>cargo build</code> باید در هر دو crate یعنی <code>hello_macro</code> و <code>hello_macro_derive</code> با موفقیت کامل شود. حال بیایید این دو crate را به کدی که در لیستینگ 20-37 آمده متصل کنیم تا عملکرد ماکروی procedural را در عمل ببینیم! در دایرکتوری <em>projects</em> خود، یک پروژهٔ باینری جدید با دستور <code>cargo new pancakes</code> ایجاد کنید. سپس باید <code>hello_macro</code> و <code>hello_macro_derive</code> را به عنوان وابستگی در فایل <em>Cargo.toml</em> مربوط به crate پروژهٔ <code>pancakes</code> اضافه کنید. اگر قصد دارید نسخه‌های خود از <code>hello_macro</code> و <code>hello_macro_derive</code> را در <a href="https://crates.io/">crates.io</a><!-- ignore --> منتشر کنید، آن‌ها را به‌صورت وابستگی معمولی اضافه کنید؛ در غیر این صورت، می‌توانید آن‌ها را به‌صورت وابستگی مسیر (<code>path</code>) مانند نمونهٔ زیر مشخص کنید:</p>
+<pre><code class="language-toml">[dependencies]
+hello_macro = { path = "../hello_macro" }
+hello_macro_derive = { path = "../hello_macro/hello_macro_derive" }
+</code></pre>
+<p>کد موجود در لیستینگ 20-37 را در فایل <em>src/main.rs</em> قرار دهید و سپس دستور <code>cargo run</code> را اجرا کنید؛ باید <code>Hello, Macro! My name is Pancakes!</code> چاپ شود. پیاده‌سازی <code>trait</code> مربوط به <code>HelloMacro</code> توسط ماکروی procedural اضافه شده است، بدون این‌که crate مربوط به <code>pancakes</code> نیاز داشته باشد آن را خودش پیاده‌سازی کند؛ استفاده از <code>#[derive(HelloMacro)]</code> باعث شد پیاده‌سازی <code>trait</code> به کد اضافه شود.</p>
+<p>اکنون، بیایید بررسی کنیم که سایر انواع ماکروهای procedural چه تفاوتی با ماکروهای سفارشی <code>derive</code> دارند.</p>
+<h3 id="attribute-like-macros"><a class="header" href="#attribute-like-macros">ماکروهای شبیه ویژگی (Attribute-Like Macros)</a></h3>
+<p>ماکروهای شبیه به صفت شباهت زیادی به ماکروهای سفارشی <code>derive</code> دارند، با این تفاوت که به‌جای تولید کد برای صفت <code>derive</code>، به شما اجازه می‌دهند که صفت‌های جدید ایجاد کنید. این نوع ماکروها انعطاف‌پذیرتر نیز هستند: <code>derive</code> فقط برای <code>struct</code>ها و <code>enum</code>ها کار می‌کند؛ در حالی که صفات می‌توانند روی سایر آیتم‌ها نیز اعمال شوند، مانند توابع. در ادامه، نمونه‌ای از استفاده از یک ماکروی شبیه به صفت را مشاهده می‌کنید. فرض کنید صفتی به نام <code>route</code> دارید که برای علامت‌گذاری توابع در یک فریم‌ورک برنامه‌های وب استفاده می‌شود:</p>
+<pre><code class="language-rust ignore">#[route(GET, "/")]
+fn index() {</code></pre>
+<p>این ویژگی <code>#[route]</code> توسط فریم‌ورک به عنوان یک ماکروی رویه‌ای تعریف می‌شود. امضای تابع تعریف ماکرو به این صورت خواهد بود:</p>
+<pre><code class="language-rust ignore">#[proc_macro_attribute]
+pub fn route(attr: TokenStream, item: TokenStream) -&gt; TokenStream {</code></pre>
+<p>در اینجا، دو پارامتر از نوع <code>TokenStream</code> داریم. پارامتر اول برای محتوای ویژگی است: بخش <code>GET, "/"</code>. پارامتر دوم برای بدنه آیتمی است که ویژگی به آن متصل شده است: در این مورد، <code>fn index() {}</code> و باقی بدنه تابع.</p>
+<p>به‌جز این تفاوت، ماکروهای شبیه به صفت دقیقاً به همان روشی کار می‌کنند که ماکروهای سفارشی <code>derive</code> کار می‌کنند: شما یک crate با نوع <code>proc-macro</code> ایجاد می‌کنید و تابعی را پیاده‌سازی می‌کنید که کدی را تولید می‌کند که می‌خواهید!</p>
+<h3 id="function-like-macros"><a class="header" href="#function-like-macros">ماکروهای شبیه تابع (Function-Like Macros)</a></h3>
+<p>ماکروهای شبیه تابع، ماکروهایی هستند که شبیه به فراخوانی تابع به نظر می‌رسند. مشابه ماکروهای <code>macro_rules!</code>، این ماکروها نسبت به توابع انعطاف‌پذیرتر هستند؛ برای مثال، می‌توانند تعداد نامشخصی از آرگومان‌ها را بپذیرند. با این حال، ماکروهای <code>macro_rules!</code> فقط می‌توانند با استفاده از نحوی مشابه <code>match</code> که قبلاً در بخش «ماکروهای اعلامی با <code>macro_rules!</code> برای فرا-برنامه‌نویسی عمومی»<!-- ignore --> بحث شد، تعریف شوند. ماکروهای شبیه تابع یک پارامتر از نوع <code>TokenStream</code> می‌گیرند و تعریف آن‌ها با استفاده از کد Rust، مانند دو نوع دیگر از ماکروهای procedural، آن <code>TokenStream</code> را پردازش می‌کند. برای مثال، یک ماکروی <code>sql!</code> را در نظر بگیرید که ممکن است به صورت زیر فراخوانی شود:</p>
+<pre><code class="language-rust ignore">let sql = sql!(SELECT * FROM posts WHERE id=1);</code></pre>
+<p>این ماکرو عبارت SQL داخل خود را تجزیه کرده و بررسی می‌کند که از نظر نحوی درست باشد، که پردازش بسیار پیچیده‌تری نسبت به آنچه یک ماکروی <code>macro_rules!</code> می‌تواند انجام دهد، دارد. ماکروی <code>sql!</code> به این صورت تعریف می‌شود:</p>
+<pre><code class="language-rust ignore">#[proc_macro]
+pub fn sql(input: TokenStream) -&gt; TokenStream {</code></pre>
+<p>این تعریف مشابه امضای ماکروی سفارشی <code>derive</code> است: توکن‌هایی را که داخل پرانتز قرار دارند دریافت می‌کنیم و کدی را که می‌خواهیم تولید کنیم بازمی‌گردانیم.</p>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<p>ووف! حالا شما با برخی از ویژگی‌های Rust آشنا شده‌اید که احتمالاً زیاد از آن‌ها استفاده نخواهید کرد، اما می‌دانید که در شرایط خاصی در دسترس هستند. ما چندین موضوع پیچیده را معرفی کردیم تا زمانی که در پیام‌های خطا یا در کد دیگران با آن‌ها روبه‌رو شدید، بتوانید این مفاهیم و نحو را تشخیص دهید. از این فصل به‌عنوان یک مرجع استفاده کنید تا شما را به‌سمت راه‌حل‌ها راهنمایی کند.</p>
+<p>در ادامه، همه چیزهایی که در طول کتاب بحث کردیم را در عمل پیاده‌سازی می‌کنیم و یک پروژه دیگر انجام خواهیم داد!</p><nav class="page-nav"><a href="ch20-04-advanced-functions-and-closures.html">→ توابع و closureهای پیشرفته</a><a href="ch21-00-final-project-a-web-server.html">پروژهٔ نهایی: ساخت یک وب‌سرور چندنخی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

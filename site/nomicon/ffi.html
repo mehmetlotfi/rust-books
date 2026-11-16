@@ -1,0 +1,576 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>FFI — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ffi"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="foreign-function-interface"><a class="header" href="#foreign-function-interface">رابط توابع خارجی (Foreign Function Interface)</a></h1>
+<h2 id="introduction"><a class="header" href="#introduction">رابط تابع خارجی (FFI)</a></h2>
+<p>این راهنما از کتابخانهٔ فشرده‌سازی/باز‌کردن فشرده‌سازی <a href="https://github.com/google/snappy">snappy</a> به‌عنوان مقدمه‌ای برای نوشتن بایندینگ برای کد خارجی استفاده می‌کند. Rust در حال حاضر نمی‌تواند مستقیماً یک کتابخانهٔ C++ را فراخوانی کند، اما snappy یک رابط C دارد (که در <a href="https://github.com/google/snappy/blob/master/snappy-c.h"><code>snappy-c.h</code></a> مستند شده است).</p>
+<h2 id="a-note-about-libc"><a class="header" href="#a-note-about-libc">نکته‌ای دربارهٔ libc</a></h2>
+<p>بسیاری از این مثال‌ها از <a href="https://crates.io/crates/libc">crate با نام <code>libc</code></a> استفاده می‌کنند که از جمله تعریف انواع گوناگون C را فراهم می‌کند. اگر خودتان این مثال‌ها را امتحان می‌کنید، باید <code>libc</code> را به <code>Cargo.toml</code> خود اضافه کنید:</p>
+<pre><code class="language-toml">[dependencies]
+libc = "0.2.0"
+</code></pre>
+<h2 id="prepare-the-build-script"><a class="header" href="#prepare-the-build-script">آماده‌سازی اسکریپت ساخت</a></h2>
+<p>از آنجا که <a href="https://github.com/google/snappy">snappy</a> به‌طور پیش‌فرض یک کتابخانهٔ ایستا است، stdc++ در فایل خروجی پیوند داده نمی‌شود. برای استفاده از این کتابخانهٔ خارجی در Rust باید به‌صورت دستی مشخص کنیم که می‌خواهیم stdc++ را به پروژهٔ خود پیوند دهیم. ساده‌ترین راه برای این کار تنظیم یک اسکریپت ساخت است.</p>
+<p>ابتدا <code>Cargo.toml</code> را ویرایش کنید و درون <code>package</code> عبارت <code>build = "build.rs"</code> را اضافه کنید:</p>
+<pre><code class="language-toml">[package]
+...
+build = "build.rs"
+</code></pre>
+<p>سپس در ریشهٔ workspace خود فایل جدیدی به نام <code>build.rs</code> بسازید:</p>
+<pre><code class="language-rust">// build.rs
+fn main() {
+    println!("cargo:rustc-link-lib=dylib=stdc++"); // This line may be unnecessary for some environments.
+    println!("cargo:rustc-link-search=&lt;YOUR SNAPPY LIBRARY PATH&gt;");
+}</code></pre>
+<p>برای اطلاعات بیشتر، <a href="../cargo/reference/build-scripts.html">کتاب Cargo - اسکریپت ساخت</a> را بخوانید.</p>
+<h2 id="calling-foreign-functions"><a class="header" href="#calling-foreign-functions">فراخوانی توابع خارجی</a></h2>
+<p>مثال زیر یک نمونهٔ حداقلی از فراخوانی یک تابع خارجی است که در صورت نصب بودن snappy کامپایل خواهد شد:</p>
+<!-- ignore: requires libc crate -->
+<pre><code class="language-rust ignore">use libc::size_t;
+
+#[link(name = "snappy")]
+unsafe extern "C" {
+    fn snappy_max_compressed_length(source_length: size_t) -&gt; size_t;
+}
+
+fn main() {
+    let x = unsafe { snappy_max_compressed_length(100) };
+    println!("max compressed length of a 100 byte buffer: {}", x);
+}</code></pre>
+<p>بلوک <code>extern</code> فهرستی از امضاهای توابع در یک کتابخانهٔ خارجی است که در اینجا با ABI زبان C در پلتفرم مورد نظر تعریف شده‌اند. attribute به نام <code>#[link(...)]</code> برای آن است که به پیوندهنده (linker) بگوییم با کتابخانهٔ snappy پیوند بزند تا نمادها (symbols) حل شوند.</p>
+<p>توابع خارجی به‌طور پیش‌فرض ناامن (unsafe) فرض می‌شوند، بنابراین فراخوانی آن‌ها باید درون <code>unsafe {}</code> قرار گیرد تا قولی به کامپایلر باشد که هر آنچه درون آن است واقعاً امن است. کتابخانه‌های C اغلب رابط‌هایی ارائه می‌دهند که نخ‌ایمن (thread-safe) نیستند و تقریباً هر تابعی که یک آرگومان اشاره‌گر بگیرد برای همهٔ ورودی‌های ممکن معتبر نیست، زیرا ممکن است اشاره‌گر معلق (dangling) باشد و اشاره‌گرهای خام (raw pointer) بیرون از مدل حافظهٔ امن Rust قرار می‌گیرند.</p>
+<p>هنگام اعلان نوع آرگومان‌های یک تابع خارجی، کامپایلر Rust نمی‌تواند بررسی کند که اعلان درست است یا نه، بنابراین درست مشخص کردن آن بخشی از صحیح نگه‌داشتن بایندینگ در زمان اجرا است.</p>
+<p>بلوک <code>extern</code> را می‌توان گسترش داد تا کل API کتابخانهٔ snappy را پوشش دهد:</p>
+<!-- ignore: requires libc crate -->
+<pre><code class="language-rust ignore">use libc::{c_int, size_t};
+
+#[link(name = "snappy")]
+unsafe extern "C" {
+    fn snappy_compress(input: *const u8,
+                       input_length: size_t,
+                       compressed: *mut u8,
+                       compressed_length: *mut size_t) -&gt; c_int;
+    fn snappy_uncompress(compressed: *const u8,
+                         compressed_length: size_t,
+                         uncompressed: *mut u8,
+                         uncompressed_length: *mut size_t) -&gt; c_int;
+    fn snappy_max_compressed_length(source_length: size_t) -&gt; size_t;
+    fn snappy_uncompressed_length(compressed: *const u8,
+                                  compressed_length: size_t,
+                                  result: *mut size_t) -&gt; c_int;
+    fn snappy_validate_compressed_buffer(compressed: *const u8,
+                                         compressed_length: size_t) -&gt; c_int;
+}
+<span class="boring">fn main() {}</span></code></pre>
+<h2 id="creating-a-safe-interface"><a class="header" href="#creating-a-safe-interface">ساخت یک رابط امن</a></h2>
+<p>API خام C باید پوشانده (wrap) شود تا امنیت حافظه فراهم شود و بتوان از مفاهیم سطح بالاتر مانند بردارها استفاده کرد. یک کتابخانه می‌تواند تنها رابط امن و سطح‌بالا را در دسترس بگذارد و جزئیات ناامن درونی را پنهان کند.</p>
+<p>پوشاندن توابعی که بافر می‌خواهند مستلزم استفاده از ماژول <code>slice::raw</code> است تا بردارهای Rust را به‌صورت اشاره‌گر به حافظه دستکاری کنیم. تضمین شده است که بردارهای Rust یک بلوک پیوستهٔ حافظه باشند. طول (length) تعداد عناصری است که در حال حاضر در بردار هست و ظرفیت (capacity) کل اندازهٔ حافظهٔ تخصیص‌یافته بر حسب تعداد عناصر است. طول همیشه کوچکتر یا مساوی ظرفیت است.</p>
+<!-- ignore: requires libc crate -->
+<pre><code class="language-rust ignore"><span class="boring">use libc::{c_int, size_t};
+</span><span class="boring">unsafe fn snappy_validate_compressed_buffer(_: *const u8, _: size_t) -&gt; c_int { 0 }
+</span><span class="boring">fn main() {}
+</span>pub fn validate_compressed_buffer(src: &amp;[u8]) -&gt; bool {
+    unsafe {
+        snappy_validate_compressed_buffer(src.as_ptr(), src.len() as size_t) == 0
+    }
+}</code></pre>
+<p>پوشانندهٔ <code>validate_compressed_buffer</code> در بالا از یک بلوک <code>unsafe</code> استفاده می‌کند، اما با نگذاشتن <code>unsafe</code> در امضای تابع تضمین می‌کند که فراخوانی آن برای همهٔ ورودی‌ها امن است.</p>
+<p>توابع <code>snappy_compress</code> و <code>snappy_uncompress</code> پیچیده‌ترند، زیرا باید برای نگه‌داشتن خروجی هم یک بافر تخصیص داده شود.</p>
+<p>تابع <code>snappy_max_compressed_length</code> را می‌توان برای تخصیص برداری با حداکثر ظرفیتِ لازم برای نگه‌داشتن خروجی فشرده به کار برد. سپس می‌توان بردار را به‌عنوان پارامتر خروجی به تابع <code>snappy_compress</code> داد. یک پارامتر خروجی دیگر نیز برای دریافت طول واقعی پس از فشرده‌سازی و تنظیم طول بردار ارسال می‌شود.</p>
+<!-- ignore: requires libc crate -->
+<pre><code class="language-rust ignore"><span class="boring">use libc::{size_t, c_int};
+</span><span class="boring">unsafe fn snappy_compress(a: *const u8, b: size_t, c: *mut u8,
+</span><span class="boring">                          d: *mut size_t) -&gt; c_int { 0 }
+</span><span class="boring">unsafe fn snappy_max_compressed_length(a: size_t) -&gt; size_t { a }
+</span><span class="boring">fn main() {}
+</span>pub fn compress(src: &amp;[u8]) -&gt; Vec&lt;u8&gt; {
+    unsafe {
+        let srclen = src.len() as size_t;
+        let psrc = src.as_ptr();
+
+        let mut dstlen = snappy_max_compressed_length(srclen);
+        let mut dst = Vec::with_capacity(dstlen as usize);
+        let pdst = dst.as_mut_ptr();
+
+        snappy_compress(psrc, srclen, pdst, &amp;mut dstlen);
+        dst.set_len(dstlen as usize);
+        dst
+    }
+}</code></pre>
+<p>باز‌کردن فشرده‌سازی مشابه است، زیرا snappy اندازهٔ داده‌های فشرده‌نشده را بخشی از قالب فشرده‌سازی ذخیره می‌کند و <code>snappy_uncompressed_length</code> اندازهٔ دقیق بافر موردنیاز را برمی‌گرداند.</p>
+<!-- ignore: requires libc crate -->
+<pre><code class="language-rust ignore"><span class="boring">use libc::{size_t, c_int};
+</span><span class="boring">unsafe fn snappy_uncompress(compressed: *const u8,
+</span><span class="boring">                            compressed_length: size_t,
+</span><span class="boring">                            uncompressed: *mut u8,
+</span><span class="boring">                            uncompressed_length: *mut size_t) -&gt; c_int { 0 }
+</span><span class="boring">unsafe fn snappy_uncompressed_length(compressed: *const u8,
+</span><span class="boring">                                     compressed_length: size_t,
+</span><span class="boring">                                     result: *mut size_t) -&gt; c_int { 0 }
+</span><span class="boring">fn main() {}
+</span>pub fn uncompress(src: &amp;[u8]) -&gt; Option&lt;Vec&lt;u8&gt;&gt; {
+    unsafe {
+        let srclen = src.len() as size_t;
+        let psrc = src.as_ptr();
+
+        let mut dstlen: size_t = 0;
+        snappy_uncompressed_length(psrc, srclen, &amp;mut dstlen);
+
+        let mut dst = Vec::with_capacity(dstlen as usize);
+        let pdst = dst.as_mut_ptr();
+
+        if snappy_uncompress(psrc, srclen, pdst, &amp;mut dstlen) == 0 {
+            dst.set_len(dstlen as usize);
+            Some(dst)
+        } else {
+            None // SNAPPY_INVALID_INPUT
+        }
+    }
+}</code></pre>
+<p>سپس می‌توانیم چند آزمون اضافه کنیم تا نحوهٔ استفاده از آن‌ها را نشان دهیم.</p>
+<!-- ignore: requires libc crate -->
+<pre><code class="language-rust ignore"><span class="boring">use libc::{c_int, size_t};
+</span><span class="boring">unsafe fn snappy_compress(input: *const u8,
+</span><span class="boring">                          input_length: size_t,
+</span><span class="boring">                          compressed: *mut u8,
+</span><span class="boring">                          compressed_length: *mut size_t)
+</span><span class="boring">                          -&gt; c_int { 0 }
+</span><span class="boring">unsafe fn snappy_uncompress(compressed: *const u8,
+</span><span class="boring">                            compressed_length: size_t,
+</span><span class="boring">                            uncompressed: *mut u8,
+</span><span class="boring">                            uncompressed_length: *mut size_t)
+</span><span class="boring">                            -&gt; c_int { 0 }
+</span><span class="boring">unsafe fn snappy_max_compressed_length(source_length: size_t) -&gt; size_t { 0 }
+</span><span class="boring">unsafe fn snappy_uncompressed_length(compressed: *const u8,
+</span><span class="boring">                                     compressed_length: size_t,
+</span><span class="boring">                                     result: *mut size_t)
+</span><span class="boring">                                     -&gt; c_int { 0 }
+</span><span class="boring">unsafe fn snappy_validate_compressed_buffer(compressed: *const u8,
+</span><span class="boring">                                            compressed_length: size_t)
+</span><span class="boring">                                            -&gt; c_int { 0 }
+</span><span class="boring">fn main() { }
+</span><span class="boring">
+</span>#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid() {
+        let d = vec![0xde, 0xad, 0xd0, 0x0d];
+        let c: &amp;[u8] = &amp;compress(&amp;d);
+        assert!(validate_compressed_buffer(c));
+        assert!(uncompress(c) == Some(d));
+    }
+
+    #[test]
+    fn invalid() {
+        let d = vec![0, 0, 0, 0];
+        assert!(!validate_compressed_buffer(&amp;d));
+        assert!(uncompress(&amp;d).is_none());
+    }
+
+    #[test]
+    fn empty() {
+        let d = vec![];
+        assert!(!validate_compressed_buffer(&amp;d));
+        assert!(uncompress(&amp;d).is_none());
+        let c = compress(&amp;d);
+        assert!(validate_compressed_buffer(&amp;c));
+        assert!(uncompress(&amp;c) == Some(d));
+    }
+}</code></pre>
+<h2 id="destructors"><a class="header" href="#destructors">نابودگرها</a></h2>
+<p>کتابخانه‌های خارجی اغلب مالکیت منابع را به کدِ فراخواننده واگذار می‌کنند. هنگامی که این اتفاق می‌افتد، باید از نابودگرهای (destructor) Rust استفاده کنیم تا امنیت را فراهم و آزادسازی این منابع را تضمین کنیم (به‌ویژه در صورت بروز panic).</p>
+<p>برای اطلاعات بیشتر دربارهٔ نابودگرها، <a href="https://doc.rust-lang.org/std/ops/trait.Drop.html">صفت Drop</a> را ببینید.</p>
+<h2 id="calling-rust-code-from-c"><a class="header" href="#calling-rust-code-from-c">فراخوانی کد Rust از C</a></h2>
+<p>شاید بخواهید کد Rust را طوری کامپایل کنید که از C قابل فراخوانی باشد. این کار نسبتاً آسان است، اما چند چیز لازم دارد.</p>
+<h3 id="rust-side"><a class="header" href="#rust-side">سمت Rust</a></h3>
+<p>ابتدا فرض می‌کنیم یک crate کتابخانه‌ای با نام <code>rust_from_c</code> دارید. فایل <code>lib.rs</code> باید کد Rust زیر را داشته باشد:</p>
+<pre><code class="language-rust">#[unsafe(no_mangle)]
+pub extern "C" fn hello_from_rust() {
+    println!("Hello from Rust!");
+}
+<span class="boring">fn main() {}</span></code></pre>
+<p><code>extern "C"</code> باعث می‌شود این تابع از قرارداد فراخوانی C پیروی کند، همان‌طور که در ادامه در «<a href="ffi.html#foreign-calling-conventions">قراردادهای فراخوانی خارجی</a>» بحث شده است. attribute به نام <code>no_mangle</code> تغییر نام (name mangling) در Rust را خاموش می‌کند تا نماد (symbol) به‌خوبی تعریف‌شده‌ای برای پیوند دادن وجود داشته باشد.</p>
+<p>سپس برای کامپایل کد Rust به‌صورت یک کتابخانهٔ اشتراکی که از C قابل فراخوانی باشد، موارد زیر را به <code>Cargo.toml</code> خود اضافه کنید:</p>
+<pre><code class="language-toml">[lib]
+crate-type = ["cdylib"]
+</code></pre>
+<p>(توجه: می‌توانیم از نوع crate به نام <code>staticlib</code> نیز استفاده کنیم، اما آن هم به تنظیم برخی پرچم‌های پیوند نیاز دارد.)</p>
+<p>دستور <code>cargo build</code> را اجرا کنید و سمت Rust آماده است.</p>
+<h3 id="c-side"><a class="header" href="#c-side">سمت C</a></h3>
+<p>یک فایل C می‌سازیم تا تابع <code>hello_from_rust</code> را فراخوانی کند و آن را با <code>gcc</code> کامپایل می‌کنیم.</p>
+<p>فایل C باید این شکل را داشته باشد:</p>
+<pre><code class="language-c">extern void hello_from_rust();
+
+int main(void) {
+    hello_from_rust();
+    return 0;
+}
+</code></pre>
+<p>نام فایل را <code>call_rust.c</code> می‌گذاریم و آن را در ریشهٔ crate قرار می‌دهیم. برای کامپایل، دستور زیر را اجرا کنید:</p>
+<pre><code class="language-sh">gcc call_rust.c -o call_rust -lrust_from_c -L./target/debug
+</code></pre>
+<p><code>-l</code> و <code>-L</code> به gcc می‌گویند کتابخانهٔ Rust ما را پیدا کند.</p>
+<p>سرانجام می‌توانیم با مشخص کردن <code>LD_LIBRARY_PATH</code> کد Rust را از C فراخوانی کنیم:</p>
+<pre><code class="language-sh">$ LD_LIBRARY_PATH=./target/debug ./call_rust
+Hello from Rust!
+</code></pre>
+<p>همین! برای یک مثال واقعی‌تر، به <a href="https://github.com/eqrion/cbindgen"><code>cbindgen</code></a> نگاه کنید.</p>
+<h2 id="callbacks-from-c-code-to-rust-functions"><a class="header" href="#callbacks-from-c-code-to-rust-functions">بازخوانی‌ها (callback) از کد C به توابع Rust</a></h2>
+<p>برخی کتابخانه‌های خارجی برای گزارش وضعیت فعلی یا داده‌های میانی به فراخواننده به استفاده از callback نیاز دارند. می‌توان توابعی را که در Rust تعریف شده‌اند به یک کتابخانهٔ خارجی داد. شرط لازم برای این کار آن است که تابع callback با قرارداد فراخوانی درست به‌صورت <code>extern</code> علامت‌گذاری شود تا از کد C قابل فراخوانی باشد.</p>
+<p>سپس تابع callback را می‌توان از طریق یک فراخوانی ثبت (registration) به کتابخانهٔ C فرستاد و بعداً از همان‌جا آن را صدا زد.</p>
+<p>یک مثال ساده:</p>
+<p>کد Rust:</p>
+<pre><code class="language-rust no_run">extern fn callback(a: i32) {
+    println!("I'm called from C with value {0}", a);
+}
+
+#[link(name = "extlib")]
+unsafe extern "C" {
+   fn register_callback(cb: extern fn(i32)) -&gt; i32;
+   fn trigger_callback();
+}
+
+fn main() {
+    unsafe {
+        register_callback(callback);
+        trigger_callback(); // Triggers the callback.
+    }
+}</code></pre>
+<p>کد C:</p>
+<pre><code class="language-c">typedef void (*rust_callback)(int32_t);
+rust_callback cb;
+
+int32_t register_callback(rust_callback callback) {
+    cb = callback;
+    return 1;
+}
+
+void trigger_callback() {
+  cb(7); // Will call callback(7) in Rust.
+}
+</code></pre>
+<p>در این مثال، <code>main()</code> در Rust تابع <code>trigger_callback()</code> را در C فراخوانی می‌کند که به نوبهٔ خود <code>callback()</code> را در Rust صدا می‌زند.</p>
+<h2 id="targeting-callbacks-to-rust-objects"><a class="header" href="#targeting-callbacks-to-rust-objects">هدف‌گیری callbackها به اشیای Rust</a></h2>
+<p>مثال قبلی نشان داد که چگونه می‌توان یک تابع سراسری را از کد C فراخوانی کرد. با این حال، اغلب لازم است که callback به یک شیء خاص در Rust هدایت شود. این می‌تواند شیئی باشد که پوشانندهٔ شیء متناظر در C را نمایش می‌دهد.</p>
+<p>این کار با فرستادن یک اشاره‌گر خام به شیء برای کتابخانهٔ C امکان‌پذیر است. کتابخانهٔ C سپس می‌تواند اشاره‌گر به شیء Rust را در اعلان (notification) بگنجاند. این کار به callback اجازه می‌دهد به‌صورت ناامن به شیء Rust مورد اشاره دسترسی پیدا کند.</p>
+<p>کد Rust:</p>
+<pre><code class="language-rust no_run">struct RustObject {
+    a: i32,
+    // Other members...
+}
+
+unsafe extern "C" fn callback(target: *mut RustObject, a: i32) {
+    println!("I'm called from C with value {0}", a);
+    unsafe {
+        // Update the value in RustObject with the value received from the callback:
+        (*target).a = a;
+    }
+}
+
+#[link(name = "extlib")]
+unsafe extern "C" {
+   fn register_callback(target: *mut RustObject,
+                        cb: unsafe extern "C" fn(*mut RustObject, i32)) -&gt; i32;
+   fn trigger_callback();
+}
+
+fn main() {
+    // Create the object that will be referenced in the callback:
+    let mut rust_object = Box::new(RustObject { a: 5 });
+
+    unsafe {
+        register_callback(&amp;mut *rust_object, callback);
+        trigger_callback();
+    }
+}</code></pre>
+<p>کد C:</p>
+<pre><code class="language-c">typedef void (*rust_callback)(void*, int32_t);
+void* cb_target;
+rust_callback cb;
+
+int32_t register_callback(void* callback_target, rust_callback callback) {
+    cb_target = callback_target;
+    cb = callback;
+    return 1;
+}
+
+void trigger_callback() {
+  cb(cb_target, 7); // Will call callback(&amp;rustObject, 7) in Rust.
+}
+</code></pre>
+<h2 id="asynchronous-callbacks"><a class="header" href="#asynchronous-callbacks">callbackهای ناهمگام</a></h2>
+<p>در مثال‌های پیشین، callbackها به‌عنوان واکنشی مستقیم به فراخوانی یک تابع در کتابخانهٔ C خارجی صدا زده می‌شدند. کنترل نخ جاری برای اجرای callback از Rust به C و دوباره به Rust منتقل می‌شود، اما در نهایت callback روی همان نخی اجرا می‌شود که تابع آغازگر callback را فراخوانی کرده بود.</p>
+<p>وقتی کتابخانهٔ خارجی نخ‌های خودش را ایجاد می‌کند و callbackها را از آن‌ها صدا می‌زند، اوضاع پیچیده‌تر می‌شود. در این موارد، دسترسی به ساختارهای داده Rust درون callbackها به‌ویژه ناامن است و باید از سازوکارهای هم‌گام‌سازی مناسب استفاده شود. افزون بر سازوکارهای کلاسیک هم‌گام‌سازی مانند mutexها، یک امکان در Rust استفاده از کانال‌ها (در <code>std::sync::mpsc</code>) برای ارسال داده از نخ C که callback را صدا زده به یک نخ Rust است.</p>
+<p>اگر یک callback ناهمگام یک شیء خاص در فضای آدرس Rust را هدف بگیرد، لازم است که پس از نابود شدن آن شیء Rust، کتابخانهٔ C دیگر هیچ callbackای اجرا نکند. این کار با لغو ثبت callback در نابودگر شیء و طراحی کتابخانه به‌گونه‌ای که تضمین کند پس از لغو ثبت هیچ callbackای اجرا نخواهد شد، ممکن است.</p>
+<h2 id="linking"><a class="header" href="#linking">پیوند دادن (Linking)</a></h2>
+<p>attribute به نام <code>link</code> روی بلوک‌های <code>extern</code> بنیان اصلی را فراهم می‌کند که با آن به rustc می‌گوییم چگونه با کتابخانه‌های بومی پیوند بزند. امروزه دو شکل پذیرفته‌شده برای attribute به نام link وجود دارد:</p>
+<ul>
+<li><code>#[link(name = "foo")]</code></li>
+<li><code>#[link(name = "foo", kind = "bar")]</code></li>
+</ul>
+<p>در هر دو حالت، <code>foo</code> نام کتابخانهٔ بومی‌ای است که به آن پیوند می‌زنیم و در حالت دوم <code>bar</code> نوع کتابخانهٔ بومی‌ای است که کامپایلر به آن پیوند می‌زند. در حال حاضر سه نوع شناخته‌شده از کتابخانه‌های بومی وجود دارد:</p>
+<ul>
+<li>پویا (Dynamic) - <code>#[link(name = "readline")]</code></li>
+<li>ایستا (Static) - <code>#[link(name = "my_build_dependency", kind = "static")]</code></li>
+<li>چارچوب‌ها (Frameworks) - <code>#[link(name = "CoreFoundation", kind = "framework")]</code></li>
+</ul>
+<p>توجه کنید که frameworkها فقط روی هدف‌های macOS در دسترس‌اند.</p>
+<p>مقدارهای مختلف <code>kind</code> برای تمایز دادن شیوهٔ مشارکت کتابخانهٔ بومی در پیوند دادن به کار می‌روند. از دیدگاه پیوند دادن، کامپایلر Rust دو نوع فایل خروجی (artifact) می‌سازد: جزئی (rlib/staticlib) و نهایی (dylib/binary). وابستگی‌های کتابخانهٔ بومی پویا و framework تا مرز artifact نهایی منتقل می‌شوند، در حالی که وابستگی‌های کتابخانهٔ ایستا اصلاً منتقل نمی‌شوند، زیرا کتابخانه‌های ایستا مستقیماً در artifact بعدی ادغام می‌شوند.</p>
+<p>چند مثال از کاربردهای این مدل عبارت‌اند از:</p>
+<ul>
+<li>
+<p>یک وابستگی ساخت بومی. گاهی هنگام نوشتن کد Rust به مقداری کد واسط C/C++ نیاز است، اما توزیع کد C/C++ در قالب کتابخانه دردسر دارد. در این حالت، کد در <code>libfoo.a</code> بایگانی می‌شود و سپس crate مربوط به Rust وابستگی را از طریق <code>#[link(name = "foo", kind = "static")]</code> اعلام می‌کند.</p>
+<p>صرف‌نظر از نوع خروجی crate، کتابخانهٔ ایستای بومی در خروجی گنجانده می‌شود، یعنی توزیع کتابخانهٔ ایستای بومی ضروری نیست.</p>
+</li>
+<li>
+<p>یک وابستگی پویای معمولی. کتابخانه‌های رایج سیستمی (مانند <code>readline</code>) در تعداد زیادی از سیستم‌ها موجودند و اغلب نمی‌توان نسخهٔ ایستای این کتابخانه‌ها را پیدا کرد. وقتی این وابستگی در یک crate از Rust گنجانده شود، هدف‌های جزئی (مانند rlibها) با کتابخانه پیوند نمی‌زنند، اما وقتی rlib در یک هدف نهایی (مانند یک binary) گنجانده شود، کتابخانهٔ بومی پیوند داده می‌شود.</p>
+</li>
+</ul>
+<p>در macOS، frameworkها همان معنای کتابخانهٔ پویا را دارند.</p>
+<h2 id="unsafe-blocks"><a class="header" href="#unsafe-blocks">بلوک‌های unsafe</a></h2>
+<p>برخی عملیات، مانند ارجاع‌زدایی (dereference) اشاره‌گرهای خام یا فراخوانی توابعی که <code>unsafe</code> علامت‌گذاری شده‌اند، فقط درون بلوک‌های unsafe مجازند. بلوک‌های unsafe ناامنی را ایزوله می‌کنند و قولی به کامپایلر هستند که ناامنی از بلوک بیرون نشت نمی‌کند.</p>
+<p>از سوی دیگر، توابع unsafe این موضوع را به همگان اعلام می‌کنند. یک تابع unsafe این‌گونه نوشته می‌شود:</p>
+<pre><code class="language-rust">unsafe fn kaboom(ptr: *const i32) -&gt; i32 { *ptr }</code></pre>
+<p>این تابع را فقط از یک بلوک <code>unsafe</code> یا یک تابع <code>unsafe</code> دیگر می‌توان فراخوانی کرد.</p>
+<h2 id="accessing-foreign-globals"><a class="header" href="#accessing-foreign-globals">دسترسی به متغیرهای سراسری خارجی</a></h2>
+<p>APIهای خارجی اغلب یک متغیر سراسری صادر می‌کنند که می‌تواند کارهایی مانند ردیابی وضعیت سراسری را انجام دهد. برای دسترسی به این متغیرها، آن‌ها را در بلوک‌های <code>extern</code> با کلیدواژهٔ <code>static</code> اعلان می‌کنید:</p>
+<!-- ignore: requires libc crate -->
+<pre><code class="language-rust ignore">#[link(name = "readline")]
+unsafe extern "C" {
+    static rl_readline_version: libc::c_int;
+}
+
+fn main() {
+    println!("You have readline version {} installed.",
+             unsafe { rl_readline_version as i32 });
+}</code></pre>
+<p>از طرف دیگر، ممکن است لازم باشد وضعیت سراسری‌ای را که یک رابط خارجی فراهم می‌کند تغییر دهید. برای این کار، می‌توان staticها را با <code>mut</code> اعلان کرد تا بتوانیم آن‌ها را تغییر دهیم.</p>
+<!-- ignore: requires libc crate -->
+<pre><code class="language-rust ignore">use std::ffi::CString;
+use std::ptr;
+
+#[link(name = "readline")]
+unsafe extern "C" {
+    static mut rl_prompt: *const libc::c_char;
+}
+
+fn main() {
+    let prompt = CString::new("[my-awesome-shell] $").unwrap();
+    unsafe {
+        rl_prompt = prompt.as_ptr();
+
+        println!("{:?}", rl_prompt);
+
+        rl_prompt = ptr::null();
+    }
+}</code></pre>
+<p>توجه کنید که هر تعاملی با یک <code>static mut</code> ناامن است، چه خواندن و چه نوشتن. کار با وضعیت سراسریِ تغییرپذیر نیازمند دقت فراوان است.</p>
+<h2 id="foreign-calling-conventions"><a class="header" href="#foreign-calling-conventions">قراردادهای فراخوانی خارجی</a></h2>
+<p>بیشتر کدهای خارجی یک ABI زبان C را در دسترس می‌گذارند و Rust هنگام فراخوانی توابع خارجی به‌طور پیش‌فرض از قرارداد فراخوانی C پلتفرم استفاده می‌کند. برخی توابع خارجی، به‌ویژه API ویندوز، از قراردادهای فراخوانی دیگری استفاده می‌کنند. Rust راهی فراهم می‌کند تا به کامپایلر بگوییم از کدام قرارداد استفاده کند:</p>
+<!-- ignore: requires libc crate -->
+<pre><code class="language-rust ignore">#[cfg(all(target_os = "win32", target_arch = "x86"))]
+#[link(name = "kernel32")]
+#[allow(non_snake_case)]
+unsafe extern "stdcall" {
+    fn SetEnvironmentVariableA(n: *const u8, v: *const u8) -&gt; libc::c_int;
+}
+<span class="boring">fn main() { }</span></code></pre>
+<p>این مورد برای کل بلوک <code>extern</code> اعمال می‌شود. فهرست محدودیت‌های ABI پشتیبانی‌شده از این قرار است:</p>
+<ul>
+<li><code>stdcall</code></li>
+<li><code>aapcs</code></li>
+<li><code>cdecl</code></li>
+<li><code>fastcall</code></li>
+<li><code>thiscall</code></li>
+<li><code>vectorcall</code> در حال حاضر این مورد پشت گیت <code>abi_vectorcall</code> پنهان است و ممکن است تغییر کند.</li>
+<li><code>Rust</code></li>
+<li><code>system</code></li>
+<li><code>C</code></li>
+<li><code>win64</code></li>
+<li><code>sysv64</code></li>
+</ul>
+<p>بیشتر ABIهای این فهرست روشن و بدیهی‌اند، اما ABI به نام <code>system</code> ممکن است کمی عجیب به نظر برسد. این محدودیت هر ABI‌ای را که برای همکاری با کتابخانه‌های هدف مناسب باشد انتخاب می‌کند. برای مثال، روی win32 با معماری x86 یعنی ABI به‌کاررفته <code>stdcall</code> خواهد بود. اما روی x86_64، ویندوز از قرارداد فراخوانی <code>C</code> استفاده می‌کند، بنابراین <code>C</code> به کار می‌رود. این یعنی در مثال قبلی می‌توانستیم از <code>extern "system" { ... }</code> برای تعریف بلوکی برای همهٔ سیستم‌های ویندوزی استفاده کنیم، نه فقط سیستم‌های x86.</p>
+<h2 id="interoperability-with-foreign-code"><a class="header" href="#interoperability-with-foreign-code">همکاری با کد خارجی (Interoperability)</a></h2>
+<p>Rust فقط در صورتی تضمین می‌کند که چینش (layout) یک <code>struct</code> با نمایش C در پلتفرم سازگار باشد که attribute به نام <code>#[repr(C)]</code> روی آن اعمال شده باشد. از <code>#[repr(C, packed)]</code> می‌توان برای چیدن اعضای ساختار بدون padding استفاده کرد. <code>#[repr(C)]</code> را می‌توان روی یک enum نیز اعمال کرد.</p>
+<p>جعبه‌های مالک (<code>Box&lt;T&gt;</code>) در Rust از اشاره‌گرهای غیرتهی به‌عنوان دستگیره استفاده می‌کنند که به شیء درون آن اشاره دارند. با این حال نباید آن‌ها را به‌صورت دستی ساخت، زیرا تخصیص‌دهنده‌های درونی آن‌ها را مدیریت می‌کنند. می‌توان با اطمینان فرض کرد که ارجاع‌ها اشاره‌گرهای غیرتهیِ مستقیم به آن نوع هستند. با این حال، شکستن قواعد بررسی قرض یا تغییرپذیری تضمینی برای امن بودن ندارد، بنابراین در صورت نیاز، استفاده از اشاره‌گرهای خام (<code>*</code>) را ترجیح دهید، چون کامپایلر دربارهٔ آن‌ها فرض‌های کمتری می‌تواند بکند.</p>
+<p>بردارها و رشته‌ها چینش حافظهٔ پایهٔ یکسانی دارند و ابزارهایی در ماژول‌های <code>vec</code> و <code>str</code> برای کار با APIهای C در دسترس است. با این حال، رشته‌ها با <code>\0</code> خاتمه نمی‌یابند. اگر برای همکاری با C به رشتهٔ خاتمه‌یافته با NUL نیاز دارید، باید از نوع <code>CString</code> در ماژول <code>std::ffi</code> استفاده کنید.</p>
+<p><a href="https://crates.io/crates/libc">crate با نام <code>libc</code> در crates.io</a> شامل نام‌های مستعار نوع و تعریف‌های تابع برای کتابخانهٔ استاندارد C در ماژول <code>libc</code> است و Rust به‌طور پیش‌فرض با <code>libc</code> و <code>libm</code> پیوند می‌زند.</p>
+<h2 id="variadic-functions"><a class="header" href="#variadic-functions">توابع متغیر‌آرگومان (Variadic)</a></h2>
+<p>در C، توابع می‌توانند «variadic» باشند، یعنی تعداد متغیری آرگومان بپذیرند. این در Rust با مشخص کردن <code>...</code> در فهرست آرگومان‌های اعلان یک تابع خارجی امکان‌پذیر است:</p>
+<pre><code class="language-no_run">unsafe extern "C" {
+    fn foo(x: i32, ...);
+}
+
+fn main() {
+    unsafe {
+        foo(10, 20, 30, 40, 50);
+    }
+}
+</code></pre>
+<p>توابع معمولی Rust <em>نمی‌توانند</em> variadic باشند:</p>
+<pre><code class="language-rust compile_fail">// This will not compile
+
+fn foo(x: i32, ...) {}</code></pre>
+<h2 id="the-nullable-pointer-optimization"><a class="header" href="#the-nullable-pointer-optimization">«بهینه‌سازی اشاره‌گر تهی‌پذیر»</a></h2>
+<p>برخی انواع Rust تعریف شده‌اند که هرگز <code>null</code> نباشند. این شامل ارجاع‌ها (<code>&amp;T</code>، <code>&amp;mut T</code>)، جعبه‌ها (<code>Box&lt;T&gt;</code>) و اشاره‌گرهای تابع (<code>extern "abi" fn()</code>) می‌شود. هنگام تعامل با C اغلب از اشاره‌گرهایی استفاده می‌شود که ممکن است <code>null</code> باشند، که به‌نظر می‌رسد برای مدیریت تبدیل‌ها از/به انواع Rust به چند <code>transmute</code> درهم‌ریخته و/یا کد ناامن نیاز داشته باشد. با این حال، تلاش برای ساختن/کار با این مقادیر نامعتبر <strong>رفتار تعریف‌نشده (undefined behavior) است</strong>، پس باید به‌جای آن از راه‌حل زیر استفاده کنید.</p>
+<p>به‌عنوان یک حالت خاص، یک <code>enum</code> واجد شرایط «بهینه‌سازی اشاره‌گر تهی‌پذیر» است اگر دقیقاً دو گونه (variant) داشته باشد که یکی هیچ داده‌ای ندارد و دیگری فیلدی از یکی از انواع غیرتهی فهرست‌شده در بالا دارد. این یعنی برای تمایزدهنده (discriminant) فضای اضافه‌ای لازم نیست؛ بلکه گونهٔ خالی با گذاشتن مقدار <code>null</code> در فیلد غیرتهی نمایش داده می‌شود. این مورد «بهینه‌سازی» نامیده می‌شود، اما برخلاف بهینه‌سازی‌های دیگر، تضمین شده است که برای انواع واجد شرایط اعمال شود.</p>
+<p>رایج‌ترین نوعی که از بهینه‌سازی اشاره‌گر تهی‌پذیر بهره می‌برد <code>Option&lt;T&gt;</code> است، که در آن <code>None</code> متناظر با <code>null</code> است. پس <code>Option&lt;extern "C" fn(c_int) -&gt; c_int&gt;</code> راه درستی است برای نمایش یک اشاره‌گر تابع تهی‌پذیر با ABI زبان C (که متناظر با نوع C یعنی <code>int (*)(int)</code> است).</p>
+<p>یک مثال ساختگی در اینجا آمده است. فرض کنید یک کتابخانهٔ C امکانی برای ثبت یک callback دارد که در موقعیت‌های معینی صدا زده می‌شود. به callback یک اشاره‌گر تابع و یک عدد صحیح داده می‌شود و قرار است تابع را با آن عدد صحیح به‌عنوان پارامتر اجرا کند. بنابراین اشاره‌گرهای تابع در هر دو جهت از مرز FFI عبور می‌کنند.</p>
+<!-- ignore: requires libc crate -->
+<pre><code class="language-rust ignore">use libc::c_int;
+
+<span class="boring">#[cfg(hidden)]
+</span>unsafe extern "C" {
+    /// Registers the callback.
+    fn register(cb: Option&lt;extern "C" fn(Option&lt;extern "C" fn(c_int) -&gt; c_int&gt;, c_int) -&gt; c_int&gt;);
+}
+<span class="boring">unsafe fn register(_: Option&lt;extern "C" fn(Option&lt;extern "C" fn(c_int) -&gt; c_int&gt;,
+</span><span class="boring">                                           c_int) -&gt; c_int&gt;)
+</span><span class="boring">{}
+</span>
+/// This fairly useless function receives a function pointer and an integer
+/// from C, and returns the result of calling the function with the integer.
+/// In case no function is provided, it squares the integer by default.
+extern "C" fn apply(process: Option&lt;extern "C" fn(c_int) -&gt; c_int&gt;, int: c_int) -&gt; c_int {
+    match process {
+        Some(f) =&gt; f(int),
+        None    =&gt; int * int
+    }
+}
+
+fn main() {
+    unsafe {
+        register(Some(apply));
+    }
+}</code></pre>
+<p>و کد سمت C به این شکل است:</p>
+<pre><code class="language-c">void register(int (*f)(int (*)(int), int)) {
+    ...
+}
+</code></pre>
+<p>هیچ <code>transmute</code>ای لازم نیست!</p>
+<h2 id="ffi-and-unwinding"><a class="header" href="#ffi-and-unwinding">FFI و بازگشایی پشته (unwinding)</a></h2>
+<p>هنگام کار با FFI مهم است که به unwinding توجه داشته باشید. بیشتر رشته‌های ABI در دو گونه می‌آیند، یکی با پسوند <code>-unwind</code> و دیگری بدون آن. ABI به نام <code>Rust</code> همیشه unwinding را مجاز می‌داند، بنابراین ABI ای به نام <code>Rust-unwind</code> وجود ندارد.</p>
+<p>اگر انتظار دارید <code>panic</code>های Rust یا استثناهای خارجی (مثلاً C++) از مرز FFI عبور کنند، آن مرز باید از رشتهٔ ABI مناسبِ <code>-unwind</code> استفاده کند. برعکس، اگر انتظار ندارید unwinding از یک مرز ABI عبور کند، از یکی از رشته‌های ABI بدون <code>unwind</code> استفاده کنید.</p>
+<blockquote>
+<p>توجه: کامپایل با <code>panic=abort</code> همچنان باعث می‌شود <code>panic!</code> بی‌درنگ فرایند را متوقف (abort) کند، صرف‌نظر از اینکه تابعی که <code>panic</code> می‌کند چه ABI ای مشخص کرده است.</p>
+</blockquote>
+<p>اگر یک عملیات unwinding با مرز ABI ای روبه‌رو شود که اجازهٔ unwind ندارد، رفتار به منبع unwinding بستگی دارد (<code>panic</code> در Rust یا یک استثنای خارجی):</p>
+<ul>
+<li><code>panic</code> باعث می‌شود فرایند به‌صورت امن متوقف شود.</li>
+<li>ورود یک استثنای خارجی به Rust باعث رفتار تعریف‌نشده می‌شود.</li>
+</ul>
+<p>توجه کنید که تعامل <code>catch_unwind</code> با استثناهای خارجی <strong>تعریف‌نشده است</strong>، همان‌طور که تعامل <code>panic</code> با سازوکارهای گرفتن استثنای خارجی (به‌ویژه <code>try</code>/<code>catch</code> در C++) تعریف‌نشده است.</p>
+<h3 id="rust-panic-with-c-unwind"><a class="header" href="#rust-panic-with-c-unwind"><code>panic</code> در Rust با <code>"C-unwind"</code></a></h3>
+<!-- ignore: using unstable feature -->
+<pre><code class="language-rust ignore">#[unsafe(no_mangle)]
+unsafe extern "C-unwind" fn example() {
+    panic!("Uh oh");
+}</code></pre>
+<p>این تابع (وقتی با <code>panic=unwind</code> کامپایل شود) مجاز است فریم‌های پشتهٔ C++ را unwind کند.</p>
+<pre><code class="language-text">[Rust function with `catch_unwind`, which stops the unwinding]
+      |
+     ...
+      |
+[C++ frames]
+      |                           ^
+      | (calls)                   | (unwinding
+      v                           |  goes this
+[Rust function `example`]         |  way)
+      |                           |
+      +--- rust function panics --+
+</code></pre>
+<p>اگر فریم‌های C++ شیء داشته باشند، نابودگرهای آن‌ها صدا زده می‌شوند.</p>
+<h3 id="c-throw-with-c-unwind"><a class="header" href="#c-throw-with-c-unwind"><code>throw</code> در C++ با <code>"C-unwind"</code></a></h3>
+<!-- ignore: using unstable feature -->
+<pre><code class="language-rust ignore">#[link(...)]
+unsafe extern "C-unwind" {
+    // A C++ function that may throw an exception
+    fn may_throw();
+}
+
+#[unsafe(no_mangle)]
+unsafe extern "C-unwind" fn rust_passthrough() {
+    let b = Box::new(5);
+    unsafe { may_throw(); }
+    println!("{:?}", &amp;b);
+}</code></pre>
+<p>یک تابع C++ با بلوک <code>try</code> می‌تواند <code>rust_passthrough</code> را فراخوانی کند و استثنایی را که <code>may_throw</code> پرتاب کرده <code>catch</code> کند.</p>
+<pre><code class="language-text">[C++ function with `try` block that invokes `rust_passthrough`]
+      |
+     ...
+      |
+[Rust function `rust_passthrough`]
+      |                            ^
+      | (calls)                    | (unwinding
+      v                            |  goes this
+[C++ function `may_throw`]         |  way)
+      |                            |
+      +--- C++ function throws ----+
+</code></pre>
+<p>اگر <code>may_throw</code> واقعاً استثنایی پرتاب کند، <code>b</code> drop می‌شود. در غیر این صورت <code>5</code> چاپ خواهد شد.</p>
+<h3 id="panic-can-be-stopped-at-an-abi-boundary"><a class="header" href="#panic-can-be-stopped-at-an-abi-boundary"><code>panic</code> را می‌توان در مرز ABI متوقف کرد</a></h3>
+<pre><code class="language-rust">#[unsafe(no_mangle)]
+extern "C" fn assert_nonzero(input: u32) {
+    assert!(input != 0)
+}</code></pre>
+<p>اگر <code>assert_nonzero</code> با آرگومان <code>0</code> فراخوانی شود، تضمین شده است که زمان اجرا (runtime) فرایند را (به‌صورت امن) متوقف کند، چه با <code>panic=abort</code> کامپایل شده باشد و چه نه.</p>
+<h3 id="catching-panic-preemptively"><a class="header" href="#catching-panic-preemptively">گرفتن پیشگیرانهٔ <code>panic</code></a></h3>
+<p>اگر کد Rust ای می‌نویسید که ممکن است panic کند و نمی‌خواهید در صورت panic فرایند متوقف شود، باید از <a href="https://doc.rust-lang.org/std/panic/fn.catch_unwind.html"><code>catch_unwind</code></a> استفاده کنید:</p>
+<pre><code class="language-rust">use std::panic::catch_unwind;
+
+#[unsafe(no_mangle)]
+pub extern "C" fn oh_no() -&gt; i32 {
+    let result = catch_unwind(|| {
+        panic!("Oops!");
+    });
+    match result {
+        Ok(_) =&gt; 0,
+        Err(_) =&gt; 1,
+    }
+}
+
+fn main() {}</code></pre>
+<p>لطفاً توجه کنید که <a href="https://doc.rust-lang.org/std/panic/fn.catch_unwind.html"><code>catch_unwind</code></a> فقط panicهایی را می‌گیرد که unwind می‌کنند، نه آن‌هایی که فرایند را متوقف می‌کنند. برای اطلاعات بیشتر مستندات <a href="https://doc.rust-lang.org/std/panic/fn.catch_unwind.html"><code>catch_unwind</code></a> را ببینید.</p>
+<h2 id="representing-opaque-structs"><a class="header" href="#representing-opaque-structs">نمایش ساختارهای مبهم (opaque)</a></h2>
+<p>گاهی یک کتابخانهٔ C می‌خواهد اشاره‌گری به چیزی بدهد، اما جزئیات درونی آن چیز را به شما نشان ندهد. یک راه پایدار و ساده استفاده از آرگومان <code>void *</code> است:</p>
+<pre><code class="language-c">void foo(void *arg);
+void bar(void *arg);
+</code></pre>
+<p>این را در Rust می‌توانیم با نوع <code>c_void</code> نمایش دهیم:</p>
+<!-- ignore: requires libc crate -->
+<pre><code class="language-rust ignore">unsafe extern "C" {
+    pub fn foo(arg: *mut libc::c_void);
+    pub fn bar(arg: *mut libc::c_void);
+}
+<span class="boring">fn main() {}</span></code></pre>
+<p>این روش کاملاً معتبری برای مدیریت این وضعیت است. با این حال، می‌توانیم کمی بهتر عمل کنیم. برای حل این مسئله، برخی کتابخانه‌های C به‌جای آن یک <code>struct</code> می‌سازند که جزئیات و چینش حافظهٔ آن خصوصی است. این کار مقداری امنیت نوع فراهم می‌کند. این ساختارها «مبهم» (opaque) نامیده می‌شوند. این هم یک مثال در C:</p>
+<pre><code class="language-c">struct Foo; /* Foo is a structure, but its contents are not part of the public interface */
+struct Bar;
+void foo(struct Foo *arg);
+void bar(struct Bar *arg);
+</code></pre>
+<p>برای انجام این کار در Rust، نوع‌های مبهم خودمان را می‌سازیم:</p>
+<pre><code class="language-rust">#[repr(C)]
+pub struct Foo {
+    _data: (),
+    _marker:
+        core::marker::PhantomData&lt;(*mut u8, core::marker::PhantomPinned)&gt;,
+}
+#[repr(C)]
+pub struct Bar {
+    _data: (),
+    _marker:
+        core::marker::PhantomData&lt;(*mut u8, core::marker::PhantomPinned)&gt;,
+}
+
+unsafe extern "C" {
+    pub fn foo(arg: *mut Foo);
+    pub fn bar(arg: *mut Bar);
+}
+<span class="boring">fn main() {}</span></code></pre>
+<p>با گنجاندن دست‌کم یک فیلد خصوصی و نداشتن سازنده (constructor)، نوعی مبهم می‌سازیم که بیرون از این ماژول نمی‌توان از آن نمونه ساخت. (از یک struct بدون فیلد، هر کسی می‌تواند نمونه بسازد.) همچنین می‌خواهیم از این نوع در FFI استفاده کنیم، پس باید <code>#[repr(C)]</code> را اضافه کنیم. نشانگر (marker) تضمین می‌کند که کامپایلر ساختار را <code>Send</code>، <code>Sync</code> و <code>Unpin</code> علامت‌گذاری نمی‌کند. (<code>*mut u8</code> نه <code>Send</code> است و نه <code>Sync</code>، و <code>PhantomPinned</code> نیز <code>Unpin</code> نیست.)</p>
+<p>اما چون نوع‌های <code>Foo</code> و <code>Bar</code> ما متفاوت‌اند، بین این دو امنیت نوع خواهیم داشت، بنابراین نمی‌توانیم به‌طور تصادفی اشاره‌گری به <code>Foo</code> را به <code>bar()</code> بدهیم.</p>
+<p>توجه کنید که استفاده از یک enum خالی به‌عنوان نوع FFI ایدهٔ واقعاً بدی است. کامپایلر بر این تکیه می‌کند که enumهای خالی غیرقابل سکونت (uninhabited) هستند، پس کار با مقادیری از نوع <code>&amp;Empty</code> یک تلهٔ بزرگ است و می‌تواند به رفتار اشتباه برنامه بینجامد (با فعال کردن رفتار تعریف‌نشده).</p>
+<blockquote>
+<p><strong>توجه:</strong> ساده‌ترین راه استفاده از «نوع‌های extern» (extern types) است. اما در حال حاضر (تا ژوئن ۲۰۲۱) ناپایدار است و پرسش‌های حل‌نشده‌ای دارد؛ برای جزئیات بیشتر <a href="https://rust-lang.github.io/rfcs/1861-extern-types.html">صفحهٔ RFC</a> و <a href="https://github.com/rust-lang/rust/issues/43467">issue پیگیری</a> را ببینید.</p>
+</blockquote><nav class="page-nav"><a href="arc-mutex/arc-final.html">→ کد نهایی</a><a href="beneath-std.html">زیر std ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

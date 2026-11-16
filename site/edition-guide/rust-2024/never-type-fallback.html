@@ -1,0 +1,100 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>تغییر fallback نوع never — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2024/never-type-fallback"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="never-type-fallback-change"><a class="header" href="#never-type-fallback-change">تغییر در fallback نوع never</a></h1>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>از Rust 1.100 به بعد، تغییراتی که پیش‌تر در این فصل مستند شده بودند دیگر مختص ویرایش نیستند.</p>
+<p>تبدیل‌های (coercion) نوع never (<code>!</code>) به هر نوع («never-to-any») اکنون در همهٔ ویرایش‌ها به‌جای نوع واحد (<code>()</code>) به نوع never (<code>!</code>) برمی‌گردند (fallback).</p>
+<p>lint با نام <code>dependency_on_unit_never_type_fallback</code> که مهاجرت را مدیریت می‌کرد نیز حذف شده است.</p>
+<p>توضیح تبدیل‌های «never-to-any» در ادامه برای اطلاع‌رسانی نگه داشته شده است.</p>
+</blockquote>
+<h2 id="details"><a class="header" href="#details">جزئیات</a></h2>
+<p>وقتی کامپایلر مقداری از نوع <code>!</code> (never) را در یک <a href="../../reference/type-coercions.html#coercion-sites">محل تبدیل</a> می‌بیند، به‌طور ضمنی یک تبدیل درج می‌کند تا نوع‌یاب بتواند هر نوعی را استنباط کند:</p>
+<pre><code class="language-rust should_panic">// This:
+let x: u8 = panic!();
+
+// ...is (essentially) turned by the compiler into:
+let x: u8 = absurd(panic!());
+
+// ...where `absurd` is the following function
+// (it's sound because `!` always marks unreachable code):
+fn absurd&lt;T&gt;(x: !) -&gt; T { x }</code></pre>
+<p>اگر نوع قابل استنباط نباشد، این می‌تواند به خطاهای کامپایل منجر شود:</p>
+<pre><code class="language-rust compile_fail E0282"><span class="boring">fn absurd&lt;T&gt;(x: !) -&gt; T { x }
+</span>// This:
+{ panic!() };
+
+// ...gets turned into this:
+{ absurd(panic!()) }; //~ ERROR can't infer the type of `absurd`</code></pre>
+<p>برای جلوگیری از چنین خطاهایی، کامپایلر به خاطر می‌سپارد که فراخوانی‌های <code>absurd</code> را کجا درج کرده است و اگر نتواند نوع را استنباط کند، به‌جای آن از نوع جایگزین (fallback) استفاده می‌کند:</p>
+<pre><code class="language-rust should_panic"><span class="boring">fn absurd&lt;T&gt;(x: !) -&gt; T { x }
+</span>type Fallback = /* An arbitrarily selected type! */ !;
+{ absurd::&lt;Fallback&gt;(panic!()) }</code></pre>
+<p>این همان چیزی است که با نام «fallback نوع never» شناخته می‌شود.</p>
+<p>از نظر تاریخی، نوع جایگزین <code>()</code> (واحد) بوده است. این باعث می‌شد <code>!</code> حتی وقتی کامپایلر بدون fallback نوع <code>()</code> را استنباط نمی‌کرد، خودبه‌خود به <code>()</code> تبدیل شود. این موضوع گیج‌کننده بود و مانع پایدارسازی نوع <code>!</code> شده است.</p>
+<p>در همهٔ ویرایش‌ها، نوع جایگزین اکنون <code>!</code> است. این باعث می‌شود همه‌چیز شهودی‌تر کار کند. اکنون وقتی <code>!</code> را عبور می‌دهید و دلیلی برای تبدیل آن به چیز دیگری وجود ندارد، به‌صورت <code>!</code> باقی می‌ماند.</p>
+<p>در برخی موارد ممکن است کد شما به این وابسته باشد که نوع جایگزین <code>()</code> است، بنابراین این تغییر می‌تواند باعث خطاهای کامپایل یا تغییر در رفتار شود.</p>
+<h2 id="migration"><a class="header" href="#migration">مهاجرت</a></h2>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>مهاجرت دیگر کاربرد ندارد، زیرا نوع never اکنون در همهٔ ویرایش‌ها به <code>!</code> برمی‌گردد. اطلاعات مربوط به بازنویسی کدی که فرض می‌کرد fallback به <code>()</code> است، در ادامه حفظ شده است تا اگر کد قدیمی‌ای دارید که باید به‌روزرسانی شود از آن استفاده کنید.</p>
+</blockquote>
+<p>برای به‌روزرسانی کدی که fallback به <code>()</code> را فرض می‌کرد، اصلاح خودکاری وجود ندارد.</p>
+<p>اصلاح دستی این است که نوع را به‌صراحت مشخص کنید تا نوع جایگزین به کار نرود. متأسفانه ممکن است دیدن اینکه کدام نوع باید مشخص شود ساده نباشد.</p>
+<p>یکی از رایج‌ترین الگوهایی که با این تغییر می‌شکنند، استفاده از <code>f()?;</code> است که در آن <code>f</code> نسبت به بخش <code>Ok</code> نوع بازگشتی جنریک است:</p>
+<pre><code class="language-rust compile_fail E0277"><span class="boring">fn outer&lt;T&gt;(x: T) -&gt; Result&lt;T, ()&gt; {
+</span>fn f&lt;T: Default&gt;() -&gt; Result&lt;T, ()&gt; {
+    Ok(T::default())
+}
+
+f()?;
+<span class="boring">Ok(x)
+</span><span class="boring">}</span></code></pre>
+<p>ممکن است فکر کنید که در این مثال نوع <code>T</code> قابل استنباط نیست. با این حال، به‌دلیل باز شدن (desugaring) فعلی عملگر <code>?</code>، اکنون به‌صورت <code>!</code> استنباط می‌شود (در حالی که در نسخه‌های قبلی Rust به‌صورت <code>()</code> استنباط می‌شد).</p>
+<p>برای رفع مشکل باید نوع <code>T</code> را به‌صراحت مشخص کنید:</p>
+<pre><code class="language-rust edition2024"><span class="boring">fn outer&lt;T&gt;(x: T) -&gt; Result&lt;T, ()&gt; {
+</span><span class="boring">fn f&lt;T: Default&gt;() -&gt; Result&lt;T, ()&gt; {
+</span><span class="boring">    Ok(T::default())
+</span><span class="boring">}
+</span>f::&lt;()&gt;()?;
+// ...or:
+() = f()?;
+<span class="boring">Ok(x)
+</span><span class="boring">}</span></code></pre>
+<p>مورد نسبتاً رایج دیگر، panic کردن در یک closure است:</p>
+<pre><code class="language-rust compile_fail E0277">trait Unit {}
+impl Unit for () {}
+
+fn run&lt;R: Unit&gt;(f: impl FnOnce() -&gt; R) {
+    f();
+}
+
+run(|| panic!());</code></pre>
+<p>پیش‌تر <code>!</code> حاصل از <code>panic!</code> به <code>()</code> تبدیل می‌شد که <code>Unit</code> را پیاده‌سازی می‌کند. اما اکنون <code>!</code> به‌صورت <code>!</code> باقی می‌ماند، بنابراین این کد شکست می‌خورد، چون <code>!</code> صفت <code>Unit</code> را پیاده‌سازی نمی‌کند. برای رفع این مشکل می‌توانید نوع بازگشتی closure را مشخص کنید:</p>
+<pre><code class="language-rust edition2024 should_panic"><span class="boring">trait Unit {}
+</span><span class="boring">impl Unit for () {}
+</span><span class="boring">
+</span><span class="boring">fn run&lt;R: Unit&gt;(f: impl FnOnce() -&gt; R) {
+</span><span class="boring">    f();
+</span><span class="boring">}
+</span>run(|| -&gt; () { panic!() });</code></pre>
+<p>موردی مشابه <code>f()?</code> را می‌توان هنگام استفاده از عبارتی با نوع <code>!</code> در یک شاخه و تابعی با نوع بازگشتی بدون قید در شاخهٔ دیگر دید:</p>
+<pre><code class="language-rust compile_fail E0277">if true {
+    Default::default()
+} else {
+    return
+};</code></pre>
+<p>پیش‌تر <code>()</code> به‌عنوان نوع بازگشتی <code>Default::default()</code> استنباط می‌شد، چون <code>!</code> حاصل از <code>return</code> به‌اشتباه به <code>()</code> تبدیل می‌شد. اکنون به‌جای آن <code>!</code> استنباط می‌شود که باعث می‌شود این کد کامپایل نشود، چون <code>!</code> صفت <code>Default</code> را پیاده‌سازی نمی‌کند.</p>
+<p>دوباره، این مشکل را می‌توان با مشخص کردن صریح نوع رفع کرد:</p>
+<pre><code class="language-rust edition2024">() = if true {
+    Default::default()
+} else {
+    return
+};
+
+// ...or:
+
+if true {
+    &lt;() as Default&gt;::default()
+} else {
+    return
+};</code></pre><nav class="page-nav"><a href="static-mut-references.html">→ ممنوعیت ارجاع به static mut</a><a href="macro-fragment-specifiers.html">مشخص‌کننده‌های قطعهٔ ماکرو ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

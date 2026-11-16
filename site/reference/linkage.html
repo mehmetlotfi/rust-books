@@ -1,0 +1,231 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>پیونددهی (Linkage) — مرجع زبان Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="linkage"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="introduction.html" style="color:inherit;text-decoration:none">مرجع زبان Rust</a><small class="en-title" dir="ltr">The Rust Reference</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><div class="rule" id="r-link"><a class="rule-link" href="#r-link" title="link"><span>[link]</span></a>
+</div>
+
+<h1 id="linkage"><a class="header" href="#linkage">پیوند (Linkage)</a></h1>
+<div class="rule" id="r-link.intro"><a class="rule-link" href="#r-link.intro" title="link.intro"><span>[link<wbr>.intro]</span></a>
+</div>
+
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> این بخش بیشتر با اصطلاحات کامپایلر توصیف شده است تا خود زبان.</p>
+</blockquote>
+</div>
+
+<p>کامپایلر از روش‌های گوناگونی برای پیوند دادن crateها به یکدیگر، هم به‌صورت ایستا و هم پویا، پشتیبانی می‌کند. این بخش این روش‌های گوناگون پیوند دادن crateها را بررسی می‌کند و اطلاعات بیشتر درباره کتابخانه‌های بومی را می‌توانید در <a href="../book/ch20-01-unsafe-rust.html#using-extern-functions-to-call-external-code">بخش FFI کتاب</a> بیابید.</p>
+<div class="rule" id="r-link.type"><a class="rule-link" href="#r-link.type" title="link.type"><span>[link<wbr>.type]</span></a>
+</div>
+
+<p>کامپایلر می‌تواند در یک نشست کامپایل، با پرچم‌های خط فرمان یا ویژگی <code>crate_type</code> چند محصول تولید کند. اگر یک یا چند پرچم خط فرمان مشخص شوند، همهٔ ویژگی‌های <code>crate_type</code> نادیده گرفته می‌شوند و فقط محصولات تعیین‌شده در خط فرمان ساخته خواهند شد.</p>
+<div class="rule" id="r-link.bin"><a class="rule-link" href="#r-link.bin" title="link.bin"><span>[link<wbr>.bin]</span></a>
+</div>
+
+<ul>
+<li><code>--crate-type=bin</code>، ‏<code>#![crate_type = "bin"]</code> — فایل اجرایی قابل اجرا تولید می‌شود. crate باید تابع <code>main</code> داشته باشد که با آغاز اجرای برنامه اجرا می‌شود. همهٔ وابستگی‌های Rust و بومی پیوند می‌خورند و یک فایل دودویی واحد و قابل توزیع ساخته می‌شود. این نوع پیش‌فرض crate است.</li>
+</ul>
+<div class="rule" id="r-link.lib"><a class="rule-link" href="#r-link.lib" title="link.lib"><span>[link<wbr>.lib]</span></a>
+</div>
+
+<ul>
+<li><code>--crate-type=lib</code>، ‏<code>#![crate_type = "lib"]</code> — یک کتابخانهٔ Rust تولید می‌شود. ماهیت دقیق خروجی مبهم است، زیرا کتابخانه شکل‌های مختلفی دارد. هدف گزینهٔ عمومی <code>lib</code> تولید سبک کتابخانهٔ «توصیه‌شده توسط کامپایلر» است. کتابخانهٔ خروجی همیشه برای rustc قابل استفاده خواهد بود، اما نوع واقعی آن ممکن است گاه تغییر کند. دیگر نوع‌های خروجی همگی گونه‌های مختلف کتابخانه‌اند و می‌توان <code>lib</code> را نام مستعار یکی از آن‌ها دانست، هرچند انتخاب واقعی را کامپایلر تعیین می‌کند.</li>
+</ul>
+<div class="rule" id="r-link.dylib"><a class="rule-link" href="#r-link.dylib" title="link.dylib"><span>[link<wbr>.dylib]</span></a>
+</div>
+
+<ul>
+<li><code>--crate-type=dylib</code>، ‏<code>#![crate_type = "dylib"]</code> — یک کتابخانهٔ پویای Rust تولید می‌شود. برخلاف خروجی <code>lib</code>، این گزینه تولید کتابخانهٔ پویا را الزامی می‌کند. کتابخانهٔ حاصل می‌تواند وابستگی کتابخانه‌ها یا فایل‌های اجرایی دیگر باشد. این نوع خروجی در Linux فایل <code>*.so</code>، در macOS فایل <code>*.dylib</code> و در Windows فایل <code>*.dll</code> می‌سازد.</li>
+</ul>
+<div class="rule" id="r-link.staticlib"><a class="rule-link" href="#r-link.staticlib" title="link.staticlib"><span>[link<wbr>.staticlib]</span></a>
+</div>
+
+<ul>
+<li>
+<p><code>--crate-type=staticlib</code>، ‏<code>#![crate_type = "staticlib"]</code> — یک کتابخانهٔ سیستمی ایستا تولید می‌شود. تفاوت آن با دیگر خروجی‌های کتابخانه این است که کامپایلر هرگز برای پیوند به خروجی‌های <code>staticlib</code> تلاش نمی‌کند. هدف، ساخت کتابخانه‌ای ایستاست که همهٔ کد crate محلی و تمام وابستگی‌های بالادستی را دربرگیرد. این خروجی در Linux، ‏macOS و Windows (MinGW) فایل <code>*.a</code> و در Windows (MSVC) فایل <code>*.lib</code> می‌سازد. این قالب برای موقعیت‌هایی مانند پیوند کد Rust به برنامهٔ غیر-Rust موجود توصیه می‌شود، زیرا وابستگی پویایی به کد Rust دیگر ندارد.</p>
+<p>هر وابستگی پویایی که کتابخانهٔ ایستا داشته باشد—مانند کتابخانه‌های سیستمی یا کتابخانه‌های Rust کامپایل‌شده به‌شکل پویا—هنگام پیوند آن کتابخانه از جای دیگر باید دستی مشخص شود. پرچم <code>--print=native-static-libs</code> می‌تواند در این کار مفید باشد.</p>
+<p>چون کتابخانهٔ ایستای حاصل کد همهٔ وابستگی‌ها، از جمله کتابخانهٔ استاندارد، را در خود دارد و همهٔ نمادهای عمومی آن‌ها را نیز صادر می‌کند، پیوندش به فایل اجرایی یا کتابخانهٔ اشتراکی ممکن است به مراقبت ویژه نیاز داشته باشد. برای کتابخانهٔ اشتراکی باید فهرست نمادهای صادرشده را با ابزارهایی مانند اسکریپت نسخهٔ پیونددهنده یا نماد، فهرست نمادهای صادرشده در macOS یا فایل تعریف ماژول در Windows محدود کرد. همچنین می‌توان بخش‌های بدون استفاده را حذف کرد تا کد وابستگی‌های واقعاً استفاده‌نشده کنار گذاشته شود؛ برای نمونه با <code>--gc-sections</code> یا <code>-dead_strip</code> در macOS.</p>
+</li>
+</ul>
+<div class="rule" id="r-link.cdylib"><a class="rule-link" href="#r-link.cdylib" title="link.cdylib"><span>[link<wbr>.cdylib]</span></a>
+</div>
+
+<ul>
+<li><code>--crate-type=cdylib</code>، ‏<code>#![crate_type = "cdylib"]</code> — یک کتابخانهٔ سیستمی پویا تولید می‌شود. این گزینه برای کامپایل کتابخانهٔ پویایی است که از زبان دیگری بارگذاری می‌شود. خروجی در Linux فایل <code>*.so</code>، در macOS فایل <code>*.dylib</code> و در Windows فایل <code>*.dll</code> خواهد بود.</li>
+</ul>
+<div class="rule" id="r-link.rlib"><a class="rule-link" href="#r-link.rlib" title="link.rlib"><span>[link<wbr>.rlib]</span></a>
+</div>
+
+<ul>
+<li><code>--crate-type=rlib</code>، <code>#![crate_type = "rlib"]</code> — یک فایل «کتابخانهٔ Rust» تولید می‌شود. این فایل به‌عنوان یک محصول میانی به‌کار می‌رود و می‌توان آن را یک «کتابخانهٔ ایستای Rust» دانست. برخلاف فایل‌های <code>staticlib</code>، این فایل‌های <code>rlib</code> در پیوندهای بعدی توسط کامپایلر تفسیر می‌شوند. این یعنی در اصل <code>rustc</code> همان‌طور که در کتابخانه‌های پویا به‌دنبال فراداده (metadata) می‌گردد، در فایل‌های <code>rlib</code> نیز به‌دنبال فراداده می‌گردد. این شکل از خروجی هم برای تولید فایل‌های اجرایی با پیوند ایستا و هم برای تولید خروجی‌های <code>staticlib</code> به‌کار می‌رود.</li>
+</ul>
+<div class="rule" id="r-link.proc-macro"><a class="rule-link" href="#r-link.proc-macro" title="link.proc-macro"><span>[link<wbr>.proc-macro]</span></a>
+</div>
+
+<ul>
+<li><code>--crate-type=proc-macro</code>، ‏<code>#![crate_type = "proc-macro"]</code> — شکل خروجی مشخص نشده است، اما با ارائهٔ مسیر <code>-L</code>، کامپایلر محصولات را به‌عنوان ماکرو می‌شناسد و برنامه می‌تواند آن‌ها را بارگذاری کند. crateهای این نوع فقط باید <a href="procedural-macros.html">ماکروهای رویه‌ای</a> صادر کنند. کامپایلر گزینهٔ <a href="conditional-compilation.html">پیکربندی</a> <code>proc_macro</code> را خودکار فعال می‌کند. این crateها همیشه برای همان هدفی کامپایل می‌شوند که خود کامپایلر با آن ساخته شده است. برای نمونه، اجرای کامپایلر روی Linux با CPU ‏<code>x86_64</code> هدف <code>x86_64-unknown-linux-gnu</code> خواهد داشت، حتی اگر crate وابستگی crate دیگری باشد که برای هدف متفاوتی ساخته می‌شود.</li>
+</ul>
+<div class="rule" id="r-link.repetition"><a class="rule-link" href="#r-link.repetition" title="link.repetition"><span>[link<wbr>.repetition]</span></a>
+</div>
+
+<p>این خروجی‌ها قابل ترکیب‌اند: با مشخص‌کردن چند نوع، کامپایلر بدون کامپایل دوباره همهٔ شکل‌ها را تولید می‌کند. اما این فقط دربارهٔ خروجی‌هایی است که با روشی یکسان مشخص شده‌اند. اگر فقط ویژگی‌های <code>crate_type</code> وجود داشته باشند، همه ساخته می‌شوند؛ ولی با وجود یک یا چند پرچم <code>--crate-type</code> در خط فرمان، تنها همان خروجی‌ها ساخته خواهند شد.</p>
+<div class="rule" id="r-link.dependency"><a class="rule-link" href="#r-link.dependency" title="link.dependency"><span>[link<wbr>.dependency]</span></a>
+</div>
+
+<p>با وجود این خروجی‌های مختلف، اگر crate ‏A به crate ‏B وابسته باشد، کامپایلر ممکن است B را به شکل‌های متفاوتی در سیستم پیدا کند؛ اما فقط قالب <code>rlib</code> و قالب کتابخانهٔ پویا جست‌وجو می‌شوند. کامپایلر باید میان این دو قالب وابستگی انتخاب کند و برای تعیین قالب وابستگی‌ها قواعد زیر را دنبال می‌کند:</p>
+<div class="rule" id="r-link.dependency-staticlib"><a class="rule-link" href="#r-link.dependency-staticlib" title="link.dependency-staticlib"><span>[link<wbr>.dependency-staticlib]</span></a>
+</div>
+
+<ol>
+<li>
+<p>هنگام تولید کتابخانهٔ ایستا، همهٔ وابستگی‌های بالادستی باید در قالب <code>rlib</code> موجود باشند، زیرا کتابخانهٔ پویا را نمی‌توان به قالب ایستا تبدیل کرد.</p>
+<p>پیوند وابستگی‌های پویای بومی به کتابخانهٔ ایستا ناممکن است و در این حالت دربارهٔ همهٔ وابستگی‌های پویای بومی پیوندنخورده هشدار چاپ می‌شود.</p>
+</li>
+</ol>
+<div class="rule" id="r-link.dependency-rlib"><a class="rule-link" href="#r-link.dependency-rlib" title="link.dependency-rlib"><span>[link<wbr>.dependency-rlib]</span></a>
+</div>
+
+<ol start="2">
+<li>
+<p>هنگام تولید فایل <code>rlib</code>، قالب وابستگی‌های بالادستی محدودیتی ندارد؛ فقط باید همهٔ آن‌ها برای خواندن فراداده در دسترس باشند.</p>
+<p>علت این است که فایل <code>rlib</code> هیچ‌یک از وابستگی‌های بالادستی خود را دربرنمی‌گیرد. وجود یک کپی از <code>libstd.rlib</code> در همهٔ فایل‌های <code>rlib</code> کارآمد نخواهد بود.</p>
+</li>
+</ol>
+<div class="rule" id="r-link.dependency-prefer-dynamic"><a class="rule-link" href="#r-link.dependency-prefer-dynamic" title="link.dependency-prefer-dynamic"><span>[link<wbr>.dependency-prefer-dynamic]</span></a>
+</div>
+
+<ol start="3">
+<li>اگر فایل اجرایی تولید شود و پرچم <code>-C prefer-dynamic</code> مشخص نشده باشد، ابتدا وابستگی‌ها در قالب <code>rlib</code> جست‌وجو می‌شوند. اگر بعضی وابستگی‌ها در این قالب نباشند، پیوند پویا امتحان می‌شود.</li>
+</ol>
+<div class="rule" id="r-link.dependency-dynamic"><a class="rule-link" href="#r-link.dependency-dynamic" title="link.dependency-dynamic"><span>[link<wbr>.dependency-dynamic]</span></a>
+</div>
+
+<ol start="4">
+<li>
+<p>هنگام تولید کتابخانهٔ پویا یا فایل اجرایی با پیوند پویا، کامپایلر تلاش می‌کند وابستگی‌های موجود در قالب rlib یا dylib را سازگار کند و محصول نهایی بسازد.</p>
+<p>یکی از هدف‌های اصلی کامپایلر این است که هیچ کتابخانه‌ای بیش از یک بار در یک محصول ظاهر نشود. برای مثال، اگر کتابخانه‌های پویای B و C هرکدام به‌طور ایستا به A پیوند خورده باشند، یک crate نمی‌تواند هم‌زمان به B و C پیوند بخورد، زیرا دو کپی از A به‌وجود می‌آید. کامپایلر ترکیب قالب‌های rlib و dylib را مجاز می‌داند، اما این محدودیت باید رعایت شود.</p>
+<p>اکنون راهی برای راهنمایی کامپایلر دربارهٔ قالب پیوند کتابخانه وجود ندارد. در پیوند پویا، کامپایلر می‌کوشد تعداد وابستگی‌های پویا را بیشینه کند و هم‌زمان اجازه دهد بعضی وابستگی‌ها از طریق rlib پیوند بخورند.</p>
+<p>در بیشتر موارد، اگر پیوند پویا انجام می‌دهید بهتر است همهٔ کتابخانه‌ها به‌شکل dylib موجود باشند. در وضعیت‌های دیگر، اگر کامپایلر نتواند قالب پیوند هر کتابخانه را تعیین کند هشدار می‌دهد.</p>
+</li>
+</ol>
+<p>به‌طور کلی، <code>--crate-type=bin</code> یا <code>--crate-type=lib</code> برای همهٔ نیازهای کامپایل کافی است و گزینه‌های دیگر تنها برای کنترل دقیق‌تر قالب خروجی crate ارائه شده‌اند.</p>
+<div class="rule" id="r-link.crt"><a class="rule-link" href="#r-link.crt" title="link.crt"><span>[link<wbr>.crt]</span></a>
+</div>
+
+<h2 id="static-and-dynamic-c-runtimes"><a class="header" href="#static-and-dynamic-c-runtimes">محیط‌های زمان اجرای ایستا و پویای C</a></h2>
+<div class="rule" id="r-link.crt.intro"><a class="rule-link" href="#r-link.crt.intro" title="link.crt.intro"><span>[link<wbr>.crt<wbr>.intro]</span></a>
+</div>
+
+<p>کتابخانهٔ استاندارد می‌کوشد در هدف‌های مناسب از محیط زمان اجرای C با پیوند ایستا و پویا پشتیبانی کند. برای مثال هدف‌های <code>x86_64-pc-windows-msvc</code> و <code>x86_64-unknown-linux-musl</code> معمولاً هر دو را دارند و کاربر یکی را انتخاب می‌کند. همهٔ هدف‌های کامپایلر حالت پیش‌فرضی برای پیوند به محیط زمان اجرای C دارند. معمولاً پیوند پیش‌فرض پویاست، اما موارد زیر از استثناهای با پیوند ایستای پیش‌فرض‌اند:</p>
+<ul>
+<li><code>arm-unknown-linux-musleabi</code></li>
+<li><code>arm-unknown-linux-musleabihf</code></li>
+<li><code>armv7-unknown-linux-musleabihf</code></li>
+<li><code>i686-unknown-linux-musl</code></li>
+<li><code>x86_64-unknown-linux-musl</code></li>
+</ul>
+<div class="rule" id="r-link.crt.crt-static"><a class="rule-link" href="#r-link.crt.crt-static" title="link.crt.crt-static"><span>[link<wbr>.crt<wbr>.crt-static]</span></a>
+</div>
+
+<p>پیوند محیط زمان اجرای C برای رعایت قابلیت هدف <code>crt-static</code> پیکربندی شده است. این قابلیت‌ها معمولاً با پرچم خط فرمان کامپایلر تنظیم می‌شوند. برای فعال‌کردن محیط زمان اجرای ایستا اجرا کنید:</p>
+<pre><code class="language-sh">rustc -C target-feature=+crt-static foo.rs
+</code></pre>
+<p>و برای پیوند پویا به محیط زمان اجرای C اجرا کنید:</p>
+<pre><code class="language-sh">rustc -C target-feature=-crt-static foo.rs
+</code></pre>
+<div class="rule" id="r-link.crt.ineffective"><a class="rule-link" href="#r-link.crt.ineffective" title="link.crt.ineffective"><span>[link<wbr>.crt<wbr>.ineffective]</span></a>
+</div>
+
+<p>هدف‌هایی که تغییر نوع پیوند محیط زمان اجرای C را پشتیبانی نمی‌کنند، این پرچم را نادیده می‌گیرند. توصیه می‌شود پس از موفقیت کامپایلر، فایل دودویی حاصل را بررسی کنید تا از نوع پیوند مورد انتظار مطمئن شوید.</p>
+<div class="rule" id="r-link.crt.target_feature"><a class="rule-link" href="#r-link.crt.target_feature" title="link.crt.target_feature"><span>[link<wbr>.crt<wbr>.target_feature]</span></a>
+</div>
+
+<p>crateها نیز می‌توانند از چگونگی پیوند محیط زمان اجرای C آگاه شوند. برای نمونه، کد روی MSVC باید بسته به محیط زمان اجرای پیوندشده به‌شکل متفاوتی—مانند <code>/MT</code> یا <code>/MD</code>—کامپایل شود. این اطلاعات اکنون از طریق <a href="conditional-compilation.html#target_feature">گزینهٔ <code>target_feature</code> در ویژگی <code>cfg</code></a> صادر می‌شود:</p>
+<pre><code class="language-rust">#[cfg(target_feature = "crt-static")]
+fn foo() {
+    println!("the C runtime should be statically linked");
+}
+
+#[cfg(not(target_feature = "crt-static"))]
+fn foo() {
+    println!("the C runtime should be dynamically linked");
+}</code></pre>
+<p>اسکریپت‌های ساخت Cargo نیز می‌توانند از طریق <a href="../cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts">متغیرهای محیطی</a> از این قابلیت آگاه شوند. در اسکریپت ساخت می‌توان پیوند را چنین تشخیص داد:</p>
+<pre><code class="language-rust">use std::env;
+
+fn main() {
+    let linkage = env::var("CARGO_CFG_TARGET_FEATURE").unwrap_or(String::new());
+
+    if linkage.contains("crt-static") {
+        println!("the C runtime will be statically linked");
+    } else {
+        println!("the C runtime will be dynamically linked");
+    }
+}</code></pre>
+<p>برای استفادهٔ محلی از این قابلیت، معمولاً پرچم‌های کامپایلر را با متغیر محیطی <code>RUSTFLAGS</code> از طریق Cargo مشخص می‌کنید. برای نمونه، برای کامپایل فایل دودویی با پیوند ایستا روی MSVC اجرا کنید:</p>
+<pre><code class="language-sh">RUSTFLAGS='-C target-feature=+crt-static' cargo build --target x86_64-pc-windows-msvc
+</code></pre>
+<div class="rule" id="r-link.foreign-code"><a class="rule-link" href="#r-link.foreign-code" title="link.foreign-code"><span>[link<wbr>.foreign-code]</span></a>
+</div>
+
+<h2 id="mixed-rust-and-foreign-codebases"><a class="header" href="#mixed-rust-and-foreign-codebases">کدبیس‌های ترکیبی Rust و زبان‌های خارجی</a></h2>
+<div class="rule" id="r-link.foreign-code.foreign-linkers"><a class="rule-link" href="#r-link.foreign-code.foreign-linkers" title="link.foreign-code.foreign-linkers"><span>[link<wbr>.foreign-code<wbr>.foreign-linkers]</span></a>
+</div>
+
+<p>اگر Rust را با کد خارجی مانند C یا C++ ترکیب می‌کنید و یک فایل دودویی واحد شامل هر دو می‌خواهید، دو راه برای پیوند نهایی دارید:</p>
+<ul>
+<li>از <code>rustc</code> استفاده کنید. کتابخانه‌های غیر-Rust را با آرگومان‌های <code>-L &lt;directory&gt;</code> و <code>-l&lt;library&gt;</code> یا دستورهای <code>#[link]</code> در کد Rust بدهید. برای پیوند فایل‌های <code>.o</code> می‌توانید از <code>-Clink-arg=file.o</code> استفاده کنید.</li>
+<li>از پیونددهندهٔ خارجی خود استفاده کنید. ابتدا باید یک هدف <code>staticlib</code> از Rust بسازید و آن را به فراخوانی پیونددهنده بدهید. برای پیوند چند زیرسامانهٔ Rust باید یک <code>staticlib</code> <em>واحد</em> بسازید؛ احتمالاً با تعداد زیادی دستور <code>extern crate</code> برای دربرگرفتن چند <code>rlib</code> از Rust. چند فایل <code>staticlib</code> از Rust احتمالاً تعارض ایجاد می‌کنند.</li>
+</ul>
+<p>دادن مستقیم <code>rlib</code>ها به پیونددهندهٔ خارجی اکنون پشتیبانی نمی‌شود.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> در این بخش، کد Rust کامپایل یا پیوندشده با نمونه‌ای متفاوت از محیط زمان اجرای Rust، «کد خارجی» به‌شمار می‌رود.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-link.unwinding"><a class="rule-link" href="#r-link.unwinding" title="link.unwinding"><span>[link<wbr>.unwinding]</span></a>
+</div>
+
+<h3 id="prohibited-linkage-and-unwinding"><a class="header" href="#prohibited-linkage-and-unwinding">پیوند و بازکردن پشتهٔ ممنوع</a></h3>
+<div class="rule" id="r-link.unwinding.intro"><a class="rule-link" href="#r-link.unwinding.intro" title="link.unwinding.intro"><span>[link<wbr>.unwinding<wbr>.intro]</span></a>
+</div>
+
+<p>بازکردن پشته هنگام panic تنها زمانی قابل استفاده است که فایل دودویی مطابق قواعد زیر به‌شکلی سازگار ساخته شده باشد.</p>
+<div class="rule" id="r-link.unwinding.potential"><a class="rule-link" href="#r-link.unwinding.potential" title="link.unwinding.potential"><span>[link<wbr>.unwinding<wbr>.potential]</span></a>
+</div>
+
+<p>یک محصول Rust در صورت برقراری هر یک از شرایط زیر <em>بالقوه بازکنندهٔ پشته</em> نامیده می‌شود:</p>
+<ul>
+<li>محصول از <a href="panic.html#r-panic.panic_handler">مدیریت‌کنندهٔ panic نوع <code>unwind</code></a> استفاده کند.</li>
+<li>محصول حاوی crateای باشد که با <a href="panic.html#panic-strategy">راهبرد panic</a> نوع <code>unwind</code> ساخته شده و تابعی با ABI دارای پسوند <code>-unwind</code> را فراخوانی می‌کند.</li>
+<li>محصول با ABI نوع <code>"Rust"</code> کدی را در محصول Rust دیگری فراخوانی کند که کپی جداگانه‌ای از محیط زمان اجرای Rust دارد و آن محصول دیگر بالقوه بازکنندهٔ پشته باشد.</li>
+</ul>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> این تعریف مشخص می‌کند آیا یک فراخوانی با ABI نوع <code>"Rust"</code> درون محصول Rust ممکن است پشته را باز کند یا نه.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-link.unwinding.prohibited"><a class="rule-link" href="#r-link.unwinding.prohibited" title="link.unwinding.prohibited"><span>[link<wbr>.unwinding<wbr>.prohibited]</span></a>
+</div>
+
+<p>اگر محصول Rust بالقوه بازکنندهٔ پشته باشد، همهٔ crateهای آن باید با <a href="panic.html#panic-strategy">راهبرد panic</a> نوع <code>unwind</code> ساخته شوند؛ در غیر این صورت بازکردن پشته می‌تواند رفتار تعریف‌نشده ایجاد کند.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> اگر پیوند را با <code>rustc</code> انجام دهید، این قواعد خودکار اعمال می‌شوند. اگر از <code>rustc</code> استفاده نمی‌کنید باید سازگاری مدیریت بازکردن پشته را در کل فایل دودویی تضمین کنید. پیوند بدون <code>rustc</code> شامل استفاده از <code>dlopen</code> یا امکانات مشابهی است که در آن محیط زمان اجرای سیستم بدون دخالت <code>rustc</code> پیوند را انجام می‌دهد. این وضعیت تنها هنگام ترکیب کد با پرچم‌های متفاوت <code>-C panic</code> رخ می‌دهد؛ بنابراین بیشتر کاربران لازم نیست نگران آن باشند.</p>
+</blockquote>
+</div>
+
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> برای تضمین صحیح‌بودن یک کتابخانه و امکان پیوند آن با <code>rustc</code> مستقل از محیط زمان اجرای panic در زمان پیوند، می‌توان از <a href="https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html#ffi-unwind-calls">lint مربوط به <code>ffi_unwind_calls</code></a> استفاده کرد. این lint همهٔ فراخوانی‌های تابع خارجی یا اشاره‌گر تابع دارای پسوند <code>-unwind</code> را علامت‌گذاری می‌کند.</p>
+</blockquote>
+</div><nav class="page-nav"><a href="panic.html">→ پنیک (Panic)</a><a href="inline-assembly.html">اسمبلی درون‌خطی (Inline assembly) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../reference/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

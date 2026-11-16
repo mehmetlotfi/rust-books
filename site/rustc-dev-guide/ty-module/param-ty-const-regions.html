@@ -1,0 +1,75 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>نوع‌ها/ثابت‌ها/ناحیه‌های پارامتر — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="ty-module/param-ty-const-regions"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="parameter-tyconstregions"><a class="header" href="#parameter-tyconstregions">پارامترهای <code>Ty</code>/<code>Const</code>/<code>Region</code></a></h1>
+<p>درون آیتم‌های جنریک می‌توان نوع‌هایی نوشت که از پارامترهای جنریکِ در دامنه استفاده می‌کنند، برای مثال <code>fn foo&lt;'a, T&gt;(_: &amp;'a Vec&lt;T&gt;)</code>.
+در این مورد خاص، نوع <code>&amp;'a Vec&lt;T&gt;</code> در داخل به این صورت نمایش داده می‌شود:</p>
+<pre><code>TyKind::Ref(
+  RegionKind::LateParam(DefId(foo), DefId(foo::'a), "'a"),
+  TyKind::Adt(Vec, &amp;[TyKind::Param("T", 0)])
+)
+</code></pre>
+<p>سه روش جداگانه برای نمایش استفاده از پارامترهای جنریک داریم:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.TyKind.html#variant.Param"><code>TyKind::Param</code></a>/<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.ConstKind.html#variant.Param"><code>ConstKind::Param</code></a>/<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.RegionKind.html#variant.ReEarlyParam"><code>RegionKind::EarlyParam</code></a> برای پارامترهای جنریک early bound (توجه: همهٔ پارامترهای نوع و ثابت early bound در نظر گرفته می‌شوند؛ برای اطلاعات بیشتر <a href="../early-late-parameters.html">فصل پارامترهای early در برابر late bound</a> را ببینید)</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.TyKind.html#variant.Bound"><code>TyKind::Bound</code></a>/<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.ConstKind.html#variant.Bound"><code>ConstKind::Bound</code></a>/<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.RegionKind.html#variant.ReBound"><code>RegionKind::Bound</code></a> برای ارجاع به پارامترهایی که از طریق قیدهای مرتبهٔ بالاتر یا نوع‌های مرتبهٔ بالاتر معرفی شده‌اند، یعنی <code>for&lt;'a&gt; fn(&amp;'a u32)</code> یا <code>for&lt;'a&gt; T: Trait&lt;'a&gt;</code>. این در <a href="./binders.html">فصل مربوط به <code>Binder</code>ها</a> بحث شده است.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.RegionKind.html#variant.ReLateParam"><code>RegionKind::LateParam</code></a> برای پارامترهای طول عمر late bound؛ دربارهٔ <code>LateParam</code> در <a href="./instantiating-binders.html">فصل نمونه‌سازی <code>Binder</code>ها</a> بحث شده است.</li>
+</ul>
+<p>این فصل فقط <code>TyKind::Param</code>، <code>ConstKind::Param</code> و <code>RegionKind::EarlyParam</code> را پوشش می‌دهد.</p>
+<h2 id="tyconst-parameters"><a class="header" href="#tyconst-parameters">پارامترهای Ty/Const</a></h2>
+<p>از آنجا که <code>TyKind::Param</code> و <code>ConstKind::Param</code> به‌طور یکسان پیاده‌سازی شده‌اند، این بخش برای سادگی فقط به <code>TyKind::Param</code> اشاره می‌کند.
+با این حال به خاطر داشته باشید که هر آنچه در اینجا می‌آید دربارهٔ <code>ConstKind::Param</code> هم صادق است</p>
+<p>هر <code>TyKind::Param</code> دو چیز دارد: نام پارامتر و یک اندیس (index).</p>
+<p>مثال ملموس زیر را از کاربرد <code>TyKind::Param</code> ببینید:</p>
+<pre><code class="language-rust ignore">struct Foo&lt;T&gt;(Vec&lt;T&gt;);</code></pre>
+<p>نوع <code>Vec&lt;T&gt;</code> به‌صورت <code>TyKind::Adt(Vec, &amp;[GenericArgKind::Type(Param("T", 0))])</code> نمایش داده می‌شود.</p>
+<p>نام تا حدی گویاست؛ نام پارامتر نوع است.
+اندیس پارامتر نوع عددی صحیح است که
+جایگاه آن را در فهرست پارامترهای جنریکِ در دامنه نشان می‌دهد.
+توجه کنید که این شامل پارامترهای تعریف‌شده روی آیتم‌هایی در دامنه‌های بیرونی‌تر از آیتمی که پارامتر روی آن تعریف شده نیز می‌شود.
+مثال‌های زیر را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">struct Foo&lt;A, B&gt; {
+  // A would have index 0
+  // B would have index 1
+
+  .. // some fields
+}
+impl&lt;X, Y&gt; Foo&lt;X, Y&gt; {
+  fn method&lt;Z&gt;() {
+    // inside here, X, Y and Z are all in scope
+    // X has index 0
+    // Y has index 1
+    // Z has index 2
+  }
+}</code></pre>
+<p>به‌طور مشخص، با داشتن <code>ty::Generics</code> آیتمی که پارامتر روی آن تعریف شده،
+اگر اندیس <code>2</code> باشد و از <code>parent</code> ریشه شروع کنیم، سومین پارامتری خواهد بود که معرفی می‌شود.
+برای مثال در مثال بالا، <code>Z</code> اندیس <code>2</code> دارد و سومین پارامتر جنریکی است که با شروع از بلوک <code>impl</code> معرفی می‌شود.</p>
+<p>اندیس، <code>Ty</code> را به‌طور کامل تعریف می‌کند و تنها بخشی از <code>TyKind::Param</code> است که برای استدلال دربارهٔ کدی که کامپایل می‌کنیم اهمیت دارد.</p>
+<p>به‌طور کلی نام برایمان مهم نیست و فقط از اندیس استفاده می‌کنیم.
+نام برای تشخیص‌ها (diagnostics) و لاگ‌های اشکال‌زدایی گنجانده شده، چون در غیر این صورت
+درک خروجی فوق‌العاده دشوار می‌شد، یعنی <code>Vec&lt;Param(0)&gt;: Sized</code> در برابر <code>Vec&lt;T&gt;: Sized</code>. در خروجی اشکال‌زدایی، نوع‌های پارامتر
+اغلب به‌صورت <code>{name}/#{index}</code> چاپ می‌شوند؛ برای مثال در تابع <code>foo</code> اگر <code>Vec&lt;T&gt;</code> را چاپ اشکال‌زدایی کنیم به‌صورت <code>Vec&lt;T/#0&gt;</code> نوشته می‌شود.</p>
+<p>یک نمایش جایگزین این بود که فقط نام را داشته باشیم.
+با این حال استفاده از اندیس کارآمدتر است، زیرا یعنی هنگام نمونه‌سازی پارامترهای جنریک با آرگومان‌ها می‌توانیم در <code>GenericArgs</code> اندیس بزنیم.
+در غیر این صورت باید <code>GenericArgs</code> را به‌صورت <code>HashMap&lt;Symbol, GenericArg&gt;</code> ذخیره می‌کردیم و هر بار که از آیتمی جنریک استفاده می‌کردیم یک جست‌وجوی hashmap انجام می‌دادیم.</p>
+<p>در نظریه، اندیس همچنین اجازه می‌دهد چند پارامتر متمایز با نام یکسان داشته باشیم، مثلاً
+<code>impl&lt;A&gt; Foo&lt;A&gt; { fn bar&lt;A&gt;() { .. } }</code>.
+قواعد مخالف shadowing این کار را دشوار می‌کنند، اما آن قواعد زبان ممکن است در آینده تغییر کنند.</p>
+<h3 id="lifetime-parameters"><a class="header" href="#lifetime-parameters">پارامترهای طول عمر</a></h3>
+<p>برخلاف <code>Ty</code>/<code>Const</code> که هر یک فقط یک حالت <code>Param</code> دارند (یعنی همان <code>Param</code> منفرد)، طول عمرها دو حالت برای نمایش پارامترهای ناحیه (region) دارند: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.RegionKind.html#variant.ReEarlyParam"><code>RegionKind::EarlyParam</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.RegionKind.html#variant.ReLateParam"><code>RegionKind::LateParam</code></a>.
+دلیل این است که توابع میان <a href="../early-late-parameters.html">پارامترهای early و late bound</a> تمایز قائل می‌شوند که در فصلی پیشین بحث شده است (پیوند را ببینید).</p>
+<p><code>RegionKind::EarlyParam</code> دقیقاً مانند <code>Ty/Const</code> که حالت <code>Param</code> دارد ساختار یافته است؛ فقط یک اندیس <code>u32</code> و یک <code>Symbol</code> است.
+برای پارامترهای طول عمر تعریف‌شده روی آیتم‌های غیرتابع، همیشه از <code>ReEarlyParam</code> استفاده می‌کنیم.
+برای توابع، از <code>ReEarlyParam</code> برای هر پارامتر early bound و از <code>ReLateParam</code> برای هر پارامتر late bound استفاده می‌کنیم.
+توجه کنید که درست مانند پارامترهای <code>Ty</code> و <code>Const</code>، اغلب آن‌ها را به‌صورت <code>'SYMBOL/#INDEX</code> برای اشکال‌زدایی قالب‌بندی می‌کنیم.</p>
+<p>یک مثال:</p>
+<pre><code class="language-rust ignore">// This function would have its signature represented as:
+//
+// ```
+// fn(
+//     T/#2,
+//     Ref('a/#0, Ref(ReLateParam(...), u32))
+// ) -&gt; Ref(ReLateParam(...), u32)
+// ```
+fn foo&lt;'a, 'b, T: 'a&gt;(one: T, two: &amp;'a &amp;'b u32) -&gt; &amp;'b u32 {
+    ...
+}</code></pre>
+<p><code>RegionKind::LateParam</code> بیشتر در فصل <a href="./instantiating-binders.html">نمونه‌سازی binderها</a> بحث شده است.</p><nav class="page-nav"><a href="generic-arguments.html">→ ADTها و آرگومان‌های جنریک</a><a href="../ty-fold.html">TypeFolder و TypeFoldable ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

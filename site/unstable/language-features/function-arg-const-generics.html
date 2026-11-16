@@ -1,0 +1,106 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>function-arg-const-generics — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/function-arg-const-generics"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="function_arg_const_generics"><a class="header" href="#function_arg_const_generics">function_arg_const_generics</a></h1>
+<p>issue ردیابی این قابلیت: <a href="https://github.com/rust-lang/rust/issues/163261">#163261</a></p>
+<hr>
+<p><code>#![feature(function_arg_const_generics)]</code> اجازه می‌دهد پارامترهای const generic در فهرست پارامترهای مقداری (value parameter) یک تابع تعریف شوند و مانند آرگومان‌های معمولی فراخوانی ارائه شوند، نه از طریق آرگومان‌های generic (نحو turbofish).</p>
+<p>هشدار: این قابلیت ناقص است؛ طراحی و نحو آن ممکن است تغییر کند.</p>
+<p>این قابلیت به <code>#![feature(gca_min_const_items)]</code> یا <code>#![feature(gca_adts)]</code> نیاز دارد.</p>
+<h2 id="examples"><a class="header" href="#examples">نمونه‌ها</a></h2>
+<p>به‌طور معمول، پارامترهای const generic در فهرست پارامترهای generic تعریف می‌شوند و با نحو turbofish ارائه می‌گردند:</p>
+<pre><code class="language-rust">fn foo&lt;const N: usize&gt;(value: u8) {
+    let _ = N;
+}
+
+fn main() {
+    foo::&lt;42&gt;(10);
+}</code></pre>
+<p>با <code>function_arg_const_generics</code>، پارامتر const generic را می‌توان به‌جای آن در فهرست پارامترهای مقداری تابع تعریف کرد:</p>
+<pre><code class="language-rust">#![allow(incomplete_features)]
+#![feature(function_arg_const_generics, gca_min_const_items)]
+
+fn foo(const N: usize, value: u8) {
+    let _ = (N, value);
+}
+
+fn main() {
+    foo(42, 10);
+}</code></pre>
+<p>در اینجا <code>N</code> همچنان یک پارامتر const generic است، اما مقدار آن به‌عنوان اولین آرگومان فراخوانی تابع ارائه می‌شود.</p>
+<h3 id="methods-and-trait-functions"><a class="header" href="#methods-and-trait-functions">متدها و تابع‌های trait</a></h3>
+<p>پارامترهای const generic در موقعیت آرگومان در تابع‌های آزاد (free function)، متدهای ذاتی (inherent)، متدهای trait و پیاده‌سازی‌های trait پشتیبانی می‌شوند.</p>
+<pre><code class="language-rust">#![allow(incomplete_features)]
+#![feature(function_arg_const_generics, gca_min_const_items)]
+
+struct Foo;
+
+impl Foo {
+    fn bar(&amp;self, const N: usize) {
+        let _ = N;
+    }
+}
+
+trait Trait {
+    fn baz(const N: usize);
+}
+
+impl Trait for Foo {
+    fn baz(const N: usize) {
+        let _ = N;
+    }
+}
+
+fn main() {
+    Foo.bar(10);
+    Foo::baz(20);
+}</code></pre>
+<h3 id="supported-const-arguments"><a class="header" href="#supported-const-arguments">آرگومان‌های const پشتیبانی‌شده</a></h3>
+<p>در حال حاضر فقط شکل‌های زیر از آرگومان‌های const پشتیبانی می‌شوند:</p>
+<ul>
+<li>literalها.</li>
+<li>مسیرها (path) به پارامترهای const generic.</li>
+<li>مسیرها به آیتم‌های const، به شرطی که آیتم const برای استفاده در سیستم نوع علامت‌گذاری شده باشد، برای مثال با استفاده از <code>gca!</code>.</li>
+</ul>
+<pre><code class="language-rust">#![allow(incomplete_features)]
+#![feature(function_arg_const_generics, gca_min_const_items)]
+
+fn foo(const N: usize) {
+    let _ = N;
+}
+
+const VALUE: usize = core::gca!(42);
+
+fn bar&lt;const K: usize&gt;() {
+    foo(K);
+}
+
+fn main() {
+    foo(10);    // OK: integer literal
+    foo(VALUE); // OK: const item marked with gca!
+    bar::&lt;20&gt;();
+}</code></pre>
+<h3 id="restrictions"><a class="header" href="#restrictions">محدودیت‌ها</a></h3>
+<p>پارامترهای const generic در موقعیت آرگومان محدودیت‌های زیر را دارند:</p>
+<ul>
+<li>باید با یک شناسهٔ ساده تعریف شوند، مانند <code>const N: usize</code>.</li>
+<li>نمی‌توان آن‌ها را به‌صراحت با نحو turbofish ارائه کرد.</li>
+<li>آرگومان‌ها باید از یکی از شکل‌های پشتیبانی‌شدهٔ آرگومان const که در بالا شرح داده شد استفاده کنند.</li>
+</ul>
+<p>برای مثال، یک متغیر محلی زمان اجرا (runtime) را نمی‌توان به‌عنوان آرگومان const به کار برد:</p>
+<pre><code class="language-rust compile_fail">#![allow(incomplete_features)]
+#![feature(function_arg_const_generics, gca_min_const_items)]
+
+fn foo(const N: usize) {}
+
+fn main() {
+    let n = 10;
+    foo(n); // ERROR: runtime local variable
+}</code></pre>
+<p>به همین ترتیب، پارامترهای const generic در موقعیت آرگومان را نمی‌توان با نحو turbofish مشخص کرد:</p>
+<pre><code class="language-rust compile_fail E0107">#![allow(incomplete_features)]
+#![feature(function_arg_const_generics, gca_min_const_items)]
+
+fn foo(const N: usize) {}
+
+fn main() {
+    foo::&lt;10&gt;(10); // ERROR: N cannot be specified using turbofish
+}</code></pre>
+<p>پارامترهای const generic در موقعیت آرگومان در حال حاضر در نوع‌های اشاره‌گر تابع (function pointer)، نحو trait <code>Fn()</code> یا اعلان‌های تابع خارجی (foreign function) پشتیبانی نمی‌شوند.</p><nav class="page-nav"><a href="../../unstable/language-features/frontmatter.html">→ frontmatter</a><a href="../../unstable/language-features/gca-adts.html">gca-adts ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

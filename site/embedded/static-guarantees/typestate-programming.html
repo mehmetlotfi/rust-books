@@ -1,0 +1,52 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>برنامه‌نویسی Typestate — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="static-guarantees/typestate-programming"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="typestate-programming"><a class="header" href="#typestate-programming">برنامه‌نویسی Typestate</a></h1>
+<p>مفهوم <a href="https://en.wikipedia.org/wiki/Typestate_analysis">typestate‌ها</a> به رمزگذاری اطلاعات دربارهٔ وضعیت فعلی یک شیء در نوع آن شیء اشاره دارد. هرچند ممکن است این موضوع کمی پیچیده و رمزآلود به نظر برسد، اگر در Rust از <a href="https://doc.rust-lang.org/1.0.0/style/ownership/builders.html">الگوی Builder</a> استفاده کرده باشید، پیش‌تر برنامه‌نویسی Typestate را شروع کرده‌اید!</p>
+<pre><code class="language-rust">pub mod foo_module {
+    #[derive(Debug)]
+    pub struct Foo {
+        inner: u32,
+    }
+
+    pub struct FooBuilder {
+        a: u32,
+        b: u32,
+    }
+
+    impl FooBuilder {
+        pub fn new(starter: u32) -&gt; Self {
+            Self {
+                a: starter,
+                b: starter,
+            }
+        }
+
+        pub fn double_a(self) -&gt; Self {
+            Self {
+                a: self.a * 2,
+                b: self.b,
+            }
+        }
+
+        pub fn into_foo(self) -&gt; Foo {
+            Foo {
+                inner: self.a + self.b,
+            }
+        }
+    }
+}
+
+fn main() {
+    let x = foo_module::FooBuilder::new(10)
+        .double_a()
+        .into_foo();
+
+    println!("{:#?}", x);
+}</code></pre>
+<p>در این مثال، هیچ راه مستقیمی برای ساختن یک شیء <code>Foo</code> وجود ندارد. باید یک <code>FooBuilder</code> بسازیم و پیش از آنکه بتوانیم شیء <code>Foo</code> موردنظرمان را به دست آوریم، آن را به‌درستی مقداردهی اولیه کنیم.</p>
+<p>این مثال کوچک دو حالت را رمزگذاری می‌کند:</p>
+<ul>
+<li><code>FooBuilder</code> که حالت «پیکربندی‌نشده» یا «پیکربندی در حال انجام» را نشان می‌دهد</li>
+<li><code>Foo</code> که حالت «پیکربندی‌شده» یا «آمادهٔ استفاده» را نشان می‌دهد.</li>
+</ul>
+<h2 id="strong-types"><a class="header" href="#strong-types">نوع‌های قوی</a></h2>
+<p>از آنجا که Rust یک <a href="https://en.wikipedia.org/wiki/Strong_and_weak_typing">سیستم نوع قوی</a> دارد، راه ساده‌ای برای ساختن جادویی یک نمونه از <code>Foo</code> یا تبدیل یک <code>FooBuilder</code> به <code>Foo</code> بدون فراخوانی متد <code>into_foo()</code> وجود ندارد. علاوه بر این، فراخوانی متد <code>into_foo()</code> ساختار <code>FooBuilder</code> اصلی را مصرف می‌کند، یعنی بدون ساختن یک نمونهٔ جدید نمی‌توان آن را دوباره استفاده کرد.</p>
+<p>این کار به ما اجازه می‌دهد حالت‌های سیستم خود را به‌صورت نوع‌ها نمایش دهیم و اقدامات لازم برای انتقال بین حالت‌ها را در متدهایی قرار دهیم که یک نوع را با نوعی دیگر جایگزین می‌کنند. با ساختن یک <code>FooBuilder</code> و تبدیل آن به یک شیء <code>Foo</code>، مراحل یک ماشین حالت ساده را پیموده‌ایم.</p><nav class="page-nav"><a href="../../embedded/static-guarantees/index.html">→ تضمین‌های ایستا</a><a href="../../embedded/static-guarantees/state-machines.html">پیرامونی‌ها به‌عنوان ماشین‌های حالت ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

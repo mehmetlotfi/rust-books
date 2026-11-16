@@ -1,0 +1,271 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Queryها: کامپایل مبتنی بر تقاضا — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="query"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="queries-demand-driven-compilation"><a class="header" href="#queries-demand-driven-compilation">Queries: demand-driven compilation</a></h1>
+<p>همان‌طور که در <a href="overview.html#queries">نمای کلی کامپایلر</a> توضیح داده شد، کامپایلر Rust
+هنوز (تا ژوئیهٔ 2021 <!-- date-check -->) در حال گذار از ساختار سنتی «مبتنی بر گذر (pass)» به
+سامانهٔ «تقاضامحور (demand-driven)» است.</p>
+<p>«سامانهٔ کوئری» کامپایلر کلید سازمان تقاضامحور rustc است.
+به‌جای گذرهای کاملاً مستقل
+(تجزیه، بررسی نوع و غیره)، مجموعه‌ای از <em>کوئری‌های</em> تابع‌مانند
+اطلاعات مربوط به منبع ورودی را محاسبه می‌کنند.
+برای مثال،
+کوئری‌ای به نام <code>type_of</code> هست که با گرفتن <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/def_id/struct.DefId.html"><code>DefId</code></a> یک آیتم،
+نوع آن آیتم را محاسبه می‌کند و به شما برمی‌گرداند.</p>
+<p>اجرای کوئری <em>memoize</em> می‌شود.
+اولین باری که کوئری را فراخوانی می‌کنید،
+محاسبه را انجام می‌دهد، اما دفعهٔ بعد نتیجه از یک hashtable برمی‌گردد.
+علاوه بر این، اجرای کوئری به‌خوبی با <em>محاسبهٔ افزایشی</em> سازگار است؛ ایده تقریباً این است که
+وقتی کوئری را فراخوانی می‌کنید،
+نتیجه <em>ممکن است</em> با بارگذاری داده‌های ذخیره‌شده از دیسک به شما برگردد.<sup class="footnote-reference" id="fr-incr-comp-detail-1"><a href="#footnote-incr-comp-detail">1</a></sup></p>
+<p>وقتی کوئری‌ای اجرا می‌کنیم،
+همچنین (در زمان اجرا!) کشف می‌کنیم به چه کوئری‌های دیگری وابسته است.
+این به ما اجازه می‌دهد <strong>گراف وابستگی</strong> crate خود را بسازیم،
+که محاسبهٔ افزایشی را sound می‌کند.</p>
+<p>در نهایت می‌خواهیم کل جریان کنترل کامپایلر کوئری‌محور باشد.
+عملاً یک کوئری سطح بالا (<code>compile</code>) خواهد بود که کامپایل را روی یک crate اجرا می‌کند؛ این
+به نوبهٔ خود اطلاعات آن crate را از <em>انتها</em> شروع کرده تقاضا می‌کند.</p>
+<p>برای مثال:</p>
+<ul>
+<li>کوئری <code>compile</code> ممکن است تقاضا کند فهرستی از واحدهای codegen
+(یعنی ماژول‌هایی که باید توسط LLVM کامپایل شوند) بگیرد.</li>
+<li>اما محاسبهٔ فهرست واحدهای codegen زیرکوئری‌ای را فراخوانی می‌کند
+که فهرست همهٔ ماژول‌های تعریف‌شده در منبع Rust را برمی‌گرداند.</li>
+<li>آن کوئری به نوبهٔ خود چیزی را فراخوانی می‌کند که HIR را می‌خواهد.</li>
+<li>این همین‌طور عقب‌تر و عقب‌تر می‌رود تا نهایتاً به تجزیهٔ واقعی برسیم.</li>
+</ul>
+<p>هرچند این چشم‌انداز کاملاً محقق نشده، بخش‌های بزرگی از کامپایلر (برای مثال،
+تولید <a href="mir/index.html">MIR</a>) در حال حاضر دقیقاً همین‌طور کار می‌کنند.</p>
+<h2 id="invoking-queries"><a class="header" href="#invoking-queries">Invoking queries</a></h2>
+<p>فراخوانی کوئری ساده است.
+struct با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html"><code>TyCtxt</code></a> («زمینهٔ نوع‌دهی») برای هر کوئری تعریف‌شده متدی ارائه می‌دهد.
+برای مثال، برای فراخوانی کوئری <code>type_of</code> فقط این را می‌نویسید:</p>
+<pre><code class="language-rust ignore">let ty = tcx.type_of(some_def_id);</code></pre>
+<h2 id="how-the-compiler-executes-a-query"><a class="header" href="#how-the-compiler-executes-a-query">کامپایلر چگونه یک کوئری را اجرا می‌کند</a></h2>
+<p>ممکن است بپرسید هنگام فراخوانی متد کوئری چه رخ می‌دهد.
+پاسخ این است که برای هر کوئری، کامپایلر یک
+cache نگه می‌دارد – اگر کوئری شما قبلاً اجرا شده باشد، پاسخ ساده است: مقدار بازگشتی را از cache clone می‌کنیم و برمی‌گردانیم (بنابراین
+باید سعی کنید مطمئن شوید نوع‌های بازگشتی کوئری‌ها
+به‌ارزانی قابل‌clone‌اند؛ در صورت نیاز <code>Rc</code> بگذارید).</p>
+<h3 id="providers"><a class="header" href="#providers">Providers</a></h3>
+<p>اما اگر کوئری <em>در</em> cache نباشد،
+کامپایلر تابع <strong>provider</strong> متناظر را فراخوانی می‌کند.
+provider تابعی است که در ماژول مشخصی پیاده‌سازی شده و هنگام مقداردهی اولیهٔ کامپایلر <strong>به‌صورت دستی ثبت می‌شود</strong> در
+struct با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/queries/struct.Providers.html"><code>Providers</code></a> (برای کوئری‌های crate محلی) یا
+struct با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/queries/struct.ExternProviders.html"><code>ExternProviders</code></a> (برای کوئری‌های crate خارجی).
+سامانهٔ ماکرو هر دو struct را تولید می‌کند،
+که به‌عنوان جدول تابع برای همهٔ پیاده‌سازی‌های کوئری عمل می‌کنند،
+و هر فیلد اشاره‌گر تابع به provider واقعی است.</p>
+<p><strong>نکته:</strong> هر دو struct با نام <code>Providers</code> و <code>ExternProviders</code> توسط ماکروها تولید می‌شوند و به‌عنوان جدول تابع برای همهٔ پیاده‌سازی‌های کوئری عمل می‌کنند.
+آن‌ها trait در Rust <strong>نیستند</strong>، بلکه structهای ساده با فیلدهای اشاره‌گر تابع‌اند.</p>
+<p><strong>providerها به‌ازای هر crate تعریف می‌شوند.</strong> کامپایلر
+در داخل، دست‌کم از نظر مفهومی، جدولی از providerها برای هر crate نگه می‌دارد.
+دو مجموعه provider هست:</p>
+<ul>
+<li>struct با نام <code>Providers</code> برای کوئری‌های مربوط به <strong>crate محلی</strong> (یعنی crateای که در حال کامپایل است)</li>
+<li>struct با نام <code>ExternProviders</code> برای کوئری‌های مربوط به <strong>crateهای خارجی</strong> (یعنی
+وابستگی‌های crate محلی)</li>
+</ul>
+<p>توجه کنید آنچه تعیین می‌کند کوئری کدام crate را هدف می‌گیرد <em>نوع</em> کوئری نیست، بلکه <em>کلید</em> آن است.
+برای مثال، وقتی <code>tcx.type_of(def_id)</code> را فراخوانی می‌کنید، بسته به اینکه <code>def_id</code>
+به کدام crate اشاره دارد می‌تواند
+کوئری محلی یا خارجی باشد (برای اطلاعات بیشتر دربارهٔ نحوهٔ کار این، trait با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/query/keys/trait.QueryKey.html"><code>self::keys::QueryKey</code></a> را ببینید).</p>
+<p>providerها همیشه امضای یکسانی دارند:</p>
+<pre><code class="language-rust ignore">fn provider&lt;'tcx&gt;(
+    tcx: TyCtxt&lt;'tcx&gt;,
+    key: QUERY_KEY,
+) -&gt; QUERY_RESULT {
+    ...
+}</code></pre>
+<p>providerها دو آرگومان می‌گیرند: <code>tcx</code> و کلید کوئری.
+نتیجهٔ کوئری را برمی‌گردانند.</p>
+<p>توجه: بیشتر crateهای <code>rustc_*</code> فقط <strong>providerهای محلی</strong> ارائه می‌دهند.
+تقریباً همهٔ <strong>providerهای extern</strong> از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/index.html"><code>rustc_metadata</code> crate</a> می‌گذرند،
+که اطلاعات را از فراداده crate بارگذاری می‌کند.
+اما در برخی موارد crateهایی هستند که کوئری‌ها را برای <em>هر دو</em> crateهای محلی و خارجی فراهم می‌کنند،
+که در آن صورت هم تابع <code>provide</code> و هم <code>provide_extern</code> تعریف می‌کنند، از طریق
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_codegen_ssa/back/symbol_export/fn.wasm_import_module_map.html"><code>wasm_import_module_map</code></a>، که <code>rustc_driver</code> می‌تواند فراخوانی کند.</p>
+<h3 id="how-providers-are-set-up"><a class="header" href="#how-providers-are-set-up">providerها چگونه راه‌اندازی می‌شوند</a></h3>
+<p>وقتی tcx ساخته می‌شود، سازندهٔ آن هم providerهای محلی و هم خارجی را با استفاده از
+struct با نام <code>Providers</code> از <code>rustc_middle::util</code> به آن می‌دهد.
+این struct هم providerهای محلی و هم خارجی را دارد:</p>
+<pre><code class="language-rust ignore">pub struct Providers {
+    pub queries: crate::query::Providers,        // Local crate providers
+    pub extern_queries: crate::query::ExternProviders,  // External crate providers
+    pub hooks: crate::hooks::Providers,
+}</code></pre>
+<p>هر یک از این structهای provider توسط ماکروها تولید می‌شود و اشاره‌گرهای تابع برای کوئری‌های مربوطه را دارد.</p>
+<h4 id="how-are-providers-registered"><a class="header" href="#how-are-providers-registered">providerها چگونه ثبت می‌شوند؟</a></h4>
+<p>struct با نام <code>util::Providers</code> هنگام مقداردهی اولیهٔ کامپایلر توسط crate با نام <code>rustc_interface</code> از static با نام <code>DEFAULT_QUERY_PROVIDERS</code> پر می‌شود.
+توابع provider واقعی در crateهای مختلف <code>rustc_*</code> (مثل <code>rustc_middle</code>، <code>rustc_hir_analysis</code> و غیره) تعریف شده‌اند.</p>
+<p>برای ثبت providerها، هر crate تابعی به نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/hir/fn.provide.html"><code>provide</code></a> ارائه می‌دهد که این‌طور به نظر می‌رسد:</p>
+<pre><code class="language-rust ignore">pub fn provide(providers: &amp;mut query::Providers) {
+    *providers = query::Providers {
+        type_of,
+        // ... add more providers here
+        ..*providers
+    };
+}</code></pre>
+<p>توجه کنید این تابع <code>query::Providers</code> می‌پذیرد نه <code>util::Providers</code>.
+نیاز به تابع <code>provide</code> که فقط <code>query::Providers</code> را نمی‌پذیرد بسیار نادر است.
+اگر بیش از فیلد <code>queries</code> در <code>util::Providers</code> به‌روز می‌شود، می‌توان به‌جای آن <code>util::Providers</code> را پذیرفت:</p>
+<pre><code class="language-rust ignore">pub fn provide(providers: &amp;mut rustc_middle::util::Providers) {
+    providers.queries.type_of = type_of;
+    // ... add more local providers here
+
+    providers.extern_queries.type_of = extern_type_of;
+    // ... add more external providers here
+
+    providers.hooks.some_hook = some_hook;
+    // ... add more hooks here
+}</code></pre>
+<h4 id="adding-a-new-provider"><a class="header" href="#adding-a-new-provider">افزودن provider جدید</a></h4>
+<p>فرض کنید می‌خواهید کوئری جدیدی به نام <code>fubar</code> اضافه کنید.
+این بخش بر سیم‌کشی providerها تمرکز دارد؛ برای نحوهٔ اعلان خود کوئری در ماکروی بزرگ <code>rustc_queries!</code> <a href="#adding-a-new-query">افزودن کوئری جدید</a> را در ادامه ببینید.</p>
+<p>در عمل معمولاً:</p>
+<ol>
+<li>تصمیم می‌گیرید کدام crate «مالک» کوئری است (مثلاً <code>rustc_hir_analysis</code>، <code>rustc_mir_build</code> یا crate دیگری از <code>rustc_*</code>).</li>
+<li>در آن crate، به‌دنبال تابع <code>provide</code> موجود بگردید:
+<pre><code class="language-rust ignore">pub fn provide(providers: &amp;mut query::Providers) {
+    // existing assignments
+}</code></pre>
+اگر وجود دارد، آن را گسترش می‌دهید تا فیلد کوئری جدید را تنظیم کند.
+اگر crate هنوز تابع <code>provide</code> ندارد، یکی اضافه کنید و مطمئن شوید در <code>DEFAULT_QUERY_PROVIDERS</code> در crate با نام <code>rustc_interface</code> گنجانده شده تا واقعاً هنگام مقداردهی اولیه فراخوانی شود (بحث بالا را ببینید).</li>
+<li>خود تابع provider را پیاده‌سازی کنید:
+<pre><code class="language-rust ignore">fn fubar&lt;'tcx&gt;(tcx: TyCtxt&lt;'tcx&gt;, key: LocalDefId) -&gt; Fubar&lt;'tcx&gt; { ... }</code></pre>
+</li>
+<li>آن را در تابع <code>provide</code> آن crate ثبت کنید:
+<pre><code class="language-rust ignore">pub fn provide(providers: &amp;mut query::Providers) {
+    *providers = query::Providers {
+        fubar,
+        ..*providers
+    };
+}</code></pre>
+</li>
+</ol>
+<h3 id="how-queries-interact-with-external-crate-metadata"><a class="header" href="#how-queries-interact-with-external-crate-metadata">کوئری‌ها چگونه با فرادادهٔ crateهای خارجی تعامل می‌کنند</a></h3>
+<p>وقتی کوئری برای crate خارجی (یعنی وابستگی) انجام می‌شود، سامانهٔ کوئری باید اطلاعات را از فرادادهٔ آن crate بارگذاری کند.
+این توسط <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/index.html"><code>rustc_metadata</code> crate</a> مدیریت می‌شود که مسئول رمزگشایی و ارائهٔ اطلاعات ذخیره‌شده در فایل‌های <code>.rmeta</code> است.</p>
+<p>فرایند به این شکل کار می‌کند:</p>
+<ol>
+<li>
+<p>وقتی کوئری انجام می‌شود، سامانهٔ کوئری ابتدا با بررسی <code>def_id.krate == LOCAL_CRATE</code> بررسی می‌کند <code>DefId</code> به crate محلی اشاره دارد یا خارجی.
+این تعیین می‌کند از provider محلی از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/queries/struct.Providers.html"><code>Providers</code></a> استفاده شود یا provider خارجی از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/queries/struct.ExternProviders.html"><code>ExternProviders</code></a>.</p>
+</li>
+<li>
+<p>برای crateهای خارجی، سامانهٔ کوئری provider را در struct با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/queries/struct.ExternProviders.html"><code>ExternProviders</code></a> جست‌وجو می‌کند.
+crate با نام <code>rustc_metadata</code> این providerهای خارجی را از طریق تابع <code>provide_extern</code> در <code>rustc_metadata/src/rmeta/decoder/cstore_impl.rs</code> ثبت می‌کند.
+درست مثل:</p>
+<pre><code class="language-rust">pub fn provide_extern(providers: &amp;mut ExternProviders) {
+    providers.foo = |tcx, def_id| {
+        // Load and decode metadata for external crate
+        let cdata = CStore::from_tcx(tcx).get_crate_data(def_id.krate);
+        cdata.foo(def_id.index)
+    };
+    // Register other external providers...
+}</code></pre>
+</li>
+<li>
+<p>فراداده در قالب دودویی در فایل‌های <code>.rmeta</code> ذخیره می‌شود که اطلاعات پیش‌محاسبه‌شدهٔ crate خارجی، مثل نوع‌ها، امضای توابع، پیاده‌سازی‌های trait و اطلاعات دیگر مورد نیاز کامپایلر را دارد.
+وقتی کوئری خارجی انجام می‌شود، crate با نام <code>rustc_metadata</code>:</p>
+<ul>
+<li>فایل <code>.rmeta</code> را برای crate خارجی بارگذاری می‌کند</li>
+<li>فراداده را با trait با نام <code>Decodable</code> رمزگشایی می‌کند</li>
+<li>اطلاعات رمزگشایی‌شده را به سامانهٔ کوئری برمی‌گرداند</li>
+</ul>
+</li>
+</ol>
+<p>این رویکرد از کامپایل مجدد crateهای خارجی جلوگیری می‌کند، کامپایل سریع‌تر crateهای وابسته را ممکن می‌کند و کامپایل افزایشی را قادر می‌سازد از مرزهای crate عبور کند.
+در ادامه مثال ساده‌شده‌ای می‌آید: وقتی <code>tcx.type_of(def_id)</code> را برای نوعی که در crate خارجی تعریف شده فراخوانی می‌کنید، سامانهٔ کوئری:</p>
+<ol>
+<li>با بررسی <code>def_id.krate != LOCAL_CRATE</code> تشخیص می‌دهد <code>def_id</code> به crate خارجی اشاره دارد</li>
+<li>provider مناسب را از <code>ExternProviders</code> که توسط <code>rustc_metadata</code> ثبت شده فراخوانی می‌کند</li>
+<li>provider اطلاعات نوع را از فرادادهٔ crate خارجی بارگذاری و رمزگشایی می‌کند</li>
+<li>نوع رمزگشایی‌شده را به فراخواننده برمی‌گرداند</li>
+</ol>
+<p>به همین دلیل بیشتر crateهای <code>rustc_*</code> فقط نیاز به ارائهٔ providerهای محلی دارند — providerهای خارجی توسط سامانهٔ فراداده مدیریت می‌شوند.
+تنها استثنا وقتی است که crate باید برخورد ویژه‌ای برای کوئری‌های خارجی فراهم کند، که در آن صورت هم providerهای محلی و هم خارجی را پیاده‌سازی می‌کند.</p>
+<p>وقتی کوئری جدیدی تعریف می‌کنیم که باید بین crateها کار کند، صرفاً چون در <code>rustc_queries!</code> فهرست شده خودکار بین‌crate نمی‌شود.
+معمولاً باید:</p>
+<ul>
+<li>کوئری را با modifierهای مناسب به <code>rustc_queries!</code> اضافه کنید (برای مثال اینکه آیا روی دیسک cache می‌شود).</li>
+<li>provider محلی را در crate مالک پیاده‌سازی کنید و از طریق تابع <code>provide</code> آن crate ثبتش کنید.</li>
+<li>provider خارجی را در <code>rustc_metadata</code> از طریق <code>provide_extern</code> اضافه کنید و مطمئن شوید نتیجهٔ کوئری در فرادادهٔ crate کدگذاری و رمزگشایی می‌شود.</li>
+</ul>
+<p>نمونه‌ای از معرفی چنین کوئری بین‌crate را در commit با نام <a href="https://github.com/rust-lang/rust/commit/996a185"><code>996a185</code></a> در مخزن <code>rust-lang/rust</code> می‌یابید.</p>
+<hr>
+<h2 id="adding-a-new-query"><a class="header" href="#adding-a-new-query">افزودن کوئری جدید</a></h2>
+<p>چگونه کوئری جدید اضافه کنیم؟
+تعریف کوئری در دو گام انجام می‌شود:</p>
+<ol>
+<li>نام کوئری، آرگومان‌ها و توضیح آن را اعلان کنید.</li>
+<li>در صورت نیاز providerهای کوئری را فراهم کنید.</li>
+</ol>
+<p>برای اعلان نام و آرگومان‌های کوئری، فقط ورودی‌ای به
+فراخوانی ماکروی بزرگ در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/query/index.html"><code>compiler/rustc_middle/src/query/mod.rs</code></a> اضافه می‌کنید.
+سپس باید یک doc comment با توضیح <em>داخلی</em> به آن اضافه کنید.
+سپس attribute با نام <code>desc</code> را بدهید که توضیح <em>رو به کاربر</em> کوئری را دارد.
+attribute با نام <code>desc</code> در چرخه‌های کوئری به کاربر نمایش داده می‌شود.</p>
+<p>این چیزی شبیه این به نظر می‌رسد:</p>
+<pre><code class="language-rust ignore">rustc_queries! {
+    /// Records the type of every item.
+    query type_of(key: DefId) -&gt; Ty&lt;'tcx&gt; {
+        desc { |tcx| "computing the type of `{}`", tcx.def_path_str(key) }
+        cache_on_disk
+        separate_provide_extern
+    }
+    ...
+}</code></pre>
+<p>تعریف کوئری شکل زیر را دارد:</p>
+<pre><code class="language-rust ignore">query type_of(key: DefId) -&gt; Ty&lt;'tcx&gt; { ... }
+^^^^^ ^^^^^^^      ^^^^^     ^^^^^^^^   ^^^
+|     |            |         |          |
+|     |            |         |          query modifiers
+|     |            |         result type
+|     |            query key type
+|     name of query
+query keyword</code></pre>
+<p>بیایید این عناصر را یکی‌یکی مرور کنیم:</p>
+<ul>
+<li><strong>کلیدواژهٔ Query:</strong> آغاز تعریف کوئری را نشان می‌دهد.</li>
+<li><strong>نام کوئری:</strong> نام متد کوئری (<code>tcx.type_of(..)</code>).
+همچنین به‌عنوان نام structی (<code>ty::queries::type_of</code>) به‌کار می‌رود که برای نمایش این کوئری تولید می‌شود.</li>
+<li><strong>نوع کلید کوئری:</strong> نوع آرگومان این کوئری.
+این نوع باید trait با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/query/keys/trait.QueryKey.html"><code>ty::query::keys::QueryKey</code></a> را پیاده‌سازی کند، که
+(برای مثال) تعریف می‌کند چگونه به یک crate نگاشت شود و مانند آن.</li>
+<li><strong>نوع نتیجهٔ کوئری:</strong> نوع تولیدشده توسط این کوئری.
+این نوع باید (الف) از <code>RefCell</code> یا تغییرپذیری داخلی دیگر استفاده نکند و (ب)
+به‌ارزانی قابل‌clone باشد.
+برای نوع‌های داده غیربدیهی interning یا استفاده از <code>Rc</code> یا <code>Arc</code> توصیه می‌شود.<sup class="footnote-reference" id="fr-steal-1"><a href="#footnote-steal">2</a></sup></li>
+<li><strong>modifierهای کوئری:</strong> پرچم‌ها و گزینه‌های مختلفی که نحوهٔ پردازش
+کوئری را سفارشی می‌کنند (عمدتاً در رابطه با <a href="queries/incremental-compilation-in-detail.html#query-modifiers">کامپایل افزایشی</a>).</li>
+</ul>
+<p>پس برای افزودن کوئری:</p>
+<ul>
+<li>با قالب بالا ورودی‌ای به <code>rustc_queries!</code> اضافه کنید.</li>
+<li>provider را با تغییر متد <code>provide</code> مناسب پیوند دهید؛
+یا در صورت لزوم یکی جدید اضافه کنید و مطمئن شوید <code>rustc_driver</code> آن را فراخوانی می‌کند.</li>
+</ul>
+<h2 id="external-links"><a class="header" href="#external-links">External links</a></h2>
+<p>ایده‌های طراحی مرتبط و issueهای پیگیری:</p>
+<ul>
+<li>سند طراحی: <a href="https://github.com/nikomatsakis/rustc-on-demand-incremental-design-doc/blob/master/0000-rustc-on-demand-and-incremental.md">سند طراحی افزایشی On-demand Rustc</a></li>
+<li>issue پیگیری: <a href="https://github.com/rust-lang/rust/issues/42293">ردیابی وابستگی «Red/Green» در کامپایلر</a></li>
+</ul>
+<p>بحث‌ها و issueهای بیشتر:</p>
+<ul>
+<li><a href="https://github.com/rust-lang/rust/issues/42633">GitHub issue #42633</a></li>
+<li><a href="https://internals.rust-lang.org/t/incremental-compilation-beta/4721">Incremental Compilation Beta</a></li>
+<li><a href="https://blog.rust-lang.org/2016/09/08/incremental.html">Incremental Compilation Announcement</a></li>
+</ul>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-incr-comp-detail">
+<p>فصل <a href="queries/incremental-compilation-in-detail.html">کامپایل افزایشی با جزئیات</a> توضیح عمیق‌تری از اینکه
+کوئری‌ها چیستند و چگونه کار می‌کنند ارائه می‌دهد.
+اگر قصد نوشتن کوئری خودتان را دارید، خواندن آن خوب است. <a href="#fr-incr-comp-detail-1">↩</a></p>
+</li>
+<li id="footnote-steal">
+<p>تنها استثنا برای آن قواعد نوع <code>ty::steal::Steal</code> است،
+که برای تغییر ارزان MIR در جا (in place) به‌کار می‌رود.
+برای جزئیات بیشتر تعریف <code>Steal</code> را ببینید.
+استفاده‌های جدید از <code>Steal</code> نباید بدون اطلاع‌دادن به <code>@rust-lang/compiler</code> اضافه شوند. <a href="#fr-steal-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="compiler-src.html">→ کد منبع کامپایلر</a><a href="queries/query-evaluation-model-in-detail.html">مدل ارزیابی Query به تفصیل ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

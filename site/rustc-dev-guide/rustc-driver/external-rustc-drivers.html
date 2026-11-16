@@ -1,0 +1,79 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>rustc_driverهای خارجی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rustc-driver/external-rustc-drivers"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="external-rustc_drivers"><a class="header" href="#external-rustc_drivers">External <code>rustc_driver</code>s</a></h1>
+<h2 id="rustc_private"><a class="header" href="#rustc_private"><code>rustc_private</code></a></h2>
+<h3 id="overview"><a class="header" href="#overview">Overview</a></h3>
+<p>قابلیت <code>rustc_private</code> به crateهای خارجی اجازه می‌دهد از درون‌ساز کامپایلر استفاده کنند.</p>
+<h3 id="using-rustc_private-with-official-toolchains"><a class="header" href="#using-rustc_private-with-official-toolchains">استفاده از <code>rustc_private</code> با toolchainهای رسمی</a></h3>
+<p>هنگام استفاده از قابلیت <code>rustc_private</code> با toolchainهای رسمی Rust که از طریق rustup توزیع می‌شوند، باید دو مؤلفهٔ اضافی نصب کنید:</p>
+<ol>
+<li><strong><code>rustc-dev</code></strong>: Provides compiler libraries</li>
+<li><strong><code>llvm-tools</code></strong>: کتابخانه‌های LLVM لازم برای لینک را فراهم می‌کند</li>
+</ol>
+<h4 id="installation-steps"><a class="header" href="#installation-steps">Installation steps</a></h4>
+<p>هر دو مؤلفه را با rustup نصب کنید:</p>
+<pre><code class="language-text">rustup component add rustc-dev llvm-tools
+</code></pre>
+<h4 id="common-error"><a class="header" href="#common-error">Common error</a></h4>
+<p>بدون مؤلفهٔ <code>llvm-tools</code> با خطاهای لینک مثل این روبه‌رو می‌شوید:</p>
+<pre><code class="language-text">error: linking with `cc` failed: exit status: 1
+  |
+  = note: rust-lld: error: unable to find library -lLLVM-{version}
+</code></pre>
+<h3 id="using-rustc-private-with-custom-toolchains"><a class="header" href="#using-rustc-private-with-custom-toolchains">استفاده از <code>rustc-private</code> با toolchainهای سفارشی</a></h3>
+<p>برای toolchainهای ساخته‌شده به‌صورت سفارشی یا محیط‌هایی که از rustup استفاده نمی‌کنند، معمولاً پیکربندی اضافی لازم است:</p>
+<h4 id="requirements"><a class="header" href="#requirements">Requirements</a></h4>
+<ul>
+<li>کتابخانه‌های LLVM باید در مسیرهای جست‌وجوی کتابخانهٔ سیستم شما در دسترس باشند</li>
+<li>نسخهٔ LLVM باید با نسخه‌ای که برای ساخت toolchain Rust شما به‌کار رفته مطابقت داشته باشد</li>
+</ul>
+<h4 id="troubleshooting-steps"><a class="header" href="#troubleshooting-steps">Troubleshooting steps</a></h4>
+<ol>
+<li>بررسی کنید LLVM نصب و در دسترس است</li>
+<li>مطمئن شوید مسیرهای کتابخانه تنظیم شده‌اند:
+<pre><code class="language-sh">export LD_LIBRARY_PATH=/path/to/llvm/lib:$LD_LIBRARY_PATH
+</code></pre>
+</li>
+<li>مطمئن شوید نسخهٔ LLVM شما با toolchain Rust شما سازگار است</li>
+</ol>
+<h3 id="configuring-rust-analyzer-for-out-of-tree-projects"><a class="header" href="#configuring-rust-analyzer-for-out-of-tree-projects">پیکربندی <code>rust-analyzer</code> برای پروژه‌های خارج از درخت (out-of-tree)</a></h3>
+<p>هنگام توسعهٔ پروژه‌های out-of-tree که از crateهای <code>rustc_private</code> استفاده می‌کنند، می‌توانید <code>rust-analyzer</code> را طوری پیکربندی کنید که این crateها را بشناسد.</p>
+<h4 id="configuration-steps"><a class="header" href="#configuration-steps">Configuration steps</a></h4>
+<ol>
+<li>
+<p><code>rust-analyzer.rustc.source</code> را در تنظیمات ویرایشگر خود روی <code>"discover"</code> بگذارید.</p>
+<p>برای VS Code، این را به <code>rust_analyzer_settings.json</code> بیفزایید:</p>
+<pre><code class="language-json">{
+    "rust-analyzer.rustc.source": "discover"
+}
+</code></pre>
+</li>
+<li>
+<p>این را به <code>Cargo.toml</code> هر crateای که از <code>rustc_private</code> استفاده می‌کند بیفزایید:</p>
+<pre><code class="language-toml">[package.metadata.rust-analyzer]
+rustc_private = true
+</code></pre>
+</li>
+</ol>
+<p>این پیکربندی به <code>rust-analyzer</code> اجازه می‌دهد crateهای <code>rustc_private</code> را در پروژه‌های out-of-tree درست بشناسد و پشتیبانی IDE ارائه دهد.</p>
+<h3 id="getting-nightly-documentation-for-rustc_private"><a class="header" href="#getting-nightly-documentation-for-rustc_private">گرفتن مستندات nightly برای <code>rustc_private</code></a></h3>
+<h4 id="latest-nightly"><a class="header" href="#latest-nightly">Latest nightly</a></h4>
+<p>برای آخرین nightly، می‌توانید مؤلفهٔ <code>rustc-docs</code> را نصب کنید و مستقیماً در مرورگر باز کنید:</p>
+<pre><code class="language-sh">rustup component add rustc-docs
+rustup doc --rustc-docs
+</code></pre>
+<blockquote>
+<p>نکته: مؤلفهٔ <code>rustc-docs</code> فقط برای toolchainهای nightly اخیر در دسترس است و ممکن است برای هر تاریخ nightly وجود نداشته باشد. اولین بار در <a href="https://github.com/rust-lang/rust/pull/75560">PR #75560</a> (اوت 2020) معرفی شد.</p>
+</blockquote>
+<h4 id="older-nightlies"><a class="header" href="#older-nightlies">Older nightlies</a></h4>
+<p>اگر به درون‌ساز کامپایلر از nightly قدیمی‌تری وابسته‌اید، ممکن است بخواهید به مستندات داخلی همان nightly مراجعه کنید.
+تنها راه این کار تولید محلی مستندات است.
+برای مثال، برای گرفتن مستندات <code>nightly-2025-11-08</code>:</p>
+<p>هش commit مربوط به Git آن nightly را بگیرید:</p>
+<pre><code class="language-sh">rustup toolchain install nightly-2025-11-08
+rustc +nightly-2025-11-08 --version --verbose
+</code></pre>
+<p>خروجی شامل خطی با نام <code>commit-hash</code> است که نسخهٔ دقیق منبع را مشخص می‌کند.
+<code>rust-lang/rust</code> را روی همان commit checkout کنید، سپس گام‌های <a href="../building/compiler-documenting.html">مستندات کامپایلر</a> را دنبال کنید.</p>
+<h3 id="additional-resources"><a class="header" href="#additional-resources">Additional resources</a></h3>
+<ul>
+<li><a href="https://github.com/rust-lang/rust/issues/137421">GitHub Issue #137421</a> توضیح می‌دهد که شکست‌های لینکر <code>rustc_private</code> اغلب به این دلیل رخ می‌دهند که <code>llvm-tools</code> نصب نشده است</li>
+</ul><nav class="page-nav"><a href="intro.html">→ rustcdriver و rustcinterface</a><a href="interacting-with-the-ast.html">مثال: بررسی نوع ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

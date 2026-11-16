@@ -1,0 +1,88 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>پیوند دادن به آیتم‌ها با نام — کتاب rustdoc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="write-documentation/linking-to-items-by-name"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustdoc.html" style="color:inherit;text-decoration:none">کتاب rustdoc</a><small class="en-title" dir="ltr">The rustdoc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="linking-to-items-by-name"><a class="header" href="#linking-to-items-by-name">پیوند دادن به آیتم‌ها با نام</a></h1>
+<p>Rustdoc می‌تواند با استفاده از مسیر یک آیتم به‌عنوان پیوند، مستقیماً به صفحه‌های rustdoc دیگر پیوند دهد. به این کار «پیوند درون‌مستندی» (intra-doc link) گفته می‌شود.</p>
+<p>برای مثال، در کد زیر همهٔ پیوندها به صفحهٔ rustdoc مربوط به <code>Bar</code> پیوند می‌دهند:</p>
+<pre><code class="language-rust">/// This struct is not [Bar]
+pub struct Foo1;
+
+/// This struct is also not [bar](Bar)
+pub struct Foo2;
+
+/// This struct is also not [bar][b]
+///
+/// [b]: Bar
+pub struct Foo3;
+
+/// This struct is also not [`Bar`]
+pub struct Foo4;
+
+/// This struct *is* [`Bar`]!
+pub struct Bar;</code></pre>
+<p>برخلاف Markdown معمولی، نحو <code>bar</code> نیز بدون نیاز به پیوند مرجع <code>[Bar]: ...</code> پشتیبانی می‌شود.</p>
+<p>backtickهای دور پیوند حذف می‌شوند، بنابراین <code>[`Option`]</code> به‌درستی به <code>Option</code> پیوند می‌دهد.</p>
+<h2 id="valid-links"><a class="header" href="#valid-links">پیوندهای معتبر</a></h2>
+<p>می‌توانید به هر چیزی که در دامنه است اشاره کنید و از مسیرها استفاده کنید، از جمله <code>Self</code>، <code>self</code>، <code>super</code> و <code>crate</code>. آیتم‌های وابسته (توابع، نوع‌ها و ثابت‌ها) پشتیبانی می‌شوند، اما <a href="https://github.com/rust-lang/rust/pull/79682">برای پیاده‌سازی‌های فراگیر (blanket) صفت‌ها پشتیبانی نمی‌شوند</a>. Rustdoc همچنین از پیوند دادن به همهٔ نوع‌های اولیه‌ای که در <a href="https://doc.rust-lang.org/std/index.html#primitives">مستندات کتابخانهٔ استاندارد</a> فهرست شده‌اند پشتیبانی می‌کند.</p>
+<p>همچنین می‌توانید به آیتم‌هایی با پارامترهای جنریک مانند <code>Vec&lt;T&gt;</code> اشاره کنید. پیوند طوری حل می‌شود که گویی <code>[`Vec&lt;T&gt;`](https://github.com/rust-lang/rust/issues/74563)</code> را نوشته‌اید. با این حال، نحو کاملاً مشخص (fully-qualified) (برای مثال، <code>&lt;Vec as IntoIterator&gt;::into_iter()</code>) <a href="https://github.com/rust-lang/rust/issues/74563">هنوز پشتیبانی نمی‌شود</a>.</p>
+<pre><code class="language-rust edition2018">use std::sync::mpsc::Receiver;
+
+/// This is a version of [`Receiver&lt;T&gt;`] with support for [`std::future`].
+///
+/// You can obtain a [`std::future::Future`] by calling [`Self::recv()`].
+pub struct AsyncReceiver&lt;T&gt; {
+    sender: Receiver&lt;T&gt;
+}
+
+impl&lt;T&gt; AsyncReceiver&lt;T&gt; {
+    pub async fn recv() -&gt; T {
+        unimplemented!()
+    }
+}</code></pre>
+<p>Rustdoc اجازه می‌دهد از مشخص‌کننده‌های fragment در URL استفاده کنید، درست مانند یک پیوند معمولی:</p>
+<pre><code class="language-rust">/// This is a special implementation of [positional parameters].
+///
+/// [positional parameters]: std::fmt#formatting-parameters
+struct MySpecialFormatter;</code></pre>
+<h2 id="namespaces-and-disambiguators"><a class="header" href="#namespaces-and-disambiguators">فضاهای نام و رفع‌کننده‌های ابهام</a></h2>
+<p>مسیرها در Rust سه فضای نام دارند: نوع، مقدار و ماکرو. نام آیتم‌ها باید درون فضای نام خود یکتا باشد، اما می‌تواند با آیتم‌های فضاهای نام دیگر هم‌پوشانی داشته باشد. در صورت ابهام، rustdoc دربارهٔ ابهام هشدار می‌دهد و یک رفع‌کنندهٔ ابهام (disambiguator) پیشنهاد می‌کند.</p>
+<pre><code class="language-rust">/// See also: [`Foo`](struct@Foo)
+struct Bar;
+
+/// This is different from [`Foo`](fn@Foo)
+struct Foo {}
+
+fn Foo() {}</code></pre>
+<p>این پیشوندها هنگام نمایش در مستندات حذف می‌شوند، بنابراین <code>[struct@Foo]</code> به‌صورت <code>Foo</code> نمایش داده می‌شود. پیشوندهای زیر در دسترس‌اند: <code>struct</code>، <code>enum</code>، <code>trait</code>، <code>union</code>، <code>mod</code>، <code>module</code>، <code>const</code>، <code>constant</code>، <code>fn</code>، <code>function</code>، <code>field</code>، <code>variant</code>، <code>method</code>، <code>derive</code>، <code>type</code>، <code>value</code>، <code>macro</code>، <code>tyalias</code>، <code>typealias</code>، <code>prim</code> یا <code>primitive</code>.</p>
+<p>همچنین می‌توانید برای توابع با افزودن <code>()</code> پس از نام تابع، یا برای ماکروها با افزودن <code>!</code> پس از نام ماکرو، ابهام را برطرف کنید. پس از <code>!</code> در ماکرو می‌توان <code>()</code>، <code>{}</code> یا <code>[]</code> آورد. مثال:</p>
+<pre><code class="language-rust">/// This is different from [`foo!()`].
+fn foo() {}
+
+/// This is different from [`foo()`]
+macro_rules! foo {
+  () =&gt; {}
+}</code></pre>
+<p>یک مورد وجود دارد که رفع ابهام در آن به‌طور خودکار انجام می‌شود: اگر یک پیوند درون‌مستندی هم‌زمان به‌عنوان یک صفت و هم به‌عنوان یک ماکروی رویه‌ای derive حل شود. در این حالت، همیشه پیوندی به صفت تولید می‌کند و هشدار «missing disambiguation» صادر نمی‌کند. یک نمونهٔ خوب از این حالت زمانی است که به صفت <code>Clone</code> پیوند می‌دهید: یک ماکروی رویه‌ای <code>Clone</code> هم وجود دارد، اما در این حالت آن را نادیده می‌گیرد. اگر می‌خواهید به ماکروی رویه‌ای پیوند دهید، می‌توانید از رفع‌کنندهٔ ابهام <code>macro@</code> استفاده کنید.</p>
+<h2 id="warnings-re-exports-and-scoping"><a class="header" href="#warnings-re-exports-and-scoping">هشدارها، بازصادرکردن‌ها و دامنه</a></h2>
+<p>پیوندها در دامنهٔ ماژولی که آیتم در آن تعریف شده حل می‌شوند، حتی وقتی آیتم بازصادر (re-export) شده باشد. اگر پیوندی از crate دیگر حل نشود، هیچ هشداری داده نمی‌شود.</p>
+<pre><code class="language-rust edition2018">mod inner {
+    /// Link to [f()]
+    pub struct S;
+    pub fn f() {}
+}
+pub use inner::S; // the link to `f` will still resolve correctly</code></pre>
+<p>هنگام بازصادر کردن یک آیتم، rustdoc اجازه می‌دهد مستندات اضافی به آن افزوده شود. آن مستندات اضافی در دامنهٔ بازصادرکردن حل می‌شوند، نه دامنهٔ اصلی، و این به شما اجازه می‌دهد به آیتم‌های crate جدید پیوند دهید. پیوندهای جدید در صورت ناکامی در حل شدن همچنان هشدار می‌دهند.</p>
+<pre><code class="language-rust">/// See also [foo()]
+pub use std::process::Command;
+
+pub fn foo() {}</code></pre>
+<p>این مورد به‌ویژه برای ماکروهای رویه‌ای مفید است که همیشه باید در crate اختصاصی خودشان تعریف شوند.</p>
+<p>نکته: به دلیل نحوهٔ تعیین دامنهٔ ماکروهای <code>macro_rules!</code> در Rust، پیوندهای درون‌مستندی یک ماکروی <code>macro_rules!</code> <a href="https://github.com/rust-lang/rust/issues/72243">نسبت به ریشهٔ crate</a> حل می‌شوند، نه نسبت به ماژولی که در آن تعریف شده است.</p>
+<p>اگر پیوندها «به‌اندازهٔ کافی شبیه» یک پیوند درون‌مستندی نباشند، نادیده گرفته می‌شوند و هیچ هشداری داده نمی‌شود، حتی اگر پیوند حل نشود. برای مثال، هر پیوندی که حاوی نویسهٔ <code>/</code> یا <code>[]</code> باشد نادیده گرفته می‌شود.</p>
+<h2 id="what-happens-in-case-an-intra-doc-link-cannot-be-generated"><a class="header" href="#what-happens-in-case-an-intra-doc-link-cannot-be-generated">وقتی پیوند درون‌مستندی قابل تولید نباشد چه می‌شود</a></h2>
+<p>در برخی موارد (برای مثال آیتم‌هایی پشت یک <code>cfg</code>)، نمی‌توان پیوند درون‌مستندی به آیتم تولید کرد. روش‌های مختلفی برای ساخت پیوند در markdown وجود دارد و بسته به روشی که استفاده کنید، در این حالت به شکل متفاوتی نمایش داده می‌شود:</p>
+<pre><code class="language-md">1. [a]
+2. [b][c]
+3. [d](e)
+4. [f]
+
+[f]: g
+</code></pre>
+<p><code>1.</code> و <code>2.</code> در مستندات تولیدشده همان‌طور که هستند نمایش داده می‌شوند (یعنی <code>[a]</code> و <code>b</code>)، در حالی که <code>3.</code> و <code>4.</code> با پیوندی جایگزین می‌شوند که برای <code>d</code> به <code>e</code> و برای <code>[f]</code> به <code>g</code> اشاره می‌کند.</p><nav class="page-nav"><a href="re-exports.html">→ Re-exportها</a><a href="documentation-tests.html">آزمون‌های مستندات ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustdoc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

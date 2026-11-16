@@ -1,0 +1,110 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>تفکیک نام — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="name-resolution"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="name-resolution"><a class="header" href="#name-resolution">Name resolution</a></h1>
+<p>در فصل‌های قبل دیدیم <a href="./ast-validation.html"><em>درخت نحو انتزاعی</em> (<code>AST</code>)</a> چگونه با گسترش همهٔ ماکروها ساخته می‌شود.
+دیدیم انجام این کار مستلزم مقداری name resolution برای حل importها و نام ماکروهاست.
+در این فصل نشان می‌دهیم این در واقع چگونه انجام می‌شود و بیشتر.</p>
+<p>در واقع، در گسترش ماکرو name resolution کامل انجام نمی‌دهیم – فقط importها و ماکروها را در آن زمان حل می‌کنیم.
+این لازم است تا بدانیم اصلاً چه چیزی را گسترش دهیم.
+بعداً، پس از داشتن کل AST، name resolution کامل را برای حل همهٔ نام‌های crate انجام می‌دهیم.
+این در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/late/index.html"><code>rustc_resolve::late</code></a> رخ می‌دهد.
+برخلاف گسترش ماکرو، در این گسترش دیرهنگام، فقط لازم است یک بار سعی کنیم نامی را حل کنیم، چون نام جدیدی افزوده نمی‌شود.
+اگر حل نام شکست بخورد، خطای کامپایلر است.</p>
+<p>Name resolution پیچیده است. فضاهای نام مختلفی هست (مثلاً ماکروها، مقادیر، نوع‌ها، طول‌عمرها)، و نام‌ها ممکن است در scopeهای (تو در توی) مختلف معتبر باشند.
+همچنین انواع مختلف نام می‌توانند به شکل‌های متفاوتی در حل شکست بخورند و شکست‌ها در scopeهای مختلف به شکل‌های متفاوتی رخ می‌دهند.
+برای مثال، در scope ماژول، شکست یعنی هیچ ماکروی گسترش‌نیافته و هیچ import سراسری (glob) حل‌نشده‌ای در آن ماژول نیست.
+از طرف دیگر، در scope بدنهٔ تابع، شکست مستلزم این است که نام در بلوکی که در آن هستیم، همهٔ scopeهای بیرونی و scope سراسری وجود نداشته باشد.</p>
+<h2 id="basics"><a class="header" href="#basics">Basics</a></h2>
+<p>در برنامه‌های خود با دادن نام به متغیرها، نوع‌ها، توابع و غیره به آن‌ها ارجاع می‌دهیم.
+این نام‌ها همیشه یکتا نیستند.
+برای مثال، این برنامهٔ معتبر Rust را در نظر بگیرید:</p>
+<pre><code class="language-rust">type x = u32;
+let x: x = 1;
+let y: x = 2;</code></pre>
+<p>از کجا بدانیم در خط ۳ <code>x</code> یک نوع (<code>u32</code>) است یا یک مقدار (1)؟
+این تعارض‌ها در name resolution حل می‌شوند.
+در این مورد مشخص،
+name resolution تعریف می‌کند که نام‌های نوع و نام‌های متغیر در فضاهای نام جداگانه زندگی می‌کنند و بنابراین می‌توانند هم‌زیستی داشته باشند.</p>
+<p>Name resolution در Rust فرایندی دوفازی است.
+در فاز اول، که در گسترش <code>macro</code> اجرا می‌شود،
+درختی از ماژول‌ها می‌سازیم و importها را حل می‌کنیم.
+گسترش ماکرو و name resolution از طریق trait با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast_lowering/trait.ResolverAstLoweringExt.html"><code>ResolverAstLoweringExt</code></a> با هم ارتباط دارند.</p>
+<p>ورودی فاز دوم درخت نحو است که با تجزیهٔ فایل‌های ورودی و گسترش <code>macros</code> تولید می‌شود.
+این فاز پیوندهایی از همهٔ نام‌ها در منبع به مکان‌های مرتبطی که نام در آن‌ها معرفی شده تولید می‌کند.
+همچنین پیام‌های خطای مفیدی تولید می‌کند،
+مثل پیشنهاد غلط تایپی، traitهایی که باید import شوند یا lint دربارهٔ آیتم‌های استفاده‌نشده.</p>
+<p>اجرای موفق فاز دوم (<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/struct.Resolver.html#method.resolve_crate"><code>Resolver::resolve_crate</code></a>) نوعی فهرست ایجاد می‌کند که بقیهٔ کامپایل می‌تواند برای پرسش دربارهٔ نام‌های موجود به‌کار ببرد
+(از طریق رابط <code>hir::lowering::Resolver</code>).</p>
+<p>Name resolution در crate با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/index.html"><code>rustc_resolve</code></a> قرار دارد، با بخش عمدهٔ آن در
+<code>lib.rs</code> و برخی کمک‌کننده‌ها یا منطق مخصوص نوع نماد در ماژول‌های دیگر.</p>
+<h2 id="namespaces"><a class="header" href="#namespaces">Namespaces</a></h2>
+<p>انواع مختلف نماد در فضاهای نام مختلف زندگی می‌کنند ‒ مثلاً نوع‌ها با متغیرها تعارض ندارند.
+این معمولاً رخ نمی‌دهد، چون متغیرها با حرف کوچک شروع می‌شوند و نوع‌ها با حرف بزرگ، اما این فقط یک قرارداد است.
+این کد معتبر Rust است که کامپایل می‌شود (با هشدار):</p>
+<pre><code class="language-rust">type x = u32;
+let x: x = 1;
+let y: x = 2; // See? x is still a type here.</code></pre>
+<p>برای مقابله با این، و با قواعد scope کمی متفاوت این فضاهای نام، resolver آن‌ها را جدا نگه می‌دارد و ساختارهای جداگانه‌ای برایشان می‌سازد.</p>
+<p>به عبارت دیگر، وقتی کد دربارهٔ فضاهای نام صحبت می‌کند، منظورش سلسله‌مراتب ماژول نیست، نوع‌ها در برابر مقادیر در برابر ماکروهاست.</p>
+<h2 id="scopes-and-ribs"><a class="header" href="#scopes-and-ribs">Scopeها و ribها</a></h2>
+<p>یک نام فقط در ناحیهٔ مشخصی از کد منبع دیده می‌شود.
+این ساختاری سلسله‌مراتبی می‌سازد، اما لزوماً ساده نیست ‒ اگر یک scope بخشی از scope دیگر باشد،
+لزوماً یعنی نامی که در scope بیرونی دیده می‌شود در scope درونی هم دیده می‌شود، یا به همان چیز ارجاع می‌دهد.</p>
+<p>برای مقابله با این، کامپایلر مفهومی به نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/late/struct.Rib.html"><code>Rib</code></a> را معرفی می‌کند.
+این انتزاعی از یک scope است.
+هر بار که مجموعهٔ نام‌های دیدنی احتمالاً تغییر کند، یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/late/struct.Rib.html"><code>Rib</code></a> جدید روی پشته گذاشته می‌شود.
+جاهایی که این می‌تواند رخ دهد برای مثال شامل این‌هاست:</p>
+<ul>
+<li>جاهای بدیهی ‒ آکولادهای دربرگیرندهٔ بلوک، مرزهای تابع، ماژول‌ها.</li>
+<li>معرفی binding با <code>let</code> ‒ این می‌تواند binding دیگری با همان نام را سایه (shadow) کند.</li>
+<li>مرز گسترش ماکرو ‒ برای مقابله با hygiene ماکرو.</li>
+</ul>
+<p>هنگام جست‌وجوی یک نام، پشتهٔ <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/late/struct.LateResolutionVisitor.html#structfield.ribs"><code>ribs</code></a> از درونی‌ترین به سمت بیرون پیمایش می‌شود.
+این به یافتن نزدیک‌ترین معنای نام کمک می‌کند (آنکه چیز دیگری سایه‌اش نکرده).
+انتقال به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/late/struct.Rib.html"><code>Rib</code></a> بیرونی ممکن است بر اینکه چه نام‌هایی قابل‌استفاده‌اند هم اثر بگذارد ‒ اگر توابع تو در تو باشند (نه closureها)،
+تابع درونی نمی‌تواند به پارامترها و bindingهای محلی تابع بیرونی دسترسی داشته باشد،
+هرچند طبق قواعد معمول scope باید دیده شوند.
+یک مثال:</p>
+<pre><code class="language-rust">fn do_something&lt;T: Default&gt;(val: T) { // &lt;- New rib in both types and values (1)
+    // `val` is accessible, as is the helper function
+    // `T` is accessible
+   let helper = || { // New rib on the block (2)
+        // `val` is accessible here
+    }; // End of (2), new rib on `helper` (3)
+    // `val` is accessible, `helper` variable shadows `helper` function
+    fn helper() { // &lt;- New rib in both types and values (4)
+        // `val` is not accessible here, (4) is not transparent for locals
+        // `T` is not accessible here
+    } // End of (4)
+    let val = T::default(); // New rib (5)
+    // `val` is the variable, not the parameter here
+} // End of (5), (3) and (1)</code></pre>
+<p>چون قواعد فضاهای نام مختلف کمی متفاوت است، هر فضای نام پشتهٔ <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/late/struct.Rib.html"><code>Rib</code></a> مستقل خودش را دارد که به‌موازات بقیه ساخته می‌شود.
+علاوه بر این، پشتهٔ <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/late/struct.Rib.html"><code>Rib</code></a> برای برچسب‌های محلی (مثلاً نام حلقه‌ها یا بلوک‌ها) هم هست، که فضای نام کامل مستقل نیست.</p>
+<h2 id="overall-strategy"><a class="header" href="#overall-strategy">Overall strategy</a></h2>
+<p>برای انجام name resolution کل crate، درخت نحو از بالا به پایین پیمایش می‌شود و هر نام برخوردشده حل می‌شود.
+این برای بیشتر انواع نام کار می‌کند،
+چون در نقطهٔ استفاده از نام، قبلاً در سلسله‌مراتب <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/late/struct.Rib.html"><code>Rib</code></a> معرفی شده است.</p>
+<p>چند استثنا برای این هست.
+آیتم‌ها کمی دشوارند، چون می‌توانند پیش از برخورد هم استفاده شوند ‒ بنابراین هر بلوک باید ابتدا برای آیتم‌ها اسکن شود تا <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/late/struct.Rib.html"><code>Rib</code></a> آن پر شود.</p>
+<p>موارد دیگر که حتی مشکل‌سازترند importها هستند که به حل بازگشتی نقطهٔ ثابت (fixed-point) نیاز دارند و ماکروها، که باید پیش از پردازش بقیهٔ کد حل و گسترش شوند.</p>
+<p>بنابراین حل در چند مرحله انجام می‌شود.</p>
+<h2 id="speculative-crate-loading"><a class="header" href="#speculative-crate-loading">Speculative crate loading</a></h2>
+<p>برای دادن خطاهای مفید، rustc پیشنهاد می‌دهد مسیرها را به scope import کنید اگر یافت نشوند.
+چگونه این کار را می‌کند؟
+هر ماژول از هر crate را مرور می‌کند و دنبال تطابق‌های ممکن می‌گردد.
+این حتی crateهایی را که هنوز بارگذاری نشده‌اند هم شامل می‌شود!</p>
+<p>بارگذاری eager crateها برای گنجاندن پیشنهادهای import که هنوز بارگذاری نشده‌اند <em>بارگذاری تخمینی crate (speculative crate loading)</em> نامیده می‌شود، چون هر خطایی که با آن روبه‌رو شود نباید گزارش شود: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/index.html"><code>rustc_resolve</code></a> تصمیم گرفت آن‌ها را بارگذاری کند، نه کاربر.
+تابعی که این کار را می‌کند <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/struct.Resolver.html#method.lookup_import_candidates"><code>lookup_import_candidates</code></a> است و در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/diagnostics/index.html"><code>rustc_resolve::diagnostics</code></a> قرار دارد.</p>
+<p>برای تشخیص بارگذاری‌های تخمینی از بارگذاری‌های آغازشده توسط کاربر، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/index.html"><code>rustc_resolve</code></a> پارامتری به نام <code>record_used</code> دست‌به‌دست می‌کند که وقتی بارگذاری تخمینی است <code>false</code> است.</p>
+<h2 id="todo-16"><a class="header" href="#todo-16">TODO: <a href="https://github.com/rust-lang/rustc-dev-guide/issues/16">#16</a></a></h2>
+<p>این نتیجهٔ گذر اول یادگیری کد است.
+قطعاً ناقص و به‌اندازهٔ کافی مفصل نیست.
+همچنین ممکن است در جاهایی نادرست باشد.
+با این حال، احتمالاً اولین راهنمای مفید برای آنچه آنجا رخ می‌دهد فراهم می‌کند.</p>
+<ul>
+<li>دقیقاً به چه چیزی پیوند می‌دهد و چگونه توسط مراحل بعدی کامپایل منتشر و مصرف می‌شود؟</li>
+<li>چه کسی آن را فراخوانی می‌کند و واقعاً چگونه استفاده می‌شود.</li>
+<li>آیا یک گذر است و نتیجه فقط استفاده می‌شود، یا می‌توان آن را به‌صورت افزایشی محاسبه کرد؟</li>
+<li>توضیح راهبرد کلی کمی مبهم است.</li>
+<li>نام <code>Rib</code> از کجا آمده؟</li>
+<li>آیا این بخش تست‌های خودش را دارد، یا فقط به‌عنوان بخشی از تست‌های سرتاسری تست می‌شود؟</li>
+</ul><nav class="page-nav"><a href="macro-expansion.html">→ گسترش ماکرو</a><a href="attributes.html">Attributeها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

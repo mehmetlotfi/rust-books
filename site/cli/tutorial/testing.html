@@ -1,0 +1,180 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>آزمون‌نویسی — کتاب برنامه‌های خط فرمان</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tutorial/testing"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../cli/index.html" style="color:inherit;text-decoration:none">کتاب برنامه‌های خط فرمان</a><small class="en-title" dir="ltr">Command Line Applications in Rust</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="testing"><a class="header" href="#testing">آزمون</a></h1>
+<p>در طول دهه‌ها توسعهٔ نرم‌افزار، مردم به یک حقیقت رسیده‌اند: نرم‌افزار آزمون‌نشده به‌ندرت کار می‌کند. بسیاری از آدم‌ها حتی تا آنجا پیش می‌روند که بگویند بیشتر نرم‌افزارهای آزمون‌شده هم کار نمی‌کنند. اما ما همه این‌جا خوش‌بین هستیم، درست است؟ برای اطمینان از این‌که برنامه‌تان همان کاری را می‌کند که انتظار دارید، عاقلانه است که آن را آزمون کنید.</p>
+<p>نقطهٔ شروع خوب این است که یک فایل <code>README</code> بنویسید که توضیح دهد برنامه‌تان باید چه کاری انجام دهد، و وقتی آمادهٔ انتشار نسخهٔ جدید شدید، <code>README</code> را مرور کنید و مطمئن شوید که رفتار برنامه هنوز مطابق انتظار است. می‌توانید این کار را با نوشتن این‌که برنامه‌تان چگونه باید به ورودی‌های نادرست واکنش نشان دهد، دقیق‌تر کنید.</p>
+<p>یک ایدهٔ جذاب‌تر هم این است: آن <code>README</code> را پیش از نوشتن کد بنویسید.</p>
+<aside>
+<p><strong>توجه:</strong> اگر دربارهٔ <a href="https://en.wikipedia.org/wiki/Test-driven_development">توسعهٔ آزمون‌محور</a> (TDD) چیزی نشنیده‌اید، به آن نگاهی بیندازید.</p>
+</aside>
+<h2 id="automated-testing"><a class="header" href="#automated-testing">آزمون خودکار</a></h2>
+<p>خب، همهٔ این‌ها خوب و قشنگ است، اما انجام دستی همهٔ این کارها؟ این می‌تواند زمان زیادی ببرد. در عین حال، بسیاری از مردم از این‌که به رایانه‌ها بگویند کارها را برایشان انجام دهند لذت می‌برند. بیایید دربارهٔ خودکارسازی این آزمون‌ها صحبت کنیم.</p>
+<p>Rust یک چارچوب آزمون داخلی دارد، پس بیایید با نوشتن نخستین آزمون خود شروع کنیم:</p>
+<pre><code class="language-rust ignore"><span class="boring">fn answer() -&gt; i32 {
+</span><span class="boring">  42
+</span><span class="boring">}
+</span><span class="boring">
+</span>#[test]
+fn check_answer_validity() {
+    assert_eq!(answer(), 42);
+}</code></pre>
+<p>می‌توانید این قطعه کد را تقریباً در هر فایل سورسی بسته‌تان قرار دهید و <code>cargo test</code> آن را پیدا و اجرا می‌کند. نکتهٔ کلیدی این‌جا attribute به نام <code>#[test]</code> است. این attribute به سامانهٔ ساخت اجازه می‌دهد چنین تابع‌هایی را کشف کند و آن‌ها را به‌عنوان آزمون اجرا کند، و بررسی کند که panic نمی‌کنند.</p>
+<aside class="exercise">
+<p><strong>تمرین برای خواننده:</strong> این آزمون را به کار بیندازید.</p>
+<p>در پایان باید خروجی‌ای مانند زیر داشته باشید:</p>
+<pre><code class="language-text">running 1 test
+test check_answer_validity ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+</code></pre>
+</aside>
+<p>اکنون که دیدیم <em>چگونه</em> می‌توانیم آزمون بنویسیم، هنوز باید بفهمیم <em>چه چیزی</em> را آزمون کنیم. همان‌طور که دیدید، نوشتن assertion برای تابع‌ها کد کمی لازم دارد، اما یک برنامهٔ CLI اغلب بیش از یک تابع است! بدتر این‌که اغلب با ورودی کاربر سروکار دارد، فایل‌ها را می‌خواند، و خروجی می‌نویسد.</p>
+<h2 id="making-your-code-testable"><a class="header" href="#making-your-code-testable">آزمون‌پذیر کردن کد</a></h2>
+<p>دو رویکرد مکمل برای آزمون عملکرد وجود دارد. یکی آزمودن واحدهای کوچکی است که برای ساخت برنامهٔ کامل خود به کار می‌برید. این‌ها «آزمون‌های واحد» (unit tests) نامیده می‌شوند. دیگری آزمودن برنامهٔ نهایی از بیرون است که آزمون جعبه‌سیاه یا آزمون یکپارچگی نامیده می‌شود. بیایید با اولی شروع کنیم.</p>
+<p>برای این‌که بفهمیم چه چیزی را باید آزمون کنیم، بیایید ببینیم برنامهٔ ما چه ویژگی‌هایی دارد. <code>grrs</code> قرار است خط‌هایی را که با یک الگوی داده‌شده مطابقت دارند چاپ کند، پس بیایید برای <em>دقیقاً همین</em> آزمون‌های واحد بنویسیم. می‌خواهیم مطمئن شویم مهم‌ترین بخش منطق ما کار می‌کند، و می‌خواهیم این کار را به شیوه‌ای انجام دهیم که به هیچ‌یک از کدهای راه‌اندازی پیرامون آن، مانند آرگومان‌های CLI، وابسته نباشد.</p>
+<p>با بازگشت به <a href="impl-draft.html">نخستین پیاده‌سازی</a> <code>grrs</code>، این بلوک کد را به تابع <code>main</code> اضافه کردیم:</p>
+<pre><code class="language-rust ignore">// ...
+for line in content.lines() {
+    if line.contains(&amp;args.pattern) {
+        println!("{}", line);
+    }
+}</code></pre>
+<p>متأسفانه آزمودن این کد چندان آسان نیست. نخست این‌که در تابع main است، پس نمی‌توانیم به‌راحتی آن را فراخوانی کنیم. این مشکل با انتقال این قطعه کد به یک تابع حل می‌شود:</p>
+<pre><code class="language-rust no_run">fn find_matches(content: &amp;str, pattern: &amp;str) {
+    for line in content.lines() {
+        if line.contains(pattern) {
+            println!("{}", line);
+        }
+    }
+}</code></pre>
+<p>اکنون می‌توانیم این تابع را در آزمون خود فراخوانی کنیم و ببینیم خروجی‌اش چیست:</p>
+<pre><code class="language-rust ignore">#[test]
+fn find_a_match() {
+    find_matches("lorem ipsum\ndolor sit amet", "lorem");
+    assert_eq!( // uhhhh</code></pre>
+<p>یا… می‌توانیم؟ در حال حاضر <code>find_matches</code> مستقیماً در <code>stdout</code> یعنی ترمینال چاپ می‌کند. نمی‌توانیم به‌راحتی این را در یک آزمون بگیریم! این مشکلی است که اغلب هنگام نوشتن آزمون پس از پیاده‌سازی پیش می‌آید: تابعی نوشته‌ایم که به‌شدت با بافتی که در آن استفاده می‌شود درهم‌تنیده است.</p>
+<aside class="note">
+<p>**توجه:** هنگام نوشتن برنامه‌های CLI کوچک این کاملاً مشکلی ندارد. لازم نیست همه‌چیز آزمون‌پذیر باشد! مهم است که فکر کنید برای کدام بخش‌های کدتان شاید بخواهید آزمون واحد بنویسید. هرچند خواهیم دید که تغییر این تابع برای آزمون‌پذیر شدن ساده است، همیشه چنین نیست.</p>
+</aside>
+<p>خب، چگونه می‌توانیم این را آزمون‌پذیر کنیم؟ باید به‌نحوی خروجی را بگیریم. کتابخانهٔ استاندارد Rust انتزاع‌های خوبی برای کار با I/O (ورودی/خروجی) دارد، و ما از یکی از آن‌ها به نام <a href="https://doc.rust-lang.org/1.39.0/std/io/trait.Write.html"><code>std::io::Write</code></a> استفاده می‌کنیم. این یک <a href="../../book/ch10-02-traits.html">صفت</a> است که روی چیزهایی که می‌توانیم در آن‌ها بنویسیم انتزاع می‌کند، از جمله رشته‌ها و <code>stdout</code>.</p>
+<p>اگر این نخستین بار است که در زمینهٔ Rust واژهٔ «صفت» (trait) را می‌شنوید، در انتظار یک سورپرایز خوب باشید. صفت‌ها از قدرتمندترین ویژگی‌های Rust هستند. می‌توانید آن‌ها را مانند interfaceها در Java یا type classها در Haskell در نظر بگیرید، هر کدام که برایتان آشناتر است. آن‌ها به شما اجازه می‌دهند روی رفتارهایی انتزاع کنید که می‌تواند بین نوع‌های مختلف مشترک باشد. کدی که از صفت‌ها استفاده می‌کند می‌تواند ایده‌ها را به شیوه‌هایی بسیار جنریک و انعطاف‌پذیر بیان کند. این یعنی خواندن آن هم می‌تواند دشوار شود. بگذارید این شما را نترساند. حتی کسانی که سال‌هاست از Rust استفاده می‌کنند همیشه فوراً متوجه نمی‌شوند کد جنریک چه می‌کند. در آن حالت کمک می‌کند به کاربردهای مشخص فکر کنید. در مورد ما، رفتاری که روی آن انتزاع می‌کنیم «نوشتن در آن» است. نمونه‌هایی از نوع‌هایی که آن را پیاده‌سازی (<code>impl</code>) می‌کنند شامل خروجی استاندارد ترمینال، فایل‌ها، یک بافر در حافظه، یا اتصال‌های شبکهٔ TCP هستند. در <a href="https://doc.rust-lang.org/1.39.0/std/io/trait.Write.html">مستندات <code>std::io::Write</code></a> به پایین بروید تا فهرست «Implementors» را ببینید.</p>
+<p>با این دانش، بیایید تابع خود را طوری تغییر دهیم که پارامتر سومی بپذیرد. این پارامتر می‌تواند هر نوعی باشد که <code>Write</code> را پیاده‌سازی می‌کند. به این ترتیب می‌توانیم در آزمون‌هایمان یک رشتهٔ ساده بدهیم و روی آن assertion بنویسیم. این نسخه از <code>find_matches</code> را می‌توانیم این‌گونه بنویسیم:</p>
+<pre><code class="language-rust ignore">fn find_matches(content: &amp;str, pattern: &amp;str, mut writer: impl std::io::Write) {
+    for line in content.lines() {
+        if line.contains(pattern) {
+            writeln!(writer, "{}", line);
+        }
+    }
+}</code></pre>
+<p>پارامتر جدید <code>mut writer</code> است، یعنی چیزی تغییرپذیر که آن را «writer» می‌نامیم. نوع آن <code>impl std::io::Write</code> است، که می‌توانید آن را جایگاهی برای هر نوعی که صفت <code>Write</code> را پیاده‌سازی می‌کند بخوانید. توجه کنید که <code>println!(…)</code> ای را که پیش‌تر به کار می‌بردیم با <code>writeln!(writer, …)</code> جایگزین کردیم. <code>println!</code> مانند <code>writeln!</code> کار می‌کند، اما همیشه از خروجی استاندارد استفاده می‌کند.</p>
+<p>اکنون می‌توانیم خروجی را آزمون کنیم:</p>
+<pre><code class="language-rust ignore">#[test]
+fn find_a_match() {
+    let mut result = Vec::new();
+    find_matches("lorem ipsum\ndolor sit amet", "lorem", &amp;mut result);
+    assert_eq!(result, b"lorem ipsum\n");
+}</code></pre>
+<p>برای استفاده از این در کد برنامه‌مان، باید فراخوانی <code>find_matches</code> را در <code>main</code> تغییر دهیم و <a href="https://doc.rust-lang.org/1.39.0/std/io/fn.stdout.html"><code>&amp;mut std::io::stdout()</code></a> را به‌عنوان پارامتر سوم اضافه کنیم. در ادامه نمونه‌ای از تابع main آمده که بر آنچه در فصل‌های قبل دیدیم بنا شده و از تابع استخراج‌شدهٔ <code>find_matches</code> ما استفاده می‌کند:</p>
+<pre><code class="language-rust ignore">fn main() -&gt; Result&lt;()&gt; {
+    let args = Cli::parse();
+    let content = std::fs::read_to_string(&amp;args.path)
+        .with_context(|| format!("could not read file `{}`", args.path.display()))?;
+
+    find_matches(&amp;content, &amp;args.pattern, &amp;mut std::io::stdout());
+
+    Ok(())
+}</code></pre>
+<aside class="note">
+<p><strong>توجه:</strong> از آن‌جا که <code>stdout</code> بایت می‌خواهد (نه رشته)، به‌جای <code>std::fmt::Write</code> از <code>std::io::Write</code> استفاده می‌کنیم. در نتیجه در آزمون‌هایمان یک بردار خالی را به‌عنوان <code>writer</code> می‌دهیم (نوع آن به <code>Vec&lt;u8&gt;</code> استنباط می‌شود)، و در <code>assert_eq!</code> از <code>b"foo"</code> استفاده می‌کنیم. پیشوند <code>b</code> آن را به یک <em>لیترال رشتهٔ بایتی</em> تبدیل می‌کند، پس نوع آن به‌جای <code>&amp;str</code>، <code>&amp;[u8]</code> خواهد بود.</p>
+</aside>
+<aside class="note">
+<p><strong>توجه:</strong> می‌توانستیم این تابع را وادار کنیم یک <code>String</code> برگرداند، اما این رفتار آن را تغییر می‌داد. به‌جای نوشتن مستقیم در ترمینال، آنگاه همه‌چیز را در یک رشته جمع می‌کرد و همهٔ نتایج را یک‌جا در پایان خالی می‌کرد.</p>
+</aside>
+<aside class="exercise">
+<p><strong>تمرین برای خواننده:</strong> <a href="https://doc.rust-lang.org/1.39.0/std/macro.writeln.html"><code>writeln!</code></a> یک <a href="https://doc.rust-lang.org/1.39.0/std/io/type.Result.html"><code>io::Result</code></a> برمی‌گرداند زیرا نوشتن می‌تواند شکست بخورد (برای مثال، وقتی بافر پر است و نمی‌توان آن را بزرگ‌تر کرد). مدیریت خطا را به <code>find_matches</code> اضافه کنید.</p>
+</aside>
+<p>اکنون دیدیم چگونه این قطعه کد را آزمون‌پذیر کنیم. کارهایی که کردیم:</p>
+<ol>
+<li>یکی از بخش‌های اصلی برنامه‌مان را شناسایی کردیم.</li>
+<li>آن را در تابع مخصوص خودش گذاشتیم.</li>
+<li>آن را انعطاف‌پذیرتر کردیم.</li>
+</ol>
+<p>هرچند هدف آزمون‌پذیر کردن بود، نتیجه‌ای که به آن رسیدیم در واقع قطعه کد Rust بسیار اصطلاحی و قابل‌استفادهٔ مجدد است. عالی است!</p>
+<h2 id="splitting-your-code-into-library-and-binary-targets"><a class="header" href="#splitting-your-code-into-library-and-binary-targets">تقسیم کد به هدف‌های کتابخانه و باینری</a></h2>
+<p>می‌توانیم یک کار دیگر هم این‌جا انجام دهیم. تا اینجا همهٔ چیزهایی را که نوشتیم در فایل <code>src/main.rs</code> گذاشته‌ایم. این یعنی پروژهٔ فعلی ما یک باینری تولید می‌کند، اما می‌توانیم کدمان را به‌صورت یک کتابخانه هم در دسترس قرار دهیم، این‌گونه:</p>
+<ol>
+<li>تابع <code>find_matches</code> را در یک <code>src/lib.rs</code> جدید بگذارید.</li>
+<li>یک <code>pub</code> پیش از <code>fn</code> اضافه کنید تا آن را به چیزی تبدیل کنید که کاربران کتابخانهٔ ما به آن دسترسی دارند (یعنی <code>pub fn find_matches</code>).</li>
+<li><code>find_matches</code> را از <code>src/main.rs</code> حذف کنید.</li>
+<li>در <code>fn main</code>، پیش از فراخوانی <code>find_matches</code> عبارت <code>grrs::</code> را بیفزایید تا اکنون <code>grrs::find_matches(…)</code> شود. این یعنی از تابعی استفاده می‌کند که در کتابخانهٔ تازه‌نوشته‌مان است!</li>
+</ol>
+<p>روشی که Rust با پروژه‌ها کار می‌کند کاملاً انعطاف‌پذیر است، و فکر کردن از همان ابتدا به این‌که چه چیزی را در بخش کتابخانهٔ crate خود بگذارید ایدهٔ خوبی است. برای مثال می‌توانید ابتدا به نوشتن کتابخانه‌ای برای منطق مخصوص برنامه‌تان فکر کنید و سپس آن را در CLI خود مانند هر کتابخانهٔ دیگری به کار ببرید. یا اگر پروژه‌تان چند باینری دارد، می‌توانید عملکرد مشترک را در بخش کتابخانهٔ آن crate بگذارید.</p>
+<aside class="note">
+<p><strong>توجه:</strong> حالا که صحبت از قرار دادن همه‌چیز در <code>src/main.rs</code> شد، اگر به این کار ادامه دهیم خواندن کد دشوار می‌شود. <a href="../../book/ch07-00-managing-growing-projects-with-packages-crates-and-modules.html">سامانهٔ ماژول</a> می‌تواند به ساختاردهی و سازمان‌دهی کدتان کمک کند.</p>
+</aside>
+<h2 id="testing-cli-applications-by-running-them"><a class="header" href="#testing-cli-applications-by-running-them">آزمون برنامه‌های CLI با اجرای آن‌ها</a></h2>
+<p>تا اینجا برای آزمودن <em>منطق کسب‌وکار</em> برنامه‌مان که معلوم شد همان تابع <code>find_matches</code> است، زحمت زیادی کشیده‌ایم. این بسیار ارزشمند است و گام نخست عالی‌ای است به‌سوی یک کدبیس به‌خوبی آزمون‌شده. معمولاً این نوع آزمون‌ها «آزمون واحد» نامیده می‌شوند.</p>
+<p>کد زیادی هست که آزمون نمی‌کنیم: هر چیزی که برای سروکار داشتن با دنیای بیرون نوشتیم! تصور کنید تابع main را نوشته‌اید اما به‌طور تصادفی یک رشتهٔ ثابت را رها کرده‌اید به‌جای آن‌که از آرگومان مسیر ارائه‌شده توسط کاربر استفاده کنید. باید برای آن هم آزمون بنویسیم! این سطح از آزمون اغلب آزمون یکپارچگی یا آزمون سیستم نامیده می‌شود.</p>
+<p>در هسته، هنوز داریم تابع می‌نویسیم و آن‌ها را با <code>#[test]</code> حاشیه‌نویسی می‌کنیم. فقط مسئله این است که درون این تابع‌ها چه می‌کنیم. برای مثال، می‌خواهیم از باینری اصلی پروژه‌مان استفاده کنیم و آن را مانند یک برنامهٔ معمولی اجرا کنیم. این آزمون‌ها را در یک فایل جدید در یک دایرکتوری جدید می‌گذاریم: <code>tests/cli.rs</code>.</p>
+<aside>
+<p><strong>توجه:</strong> طبق قرارداد، <code>cargo</code> آزمون‌های یکپارچگی را در دایرکتوری <code>tests/</code> جست‌وجو می‌کند. به‌همین ترتیب بنچمارک‌ها را در <code>benches/</code> و مثال‌ها را در <code>examples/</code> می‌جوید. این قراردادها به کد سورس اصلی شما هم تعمیم می‌یابند: کتابخانه‌ها فایل <code>src/lib.rs</code> دارند، باینری اصلی <code>src/main.rs</code> است، و اگر چند باینری وجود داشته باشد، cargo انتظار دارد آن‌ها در <code>src/bin/&lt;name&gt;.rs</code> باشند. پیروی از این قراردادها کدبیس شما را برای کسانی که به خواندن کد Rust عادت دارند قابل‌کشف‌تر می‌کند.</p>
+</aside>
+<p><code>grrs</code> ابزار کوچکی است که یک رشته را در یک فایل جست‌وجو می‌کند. پیش‌تر آزمون کرده‌ایم که می‌توانیم یک تطابق پیدا کنیم. بیایید فکر کنیم چه عملکردهای دیگری را می‌توانیم آزمون کنیم.</p>
+<p>این‌ها مواردی است که به ذهن من رسید:</p>
+<ul>
+<li>وقتی فایل وجود ندارد چه اتفاقی می‌افتد؟</li>
+<li>وقتی هیچ تطابقی نیست خروجی چیست؟</li>
+<li>آیا وقتی یکی (یا هر دو) آرگومان را فراموش می‌کنیم، برنامهٔ ما با خطا خارج می‌شود؟</li>
+</ul>
+<p>همهٔ این‌ها موارد آزمون معتبری هستند. علاوه بر این، باید یک مورد آزمون هم برای مسیر موفق داشته باشیم: دست‌کم یک تطابق پیدا می‌کنیم و آن را چاپ می‌کنیم.</p>
+<p>برای آسان‌تر کردن این نوع آزمون‌ها از crate به نام <a href="https://docs.rs/assert_cmd"><code>assert_cmd</code></a> استفاده می‌کنیم. این crate مجموعه‌ای از کمک‌کننده‌های خوب دارد که به ما اجازه می‌دهند باینری اصلی خود را اجرا کنیم و ببینیم چگونه رفتار می‌کند. همچنین crate به نام <a href="https://docs.rs/predicates"><code>predicates</code></a> را اضافه می‌کنیم که به ما کمک می‌کند assertionهایی بنویسیم که <code>assert_cmd</code> بتواند با آن‌ها آزمون کند و پیام‌های خطای عالی دارند. این وابستگی‌ها را به فهرست اصلی اضافه نمی‌کنیم، بلکه به بخش <code>dev dependencies</code> در <code>Cargo.toml</code> اضافه می‌کنیم. آن‌ها فقط هنگام توسعهٔ crate لازم هستند، نه هنگام استفاده از آن.</p>
+<pre><code class="language-toml">[dev-dependencies]
+assert_cmd = "2.0.14"
+predicates = "3.1.0"
+</code></pre>
+<p>این به نظر راه‌اندازی زیادی می‌رسد. با این حال، بیایید یک‌راست وارد شویم و فایل <code>tests/cli.rs</code> خود را بسازیم:</p>
+<pre><code class="language-rust ignore">use assert_cmd::cargo::*; // Import cargo_bin_cmd! macro and methods
+use predicates::prelude::*; // Used for writing assertions
+
+#[test]
+fn file_doesnt_exist() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let mut cmd = cargo_bin_cmd!("grrs");
+
+    cmd.arg("foobar").arg("test/file/doesnt/exist");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("could not read file"));
+
+    Ok(())
+}
+</code></pre>
+<p>می‌توانید این آزمون را با <code>cargo test</code> اجرا کنید، درست مانند آزمون‌هایی که بالاتر نوشتیم. بار نخست ممکن است کمی بیشتر طول بکشد چون <code>Command::cargo_bin("grrs")</code> باید باینری اصلی شما را کامپایل کند.</p>
+<h2 id="generating-test-files"><a class="header" href="#generating-test-files">تولید فایل‌های آزمون</a></h2>
+<p>آزمونی که همین حالا دیدیم فقط بررسی می‌کند که برنامه‌مان وقتی فایل ورودی وجود ندارد پیام خطا می‌نویسد. این آزمون مهمی است، اما شاید مهم‌ترین آزمون نباشد. بیایید آزمون کنیم که واقعاً تطابق‌هایی را که در یک فایل پیدا کردیم چاپ می‌کنیم!</p>
+<p>به فایلی نیاز داریم که محتوایش را بدانیم تا بدانیم برنامه‌مان <em>باید</em> چه چیزی برگرداند و این انتظار را در کدمان بررسی کنیم. یک ایده می‌تواند افزودن فایلی با محتوای دلخواه به پروژه و استفاده از آن در آزمون‌هایمان باشد. ایدهٔ دیگر ساختن فایل‌های موقت در آزمون‌هایمان است. برای این آموزش به رویکرد دوم نگاه می‌کنیم. این رویکرد انعطاف‌پذیرتر است و در موارد دیگر هم کار می‌کند؛ برای مثال وقتی برنامه‌هایی را آزمون می‌کنید که فایل‌ها را تغییر می‌دهند.</p>
+<p>برای ساختن این فایل‌های موقت از crate به نام <a href="https://docs.rs/assert_fs"><code>assert_fs</code></a> استفاده می‌کنیم. بیایید آن را به <code>dev-dependencies</code> در <code>Cargo.toml</code> خود اضافه کنیم:</p>
+<pre><code class="language-toml">assert_fs = "1.1.1"
+</code></pre>
+<p>این یک مورد آزمون جدید است که یک فایل موقت می‌سازد (یک فایل «نام‌دار» تا بتوانیم مسیرش را بگیریم)، آن را با مقداری متن پر می‌کند، و سپس برنامه‌مان را اجرا می‌کند تا ببیند خروجی درست می‌گیریم یا نه. می‌توانید آن را زیر مورد آزمون دیگر بنویسید. وقتی متغیر <code>file</code> در پایان تابع از محدوده خارج می‌شود، فایل موقت واقعی به‌طور خودکار حذف می‌شود.</p>
+<pre><code class="language-rust ignore">#[test]
+fn find_content_in_file() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let file = assert_fs::NamedTempFile::new("sample.txt")?;
+    file.write_str("A test\nActual content\nMore content\nAnother test")?;
+
+    let mut cmd = cargo_bin_cmd!("grrs");
+    cmd.arg("test").arg(file.path());
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("A test\nAnother test"));
+
+    Ok(())
+}</code></pre>
+<aside class="exercise">
+<p>**تمرین برای خواننده:** آزمون‌های یکپارچگی‌ای برای وقتی که یک رشتهٔ خالی را به‌عنوان الگو می‌دهیم اضافه کنید. برنامه را در صورت نیاز تنظیم کنید.</p>
+</aside>
+<h2 id="what-to-test"><a class="header" href="#what-to-test">چه چیزی را آزمون کنیم؟</a></h2>
+<p>هرچند نوشتن آزمون‌های یکپارچگی قطعاً می‌تواند سرگرم‌کننده باشد، نوشتن آن‌ها مدتی طول می‌کشد و همچنین به‌روز کردن آن‌ها وقتی رفتار برنامه‌تان تغییر می‌کند. برای اطمینان از این‌که زمانتان را عاقلانه صرف می‌کنید، باید از خودتان بپرسید چه چیزی را باید آزمون کنید.</p>
+<p>به‌طور کلی ایدهٔ خوبی است که آزمون یکپارچگی برای همهٔ انواع رفتاری که کاربر می‌تواند مشاهده کند بنویسید. این یعنی لازم نیست همهٔ حالت‌های مرزی را پوشش دهید. معمولاً کافی است برای انواع مختلف مثال داشته باشید و برای پوشش حالت‌های مرزی به آزمون‌های واحد تکیه کنید.</p>
+<p>همچنین ایدهٔ خوبی است که آزمون‌هایتان را روی چیزهایی که نمی‌توانید فعالانه کنترل کنید متمرکز نکنید. آزمودن چیدمان دقیق <code>--help</code> ایدهٔ بدی خواهد بود چون برای شما تولید می‌شود. در عوض ممکن است فقط بخواهید بررسی کنید که عناصر خاصی حاضرند.</p>
+<p>بسته به ماهیت برنامه‌تان، می‌توانید تکنیک‌های آزمون بیشتری هم امتحان کنید. برای مثال، اگر بخش‌هایی از برنامه‌تان را استخراج کرده‌اید و می‌بینید هنگام تلاش برای یافتن همهٔ حالت‌های مرزی مثال‌های زیادی را به‌صورت آزمون واحد می‌نویسید، باید به <a href="https://docs.rs/proptest"><code>proptest</code></a> نگاه کنید. اگر برنامه‌ای دارید که فایل‌های دلخواه را مصرف و تحلیل می‌کند، سعی کنید یک <a href="https://rust-fuzz.github.io/book/introduction.html">fuzzer</a> بنویسید تا باگ‌ها را در حالت‌های مرزی پیدا کند.</p>
+<aside>
+<p><strong>توجه:</strong> کد سورس کامل و قابل‌اجرایی را که در این فصل به کار رفته <a href="https://github.com/rust-cli/book/tree/master/src/tutorial/testing">در مخزن این کتاب</a> پیدا می‌کنید.</p>
+</aside><nav class="page-nav"><a href="../../cli/tutorial/output.html">→ خروجی برای انسان‌ها و ماشین‌ها</a><a href="../../cli/tutorial/packaging.html">بسته‌بندی و توزیع یک ابزار Rust ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cli/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

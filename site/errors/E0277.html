@@ -1,0 +1,67 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0277 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0277"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>سعی کرده‌اید نوعی را در جایی به کار ببرید که انتظار یک صفت (trait) مشخص را دارد، در حالی که آن نوع آن صفت را پیاده‌سازی نمی‌کند.</p>
+<p>کد دارای خطا:</p>
+<pre><code class="language-compile_fail E0277">// here we declare the Foo trait with a bar method
+trait Foo {
+    fn bar(&amp;self);
+}
+
+// we now declare a function which takes an object implementing the Foo trait
+fn some_func&lt;T: Foo&gt;(foo: T) {
+    foo.bar();
+}
+
+fn main() {
+    // we now call the method with the i32 type, which doesn't implement
+    // the Foo trait
+    some_func(5i32); // error: the trait bound `i32 : Foo` is not satisfied
+}
+</code></pre>
+<p>برای رفع این خطا، بررسی کنید که نوعی که به کار می‌برید واقعاً آن صفت را پیاده‌سازی کرده باشد. مثال:</p>
+<pre><code>trait Foo {
+    fn bar(&amp;self);
+}
+
+// we implement the trait on the i32 type
+impl Foo for i32 {
+    fn bar(&amp;self) {}
+}
+
+fn some_func&lt;T: Foo&gt;(foo: T) {
+    foo.bar(); // we can now use this method since i32 implements the
+               // Foo trait
+}
+
+fn main() {
+    some_func(5i32); // ok!
+}
+</code></pre>
+<p>یا در یک بستر جنریک، یک نمونه کد دارای خطا چنین به نظر می‌رسد:</p>
+<pre><code class="language-compile_fail E0277">fn some_func&lt;T&gt;(foo: T) {
+    println!("{:?}", foo); // error: the trait `core::fmt::Debug` is not
+                           //        implemented for the type `T`
+}
+
+fn main() {
+    // We now call the method with the i32 type,
+    // which *does* implement the Debug trait.
+    some_func(5i32);
+}
+</code></pre>
+<p>توجه کنید که خطا در اینجا در تعریف تابع جنریک است. اگرچه ما آن را فقط با پارامتری فراخوانی می‌کنیم که <code>Debug</code> را پیاده‌سازی می‌کند، کامپایلر باز هم تابع را رد می‌کند. تابع باید با همه نوع‌های ورودی ممکن کار کند. برای اینکه این مثال کامپایل شود، باید نوع جنریکی را که می‌پذیریم محدود کنیم:</p>
+<pre><code>use std::fmt;
+
+// Restrict the input type to types that implement Debug.
+fn some_func&lt;T: fmt::Debug&gt;(foo: T) {
+    println!("{:?}", foo);
+}
+
+fn main() {
+    // Calling the method is still fine, as i32 implements Debug.
+    some_func(5i32);
+
+    // This would fail to compile now:
+    // struct WithoutDebug;
+    // some_func(WithoutDebug);
+}
+</code></pre>
+<p>Rust فقط به امضای تابع فراخوانی‌شده نگاه می‌کند؛ بنابراین این امضا باید از قبل همه الزاماتی را که برای هر پارامتر نوع به کار می‌روند مشخص کرده باشد.</p><nav class="page-nav"><a href="../errors/E0276.html">→ E0276</a><a href="../errors/E0281.html">E0281 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

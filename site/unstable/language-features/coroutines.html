@@ -1,0 +1,150 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>coroutines — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/coroutines"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="coroutines"><a class="header" href="#coroutines"><code>coroutines</code></a></h1>
+<p>issue ردیابی این قابلیت: <a href="https://github.com/rust-lang/rust/issues/43122">#43122</a></p>
+<hr>
+<p>قابلیت <code>coroutines</code> در Rust به شما اجازه می‌دهد coroutine یا literalهای coroutine تعریف کنید. coroutine یک «تابع قابل‌ازسرگیری» است که از نظر نحوی شبیه closure است، اما در خود کامپایلر به معناشناسی (semantics) بسیار متفاوتی کامپایل می‌شود. ویژگی اصلی coroutine این است که می‌تواند در حین اجرا معلق شود تا در زمانی بعد از سر گرفته شود. coroutineها از کلیدواژه‌ی <code>yield</code> برای «بازگرداندن» استفاده می‌کنند و سپس فراخواننده می‌تواند با <code>resume</code> اجرای coroutine را درست پس از کلیدواژه‌ی <code>yield</code> از سر بگیرد.</p>
+<p>coroutineها در حال حاضر قابلیتی فوق‌العاده ناپایدار در کامپایلر هستند. این قابلیت در <a href="https://github.com/rust-lang/rfcs/pull/2033">RFC 2033</a> اضافه شد و فعلاً بیشتر به‌عنوان مرحله‌ای برای جمع‌آوری اطلاعات و محدودیت‌ها در نظر گرفته شده است. هدف این است که پیش از پایدارسازی واقعی بتوان روی کامپایلر nightly آزمایش کرد. برای پایدارسازی coroutineها یک RFC دیگر لازم خواهد بود که احتمالاً حداقل چند تغییر کوچک در طراحی کلی را هم در بر خواهد داشت.</p>
+<p>یک مثال نحوی از coroutine:</p>
+<pre><code class="language-rust">#![feature(coroutines, coroutine_trait, stmt_expr_attributes)]
+
+use std::ops::{Coroutine, CoroutineState};
+use std::pin::Pin;
+
+fn main() {
+    let mut coroutine = #[coroutine] || {
+        yield 1;
+        return "foo"
+    };
+
+    match Pin::new(&amp;mut coroutine).resume(()) {
+        CoroutineState::Yielded(1) =&gt; {}
+        _ =&gt; panic!("unexpected value from resume"),
+    }
+    match Pin::new(&amp;mut coroutine).resume(()) {
+        CoroutineState::Complete("foo") =&gt; {}
+        _ =&gt; panic!("unexpected value from resume"),
+    }
+}</code></pre>
+<p>coroutineها literalهایی شبیه closure هستند که با <code>#[coroutine]</code> حاشیه‌نویسی می‌شوند و می‌توانند شامل دستور <code>yield</code> باشند. دستور <code>yield</code> یک عبارت اختیاری می‌گیرد که مقداری است که از coroutine بیرون داده می‌شود. همه‌ی literalهای coroutine صفت <code>Coroutine</code> را در ماژول <code>std::ops</code> پیاده‌سازی می‌کنند. صفت <code>Coroutine</code> یک متد اصلی دارد، <code>resume</code>، که اجرای coroutine را از نقطه‌ی تعلیق قبلی از سر می‌گیرد.</p>
+<p>نمونه‌ای از جریان کنترل coroutineها این است که مثال زیر همه‌ی اعداد را به‌ترتیب چاپ می‌کند:</p>
+<pre><code class="language-rust">#![feature(coroutines, coroutine_trait, stmt_expr_attributes)]
+
+use std::ops::Coroutine;
+use std::pin::Pin;
+
+fn main() {
+    let mut coroutine = #[coroutine] || {
+        println!("2");
+        yield;
+        println!("4");
+    };
+
+    println!("1");
+    Pin::new(&amp;mut coroutine).resume(());
+    println!("3");
+    Pin::new(&amp;mut coroutine).resume(());
+    println!("5");
+}</code></pre>
+<p>در حال حاضر کاربرد اصلی coroutineها پیاده‌سازی یک پایه (primitive) برای نحو <code>async</code>/<code>await</code> و <code>gen</code> است، اما coroutineها احتمالاً در آینده به پایه‌های دیگر هم گسترش خواهند یافت. بازخورد درباره‌ی طراحی و کاربرد همیشه قدردانی می‌شود!</p>
+<h3 id="the-coroutine-trait"><a class="header" href="#the-coroutine-trait">صفت <code>Coroutine</code></a></h3>
+<p>صفت <code>Coroutine</code> در <code>std::ops</code> در حال حاضر به این شکل است:</p>
+<pre><code class="language-rust"><span class="boring">#![feature(arbitrary_self_types, coroutine_trait)]
+</span><span class="boring">use std::ops::CoroutineState;
+</span><span class="boring">use std::pin::Pin;
+</span>
+pub trait Coroutine&lt;R = ()&gt; {
+    type Yield;
+    type Return;
+    fn resume(self: Pin&lt;&amp;mut Self&gt;, resume: R) -&gt; CoroutineState&lt;Self::Yield, Self::Return&gt;;
+}</code></pre>
+<p>نوع <code>Coroutine::Yield</code> نوع مقادیری است که می‌توان با دستور <code>yield</code> بیرون داد. نوع <code>Coroutine::Return</code> نوع مقدار بازگشتی coroutine است. این معمولاً آخرین عبارت در تعریف coroutine یا هر مقداری است که در coroutine به <code>return</code> داده می‌شود. تابع <code>resume</code> نقطه‌ی ورود برای اجرای خود <code>Coroutine</code> است.</p>
+<p>مقدار بازگشتی <code>resume</code>، یعنی <code>CoroutineState</code>، به این شکل است:</p>
+<pre><code class="language-rust">pub enum CoroutineState&lt;Y, R&gt; {
+    Yielded(Y),
+    Complete(R),
+}</code></pre>
+<p>حالت <code>Yielded</code> نشان می‌دهد که coroutine را می‌توان بعداً از سر گرفت. این متناظر با یک نقطه‌ی <code>yield</code> در coroutine است. حالت <code>Complete</code> نشان می‌دهد که coroutine تمام شده و دیگر نمی‌توان آن را از سر گرفت. فراخوانی <code>resume</code> پس از اینکه coroutine مقدار <code>Complete</code> برگردانده، احتمالاً به panic برنامه می‌انجامد.</p>
+<h3 id="closure-like-semantics"><a class="header" href="#closure-like-semantics">معناشناسی شبیه closure</a></h3>
+<p>نحو شبیه closure برای coroutineها به این واقعیت اشاره دارد که آن‌ها معناشناسی شبیه closure هم دارند. یعنی:</p>
+<ul>
+<li>
+<p>هنگام ایجاد، coroutine هیچ کدی اجرا نمی‌کند. literal یک closure هنگام ساخت هیچ‌یک از کدهای closure را اجرا نمی‌کند، و به همین ترتیب literal یک coroutine هم هنگام ساخت هیچ کدی را درون coroutine اجرا نمی‌کند.</p>
+</li>
+<li>
+<p>coroutineها می‌توانند متغیرهای بیرونی را با ارجاع یا با move بگیرند (capture)، و این را می‌توان با کلیدواژه‌ی <code>move</code> در ابتدای closure تغییر داد. مانند closureها، همه‌ی coroutineها یک محیط ضمنی دارند که توسط کامپایلر استنتاج می‌شود. متغیرهای بیرونی را می‌توان به درون coroutine move کرد تا با پیشرفت coroutine از آن‌ها استفاده شود.</p>
+</li>
+<li>
+<p>literalهای coroutine مقداری با یک نوع یکتا تولید می‌کنند که صفت <code>std::ops::Coroutine</code> را پیاده‌سازی می‌کند. این کار هم اجرای واقعی coroutine را از طریق متد <code>Coroutine::resume</code> ممکن می‌کند و هم امکان نام‌بردن از آن در نوع‌های بازگشتی و مانند آن را.</p>
+</li>
+<li>
+<p>صفت‌هایی مانند <code>Send</code> و <code>Sync</code> بسته به متغیرهای capture‌شده‌ی محیط، به‌طور خودکار برای <code>Coroutine</code> پیاده‌سازی می‌شوند. برخلاف closureها، coroutineها به متغیرهایی هم که در سراسر نقاط تعلیق زنده‌اند وابسته‌اند. یعنی اگرچه محیط پیرامون ممکن است <code>Send</code> یا <code>Sync</code> باشد، خود coroutine ممکن است نباشد، چون متغیرهای داخلی که در سراسر نقاط <code>yield</code> زنده‌اند ممکن است <code>Send</code> یا <code>Sync</code> نباشند. توجه کنید که coroutineها صفت‌هایی مانند <code>Copy</code> یا <code>Clone</code> را به‌طور خودکار پیاده‌سازی نمی‌کنند.</p>
+</li>
+<li>
+<p>هرگاه یک coroutine drop شود، همه‌ی متغیرهای محیطِ capture‌شده را drop می‌کند.</p>
+</li>
+</ul>
+<h3 id="coroutines-as-state-machines"><a class="header" href="#coroutines-as-state-machines">coroutineها به‌عنوان ماشین حالت</a></h3>
+<p>در کامپایلر، coroutineها در حال حاضر به‌صورت ماشین حالت (state machine) کامپایل می‌شوند. هر عبارت <code>yield</code> متناظر با یک حالت متفاوت است که همه‌ی متغیرهای زنده در آن نقطه‌ی تعلیق را ذخیره می‌کند. از سرگیری یک coroutine بر اساس حالت فعلی انشعاب می‌کند و سپس در درون اجرا می‌شود تا به یک <code>yield</code> برسد؛ در آن نقطه همه‌ی حالت در coroutine ذخیره و یک مقدار برگردانده می‌شود.</p>
+<p>بیایید یک مثال را ببینیم تا بفهمیم اینجا چه می‌گذرد:</p>
+<pre><code class="language-rust">#![feature(coroutines, coroutine_trait, stmt_expr_attributes)]
+
+use std::ops::Coroutine;
+use std::pin::Pin;
+
+fn main() {
+    let ret = "foo";
+    let mut coroutine = #[coroutine] move || {
+        yield 1;
+        return ret
+    };
+
+    Pin::new(&amp;mut coroutine).resume(());
+    Pin::new(&amp;mut coroutine).resume(());
+}</code></pre>
+<p>این literal مربوط به coroutine به چیزی شبیه این کامپایل می‌شود:</p>
+<pre><code class="language-rust">#![feature(arbitrary_self_types, coroutine_trait)]
+
+use std::ops::{Coroutine, CoroutineState};
+use std::pin::Pin;
+
+fn main() {
+    let ret = "foo";
+    let mut coroutine = {
+        enum __Coroutine {
+            Start(&amp;'static str),
+            Yield1(&amp;'static str),
+            Done,
+        }
+
+        impl Coroutine for __Coroutine {
+            type Yield = i32;
+            type Return = &amp;'static str;
+
+            fn resume(mut self: Pin&lt;&amp;mut Self&gt;, resume: ()) -&gt; CoroutineState&lt;i32, &amp;'static str&gt; {
+                use std::mem;
+                match mem::replace(&amp;mut *self, __Coroutine::Done) {
+                    __Coroutine::Start(s) =&gt; {
+                        *self = __Coroutine::Yield1(s);
+                        CoroutineState::Yielded(1)
+                    }
+
+                    __Coroutine::Yield1(s) =&gt; {
+                        *self = __Coroutine::Done;
+                        CoroutineState::Complete(s)
+                    }
+
+                    __Coroutine::Done =&gt; {
+                        panic!("coroutine resumed after completion")
+                    }
+                }
+            }
+        }
+
+        __Coroutine::Start(ret)
+    };
+
+    Pin::new(&amp;mut coroutine).resume(());
+    Pin::new(&amp;mut coroutine).resume(());
+}</code></pre>
+<p>به‌ویژه در اینجا می‌بینیم که کامپایلر یک نوع تازه تولید می‌کند، در این مورد <code>__Coroutine</code>. این نوع تعدادی حالت دارد (که اینجا به‌صورت یک <code>enum</code> نمایش داده شده‌اند) و هر یک متناظر با یکی از حالت‌های مفهومی coroutine است. در ابتدا متغیر بیرونی <code>foo</code> را می‌بندیم (close over) و سپس آن متغیر در سراسر نقطه‌ی <code>yield</code> هم زنده است، پس در هر دو حالت ذخیره می‌شود.</p>
+<p>وقتی coroutine شروع می‌شود بلافاصله 1 را yield می‌کند، اما درست پیش از آن حالتش را ذخیره می‌کند تا نشان دهد به نقطه‌ی yield رسیده است. هنگام از سرگیری دوباره، <code>return ret</code> اجرا می‌شود که حالت <code>Complete</code> را برمی‌گرداند.</p>
+<p>اینجا همچنین می‌توان توجه کرد که حالت <code>Done</code>، اگر از سر گرفته شود، بلافاصله panic می‌کند، چون از سرگیری یک coroutine تمام‌شده نامعتبر است. همچنین شایان ذکر است که این فقط یک desugaring تقریبی است، نه مشخصاتی هنجاری (normative) از کاری که کامپایلر انجام می‌دهد.</p><nav class="page-nav"><a href="../../unstable/language-features/compiler-builtins.html">→ compiler-builtins</a><a href="../../unstable/language-features/coverage-attribute.html">coverage-attribute ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

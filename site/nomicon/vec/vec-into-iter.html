@@ -1,0 +1,97 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>IntoIter — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="vec/vec-into-iter"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="intoiter"><a class="header" href="#intoiter">IntoIter</a></h1>
+<p>بیایید به نوشتن iterator‌ها بپردازیم. <code>iter</code> و <code>iter_mut</code> به لطف جادوی Deref از قبل برای ما نوشته شده‌اند. با این حال دو iterator جالب هست که Vec ارائه می‌دهد و slice‌ها نمی‌توانند: <code>into_iter</code> و <code>drain</code>.</p>
+<p>IntoIter، Vec را به‌صورت by-value مصرف می‌کند و در نتیجه می‌تواند عناصرش را به‌صورت by-value تولید کند. برای فعال کردن این امکان، IntoIter باید کنترل تخصیص حافظهٔ Vec را به دست بگیرد.</p>
+<p>IntoIter باید DoubleEnded هم باشد تا خواندن از هر دو سر ممکن شود. خواندن از انتها را می‌توان صرفاً با صدا زدن <code>pop</code> پیاده‌سازی کرد، اما خواندن از ابتدا سخت‌تر است. می‌توانستیم <code>remove(0)</code> را صدا بزنیم اما این کار به‌طرز دیوانه‌واری گران است. در عوض می‌خواهیم فقط از ptr::read استفاده کنیم تا مقدارها را از هر یک از دو سر Vec بیرون کپی کنیم، بدون اینکه اصلاً بافر را تغییر دهیم.</p>
+<p>برای این کار از یک ایدیوم بسیار رایج C برای پیمایش آرایه استفاده می‌کنیم. دو اشاره‌گر می‌سازیم؛ یکی که به ابتدای آرایه اشاره می‌کند و یکی که به یک عنصر بعد از انتها. وقتی از یک سر عنصری می‌خواهیم، مقداری را که اشاره‌گر آن سر به آن اشاره می‌کند می‌خوانیم و اشاره‌گر را یک خانه جابه‌جا می‌کنیم. وقتی دو اشاره‌گر برابر شدند، می‌دانیم کار تمام شده است.</p>
+<p>توجه کنید که ترتیب خواندن و offset دادن برای <code>next</code> و <code>next_back</code> برعکس است. برای <code>next_back</code> اشاره‌گر همیشه بعد از عنصری است که می‌خواهد بعداً بخواند، در حالی که برای <code>next</code> اشاره‌گر همیشه روی عنصری است که می‌خواهد بعداً بخواند. برای اینکه ببینید چرا چنین است، حالتی را در نظر بگیرید که همهٔ عناصر به‌جز یکی تولید شده‌اند.</p>
+<p>آرایه این شکلی است:</p>
+<pre><code class="language-text">          S  E
+[X, X, X, O, X, X, X]
+</code></pre>
+<p>اگر E مستقیماً به عنصری اشاره می‌کرد که می‌خواهد بعداً تولید کند، قابل‌تشخیص از حالتی که دیگر عنصری برای تولید نمانده نبود.</p>
+<p>هرچند در طول پیمایش اصلاً به آن اهمیتی نمی‌دهیم، باید اطلاعات تخصیص Vec را هم نگه داریم تا پس از drop شدن IntoIter بتوانیم آن را آزاد کنیم.</p>
+<p>پس از struct زیر استفاده خواهیم کرد:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">pub struct IntoIter&lt;T&gt; {
+    buf: NonNull&lt;T&gt;,
+    cap: usize,
+    start: *const T,
+    end: *const T,
+}</code></pre>
+<p>و این همان چیزی است که برای مقداردهی اولیه به آن می‌رسیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">impl&lt;T&gt; IntoIterator for Vec&lt;T&gt; {
+    type Item = T;
+    type IntoIter = IntoIter&lt;T&gt;;
+    fn into_iter(self) -&gt; IntoIter&lt;T&gt; {
+        // Make sure not to drop Vec since that would free the buffer
+        let vec = ManuallyDrop::new(self);
+
+        // Can't destructure Vec since it's Drop
+        let ptr = vec.ptr;
+        let cap = vec.cap;
+        let len = vec.len;
+
+        IntoIter {
+            buf: ptr,
+            cap,
+            start: ptr.as_ptr(),
+            end: if cap == 0 {
+                // can't offset off this pointer, it's not allocated!
+                ptr.as_ptr()
+            } else {
+                unsafe { ptr.as_ptr().add(len) }
+            },
+        }
+    }
+}</code></pre>
+<p>و برای مقداردهی اولیه به این می‌رسیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">impl&lt;T&gt; Iterator for IntoIter&lt;T&gt; {
+    type Item = T;
+    fn next(&amp;mut self) -&gt; Option&lt;T&gt; {
+        if self.start == self.end {
+            None
+        } else {
+            unsafe {
+                let result = ptr::read(self.start);
+                self.start = self.start.offset(1);
+                Some(result)
+            }
+        }
+    }
+
+    fn size_hint(&amp;self) -&gt; (usize, Option&lt;usize&gt;) {
+        let len = (self.end as usize - self.start as usize)
+                  / mem::size_of::&lt;T&gt;();
+        (len, Some(len))
+    }
+}</code></pre>
+<p>پیمایش رو به جلو این‌گونه است:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">impl&lt;T&gt; DoubleEndedIterator for IntoIter&lt;T&gt; {
+    fn next_back(&amp;mut self) -&gt; Option&lt;T&gt; {
+        if self.start == self.end {
+            None
+        } else {
+            unsafe {
+                self.end = self.end.offset(-1);
+                Some(ptr::read(self.end))
+            }
+        }
+    }
+}</code></pre>
+<p>چون IntoIter مالکیت تخصیص خود را به دست می‌گیرد، باید Drop را پیاده‌سازی کند تا آن را آزاد کند. با این حال، می‌خواهد Drop را برای drop کردن عناصری که تولید نشده‌اند و در آن باقی مانده‌اند نیز پیاده‌سازی کند.</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">impl&lt;T&gt; Drop for IntoIter&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        if self.cap != 0 {
+            // drop any remaining elements
+            for _ in &amp;mut *self {}
+            let layout = Layout::array::&lt;T&gt;(self.cap).unwrap();
+            unsafe {
+                alloc::dealloc(self.buf.as_ptr() as *mut u8, layout);
+            }
+        }
+    }
+}</code></pre><nav class="page-nav"><a href="vec-insert-remove.html">→ Insert و Remove</a><a href="vec-raw.html">RawVec ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../nomicon/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

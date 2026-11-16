@@ -1,0 +1,344 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>گسترش ماکرو — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="macro-expansion"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="macro-expansion"><a class="header" href="#macro-expansion">Macro expansion</a></h1>
+<p>Rust سامانهٔ ماکروی بسیار قدرتمندی دارد.
+در فصل قبل دیدیم parser چگونه ماکروهایی را که باید گسترش یابند کنار می‌گذارد (با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/placeholders/index.html">جانگهدارهای</a> موقت).
+این فصل دربارهٔ فرایند گسترش تکراری آن ماکروهاست تا زمانی که
+<a href="./ast-validation.html"><em>درخت نحو انتزاعی</em> (AST)</a> کاملی برای crate خود بدون ماکروی گسترش‌نیافته داشته باشیم (یا خطای کامپایل).</p>
+<p>ابتدا دربارهٔ الگوریتمی صحبت می‌کنیم که خروجی ماکرو را گسترش می‌دهد و در ASTها ادغام می‌کند.
+سپس نگاهی می‌اندازیم به اینکه داده‌های hygiene چگونه جمع‌آوری می‌شوند.
+در نهایت جزئیات گسترش انواع مختلف ماکروها را بررسی می‌کنیم.</p>
+<p>بسیاری از الگوریتم‌ها و ساختارهای داده توصیف‌شده در ادامه در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/index.html"><code>rustc_expand</code></a> هستند،
+با ساختارهای داده بنیادی در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/base/index.html"><code>rustc_expand::base</code></a>.</p>
+<p>همچنین قابل‌توجه است که <code>cfg</code> و <code>cfg_attr</code> متفاوت از ماکروهای دیگر برخورد می‌شوند و
+در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/config/index.html"><code>rustc_expand::config</code></a> مدیریت می‌شوند.</p>
+<h2 id="expansion-and-ast-integration"><a class="header" href="#expansion-and-ast-integration">گسترش و ادغام در AST</a></h2>
+<p>اول، گسترش در سطح crate رخ می‌دهد.
+با دریافت کد منبع خام یک crate، کامپایلر ASTای عظیم با همهٔ ماکروهای گسترش‌یافته، همهٔ
+ماژول‌های inline‌شده و غیره تولید می‌کند. نقطهٔ ورود اصلی این فرایند متد
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/expand/struct.MacroExpander.html#method.fully_expand_fragment"><code>MacroExpander::fully_expand_fragment</code></a> است.
+با چند استثنا،
+این متد را روی کل crate به‌کار می‌بریم (برای بحث مفصل‌تر دربارهٔ مسائل گسترش در موارد لبه‌ای
+<a href="#eager-expansion">«گسترش eager»</a> را در ادامه ببینید).</p>
+<p>در سطح بالا، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/expand/struct.MacroExpander.html#method.fully_expand_fragment"><code>fully_expand_fragment</code></a> به‌صورت تکرار کار می‌کند.
+صفی از فراخوانی‌های ماکروی حل‌نشده نگه می‌داریم (یعنی ماکروهایی که هنوز تعریفشان را نیافته‌ایم).
+بارها سعی می‌کنیم ماکرویی را از صف برداریم، حلش کنیم، گسترشش دهیم و دوباره ادغامش کنیم.
+اگر در یک تکرار نتوانیم پیشرفت کنیم، این یک خطای کامپایل است.
+این <a href="https://github.com/rust-lang/rust/pull/53778#issuecomment-419224049">الگوریتم</a> است:</p>
+<ol>
+<li>یک <code>queue</code> از ماکروهای حل‌نشده را مقداردهی اولیه کنید.</li>
+<li>Repeat until <code>queue</code> is empty (or we make no progress, which is an error):
+<ol>
+<li>importها را در crate نیمه‌ساخته‌شدهٔ خود تا حد امکان <a href="./name-resolution.html">حل کنید</a>.</li>
+<li>تا حد امکان <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/expand/struct.Invocation.html"><code>Invocation</code>های</a> ماکرو را از crate نیمه‌ساخته جمع کنید (<code>fn</code>-مانند، attributeها، derive‌ها) و به صف بیفزایید.</li>
+<li>اولین عنصر را از صف بردارید و سعی کنید حلش کنید.</li>
+<li>If it’s resolved:
+<ol>
+<li>Run the macro’s expander function that consumes a <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/tokenstream/struct.TokenStream.html"><code>TokenStream</code></a> or
+AST and produces a <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/tokenstream/struct.TokenStream.html"><code>TokenStream</code></a> or <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/expand/enum.AstFragment.html"><code>AstFragment</code></a> (depending on
+the macro kind).
+(A <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/tokenstream/struct.TokenStream.html"><code>TokenStream</code></a> is a collection of <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/tokenstream/enum.TokenTree.html"><code>TokenTree</code>s</a>,
+each of which are a token (punctuation, identifier, or literal) or a
+delimited group (anything inside <code>()</code>/<code>[]</code>/<code>{}</code>)).
+<ul>
+<li>در این نقطه همه‌چیز دربارهٔ خود ماکرو را می‌دانیم و می‌توانیم
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.LocalExpnId.html#method.set_expn_data"><code>set_expn_data</code></a> را فراخوانی کنیم تا ویژگی‌هایش را در داده‌های سراسری پر کند؛ یعنی داده‌های <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/index.html">hygiene</a> مرتبط با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.ExpnId.html"><code>ExpnId</code></a> (<a href="#hygiene-and-hierarchies">Hygiene</a> را در ادامه ببینید).</li>
+</ul>
+</li>
+<li>Integrate that piece of AST into the currently-existing though
+partially-built AST.
+This is essentially where the “token-like mass”
+becomes a proper set-in-stone AST with side-tables.
+It happens as follows:
+<ul>
+<li>اگر ماکرو توکن تولید کند (مثلاً proc macro)، آن را به AST تجزیه می‌کنیم، که ممکن است خطای تجزیه تولید کند.</li>
+<li>هنگام گسترش، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.SyntaxContext.html"><code>SyntaxContext</code></a>ها را می‌سازیم (سلسله‌مراتب ۲) (<a href="#hygiene-and-hierarchies">Hygiene</a> را در ادامه ببینید).</li>
+<li>These two passes happen one after another on every AST fragment
+freshly expanded from a macro:
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/node_id/struct.NodeId.html"><code>NodeId</code></a>ها توسط <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/expand/struct.InvocationCollector.html"><code>InvocationCollector</code></a> تخصیص داده می‌شوند.
+این همچنین فراخوانی‌های ماکروی جدید را از این تکهٔ AST جدید جمع می‌کند و به صف می‌افزاید.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/def_collector/struct.DefCollector.html"><code>DefCollector</code></a> <a href="hir.html#identifiers-in-the-hir">«مسیرهای Def»</a> را می‌سازد، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/def_id/struct.DefId.html"><code>DefId</code></a>های متناظر را تخصیص می‌دهد و همچنین گراف کاهش‌یافته را می‌سازد (از دید resolver، قراردادن نام‌ها در ماژول‌ها).</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>پس از گسترش یک ماکرو و ادغام خروجی‌اش، به تکرار بعدی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/expand/struct.MacroExpander.html#method.fully_expand_fragment"><code>fully_expand_fragment</code></a> ادامه دهید.</li>
+</ol>
+</li>
+<li>If it’s not resolved:
+<ol>
+<li>ماکرو را دوباره در صف بگذارید.</li>
+<li>به تکرار بعدی ادامه دهید…</li>
+</ol>
+</li>
+</ol>
+</li>
+</ol>
+<h3 id="error-recovery"><a class="header" href="#error-recovery">Error Recovery</a></h3>
+<p>اگر در یک تکرار پیشرفتی نداشته باشیم به خطای کامپایل رسیده‌ایم
+(مثلاً ماکروی تعریف‌نشده). سعی می‌کنیم از شکست‌ها (یعنی ماکروها یا importهای حل‌نشده) با هدف تولید پیام‌های تشخیصی بازیابی کنیم.
+بازیابی از شکست با گسترش ماکروهای حل‌نشده به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/ast/enum.ExprKind.html#variant.Err"><code>ExprKind::Err</code></a> انجام می‌شود و اجازه می‌دهد کامپایل از اولین خطا بگذرد
+تا <code>rustc</code> بتواند بیش از خطای اصلی را گزارش دهد.</p>
+<h3 id="name-resolution"><a class="header" href="#name-resolution">Name Resolution</a></h3>
+<p>توجه کنید name resolution اینجا دخیل است: باید importها و نام ماکروها را در الگوریتم بالا حل کنیم.
+این در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/macros/index.html"><code>rustc_resolve::macros</code></a> انجام می‌شود که مسیرهای ماکرو را حل می‌کند، آن حل‌ها را اعتبارسنجی می‌کند و
+خطاهای مختلف را گزارش می‌دهد (مثلاً «not found»، «found, but it’s unstable»، «expected x, found y»).
+اما هنوز سعی نمی‌کنیم نام‌های دیگر را حل کنیم.
+این بعداً رخ می‌دهد، همان‌طور که در فصل <a href="./name-resolution.html">Name Resolution</a> خواهیم دید.</p>
+<h3 id="eager-expansion"><a class="header" href="#eager-expansion">Eager Expansion</a></h3>
+<p><em>گسترش eager</em> یعنی آرگومان‌های فراخوانی ماکرو را پیش از خود فراخوانی ماکرو گسترش می‌دهیم.
+این فقط برای چند ماکروی داخلی ویژه که literal انتظار دارند پیاده‌سازی شده؛ گسترش ابتدایی آرگومان‌ها برای برخی
+از این ماکروها تجربهٔ کاربری روان‌تری ایجاد می‌کند.
+به‌عنوان مثال این را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">macro bar($i: ident) { $i }
+macro foo($i: ident) { $i }
+
+foo!(bar!(baz));</code></pre>
+<p>گسترش lazy ابتدا <code>foo!</code> را گسترش می‌دهد.
+گسترش eager ابتدا <code>bar!</code> را گسترش می‌دهد.</p>
+<p>گسترش eager قابلیتی عمومی در Rust نیست.
+پیاده‌سازی گسترش eager به‌طور کلی‌تر چالش‌برانگیز خواهد بود، پس برای تجربهٔ کاربری آن را برای
+چند ماکروی داخلی ویژه پیاده‌سازی می‌کنیم.
+ماکروهای داخلی در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_builtin_macros/index.html"><code>rustc_builtin_macros</code></a> پیاده‌سازی شده‌اند، به‌همراه چند امکان اولیهٔ تولید کد دیگر مثل تزریق importهای کتابخانهٔ استاندارد یا
+تولید test harness.
+چند کمک‌کنندهٔ اضافی برای ساخت تکه‌های AST در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/build/index.html"><code>rustc_expand::build</code></a> هست.
+گسترش eager عموماً زیرمجموعه‌ای از کارهای گسترش lazy (معمولی) را انجام می‌دهد.
+با فراخوانی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/expand/struct.MacroExpander.html#method.fully_expand_fragment"><code>fully_expand_fragment</code></a> فقط روی بخشی از crate انجام می‌شود (در مقابل کل crate، آن‌طور که معمولاً می‌کنیم).</p>
+<h3 id="other-data-structures"><a class="header" href="#other-data-structures">ساختارهای داده دیگر</a></h3>
+<p>در اینجا چند ساختار داده قابل‌توجه دیگر که در گسترش و ادغام دخیل‌اند آمده است:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/base/trait.ResolverExpand.html"><code>ResolverExpand</code></a> - <code>trait</code>ای که برای شکستن وابستگی‌های crate به‌کار می‌رود.
+این اجازه می‌دهد سرویس‌های resolver در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/index.html"><code>rustc_ast</code></a> استفاده شوند، با وجود اینکه <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/index.html"><code>rustc_resolve</code></a> و
+تقریباً همهٔ چیزهای دیگر به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/index.html"><code>rustc_ast</code></a> وابسته‌اند.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/base/struct.ExtCtxt.html"><code>ExtCtxt</code></a>/<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/base/struct.ExpansionData.html"><code>ExpansionData</code></a> - داده‌های زیرساخت میانی گسترش را نگه می‌دارد.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/base/enum.Annotatable.html"><code>Annotatable</code></a> - تکه‌ای از AST که می‌تواند هدف attribute باشد، تقریباً همان چیزی است که <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/expand/enum.AstFragment.html"><code>AstFragment</code></a> هست جز برای نوع‌ها و الگوهایی که ماکروها می‌توانند تولید کنند اما نمی‌توان با attribute annotate‌شان کرد.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/base/trait.MacResult.html"><code>MacResult</code></a> - تکهٔ AST «چندریخت»، چیزی که بسته به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/expand/enum.AstFragmentKind.html"><code>AstFragmentKind</code></a> خود می‌تواند به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/expand/enum.AstFragment.html"><code>AstFragment</code></a> متفاوتی تبدیل شود (یعنی آیتم، عبارت، الگو و غیره).</li>
+</ul>
+<h2 id="hygiene-and-hierarchies"><a class="header" href="#hygiene-and-hierarchies">Hygiene و سلسله‌مراتب‌ها</a></h2>
+<p>اگر تاکنون از ماکروهای پیش‌پردازندهٔ C/C++ استفاده کرده‌اید، می‌دانید چند دام آزاردهنده و دشوار برای اشکال‌زدایی هست!
+برای مثال این کد C را در نظر بگیرید:</p>
+<pre><code class="language-c">#define DEFINE_FOO struct Bar {int x;}; struct Foo {Bar bar;};
+
+// Then, somewhere else
+struct Bar {
+    ...
+};
+
+DEFINE_FOO
+</code></pre>
+<p>بیشتر افراد از نوشتن C به این شکل پرهیز می‌کنند – و دلیل خوبی دارد: کامپایل نمی‌شود.
+<code>struct Bar</code> تعریف‌شده توسط ماکرو با <code>struct Bar</code> تعریف‌شده در کد نام‌تعارض دارد.
+همچنین مثال زیر را در نظر بگیرید:</p>
+<pre><code class="language-c">#define DO_FOO(x) {\
+    int y = 0;\
+    foo(x, y);\
+    }
+
+// Then elsewhere
+int y = 22;
+DO_FOO(y);
+</code></pre>
+<p>مشکل را می‌بینید؟
+می‌خواستیم فراخوانی <code>foo(22, 0)</code> تولید شود، اما به‌جای آن
+<code>foo(0, 0)</code> گرفتیم چون ماکرو <code>y</code> خودش را تعریف کرده بود!</p>
+<p>این‌ها هر دو نمونه‌هایی از مشکلات <em>hygiene ماکرو</em> هستند.
+<em>Hygiene</em> به نحوهٔ مدیریت نام‌های تعریف‌شده <em>درون یک ماکرو</em> مربوط است.
+به‌طور خاص، سامانهٔ ماکروی hygienic از خطاهای ناشی از نام‌های معرفی‌شده درون ماکرو جلوگیری می‌کند.
+ماکروهای Rust از این جهت hygienic هستند که اجازهٔ نوشتن باگ‌هایی از نوع بالا را نمی‌دهند.</p>
+<p>در سطح بالا، hygiene در کامپایلر Rust با ردیابی زمینه‌ای (context) که نام در آن معرفی و استفاده می‌شود انجام می‌شود.
+سپس می‌توانیم نام‌ها را بر اساس آن زمینه رفع ابهام کنیم.
+تکرارهای آینده سامانهٔ ماکرو کنترل بیشتری به نویسندهٔ ماکرو برای استفاده از آن زمینه می‌دهند.
+برای مثال،
+نویسندهٔ ماکرو ممکن است بخواهد نام جدیدی را در زمینه‌ای که ماکرو فراخوانی شده معرفی کند.
+یا نویسندهٔ ماکرو ممکن است متغیری را فقط برای استفاده درون ماکرو تعریف کند (یعنی نباید بیرون ماکرو دیده شود).</p>
+<p>زمینه به گره‌های AST متصل است.
+همهٔ گره‌های AST تولیدشده توسط ماکروها زمینه دارند.
+علاوه بر این، ممکن است گره‌های دیگری هم زمینه داشته باشند،
+مثل برخی نحوهای desugar‌شده (گره‌های گسترش‌نیافته با ماکرو فقط زمینهٔ «ریشه» دارند، همان‌طور که در ادامه شرح داده شده).
+در سراسر کامپایلر از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/struct.Span.html"><code>rustc_span::Span</code></a>ها برای ارجاع به مکان‌های کد استفاده می‌کنیم.
+این struct هم اطلاعات hygiene به آن متصل است، همان‌طور که بعداً خواهیم دید.</p>
+<p>چون فراخوانی‌ها و تعاریف ماکرو می‌توانند تو در تو باشند، زمینهٔ نحوی یک گره باید سلسله‌مراتب باشد.
+برای مثال، اگر ماکرویی را گسترش دهیم و فراخوانی یا تعریف ماکروی دیگری در خروجی تولیدشده باشد،
+زمینهٔ نحوی باید این تو در تویی را بازتاب دهد.</p>
+<p>اما معلوم می‌شود در واقع چند نوع زمینه هست که شاید بخواهیم برای اهداف مختلف ردیابی کنیم.
+بنابراین نه یک بلکه <em>سه</em> سلسله‌مراتب گسترش هست که با هم اطلاعات hygiene یک crate را تشکیل می‌دهند.</p>
+<p>همهٔ این سلسله‌مراتب‌ها به نوعی «شناسهٔ ماکرو» برای شناسایی عناصر جداگانه در زنجیرهٔ گسترش‌ها نیاز دارند.
+این شناسه <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.ExpnId.html"><code>ExpnId</code></a> است.
+همهٔ ماکروها شناسهٔ عدد صحیح می‌گیرند که از 0 و به‌طور پیوسته با کشف فراخوانی‌های ماکروی جدید تخصیص می‌یابد.
+همهٔ سلسله‌مراتب‌ها از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.ExpnId.html#method.root"><code>ExpnId::root</code></a> شروع می‌شوند که والد خودش است.</p>
+<p>crate با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/index.html"><code>rustc_span::hygiene</code></a> همهٔ الگوریتم‌های مرتبط با hygiene
+(به‌جز برخی hackها در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/struct.Resolver.html#method.resolve_crate_root"><code>Resolver::resolve_crate_root</code></a>)
+و ساختارهای مربوط به hygiene و گسترش را که در داده‌های سراسری نگه‌داری می‌شوند دارد.</p>
+<p>سلسله‌مراتب‌های واقعی در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.HygieneData.html"><code>HygieneData</code></a> ذخیره می‌شوند.
+این داده‌ای سراسری شامل اطلاعات hygiene و گسترش است که از هر <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/symbol/struct.Ident.html"><code>Ident</code></a> بدون هیچ زمینه‌ای قابل‌دسترسی است.</p>
+<h3 id="the-expansion-order-hierarchy"><a class="header" href="#the-expansion-order-hierarchy">سلسله‌مراتب ترتیب گسترش</a></h3>
+<p>سلسله‌مراتب اول ترتیب گسترش‌ها را ردیابی می‌کند، یعنی وقتی فراخوانی ماکرو در خروجی ماکروی دیگر است.</p>
+<p>اینجا، فرزندان در سلسله‌مراتب «درونی‌ترین» توکن‌ها خواهند بود.
+خود struct با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.ExpnData.html"><code>ExpnData</code></a> زیرمجموعه‌ای از ویژگی‌ها را هم از تعریف ماکرو و هم فراخوانی ماکرو دارد که از طریق داده‌های سراسری در دسترس‌اند.
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.ExpnData.html#structfield.parent"><code>ExpnData::parent</code></a> پیوند فرزند به والد را در این سلسله‌مراتب ردیابی می‌کند.</p>
+<p>برای مثال:</p>
+<pre><code class="language-rust ignore">macro_rules! foo { () =&gt; { println!(); } }
+
+fn main() { foo!(); }</code></pre>
+<p>در این کد، گره‌های AST که نهایتاً تولید می‌شوند سلسله‌مراتب
+<code>root -&gt; id(foo) -&gt; id(println)</code> را دارند.</p>
+<h3 id="the-macro-definition-hierarchy"><a class="header" href="#the-macro-definition-hierarchy">سلسله‌مراتب تعریف ماکرو</a></h3>
+<p>سلسله‌مراتب دوم ترتیب تعاریف ماکرو را ردیابی می‌کند، یعنی وقتی ماکرویی را گسترش می‌دهیم و تعریف ماکروی دیگری در خروجی‌اش آشکار می‌شود.
+این یکی کمی پیچیده و دشوارتر از دو سلسله‌مراتب دیگر است.</p>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.SyntaxContext.html"><code>SyntaxContext</code></a> کل یک زنجیر در این سلسله‌مراتب را با یک شناسه نمایش می‌دهد.
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.SyntaxContextData.html"><code>SyntaxContextData</code></a> داده‌های مرتبط با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.SyntaxContext.html"><code>SyntaxContext</code></a> داده‌شده را دارد؛ بیشتر cache نتایج فیلترکردن آن زنجیر به شکل‌های مختلف است.
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.SyntaxContextData.html#structfield.parent"><code>SyntaxContextData::parent</code></a> پیوند فرزند به والد اینجاست،
+و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.SyntaxContextData.html#structfield.outer_expn"><code>SyntaxContextData::outer_expns</code></a> عناصر جداگانهٔ زنجیرند.
+«عملگر زنجیره‌ساز» در کد کامپایلر <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.SyntaxContext.html#method.apply_mark"><code>SyntaxContext::apply_mark</code></a> است.</p>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/struct.Span.html"><code>Span</code></a> که بالا ذکر شد، در واقع فقط نمایش فشردهٔ یک مکان کد و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.SyntaxContext.html"><code>SyntaxContext</code></a> است.
+به همین ترتیب، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/symbol/struct.Ident.html"><code>Ident</code></a> فقط یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/symbol/struct.Symbol.html"><code>Symbol</code></a> intern‌شده + <code>Span</code> است (یعنی رشتهٔ intern‌شده + داده‌های hygiene).</p>
+<p>برای ماکروهای داخلی از زمینهٔ <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.SyntaxContext.html#method.apply_mark"><code>SyntaxContext::empty().apply_mark(expn_id)</code></a> استفاده می‌کنیم و چنین ماکروهایی
+در ریشهٔ سلسله‌مراتب تعریف‌شده در نظر گرفته می‌شوند.
+برای <code>proc macro</code>ها هم همین کار را می‌کنیم چون هنوز hygiene بین‌crate پیاده‌سازی نشده است.</p>
+<p>اگر توکن پیش از تولید توسط ماکرو زمینهٔ <code>X</code> داشته باشد، پس از تولید توسط ماکرو زمینهٔ <code>X -&gt; macro_id</code> را دارد.
+چند مثال:</p>
+<p>Example 0:</p>
+<pre><code class="language-rust ignore">macro m() { ident }
+
+m!();</code></pre>
+<p>اینجا <code>ident</code> که ابتدا زمینهٔ <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.SyntaxContext.html#method.root"><code>SyntaxContext::root</code></a> دارد،
+پس از تولید توسط <code>m</code> زمینهٔ <code>ROOT -&gt; id(m)</code> دارد.</p>
+<p>Example 1:</p>
+<pre><code class="language-rust ignore">macro m() { macro n() { ident } }
+
+m!();
+n!();</code></pre>
+<p>در این مثال <code>ident</code> ابتدا زمینهٔ <code>ROOT</code> دارد، سپس <code>ROOT -&gt; id(m)</code>
+پس از گسترش اول، سپس <code>ROOT -&gt; id(m) -&gt; id(n)</code>.</p>
+<p>Example 2:</p>
+<p>توجه کنید این زنجیرها کاملاً توسط آخرین عنصرشان تعیین نمی‌شوند، به عبارت دیگر <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.ExpnId.html"><code>ExpnId</code></a> با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.SyntaxContext.html"><code>SyntaxContext</code></a> یکریخت (isomorphic) نیست.</p>
+<pre><code class="language-rust ignore">macro m($i: ident) { macro n() { ($i, bar) } }
+
+m!(foo);</code></pre>
+<p>پس از همهٔ گسترش‌ها، <code>foo</code> زمینهٔ <code>ROOT -&gt; id(n)</code> و <code>bar</code> زمینهٔ
+<code>ROOT -&gt; id(m) -&gt; id(n)</code> دارد.</p>
+<p>فعلاً این سلسله‌مراتب برای ردیابی تعاریف ماکرو در معرض به‌اصطلاح <a href="https://github.com/rust-lang/rust/pull/51762#issuecomment-401400732">«hack انتقال زمینه»</a> است. ماکروهای مدرن (یعنی آزمایشی)
+hygiene قوی‌تری نسبت به سامانهٔ قدیمی «Macros By Example» (MBE) دارند
+که می‌تواند به تعامل‌های عجیب بین این دو بینجامد.
+هدف hack این است که فعلاً همه‌چیز «فقط کار کند».</p>
+<h3 id="the-call-site-hierarchy"><a class="header" href="#the-call-site-hierarchy">سلسله‌مراتب محل فراخوانی (Call-site)</a></h3>
+<p>سلسله‌مراتب سوم و آخر مکان فراخوانی‌های ماکرو را ردیابی می‌کند.</p>
+<p>در این سلسله‌مراتب <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/struct.ExpnData.html#structfield.call_site"><code>ExpnData::call_site</code></a> پیوند <code>child -&gt; parent</code> است.</p>
+<p>در اینجا یک مثال:</p>
+<pre><code class="language-rust ignore">macro bar($i: ident) { $i }
+macro foo($i: ident) { $i }
+
+foo!(bar!(baz));</code></pre>
+<p>برای گرهٔ AST با نام <code>baz</code> در خروجی نهایی، سلسله‌مراتب ترتیب گسترش <code>ROOT -&gt; id(foo) -&gt; id(bar) -&gt; baz</code> است،
+در حالی که سلسله‌مراتب محل فراخوانی <code>ROOT -&gt; baz</code> است.</p>
+<h3 id="macro-backtraces"><a class="header" href="#macro-backtraces">Macro Backtraces</a></h3>
+<p>backtraceهای ماکرو در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/index.html"><code>rustc_span</code></a> با استفاده از ماشین‌آلات hygiene در
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/hygiene/index.html"><code>rustc_span::hygiene</code></a> پیاده‌سازی شده‌اند.</p>
+<h2 id="producing-macro-output"><a class="header" href="#producing-macro-output">Producing Macro Output</a></h2>
+<p>بالا دیدیم خروجی یک ماکرو چگونه در AST یک crate ادغام می‌شود،
+و همچنین دیدیم داده‌های hygiene یک crate چگونه تولید می‌شود.
+اما خروجی ماکرو را واقعاً چگونه تولید می‌کنیم؟
+به نوع ماکرو بستگی دارد.</p>
+<p>در Rust دو نوع ماکرو هست:</p>
+<ol>
+<li>ماکروهای <code>macro_rules!</code> (یا «Macros By Example» (MBE))، و</li>
+<li>ماکروهای رویه‌ای (procedural) (proc macro)؛ از جمله derive‌های سفارشی.</li>
+</ol>
+<p>در مرحلهٔ تجزیه، parser عادی Rust محتوای ماکروها و فراخوانی‌هایشان را کنار می‌گذارد.
+بعداً ماکروها با استفاده از این بخش‌های کد گسترش می‌یابند.</p>
+<p>چند ساختار داده/رابط مهم اینجا:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/base/struct.SyntaxExtension.html"><code>SyntaxExtension</code></a> - نمایش lower‌شدهٔ ماکرو، تابع expander آن را دارد،
+که <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/tokenstream/struct.TokenStream.html"><code>TokenStream</code></a> یا AST را به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/tokenstream/struct.TokenStream.html"><code>TokenStream</code></a> یا AST دیگر
++ برخی داده‌های اضافی مثل پایداری یا فهرست قابلیت‌های ناپایدار مجاز درون ماکرو تبدیل می‌کند.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/base/enum.SyntaxExtensionKind.html"><code>SyntaxExtensionKind</code></a> - توابع expander ممکن است امضاهای مختلفی داشته باشند (یک جریان توکن بگیرند، یا دو تا، یا یک تکه AST و غیره).
+این یک <code>enum</code> است که آن‌ها را فهرست می‌کند.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/base/trait.BangProcMacro.html"><code>BangProcMacro</code></a>/<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/base/trait.TTMacroExpander.html"><code>TTMacroExpander</code></a>/<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/base/trait.AttrProcMacro.html"><code>AttrProcMacro</code></a>/<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/base/trait.MultiItemModifier.html"><code>MultiItemModifier</code></a> -
+<code>trait</code>هایی که امضاهای تابع expander را نمایش می‌دهند.</li>
+</ul>
+<h2 id="macros-by-example"><a class="header" href="#macros-by-example">Macros By Example</a></h2>
+<p>MBEها parser خودشان را دارند که از parser Rust متمایز است.
+وقتی ماکروها گسترش می‌یابند، ممکن است parser مربوط به MBE را برای تجزیه و گسترش ماکرو فراخوانی کنیم.
+parser مربوط به MBE نیز ممکن است هنگام نیاز به bind‌کردن metavariable (مثلاً <code>$my_expr</code>) در تجزیهٔ محتوای فراخوانی ماکرو، parser Rust را فراخوانی کند.
+کد گسترش ماکرو در <a href="https://github.com/rust-lang/rust/tree/HEAD/compiler/rustc_expand/src/mbe"><code>compiler/rustc_expand/src/mbe/</code></a> است.</p>
+<h3 id="example"><a class="header" href="#example">Example</a></h3>
+<pre><code class="language-rust ignore">macro_rules! printer {
+    (print $mvar:ident) =&gt; {
+        println!("{}", $mvar);
+    };
+    (print twice $mvar:ident) =&gt; {
+        println!("{}", $mvar);
+        println!("{}", $mvar);
+    };
+}</code></pre>
+<p>اینجا <code>$mvar</code> یک <em>metavariable</em> نامیده می‌شود.
+برخلاف متغیرهای عادی، به‌جای اینکه <em>در زمان اجرا</em> به مقدار bind شود، یک metavariable <em>در زمان کامپایل</em> به درختی از <em>توکن‌ها</em> bind می‌شود.
+<em>توکن</em> یک «واحد» واحد از گرامر است، مثل
+شناسه (مثلاً <code>foo</code>) یا علامت نگارشی (مثلاً <code>=&gt;</code>). توکن‌های ویژهٔ دیگری هم هست، مثل <code>EOF</code> که خودش نشان می‌دهد توکن دیگری نیست.
+درخت‌های توکن هم از نویسه‌های جفت‌شدهٔ شبیه پرانتز پدید می‌آیند
+(<code>(</code>…<code>)</code>، <code>[</code>…<code>]</code> و <code>{</code>…<code>}</code>) – شامل باز و بسته و همهٔ توکن‌های بین آن‌هاست (Rust لازم می‌کند نویسه‌های شبیه پرانتز متوازن باشند).
+اینکه گسترش ماکرو روی جریان‌های توکن عمل می‌کند نه بایت‌های خام فایل منبع، پیچیدگی زیادی را انتزاعی می‌کند.
+گسترش‌دهندهٔ ماکرو (و بخش بزرگی از بقیهٔ کامپایلر) خط و ستون دقیق یک ساختار نحوی را در کد در نظر نمی‌گیرد؛ در نظر می‌گیرد
+کدام ساختارها در کد به‌کار رفته‌اند.
+استفاده از توکن‌ها اجازه می‌دهد به <em>چه چیزی</em> اهمیت دهیم بدون نگرانی از <em>کجا</em>.
+برای اطلاعات بیشتر دربارهٔ توکن‌ها، فصل <a href="./the-parser.html">Parsing</a> این کتاب را ببینید.</p>
+<pre><code class="language-rust ignore">printer!(print foo); // `foo` is a variable</code></pre>
+<p>فرایند گسترش فراخوانی ماکرو به درخت نحو <code>println!("{}", foo)</code> و سپس گسترش درخت نحو به فراخوانی <code>Display::fmt</code> یک نمونهٔ رایج <em>گسترش ماکرو</em> است.</p>
+<h3 id="the-mbe-parser"><a class="header" href="#the-mbe-parser">parser مربوط به MBE</a></h3>
+<p>گسترش MBE که توسط parser ماکرو انجام می‌شود دو بخش دارد:</p>
+<ol>
+<li>تجزیهٔ تعریف، و</li>
+<li>تجزیهٔ فراخوانی‌ها.</li>
+</ol>
+<p>parser مربوط به MBE را به‌عنوان parser regex مبتنی بر اتوماتای متناهی نامعین (NFA) در نظر می‌گیریم چون از الگوریتمی استفاده می‌کند که از نظر ایده شبیه <a href="https://en.wikipedia.org/wiki/Earley_parser">الگوریتم تجزیهٔ Earley</a> است.
+parser ماکرو در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/mbe/macro_parser"><code>compiler/rustc_expand/src/mbe/macro_parser.rs</code></a> تعریف شده است.</p>
+<p>رابط parser ماکرو به این شکل است (کمی ساده‌شده):</p>
+<pre><code class="language-rust ignore">fn parse_tt(
+    &amp;mut self,
+    parser: &amp;mut Cow&lt;'_, Parser&lt;'_&gt;&gt;,
+    matcher: &amp;[MatcherLoc]
+) -&gt; ParseResult</code></pre>
+<p>در parser ماکرو از این آیتم‌ها استفاده می‌کنیم:</p>
+<ul>
+<li>متغیر <code>parser</code> ارجاعی به حالت parser عادی Rust است، از جمله جریان توکن و جلسهٔ تجزیه.
+جریان توکن چیزی است که می‌خواهیم از parser مربوط به MBE بخواهیم تجزیه کند.
+جریان خام توکن‌ها را مصرف می‌کنیم و bindingی از metavariableها به درخت‌های توکن متناظر خروجی می‌دهیم.
+جلسهٔ تجزیه را می‌توان برای گزارش خطاهای parser به‌کار برد.</li>
+<li>متغیر <code>matcher</code> دنباله‌ای از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/mbe/macro_parser/enum.MatcherLoc.html"><code>MatcherLoc</code></a>هاست که می‌خواهیم جریان توکن را با آن‌ها تطبیق دهیم.
+آن‌ها پیش از تطبیق از درخت‌های توکن اصلی در تعریف ماکرو تبدیل می‌شوند.</li>
+</ul>
+<p>در قیاس با parser مربوط به regex، جریان توکن ورودی است و آن را با الگوی تعریف‌شده توسط matcher تطبیق می‌دهیم.
+با مثال‌هایمان، جریان توکن می‌تواند جریان توکن‌های درون فراخوانی نمونه <code>print foo</code> باشد، در حالی که matcher ممکن است دنبالهٔ توکن (درخت‌های) <code>print $mvar:ident</code> باشد.</p>
+<p>خروجی parser یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/mbe/macro_parser/enum.ParseResult.html"><code>ParseResult</code></a> است که نشان می‌دهد کدام یک از سه حالت رخ داده:</p>
+<ul>
+<li><strong>موفقیت</strong>: جریان توکن با matcher داده‌شده مطابقت دارد و bindingی از metavariableها به درخت‌های توکن متناظر تولید کرده‌ایم.</li>
+<li><strong>شکست</strong>: جریان توکن با matcher مطابقت ندارد و به پیام خطایی مثل «No rule expected token …» می‌انجامد.</li>
+<li><strong>خطا</strong>: خطای مرگباری <em>در parser</em> رخ داده.
+برای مثال، این وقتی رخ می‌دهد که بیش از یک الگو تطبیق یابد، چون نشان می‌دهد ماکرو مبهم است.</li>
+</ul>
+<p>رابط کامل <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/mbe/macro_parser/struct.TtParser.html#method.parse_tt">اینجا</a> تعریف شده است.</p>
+<p>parser ماکرو تقریباً دقیقاً همان کاری را می‌کند که parser معمولی regex می‌کند، با یک استثنا: برای تجزیهٔ انواع مختلف metavariable مثل
+<code>ident</code>، <code>block</code>، <code>expr</code> و غیره، parser ماکرو باید به parser معمولی Rust رجوع کند.</p>
+<p>کد تجزیهٔ تعاریف ماکرو در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/mbe/macro_rules"><code>compiler/rustc_expand/src/mbe/macro_rules.rs</code></a> است.
+برای اطلاعات بیشتر دربارهٔ پیاده‌سازی parser ماکرو، کامنت‌های
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/mbe/macro_parser"><code>compiler/rustc_expand/src/mbe/macro_parser.rs</code></a> را ببینید.</p>
+<p>با مثال خودمان، سعی می‌کنیم جریان توکن <code>print foo</code> را از فراخوانی با matcherهای <code>print $mvar:ident</code> و <code>print twice $mvar:ident</code> که پیش‌تر از قواعد در تعریف ماکرو استخراج کرده بودیم تطبیق دهیم.
+وقتی parser ماکرو به جایی در matcher فعلی می‌رسد که باید یک <em>non-terminal</em> (مثلاً <code>$mvar:ident</code>) را تطبیق دهد، برای گرفتن محتوای آن non-terminal به parser معمولی Rust رجوع می‌کند.
+در این مورد، parser مربوط به Rust دنبال توکن <code>ident</code> می‌گردد که آن را می‌یابد (<code>foo</code>) و به parser ماکرو برمی‌گرداند.
+سپس parser ماکرو به تجزیه ادامه می‌دهد.</p>
+<p>توجه کنید دقیقاً یکی از matcherها از قواعد مختلف باید با فراخوانی تطبیق یابد؛ اگر بیش از یک تطابق باشد، تجزیه مبهم است، و اگر هیچ تطابقی نباشد، خطای نحوی است.</p>
+<p>با فرض اینکه دقیقاً یک قاعده تطبیق یابد، گسترش ماکرو سپس سمت راست قاعده را <em>رونویسی (transcribe)</em> می‌کند و مقادیر هر تطابقی را که هنگام تطبیق با سمت چپ ضبط کرده جایگزین می‌کند.</p>
+<h2 id="procedural-macros"><a class="header" href="#procedural-macros">Procedural Macros</a></h2>
+<p>ماکروهای رویه‌ای هم هنگام تجزیه گسترش می‌یابند.
+اما به‌جای داشتن parser در کامپایلر، proc macroها به‌صورت crateهای سفارشی شخص ثالث پیاده‌سازی می‌شوند.
+کامپایلر crate مربوط به proc macro و توابع ویژه annotate‌شده در آن (یعنی خود proc macro) را کامپایل می‌کند و جریانی از توکن‌ها به آن‌ها می‌دهد.
+یک proc macro می‌تواند جریان توکن را تبدیل کند و جریان توکن جدیدی خروجی دهد که در AST سنتز می‌شود.</p>
+<p>نوع جریان توکن مورد استفادهٔ proc macroها <em>پایدار</em> است، پس <code>rustc</code> آن را در داخل به‌کار نمی‌برد.
+جریان توکن (ناپایدار) کامپایلر در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/tokenstream/struct.TokenStream.html"><code>rustc_ast::tokenstream::TokenStream</code></a> تعریف شده است.
+این به <a href="https://doc.rust-lang.org/proc_macro/struct.TokenStream.html"><code>proc_macro::TokenStream</code></a> پایدار و برعکس در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/proc_macro/index.html"><code>rustc_expand::proc_macro</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/proc_macro_server/index.html"><code>rustc_expand::proc_macro_server</code></a> تبدیل می‌شود.
+چون ABI در Rust فعلاً ناپایدار است، برای این تبدیل از ABI در C استفاده می‌کنیم.</p>
+<!-- TODO(rylev): more here. [#1160](https://github.com/rust-lang/rustc-dev-guide/issues/1160) -->
+<h3 id="custom-derive"><a class="header" href="#custom-derive">Custom Derive</a></h3>
+<p>derive‌های سفارشی نوع ویژه‌ای از proc macro هستند.</p>
+<h3 id="macros-by-example-and-macros-20"><a class="header" href="#macros-by-example-and-macros-20">Macros By Example و Macros 2.0</a></h3>
+<p>تلاشی قدیمی و عمدتاً مستندنشده برای بهبود سامانهٔ MBE هست که ویژگی‌های بیشتر مرتبط با hygiene، قواعد بهتر scope و visibility و غیره به آن می‌دهد. در داخل از همان ماشین‌آلات MBEهای امروزی با چند شیرینی نحوی اضافه استفاده می‌کند و اجازه دارند در فضای نام باشند.</p>
+<!-- TODO(rylev): more? [#1160](https://github.com/rust-lang/rustc-dev-guide/issues/1160) --><nav class="page-nav"><a href="the-parser.html">→ تحلیل واژگانی و تجزیه</a><a href="name-resolution.html">تفکیک نام ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

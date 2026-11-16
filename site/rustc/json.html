@@ -1,0 +1,257 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>خروجی JSON — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="json"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="json-output"><a class="header" href="#json-output">خروجی JSON</a></h1>
+<p>این فصل ساختارهای JSON را که <code>rustc</code> تولید می‌کند مستند می‌کند. خروجی JSON را می‌توان با <a href="command-line-arguments.html#option-error-format">پرچم <code>--error-format=json</code></a> فعال کرد. گزینه‌های بیشتری را می‌توان با <a href="command-line-arguments.html#option-json">پرچم <code>--json</code></a> مشخص کرد؛ این گزینه‌ها می‌توانند تعیین کنند که چه پیام‌هایی تولید شوند و قالب پیام‌ها چگونه باشد.</p>
+<p>پیام‌های JSON به‌صورت یکی در هر خط در stderr نوشته می‌شوند.</p>
+<p>اگر خروجی را با Rust تجزیه می‌کنید، crate با نام <a href="https://crates.io/crates/cargo_metadata"><code>cargo_metadata</code></a> پشتیبانی‌هایی برای تجزیهٔ این پیام‌ها فراهم می‌کند.</p>
+<p>هر نوع پیام یک فیلد <code>$message_type</code> دارد که می‌توان از آن برای تشخیص قالب‌های مختلف استفاده کرد. هنگام تجزیه باید دقت کرد که کد شما با تغییرات آیندهٔ قالب سازگار بماند (forwards-compatible). مقادیر اختیاری ممکن است <code>null</code> باشند. ممکن است فیلدهای جدیدی اضافه شوند. فیلدهای شمارشی مانند “level” یا “suggestion_applicability” ممکن است مقادیر جدیدی اضافه کنند.</p>
+<h2 id="diagnostics"><a class="header" href="#diagnostics">پیام‌های تشخیصی (Diagnostics)</a></h2>
+<p>پیام‌های تشخیصی (diagnostic) خطاها یا نگرانی‌های احتمالی را که هنگام کامپایل تولید شده‌اند گزارش می‌کنند. <code>rustc</code> اطلاعات دقیقی دربارهٔ اینکه پیام تشخیصی از کجا سرچشمه می‌گیرد، همراه با راهنمایی‌ها و پیشنهادها ارائه می‌دهد.</p>
+<p>پیام‌های تشخیصی در یک رابطهٔ والد/فرزند سازمان‌دهی می‌شوند: مقدار diagnostic والد هستهٔ پیام تشخیصی است و فرزندهای پیوست‌شده به آن زمینه، راهنمایی و اطلاعات بیشتری فراهم می‌کنند.</p>
+<p>پیام‌های تشخیصی قالب زیر را دارند:</p>
+<pre><code class="language-javascript">{
+    /* Type of this message */
+    "$message_type": "diagnostic",
+    /* The primary message. */
+    "message": "unused variable: `x`",
+    /* The diagnostic code.
+       Some messages may set this value to null.
+    */
+    "code": {
+        /* A unique string identifying which diagnostic triggered. */
+        "code": "unused_variables",
+        /* An optional string explaining more detail about the diagnostic code. */
+        "explanation": null
+    },
+    /* The severity of the diagnostic.
+       Values may be:
+       - "error": A fatal error that prevents compilation.
+       - "warning": A possible error or concern.
+       - "note": Additional information or context about the diagnostic.
+       - "help": A suggestion on how to resolve the diagnostic.
+       - "failure-note": A note attached to the message for further information.
+       - "error: internal compiler error": Indicates a bug within the compiler.
+    */
+    "level": "warning",
+    /* An array of source code locations to point out specific details about
+       where the diagnostic originates from. This may be empty, for example
+       for some global messages, or child messages attached to a parent.
+
+       Character offsets are offsets of Unicode Scalar Values.
+    */
+    "spans": [
+        {
+            /* The file where the span is located.
+               Note that this path may not exist. For example, if the path
+               points to the standard library, and the rust src is not
+               available in the sysroot, then it may point to a nonexistent
+               file. Beware that this may also point to the source of an
+               external crate.
+            */
+            "file_name": "lib.rs",
+            /* The byte offset where the span starts (0-based, inclusive). */
+            "byte_start": 21,
+            /* The byte offset where the span ends (0-based, exclusive). */
+            "byte_end": 22,
+            /* The first line number of the span (1-based, inclusive). */
+            "line_start": 2,
+            /* The last line number of the span (1-based, inclusive). */
+            "line_end": 2,
+            /* The first character offset of the line_start (1-based, inclusive). */
+            "column_start": 9,
+            /* The last character offset of the line_end (1-based, exclusive). */
+            "column_end": 10,
+            /* Whether or not this is the "primary" span.
+
+               This indicates that this span is the focal point of the
+               diagnostic.
+
+               There are rare cases where multiple spans may be marked as
+               primary. For example, "immutable borrow occurs here" and
+               "mutable borrow ends here" can be two separate primary spans.
+
+               The top (parent) message should always have at least one
+               primary span, unless it has zero spans. Child messages may have
+               zero or more primary spans.
+            */
+            "is_primary": true,
+            /* An array of objects showing the original source code for this
+               span. This shows the entire lines of text where the span is
+               located. A span across multiple lines will have a separate
+               value for each line.
+            */
+            "text": [
+                {
+                    /* The entire line of the original source code. */
+                    "text": "    let x = 123;",
+                    /* The first character offset of the line of
+                       where the span covers this line (1-based, inclusive). */
+                    "highlight_start": 9,
+                    /* The last character offset of the line of
+                       where the span covers this line (1-based, exclusive). */
+                    "highlight_end": 10
+                }
+            ],
+            /* An optional message to display at this span location.
+               This is typically null for primary spans.
+            */
+            "label": null,
+            /* An optional string of a suggested replacement for this span to
+               solve the issue. Tools may try to replace the contents of the
+               span with this text.
+            */
+            "suggested_replacement": null,
+            /* An optional string that indicates the confidence of the
+               "suggested_replacement". Tools may use this value to determine
+               whether or not suggestions should be automatically applied.
+
+               Possible values may be:
+               - "MachineApplicable": The suggestion is definitely what the
+                 user intended. This suggestion should be automatically
+                 applied.
+               - "MaybeIncorrect": The suggestion may be what the user
+                 intended, but it is uncertain. The suggestion should result
+                 in valid Rust code if it is applied.
+               - "HasPlaceholders": The suggestion contains placeholders like
+                 `(...)`. The suggestion cannot be applied automatically
+                 because it will not result in valid Rust code. The user will
+                 need to fill in the placeholders.
+               - "Unspecified": The applicability of the suggestion is unknown.
+            */
+            "suggestion_applicability": null,
+            /* An optional object indicating the expansion of a macro within
+               this span.
+
+               If a message occurs within a macro invocation, this object will
+               provide details of where within the macro expansion the message
+               is located.
+            */
+            "expansion": {
+                /* The span of the macro invocation.
+                   Uses the same span definition as the "spans" array.
+                */
+                "span": {/*...*/}
+                /* Name of the macro, such as "foo!" or "#[derive(Eq)]". */
+                "macro_decl_name": "some_macro!",
+                /* Optional span where the relevant part of the macro is
+                  defined. */
+                "def_site_span": {/*...*/},
+            }
+        }
+    ],
+    /* Array of attached diagnostic messages.
+       This is an array of objects using the same format as the parent
+       message. Children are not nested (children do not themselves
+       contain "children" definitions).
+    */
+    "children": [
+        {
+            "message": "`#[warn(unused_variables)]` on by default",
+            "code": null,
+            "level": "note",
+            "spans": [],
+            "children": [],
+            "rendered": null
+        },
+        {
+            "message": "if this is intentional, prefix it with an underscore",
+            "code": null,
+            "level": "help",
+            "spans": [
+                {
+                    "file_name": "lib.rs",
+                    "byte_start": 21,
+                    "byte_end": 22,
+                    "line_start": 2,
+                    "line_end": 2,
+                    "column_start": 9,
+                    "column_end": 10,
+                    "is_primary": true,
+                    "text": [
+                        {
+                            "text": "    let x = 123;",
+                            "highlight_start": 9,
+                            "highlight_end": 10
+                        }
+                    ],
+                    "label": null,
+                    "suggested_replacement": "_x",
+                    "suggestion_applicability": "MachineApplicable",
+                    "expansion": null
+                }
+            ],
+            "children": [],
+            "rendered": null
+        }
+    ],
+    /* Optional string of the rendered version of the diagnostic as displayed
+       by rustc. Note that this may be influenced by the `--json` flag.
+    */
+    "rendered": "warning: unused variable: `x`\n --&gt; lib.rs:2:9\n  |\n2 |     let x = 123;\n  |         ^ help: if this is intentional, prefix it with an underscore: `_x`\n  |\n  = note: `#[warn(unused_variables)]` on by default\n\n"
+}
+</code></pre>
+<h2 id="artifact-notifications"><a class="header" href="#artifact-notifications">اعلان‌های artifact</a></h2>
+<p>اعلان‌های artifact هنگامی صادر می‌شوند که <a href="command-line-arguments.html#option-json">پرچم <code>--json=artifacts</code></a> استفاده شود. این اعلان‌ها نشان می‌دهند که یک فایل artifact روی دیسک ذخیره شده است. اطلاعات بیشتر دربارهٔ انواع خروجی (emit) را می‌توان در مستندات <a href="command-line-arguments.html#option-emit">پرچم <code>--emit</code></a> یافت. اعلان‌ها می‌توانند برای هر نوع بیش از یک فایل داشته باشند، برای مثال هنگام استفاده از چند واحد تولید کد (codegen unit).</p>
+<pre><code class="language-javascript">{
+    /* Type of this message */
+    "$message_type": "artifact",
+    /* The filename that was generated. */
+    "artifact": "libfoo.rlib",
+    /* The kind of artifact that was generated. Possible values:
+       - "link": The generated crate as specified by the crate-type.
+       - "dep-info": The `.d` file with dependency information in a Makefile-like syntax.
+       - "metadata": The Rust `.rmeta` file containing metadata about the crate.
+       - "asm": The `.s` file with generated assembly
+       - "llvm-ir": The `.ll` file with generated textual LLVM IR
+       - "llvm-bc": The `.bc` file with generated LLVM bitcode
+       - "mir": The `.mir` file with rustc's mid-level intermediate representation.
+       - "obj": The `.o` file with generated native object code
+    */
+    "emit": "link"
+}
+</code></pre>
+<h2 id="future-incompatible-reports"><a class="header" href="#future-incompatible-reports">گزارش‌های ناسازگاری با آینده</a></h2>
+<p>اگر پرچم <a href="command-line-arguments.html#option-json"><code>--json=future-incompat</code></a> استفاده شود، در صورتی که ممکن باشد crate در آینده دیگر کامپایل نشود، یک ساختار JSON جداگانه صادر می‌شود. این ساختار شامل اطلاعات تشخیصی دربارهٔ هشدارهای خاصی است که ممکن است در آینده به یک خطای سخت تبدیل شوند. این گزارش اطلاعات تشخیصی را حتی در صورتی که پیام‌های تشخیصی سرکوب شده باشند (مثلاً با attribute با نام <code>#[allow]</code> یا گزینهٔ <code>--cap-lints</code>) نیز در بر می‌گیرد.</p>
+<pre><code class="language-javascript">{
+    /* Type of this message */
+    "$message_type": "future_incompat",
+    /* An array of objects describing a warning that will become a hard error
+       in the future.
+    */
+    "future_incompat_report":
+    [
+        {
+            /* A diagnostic structure as defined in
+               https://doc.rust-lang.org/rustc/json.html#diagnostics
+            */
+            "diagnostic": {...},
+        }
+    ]
+}
+</code></pre>
+<h2 id="unused-dependency-notifications"><a class="header" href="#unused-dependency-notifications">اعلان‌های وابستگی استفاده‌نشده</a></h2>
+<p>گزینه‌های <code>--json=unused-externs</code> و <code>--json=unused-externs-silent</code> همراه با lint با نام <code>unused-crate-dependencies</code> ساختارهای JSON‌ای صادر می‌کنند که وابستگی‌های crate (مشخص‌شده با <code>--extern</code>) را که هیچ نمادی از آن‌ها ارجاع داده نشده است گزارش می‌دهند. این ساختارها برای مصرف توسط سیستم ساخت در نظر گرفته شده‌اند؛ سیستم ساخت می‌تواند سپس پیام‌های تشخیصی صادر کند که به کاربر می‌گویند وابستگی‌های استفاده‌نشده را از <code>Cargo.toml</code> (یا هر فایل دیگری از سیستم ساخت که وابستگی‌ها را تعریف می‌کند) حذف کند.</p>
+<p>ساختار JSON به این صورت است:</p>
+<pre><code class="language-json">{
+    "lint_level": "deny", /* Level of the warning */
+    "unused_names": [
+        "foo"  /* Names of unused crates, as specified with --extern foo=libfoo.rlib */
+    ],
+}
+</code></pre>
+<p>سطح lint از نوع warn/deny/forbid (که یا در خط فرمان یا در کد منبع تعریف شده است) مقدار <code>lint_level</code> را در JSON تعیین می‌کند. با <code>unused-externs</code>، یک پیام تشخیصی با سطح <code>deny</code> یا <code>forbid</code> باعث می‌شود <code>rustc</code> نیز با کد خروج ناموفق پایان یابد.</p>
+<p><code>unused-externs-silent</code> پیام تشخیصی را به همان شیوه گزارش می‌کند، اما باعث نمی‌شود <code>rustc</code> با شکست خارج شود؛ اعلام شکست به‌طور مناسب بر عهدهٔ مصرف‌کننده است. (Cargo به این رفتار نیاز دارد، زیرا وابستگی‌های یکسانی را میان چندین هدف ساخت به اشتراک می‌گذارد، بنابراین باید فقط در صورتی یک وابستگی استفاده‌نشده را گزارش کند که هیچ‌یک از هدف‌ها از آن استفاده نکنند.)</p>
+<h2 id="timings"><a class="header" href="#timings">زمان‌بندی‌ها</a></h2>
+<p><strong>این تنظیم در حال حاضر ناپایدار است و استفاده از <code>-Zunstable-options</code> را لازم دارد.</strong></p>
+<p>گزینهٔ <code>--timings</code> به <code>rustc</code> می‌گوید هنگامی که یک بخش مشخص از کامپایل (مانند تولید کد یا لینک‌کردن) آغاز یا پایان می‌یابد، پیام‌هایی صادر کند. این پیام‌ها در حال حاضر قالب زیر را دارند:</p>
+<pre><code class="language-json">{
+    "$message_type": "section_timing", /* Type of this message */
+    "event": "start", /* Marks the "start" or "end" of the compilation section */
+    "name": "link",  /* The name of the compilation section */
+    // Opaque timestamp when the message was emitted, in microseconds
+    // The timestamp is currently relative to the beginning of the compilation session
+    "time": 12345
+}
+</code></pre>
+<p>توجه کنید که قالب JSON پیام‌های <code>timings</code> ناپایدار است و ممکن است تغییر کند.</p>
+<p>بخش‌های کامپایل می‌توانند تودرتو باشند؛ برای مثال، اگر آغاز “foo”، سپس آغاز “bar”، سپس پایان “bar” و بعد پایان “foo” را مشاهده کنید، به این معناست که بخش “bar” به‌عنوان بخشی از بخش “foo” رخ داده است.</p>
+<p>مهر زمانی (timestamp) فقط باید برای محاسبهٔ مدت‌زمان هر بخش استفاده شود.</p>
+<p>در حال حاضر هیچ تضمینی نمی‌دهیم که نام‌های بخش مشخصی صادر شوند.</p><nav class="page-nav"><a href="lints/listing/deny-by-default.html">→ lintهای ممنوع به‌صورت پیش‌فرض</a><a href="tests/index.html">آزمون‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

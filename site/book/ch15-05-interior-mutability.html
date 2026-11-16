@@ -1,0 +1,443 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>RefCell&lt;T&gt; و الگوی تغییرپذیری درونی — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch15-05-interior-mutability"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="refcellt-and-the-interior-mutability-pattern"><a class="header" href="#refcellt-and-the-interior-mutability-pattern"><code>RefCell&lt;T&gt;</code> و الگوی تغییرپذیری داخلی</a></h2>
+<p><em>تغییرپذیری داخلی</em> یک الگوی طراحی در راست است که به شما اجازه می‌دهد داده‌ها را حتی زمانی که ارجاع‌های غیرقابل‌تغییر به آن داده‌ها وجود دارد، تغییر دهید؛ معمولاً این عمل توسط قوانین وام‌دهی (‌borrowing rules) ممنوع است. برای تغییر داده‌ها، این الگو از کد <code>unsafe</code> درون یک ساختار داده برای تغییر قوانین معمول راست که کنترل تغییرپذیری و وام‌دهی را بر عهده دارند، استفاده می‌کند. کد <code>unsafe</code> به کامپایلر نشان می‌دهد که ما قوانین را به صورت دستی بررسی می‌کنیم و دیگر به کامپایلر اعتماد نداریم که این کار را برای ما انجام دهد؛ ما در فصل 20 بیشتر درباره کد <code>unsafe</code> صحبت خواهیم کرد.</p>
+<p>ما می‌توانیم از انواعی که از الگوی تغییرپذیری داخلی استفاده می‌کنند تنها در صورتی استفاده کنیم که بتوانیم اطمینان حاصل کنیم که قوانین وام‌دهی در زمان اجرا رعایت خواهند شد، حتی اگر کامپایلر نتواند این را تضمین کند. کد <code>unsafe</code> مرتبط سپس در یک API ایمن پیچیده شده و نوع بیرونی همچنان غیرقابل‌تغییر باقی می‌ماند.</p>
+<p>بیایید این مفهوم را با بررسی نوع <code>RefCell&lt;T&gt;</code> که از الگوی تغییرپذیری داخلی پیروی می‌کند، بیشتر بررسی کنیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="enforcing-borrowing-rules-at-runtime-with-refcellt"></a></p>
+<h3 id="enforcing-borrowing-rules-at-runtime"><a class="header" href="#enforcing-borrowing-rules-at-runtime">اعمال قوانین قرض‌گیری در زمان اجرا</a></h3>
+<p>بر خلاف <code>Rc&lt;T&gt;</code>، نوع <code>RefCell&lt;T&gt;</code> نشان‌دهنده‌ی مالکیت یکتا (single ownership) بر داده‌ای است که در خود نگه می‌دارد. پس چه چیزی <code>RefCell&lt;T&gt;</code> را از نوعی مانند <code>Box&lt;T&gt;</code> متمایز می‌کند؟ قوانین قرض‌گیری (borrowing) را که در فصل ۴ یاد گرفتید به‌خاطر بیاورید:</p>
+<ul>
+<li>در هر لحظه فقط می‌توانید <em>یا</em> یک رفرنس قابل‌تغییر داشته باشید <em>یا</em> هر تعداد رفرنس تغییرناپذیر (اما نه هر دو همزمان).</li>
+<li>رفرنس‌ها باید همواره معتبر باشند.</li>
+</ul>
+<p>با استفاده از ارجاع‌ها و <code>Box&lt;T&gt;</code>، ثابت‌های قوانین وام‌دهی در زمان کامپایل اعمال می‌شوند. اما با <code>RefCell&lt;T&gt;</code>، این ثابت‌ها در <em>زمان اجرا</em> اعمال می‌شوند. با ارجاع‌ها، اگر این قوانین را بشکنید، یک خطای کامپایل دریافت خواهید کرد. اما با <code>RefCell&lt;T&gt;</code>، اگر این قوانین را بشکنید، برنامه شما دچار وحشت (panic) می‌شود و متوقف می‌شود.</p>
+<p>مزیت بررسی قوانین وام‌دهی در زمان کامپایل این است که خطاها زودتر در فرایند توسعه شناسایی می‌شوند، و هیچ تأثیری بر عملکرد زمان اجرا وجود ندارد زیرا تمام تحلیل‌ها پیشاپیش انجام شده‌اند. به همین دلایل، بررسی قوانین وام‌دهی در زمان کامپایل بهترین انتخاب در اکثر موارد است، که به همین دلیل این روش پیش‌فرض راست است.</p>
+<p>مزیت بررسی قوانین وام‌دهی در زمان اجرا این است که سناریوهایی که ایمن از نظر حافظه هستند اجازه می‌یابند، در حالی که ممکن است توسط بررسی‌های زمان کامپایل مجاز نباشند. تحلیل ایستا (static analysis)، مانند کامپایلر راست، به‌طور ذاتی محافظه‌کارانه است. برخی خصوصیات کد غیرممکن است که با تحلیل کد شناسایی شوند: معروف‌ترین مثال، مشکل توقف (Halting Problem) است که فراتر از محدوده این کتاب است اما موضوع جالبی برای تحقیق می‌باشد.</p>
+<p>از آن‌جا که برخی تحلیل‌ها غیرممکن هستند، اگر کامپایلر Rust نتواند مطمئن شود که کد با قوانین مالکیت سازگار است، ممکن است یک برنامه‌ی درست را رد کند؛ به این ترتیب، کامپایلر محافظه‌کارانه عمل می‌کند. اگر Rust یک برنامه‌ی نادرست را بپذیرد، کاربران دیگر نمی‌توانند به تضمین‌هایی که Rust ارائه می‌دهد اعتماد کنند. اما اگر Rust یک برنامه‌ی درست را رد کند، نهایتاً برنامه‌نویس دچار زحمت می‌شود، اما اتفاق فاجعه‌باری رخ نخواهد داد. نوع <code>RefCell&lt;T&gt;</code> زمانی مفید است که شما اطمینان دارید کدتان از قوانین قرض‌گیری پیروی می‌کند، اما کامپایلر قادر به درک و تضمین این موضوع نیست.</p>
+<p>مشابه <code>Rc&lt;T&gt;</code>، <code>RefCell&lt;T&gt;</code> تنها برای استفاده در سناریوهای تک‌ریسمانی (single-threaded) است و اگر بخواهید آن را در یک بافت چندریسمانی (multithreaded) استفاده کنید، یک خطای زمان کامپایل به شما خواهد داد. ما در فصل 16 درباره نحوه دریافت عملکرد <code>RefCell&lt;T&gt;</code> در یک برنامه چندریسمانی صحبت خواهیم کرد.</p>
+<p>در اینجا مروری بر دلایلی برای انتخاب <code>Box&lt;T&gt;</code>، <code>Rc&lt;T&gt;</code> یا <code>RefCell&lt;T&gt;</code> آمده است:</p>
+<ul>
+<li><code>Rc&lt;T&gt;</code> امکان چندین مالک برای یک داده را فراهم می‌کند؛ در حالی که <code>Box&lt;T&gt;</code> و <code>RefCell&lt;T&gt;</code> تنها یک مالک دارند.</li>
+<li><code>Box&lt;T&gt;</code> اجازه می‌دهد که وام‌دهی‌های غیرقابل‌تغییر یا قابل‌تغییر در زمان کامپایل بررسی شوند؛ <code>Rc&lt;T&gt;</code> تنها وام‌دهی‌های غیرقابل‌تغییر را در زمان کامپایل بررسی می‌کند؛ <code>RefCell&lt;T&gt;</code> اجازه می‌دهد که وام‌دهی‌های غیرقابل‌تغییر یا قابل‌تغییر در زمان اجرا بررسی شوند.</li>
+<li>از آنجا که <code>RefCell&lt;T&gt;</code> اجازه می‌دهد وام‌دهی‌های قابل‌تغییر در زمان اجرا بررسی شوند، شما می‌توانید مقدار درون <code>RefCell&lt;T&gt;</code> را حتی زمانی که خود <code>RefCell&lt;T&gt;</code> غیرقابل‌تغییر است، تغییر دهید.</li>
+</ul>
+<p>تغییر مقدار درون یک مقدار غیرقابل‌تغییر همان الگوی <em>تغییرپذیری داخلی</em> است. بیایید به یک موقعیت که در آن تغییرپذیری داخلی مفید است نگاهی بیندازیم و بررسی کنیم چگونه این امر ممکن است.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="interior-mutability-a-mutable-borrow-to-an-immutable-value"></a></p>
+<h3 id="using-interior-mutability"><a class="header" href="#using-interior-mutability">استفاده از تغییرپذیری داخلی</a></h3>
+<p>یکی از پیامدهای قوانین وام‌دهی این است که وقتی شما یک مقدار غیرقابل‌تغییر دارید، نمی‌توانید آن را به صورت قابل‌تغییر وام دهید. برای مثال، این کد کامپایل نخواهد شد:</p>
+<pre><code class="language-rust ignore does_not_compile">fn main() {
+    let x = 5;
+    let y = &amp;mut x;
+}</code></pre>
+<p>اگر سعی کنید این کد را کامپایل کنید، خطای زیر را دریافت خواهید کرد:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling borrowing v0.1.0 (file:///projects/borrowing)
+error[E0596]: cannot borrow `x` as mutable, as it is not declared as mutable
+ --&gt; src/main.rs:3:13
+  |
+3 |     let y = &amp;mut x;
+  |             ^^^^^^ cannot borrow as mutable
+  |
+help: consider changing this to be mutable
+  |
+2 |     let mut x = 5;
+  |         +++
+
+For more information about this error, try `rustc --explain E0596`.
+error: could not compile `borrowing` (bin "borrowing") due to 1 previous error
+</code></pre>
+<p>با این حال، موقعیت‌هایی وجود دارند که در آن‌ها مفید است یک مقدار بتواند خود را در متدهایش تغییر دهد اما برای کد دیگر غیرقابل‌تغییر به نظر برسد. کدی که خارج از متدهای مقدار قرار دارد نمی‌تواند مقدار را تغییر دهد. استفاده از <code>RefCell&lt;T&gt;</code> یکی از راه‌هایی است که می‌توانید قابلیت تغییرپذیری داخلی را به دست آورید، اما <code>RefCell&lt;T&gt;</code> به طور کامل قوانین وام‌دهی را دور نمی‌زند: کنترل‌کننده وام‌دهی در کامپایلر این تغییرپذیری داخلی را مجاز می‌کند و قوانین وام‌دهی در عوض در زمان اجرا بررسی می‌شوند. اگر این قوانین را نقض کنید، به جای خطای کامپایل، یک <code>panic!</code> دریافت خواهید کرد.</p>
+<p>بیایید با یک مثال عملی کار کنیم که در آن از <code>RefCell&lt;T&gt;</code> برای تغییر مقدار غیرقابل‌تغییر استفاده کنیم و ببینیم چرا این کار مفید است.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="a-use-case-for-interior-mutability-mock-objects"></a></p>
+<h4 id="testing-with-mock-objects"><a class="header" href="#testing-with-mock-objects">یک کاربرد برای تغییرپذیری داخلی: Mock Objects</a></h4>
+<p>گاهی اوقات در زمان تست، یک برنامه‌نویس نوعی را به‌جای نوعی دیگر استفاده می‌کند تا بتواند رفتار خاصی را مشاهده کرده و بررسی کند که آن رفتار به‌درستی پیاده‌سازی شده است. این نوع جایگزین را <em>test double</em> می‌نامند. می‌توانید آن را مشابه <em>بدل‌کار</em> در صنعت فیلم‌سازی در نظر بگیرید، جایی که فردی به‌جای بازیگر اصلی برای اجرای یک صحنه‌ی دشوار وارد عمل می‌شود. Test doubleها به‌عنوان جایگزین نوع‌های دیگر هنگام اجرای تست‌ها عمل می‌کنند. _Mock object_ها نوع خاصی از test doubleها هستند که اتفاقات رخ‌داده در طول تست را ثبت می‌کنند تا بتوانید بررسی کنید که اقدامات موردنظر به‌درستی انجام شده‌اند.</p>
+<p>راست اشیاء را به همان شکلی که زبان‌های دیگر دارند، ندارد و قابلیت‌های اشیاء Mock را نیز در کتابخانه استاندارد، مانند برخی زبان‌های دیگر، ارائه نمی‌دهد. با این حال، شما می‌توانید یک ساختار (struct) ایجاد کنید که همان مقاصد اشیاء Mock را فراهم کند.</p>
+<p>در اینجا سناریویی که قصد تست آن را داریم آورده شده است: ما یک کتابخانه ایجاد خواهیم کرد که یک مقدار را نسبت به یک مقدار حداکثری ردیابی می‌کند و بر اساس نزدیکی مقدار فعلی به مقدار حداکثری پیام‌هایی ارسال می‌کند. به عنوان مثال، این کتابخانه می‌تواند برای پیگیری سهمیه تعداد درخواست‌های API که یک کاربر مجاز است انجام دهد، استفاده شود.</p>
+<p>کتابخانه‌ی ما تنها وظیفه‌ی پیگیری میزان نزدیکی یک مقدار به مقدار حداکثری و تعیین این‌که در چه زمان‌هایی چه پیام‌هایی باید نمایش داده شوند را بر عهده دارد. برنامه‌هایی که از کتابخانه‌ی ما استفاده می‌کنند، باید مکانیزم ارسال پیام را فراهم کنند: این برنامه می‌تواند پیام را درون رابط کاربری نمایش دهد، یک ایمیل ارسال کند، پیامک بفرستد، یا کار دیگری انجام دهد. کتابخانه نیازی به دانستن جزئیات این فرآیند ندارد. تنها چیزی که نیاز دارد، یک چیزی است که <code>trait</code>ای که ما تعریف خواهیم کرد به‌نام <code>Messenger</code> را پیاده‌سازی کند. لیستینگ 15-20 کد کتابخانه را نشان می‌دهد.</p>
+<figure class="listing" id="listing-15-20">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">pub trait Messenger {
+    fn send(&amp;self, msg: &amp;str);
+}
+
+pub struct LimitTracker&lt;'a, T: Messenger&gt; {
+    messenger: &amp;'a T,
+    value: usize,
+    max: usize,
+}
+
+impl&lt;'a, T&gt; LimitTracker&lt;'a, T&gt;
+where
+    T: Messenger,
+{
+    pub fn new(messenger: &amp;'a T, max: usize) -&gt; LimitTracker&lt;'a, T&gt; {
+        LimitTracker {
+            messenger,
+            value: 0,
+            max,
+        }
+    }
+
+    pub fn set_value(&amp;mut self, value: usize) {
+        self.value = value;
+
+        let percentage_of_max = self.value as f64 / self.max as f64;
+
+        if percentage_of_max &gt;= 1.0 {
+            self.messenger.send("Error: You are over your quota!");
+        } else if percentage_of_max &gt;= 0.9 {
+            self.messenger
+                .send("Urgent warning: You've used up over 90% of your quota!");
+        } else if percentage_of_max &gt;= 0.75 {
+            self.messenger
+                .send("Warning: You've used up over 75% of your quota!");
+        }
+    }
+}</code></pre>
+<figcaption><a href="#listing-15-20">لیست ۱۵-۲۰</a>: یک کتابخانه برای پیگیری نزدیکی یک مقدار به یک مقدار حداکثری و هشدار در زمانی که مقدار در سطوح خاصی است</figcaption>
+</figure>
+<p>یکی از بخش‌های مهم این کد آن است که <code>trait</code> به‌نام <code>Messenger</code> یک متد به‌نام <code>send</code> دارد که یک رفرنس تغییرناپذیر به <code>self</code> و متن پیام را می‌گیرد. این <code>trait</code> رابطی است که شیء mock ما باید آن را پیاده‌سازی کند تا بتواند درست مانند یک شیء واقعی مورد استفاده قرار گیرد. بخش مهم دیگر این است که ما می‌خواهیم رفتار متد <code>set_value</code> روی <code>LimitTracker</code> را تست کنیم. ما می‌توانیم مقادیری که به پارامتر <code>value</code> می‌دهیم را تغییر دهیم، اما <code>set_value</code> چیزی را باز نمی‌گرداند که بتوانیم روی آن assertion انجام دهیم. ما می‌خواهیم بتوانیم بگوییم که اگر یک <code>LimitTracker</code> با چیزی که <code>trait</code> <code>Messenger</code> را پیاده‌سازی می‌کند و یک مقدار مشخص برای <code>max</code> ایجاد کنیم، آنگاه با ارسال اعداد مختلف به‌عنوان <code>value</code>، پیام‌های مناسب از طریق <code>messenger</code> ارسال شوند.</p>
+<p>ما به یک شیء mock نیاز داریم که به‌جای ارسال ایمیل یا پیامک هنگام فراخوانی <code>send</code>، فقط پیام‌هایی را که قرار است ارسال شوند ذخیره کند. می‌توانیم یک نمونه‌ی جدید از شیء mock ایجاد کنیم، یک <code>LimitTracker</code> بسازیم که از این mock استفاده می‌کند، متد <code>set_value</code> را روی <code>LimitTracker</code> فراخوانی کنیم، و سپس بررسی کنیم که شیء mock پیام‌هایی را که انتظار داشتیم در خود ذخیره کرده است. لیستینگ 15-21 تلاشی برای پیاده‌سازی چنین شیء mockی را نشان می‌دهد، اما <em>borrow checker</em> اجازه‌ی انجام آن را نمی‌دهد.</p>
+<figure class="listing" id="listing-15-21">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">pub trait Messenger {
+</span><span class="boring">    fn send(&amp;self, msg: &amp;str);
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct LimitTracker&lt;'a, T: Messenger&gt; {
+</span><span class="boring">    messenger: &amp;'a T,
+</span><span class="boring">    value: usize,
+</span><span class="boring">    max: usize,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl&lt;'a, T&gt; LimitTracker&lt;'a, T&gt;
+</span><span class="boring">where
+</span><span class="boring">    T: Messenger,
+</span><span class="boring">{
+</span><span class="boring">    pub fn new(messenger: &amp;'a T, max: usize) -&gt; LimitTracker&lt;'a, T&gt; {
+</span><span class="boring">        LimitTracker {
+</span><span class="boring">            messenger,
+</span><span class="boring">            value: 0,
+</span><span class="boring">            max,
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn set_value(&amp;mut self, value: usize) {
+</span><span class="boring">        self.value = value;
+</span><span class="boring">
+</span><span class="boring">        let percentage_of_max = self.value as f64 / self.max as f64;
+</span><span class="boring">
+</span><span class="boring">        if percentage_of_max &gt;= 1.0 {
+</span><span class="boring">            self.messenger.send("Error: You are over your quota!");
+</span><span class="boring">        } else if percentage_of_max &gt;= 0.9 {
+</span><span class="boring">            self.messenger
+</span><span class="boring">                .send("Urgent warning: You've used up over 90% of your quota!");
+</span><span class="boring">        } else if percentage_of_max &gt;= 0.75 {
+</span><span class="boring">            self.messenger
+</span><span class="boring">                .send("Warning: You've used up over 75% of your quota!");
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MockMessenger {
+        sent_messages: Vec&lt;String&gt;,
+    }
+
+    impl MockMessenger {
+        fn new() -&gt; MockMessenger {
+            MockMessenger {
+                sent_messages: vec![],
+            }
+        }
+    }
+
+    impl Messenger for MockMessenger {
+        fn send(&amp;self, message: &amp;str) {
+            self.sent_messages.push(String::from(message));
+        }
+    }
+
+    #[test]
+    fn it_sends_an_over_75_percent_warning_message() {
+        let mock_messenger = MockMessenger::new();
+        let mut limit_tracker = LimitTracker::new(&amp;mock_messenger, 100);
+
+        limit_tracker.set_value(80);
+
+        assert_eq!(mock_messenger.sent_messages.len(), 1);
+    }
+}</code></pre>
+<figcaption><a href="#listing-15-21">لیست ۱۵-۲۱</a>: تلاش برای پیاده‌سازی یک &lt;code&gt;&lt;/x-listing&gt;MockMessenger&lt;/code&gt; که توسط کنترل‌کننده وام‌دهی اجازه داده نمی‌شود</figcaption>
+</figure>
+<p>این کد تست یک ساختار <code>MockMessenger</code> تعریف می‌کند که یک فیلد <code>sent_messages</code> با یک <code>Vec</code> از مقادیر <code>String</code> دارد تا پیام‌هایی را که به آن گفته شده است ارسال کند، پیگیری کند. ما همچنین یک تابع مرتبط <code>new</code> تعریف می‌کنیم تا ایجاد مقادیر <code>MockMessenger</code> جدید که با یک لیست خالی از پیام‌ها شروع می‌شود، راحت باشد. سپس ویژگی <code>Messenger</code> را برای <code>MockMessenger</code> پیاده‌سازی می‌کنیم تا بتوانیم یک <code>MockMessenger</code> را به یک <code>LimitTracker</code> بدهیم. در تعریف متد <code>send</code>، ما پیام ارسال‌شده به عنوان یک پارامتر را می‌گیریم و آن را در لیست <code>sent_messages</code> درون <code>MockMessenger</code> ذخیره می‌کنیم.</p>
+<p>در این تست، در حال بررسی این هستیم که وقتی به <code>LimitTracker</code> گفته می‌شود مقدار <code>value</code> را به چیزی بیشتر از ۷۵٪ مقدار <code>max</code> تنظیم کند، چه اتفاقی می‌افتد. ابتدا یک <code>MockMessenger</code> جدید می‌سازیم که با یک لیست خالی از پیام‌ها شروع می‌کند. سپس یک <code>LimitTracker</code> جدید ایجاد می‌کنیم و یک رفرنس به <code>MockMessenger</code> جدید و همچنین مقدار <code>max</code> برابر با <code>100</code> به آن می‌دهیم. متد <code>set_value</code> را با مقدار <code>80</code> روی <code>LimitTracker</code> فراخوانی می‌کنیم، که بیش از ۷۵٪ عدد ۱۰۰ است. سپس بررسی می‌کنیم (assert) که لیست پیام‌هایی که <code>MockMessenger</code> پیگیری می‌کند، اکنون باید شامل یک پیام باشد.</p>
+<p>با این حال، یک مشکل با این تست وجود دارد، همانطور که در اینجا نشان داده شده است:</p>
+<pre><code class="language-console">$ cargo test
+   Compiling limit-tracker v0.1.0 (file:///projects/limit-tracker)
+error[E0596]: cannot borrow `self.sent_messages` as mutable, as it is behind a `&amp;` reference
+  --&gt; src/lib.rs:58:13
+   |
+58 |             self.sent_messages.push(String::from(message));
+   |             ^^^^^^^^^^^^^^^^^^ `self` is a `&amp;` reference, so it cannot be borrowed as mutable
+   |
+help: consider changing this to be a mutable reference in the `impl` method and the `trait` definition
+   |
+ 2 ~     fn send(&amp;mut self, msg: &amp;str);
+ 3 | }
+...
+56 |     impl Messenger for MockMessenger {
+57 ~         fn send(&amp;mut self, message: &amp;str) {
+   |
+
+For more information about this error, try `rustc --explain E0596`.
+error: could not compile `limit-tracker` (lib test) due to 1 previous error
+</code></pre>
+<p>ما نمی‌توانیم <code>MockMessenger</code> را طوری تغییر دهیم که پیام‌ها را دنبال کند، چون متد <code>send</code> یک رفرنس تغییرناپذیر به <code>self</code> دریافت می‌کند. همچنین نمی‌توانیم پیشنهاد پیام خطا را بپذیریم و <code>&amp;mut self</code> را هم در متد <code>impl</code> و هم در تعریف <code>trait</code> قرار دهیم، زیرا نمی‌خواهیم فقط به‌خاطر تست، <code>trait</code> <code>Messenger</code> را تغییر دهیم. در عوض، باید راهی پیدا کنیم که کد تست ما با طراحی فعلی به‌درستی کار کند.</p>
+<p>در چنین وضعیتی، <em>تغییرپذیری درونی</em> (interior mutability) می‌تواند به کمک ما بیاید! ما فیلد <code>sent_messages</code> را درون یک <code>RefCell&lt;T&gt;</code> ذخیره می‌کنیم، و سپس متد <code>send</code> می‌تواند مقدار <code>sent_messages</code> را تغییر دهد تا پیام‌هایی را که دیده‌ایم ذخیره کند. لیستینگ 15-22 نشان می‌دهد که این کار چگونه انجام می‌شود.</p>
+<figure class="listing" id="listing-15-22">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">pub trait Messenger {
+</span><span class="boring">    fn send(&amp;self, msg: &amp;str);
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct LimitTracker&lt;'a, T: Messenger&gt; {
+</span><span class="boring">    messenger: &amp;'a T,
+</span><span class="boring">    value: usize,
+</span><span class="boring">    max: usize,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl&lt;'a, T&gt; LimitTracker&lt;'a, T&gt;
+</span><span class="boring">where
+</span><span class="boring">    T: Messenger,
+</span><span class="boring">{
+</span><span class="boring">    pub fn new(messenger: &amp;'a T, max: usize) -&gt; LimitTracker&lt;'a, T&gt; {
+</span><span class="boring">        LimitTracker {
+</span><span class="boring">            messenger,
+</span><span class="boring">            value: 0,
+</span><span class="boring">            max,
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn set_value(&amp;mut self, value: usize) {
+</span><span class="boring">        self.value = value;
+</span><span class="boring">
+</span><span class="boring">        let percentage_of_max = self.value as f64 / self.max as f64;
+</span><span class="boring">
+</span><span class="boring">        if percentage_of_max &gt;= 1.0 {
+</span><span class="boring">            self.messenger.send("Error: You are over your quota!");
+</span><span class="boring">        } else if percentage_of_max &gt;= 0.9 {
+</span><span class="boring">            self.messenger
+</span><span class="boring">                .send("Urgent warning: You've used up over 90% of your quota!");
+</span><span class="boring">        } else if percentage_of_max &gt;= 0.75 {
+</span><span class="boring">            self.messenger
+</span><span class="boring">                .send("Warning: You've used up over 75% of your quota!");
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    struct MockMessenger {
+        sent_messages: RefCell&lt;Vec&lt;String&gt;&gt;,
+    }
+
+    impl MockMessenger {
+        fn new() -&gt; MockMessenger {
+            MockMessenger {
+                sent_messages: RefCell::new(vec![]),
+            }
+        }
+    }
+
+    impl Messenger for MockMessenger {
+        fn send(&amp;self, message: &amp;str) {
+            self.sent_messages.borrow_mut().push(String::from(message));
+        }
+    }
+
+    #[test]
+    fn it_sends_an_over_75_percent_warning_message() {
+        // --snip--
+<span class="boring">        let mock_messenger = MockMessenger::new();
+</span><span class="boring">        let mut limit_tracker = LimitTracker::new(&amp;mock_messenger, 100);
+</span><span class="boring">
+</span><span class="boring">        limit_tracker.set_value(80);
+</span>
+        assert_eq!(mock_messenger.sent_messages.borrow().len(), 1);
+    }
+}</code></pre>
+<figcaption><a href="#listing-15-22">لیست ۱۵-۲۲</a>: استفاده از &lt;code&gt;&lt;/x-listing&gt;RefCell&lt;T&gt;&lt;/code&gt; برای تغییر یک مقدار داخلی در حالی که مقدار بیرونی غیرقابل‌تغییر در نظر گرفته می‌شود</figcaption>
+</figure>
+<p>فیلد <code>sent_messages</code> اکنون از نوع <code>RefCell&lt;Vec&lt;String&gt;&gt;</code> به جای <code>Vec&lt;String&gt;</code> است. در تابع <code>new</code>، یک نمونه جدید از <code>RefCell&lt;Vec&lt;String&gt;&gt;</code> را در اطراف وکتور خالی ایجاد می‌کنیم.</p>
+<p>برای پیاده‌سازی متد <code>send</code>، پارامتر اول همچنان یک وام‌دهی غیرقابل‌تغییر به <code>self</code> است، که با تعریف ویژگی مطابقت دارد. ما متد <code>borrow_mut</code> را روی <code>RefCell&lt;Vec&lt;String&gt;&gt;</code> در <code>self.sent_messages</code> فراخوانی می‌کنیم تا یک ارجاع متغیر به مقدار درون <code>RefCell&lt;Vec&lt;String&gt;&gt;</code>، که همان وکتور است، دریافت کنیم. سپس می‌توانیم روی ارجاع متغیر به وکتور، متد <code>push</code> را فراخوانی کنیم تا پیام‌های ارسال‌شده در طول تست را پیگیری کنیم.</p>
+<p>آخرین تغییری که باید انجام دهیم در ادعا (assertion) است: برای دیدن تعداد آیتم‌های درون وکتور داخلی، ما متد <code>borrow</code> را روی <code>RefCell&lt;Vec&lt;String&gt;&gt;</code> فراخوانی می‌کنیم تا یک ارجاع غیرقابل‌تغییر به وکتور دریافت کنیم.</p>
+<p>حالا که دیدید چگونه از <code>RefCell&lt;T&gt;</code> استفاده کنید، بیایید به نحوه کار آن بپردازیم!</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="keeping-track-of-borrows-at-runtime-with-refcellt"></a></p>
+<h4 id="tracking-borrows-at-runtime"><a class="header" href="#tracking-borrows-at-runtime">ردیابی قرض‌ها در زمان اجرا</a></h4>
+<p>هنگام ایجاد ارجاع‌های غیرقابل‌تغییر و قابل‌تغییر، ما از سینتکس <code>&amp;</code> و <code>&amp;mut</code> استفاده می‌کنیم. با <code>RefCell&lt;T&gt;</code>، از متدهای <code>borrow</code> و <code>borrow_mut</code> استفاده می‌کنیم، که بخشی از API ایمن متعلق به <code>RefCell&lt;T&gt;</code> هستند. متد <code>borrow</code> نوع اسمارت پوینتر <code>Ref&lt;T&gt;</code> را برمی‌گرداند، و <code>borrow_mut</code> نوع اسمارت پوینتر <code>RefMut&lt;T&gt;</code> را برمی‌گرداند. هر دو نوع، <code>Deref</code> را پیاده‌سازی می‌کنند، بنابراین می‌توانیم با آن‌ها مثل ارجاع‌های معمولی رفتار کنیم.</p>
+<p><code>RefCell&lt;T&gt;</code> تعداد <code>Ref&lt;T&gt;</code> و <code>RefMut&lt;T&gt;</code>هایی را که در حال حاضر فعال هستند، دنبال می‌کند. هر بار که متد <code>borrow</code> را فراخوانی می‌کنیم، <code>RefCell&lt;T&gt;</code> شمارنده‌ی رفرنس‌های تغییرناپذیر فعال را افزایش می‌دهد. زمانی که یک مقدار <code>Ref&lt;T&gt;</code> از حوزه‌ی دید (scope) خارج می‌شود، این شمارنده یک واحد کاهش می‌یابد. درست مانند قوانین قرض‌گیری در زمان کامپایل، <code>RefCell&lt;T&gt;</code> نیز به ما اجازه می‌دهد که در هر لحظه <em>یا</em> چندین رفرنس تغییرناپذیر داشته باشیم <em>یا</em> یک رفرنس قابل‌تغییر، اما نه هر دو به‌طور همزمان.</p>
+<p>اگر سعی کنیم این قوانین را نقض کنیم، به جای دریافت یک خطای کامپایل مثل ارجاع‌ها، پیاده‌سازی <code>RefCell&lt;T&gt;</code> در زمان اجرا دچار وحشت (panic) خواهد شد. فهرست 15-23 اصلاحی از پیاده‌سازی متد <code>send</code> در فهرست 15-22 را نشان می‌دهد. ما به عمد سعی داریم دو وام‌دهی قابل‌تغییر در یک دامنه ایجاد کنیم تا نشان دهیم <code>RefCell&lt;T&gt;</code> از انجام این کار در زمان اجرا جلوگیری می‌کند.</p>
+<figure class="listing" id="listing-15-23">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust ignore panics"><span class="boring">pub trait Messenger {
+</span><span class="boring">    fn send(&amp;self, msg: &amp;str);
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct LimitTracker&lt;'a, T: Messenger&gt; {
+</span><span class="boring">    messenger: &amp;'a T,
+</span><span class="boring">    value: usize,
+</span><span class="boring">    max: usize,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl&lt;'a, T&gt; LimitTracker&lt;'a, T&gt;
+</span><span class="boring">where
+</span><span class="boring">    T: Messenger,
+</span><span class="boring">{
+</span><span class="boring">    pub fn new(messenger: &amp;'a T, max: usize) -&gt; LimitTracker&lt;'a, T&gt; {
+</span><span class="boring">        LimitTracker {
+</span><span class="boring">            messenger,
+</span><span class="boring">            value: 0,
+</span><span class="boring">            max,
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn set_value(&amp;mut self, value: usize) {
+</span><span class="boring">        self.value = value;
+</span><span class="boring">
+</span><span class="boring">        let percentage_of_max = self.value as f64 / self.max as f64;
+</span><span class="boring">
+</span><span class="boring">        if percentage_of_max &gt;= 1.0 {
+</span><span class="boring">            self.messenger.send("Error: You are over your quota!");
+</span><span class="boring">        } else if percentage_of_max &gt;= 0.9 {
+</span><span class="boring">            self.messenger
+</span><span class="boring">                .send("Urgent warning: You've used up over 90% of your quota!");
+</span><span class="boring">        } else if percentage_of_max &gt;= 0.75 {
+</span><span class="boring">            self.messenger
+</span><span class="boring">                .send("Warning: You've used up over 75% of your quota!");
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">#[cfg(test)]
+</span><span class="boring">mod tests {
+</span><span class="boring">    use super::*;
+</span><span class="boring">    use std::cell::RefCell;
+</span><span class="boring">
+</span><span class="boring">    struct MockMessenger {
+</span><span class="boring">        sent_messages: RefCell&lt;Vec&lt;String&gt;&gt;,
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    impl MockMessenger {
+</span><span class="boring">        fn new() -&gt; MockMessenger {
+</span><span class="boring">            MockMessenger {
+</span><span class="boring">                sent_messages: RefCell::new(vec![]),
+</span><span class="boring">            }
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span>    impl Messenger for MockMessenger {
+        fn send(&amp;self, message: &amp;str) {
+            let mut one_borrow = self.sent_messages.borrow_mut();
+            let mut two_borrow = self.sent_messages.borrow_mut();
+
+            one_borrow.push(String::from(message));
+            two_borrow.push(String::from(message));
+        }
+    }
+<span class="boring">
+</span><span class="boring">    #[test]
+</span><span class="boring">    fn it_sends_an_over_75_percent_warning_message() {
+</span><span class="boring">        let mock_messenger = MockMessenger::new();
+</span><span class="boring">        let mut limit_tracker = LimitTracker::new(&amp;mock_messenger, 100);
+</span><span class="boring">
+</span><span class="boring">        limit_tracker.set_value(80);
+</span><span class="boring">
+</span><span class="boring">        assert_eq!(mock_messenger.sent_messages.borrow().len(), 1);
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-15-23">لیست ۱۵-۲۳</a>: ایجاد دو ارجاع متغیر در یک دامنه برای دیدن اینکه &lt;code&gt;&lt;/x-listing&gt;RefCell&lt;T&gt;&lt;/code&gt; وحشت خواهد کرد</figcaption>
+</figure>
+<p>ما یک متغیر به نام <code>one_borrow</code> برای اسمارت پوینتر <code>RefMut&lt;T&gt;</code> که از <code>borrow_mut</code> بازگردانده شده است، ایجاد می‌کنیم. سپس یک وام‌دهی متغیر دیگر به همان روش در متغیر <code>two_borrow</code> ایجاد می‌کنیم. این کار دو ارجاع متغیر در یک دامنه ایجاد می‌کند، که مجاز نیست. هنگامی که تست‌ها را برای کتابخانه خود اجرا می‌کنیم، کد در فهرست 15-23 بدون هیچ خطایی کامپایل می‌شود، اما تست شکست خواهد خورد:</p>
+<pre><code class="language-console">$ cargo test
+   Compiling limit-tracker v0.1.0 (file:///projects/limit-tracker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.91s
+     Running unittests src/lib.rs (target/debug/deps/limit_tracker-e599811fa246dbde)
+
+running 1 test
+test tests::it_sends_an_over_75_percent_warning_message ... FAILED
+
+failures:
+
+---- tests::it_sends_an_over_75_percent_warning_message stdout ----
+
+thread 'tests::it_sends_an_over_75_percent_warning_message' (6028024) panicked at src/lib.rs:60:53:
+RefCell already borrowed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::it_sends_an_over_75_percent_warning_message
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`
+</code></pre>
+<p>توجه داشته باشید که کد با پیام <code>already borrowed: BorrowMutError</code> دچار وحشت (panic) شد. این نحوه عملکرد <code>RefCell&lt;T&gt;</code> برای مدیریت نقض قوانین وام‌دهی در زمان اجرا است.</p>
+<p>انتخاب اینکه خطاهای وام‌دهی در زمان اجرا و نه در زمان کامپایل بررسی شوند، همانطور که در اینجا انجام دادیم، به این معنا است که ممکن است اشتباهات در کد شما در مراحل بعدی فرآیند توسعه کشف شوند: شاید حتی تا زمانی که کد شما به محیط تولید (production) استقرار یابد. همچنین، کد شما جریمه عملکردی کوچکی را به دلیل پیگیری وام‌ها در زمان اجرا به جای زمان کامپایل متحمل خواهد شد. با این حال، استفاده از <code>RefCell&lt;T&gt;</code> امکان نوشتن یک شیء Mock را فراهم می‌کند که می‌تواند خود را تغییر دهد تا پیام‌هایی که مشاهده کرده است را پیگیری کند، در حالی که شما آن را در یک زمینه که تنها مقادیر غیرقابل‌تغییر مجاز هستند استفاده می‌کنید. شما می‌توانید با وجود این مبادلات، از <code>RefCell&lt;T&gt;</code> برای دریافت عملکرد بیشتری نسبت به ارجاع‌های معمولی استفاده کنید.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="having-multiple-owners-of-mutable-data-by-combining-rc-t-and-ref-cell-t"></a>
+<a id="allowing-multiple-owners-of-mutable-data-with-rct-and-refcellt"></a></p>
+<h3 id="allowing-multiple-owners-of-mutable-data"><a class="header" href="#allowing-multiple-owners-of-mutable-data">اجازهٔ چند مالک برای داده‌های تغییرپذیر</a></h3>
+<p>یک روش رایج برای استفاده از <code>RefCell&lt;T&gt;</code> ترکیب آن با <code>Rc&lt;T&gt;</code> است. به خاطر بیاورید که <code>Rc&lt;T&gt;</code> به شما اجازه می‌دهد چندین مالک برای برخی داده‌ها داشته باشید، اما فقط دسترسی غیرقابل‌تغییر به آن داده‌ها را می‌دهد. اگر یک <code>Rc&lt;T&gt;</code> داشته باشید که یک <code>RefCell&lt;T&gt;</code> را نگه می‌دارد، می‌توانید یک مقداری داشته باشید که می‌تواند چندین مالک داشته باشد <em>و</em> شما بتوانید آن را تغییر دهید!</p>
+<p>برای مثال، لیست cons در لیستینگ 15-18 را به‌خاطر بیاورید که در آن از <code>Rc&lt;T&gt;</code> استفاده کردیم تا چند لیست بتوانند مالکیت مشترک روی یک لیست دیگر داشته باشند. از آن‌جا که <code>Rc&lt;T&gt;</code> فقط مقادیر تغییرناپذیر را نگه می‌دارد، پس از ایجاد لیست‌ها دیگر نمی‌توانیم هیچ‌یک از مقادیر درون آن‌ها را تغییر دهیم. بیایید <code>RefCell&lt;T&gt;</code> را به خاطر توانایی‌اش در تغییر مقادیر، به ترکیب اضافه کنیم. لیستینگ 15-24 نشان می‌دهد که با استفاده از <code>RefCell&lt;T&gt;</code> در تعریف <code>Cons</code>، می‌توانیم مقدار ذخیره‌شده در تمام لیست‌ها را تغییر دهیم.</p>
+<figure class="listing" id="listing-15-24">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">#[derive(Debug)]
+enum List {
+    Cons(Rc&lt;RefCell&lt;i32&gt;&gt;, Rc&lt;List&gt;),
+    Nil,
+}
+
+use crate::List::{Cons, Nil};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+fn main() {
+    let value = Rc::new(RefCell::new(5));
+
+    let a = Rc::new(Cons(Rc::clone(&amp;value), Rc::new(Nil)));
+
+    let b = Cons(Rc::new(RefCell::new(3)), Rc::clone(&amp;a));
+    let c = Cons(Rc::new(RefCell::new(4)), Rc::clone(&amp;a));
+
+    *value.borrow_mut() += 10;
+
+    println!("a after = {a:?}");
+    println!("b after = {b:?}");
+    println!("c after = {c:?}");
+}</code></pre>
+<figcaption><a href="#listing-15-24">لیست ۱۵-۲۴</a>: استفاده از &lt;code&gt;&lt;/x-listing&gt;Rc&lt;RefCell&lt;i32&gt;&gt;&lt;/code&gt; برای ایجاد یک &lt;code&gt;List&lt;/code&gt; که می‌توانیم آن را تغییر دهیم</figcaption>
+</figure>
+<p>ما مقداری که نمونه‌ای از <code>Rc&lt;RefCell&lt;i32&gt;&gt;</code> است ایجاد می‌کنیم و آن را در یک متغیر به نام <code>value</code> ذخیره می‌کنیم تا بتوانیم بعداً به طور مستقیم به آن دسترسی داشته باشیم. سپس یک <code>List</code> در <code>a</code> با یک متغیر <code>Cons</code> که <code>value</code> را نگه می‌دارد ایجاد می‌کنیم. ما نیاز داریم <code>value</code> را کلون کنیم تا هر دو <code>a</code> و <code>value</code> مالک مقدار داخلی <code>5</code> باشند، به جای انتقال مالکیت از <code>value</code> به <code>a</code> یا اینکه <code>a</code> از <code>value</code> وام بگیرد.</p>
+<p>لیست <code>a</code> را در یک <code>Rc&lt;T&gt;</code> قرار می‌دهیم تا زمانی که لیست‌های <code>b</code> و <code>c</code> را ایجاد می‌کنیم، هر دو بتوانند به <code>a</code> اشاره کنند؛ کاری که در لیستینگ 15-18 نیز انجام دادیم.</p>
+<p>پس از آن‌که لیست‌های <code>a</code>، <code>b</code> و <code>c</code> ایجاد شدند، می‌خواهیم عدد ۱۰ را به مقدار موجود در <code>value</code> اضافه کنیم. این کار را با فراخوانی متد <code>borrow_mut</code> روی <code>value</code> انجام می‌دهیم؛ این متد از قابلیت dereferencing خودکار (که در فصل ۵ در بخش <a href="ch05-03-method-syntax.html#wheres-the---operator">«عملگر <code>-&gt;</code> کجاست؟»</a><!-- ignore --> درباره‌اش صحبت کردیم) استفاده می‌کند تا <code>Rc&lt;T&gt;</code> را به مقدار درونی از نوع <code>RefCell&lt;T&gt;</code> dereference کند. متد <code>borrow_mut</code> یک smart pointer از نوع <code>RefMut&lt;T&gt;</code> برمی‌گرداند، و ما با استفاده از عملگر <code>*</code> (dereference) مقدار درونی را تغییر می‌دهیم.</p>
+<p>وقتی <code>a</code>، <code>b</code> و <code>c</code> را چاپ می‌کنیم، می‌بینیم که همه‌ی آن‌ها مقدار تغییر یافته‌ی <code>15</code> را دارند، نه مقدار اولیه‌ی <code>5</code>:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling cons-list v0.1.0 (file:///projects/cons-list)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.63s
+     Running `target/debug/cons-list`
+a after = Cons(RefCell { value: 15 }, Nil)
+b after = Cons(RefCell { value: 3 }, Cons(RefCell { value: 15 }, Nil))
+c after = Cons(RefCell { value: 4 }, Cons(RefCell { value: 15 }, Nil))
+</code></pre>
+<p>این تکنیک واقعاً جالب است! با استفاده از <code>RefCell&lt;T&gt;</code>، یک مقدار <code>List</code> داریم که از بیرون تغییرناپذیر به‌نظر می‌رسد. اما می‌توانیم با استفاده از متدهای <code>RefCell&lt;T&gt;</code> که دسترسی به <em>تغییرپذیری درونی</em> را فراهم می‌کنند، داده‌های خود را در مواقع نیاز تغییر دهیم. بررسی‌های زمان اجرا (runtime) برای قوانین قرض‌گیری از بروز <em>data race</em> جلوگیری می‌کنند، و گاهی ارزش دارد که اندکی از سرعت را فدای این انعطاف‌پذیری در ساختارهای داده کنیم. توجه داشته باشید که <code>RefCell&lt;T&gt;</code> برای کد چندنخی (multithreaded) قابل‌استفاده نیست! <code>Mutex&lt;T&gt;</code> نسخه‌ی <em>ایمن در برابر نخ</em> (thread-safe) از <code>RefCell&lt;T&gt;</code> است، و ما در فصل ۱۶ درباره‌ی <code>Mutex&lt;T&gt;</code> صحبت خواهیم کرد.</p><nav class="page-nav"><a href="ch15-04-rc.html">→ Rc&lt;T&gt;، اشاره‌گر هوشمند با شمارش ارجاع</a><a href="ch15-06-reference-cycles.html">چرخه‌های ارجاع می‌توانند باعث نشت حافظه شوند ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

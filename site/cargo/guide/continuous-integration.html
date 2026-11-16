@@ -1,0 +1,205 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>یکپارچه‌سازی مداوم — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="guide/continuous-integration"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="continuous-integration"><a class="header" href="#continuous-integration">یکپارچه‌سازی مداوم</a></h1>
+<h2 id="getting-started"><a class="header" href="#getting-started">شروع به کار</a></h2>
+<p>یک CI ساده، پروژه‌های شما را می‌سازد و آزمون می‌کند:</p>
+<h3 id="github-actions"><a class="header" href="#github-actions">GitHub Actions</a></h3>
+<p>برای آزمون بستهٔ خود در GitHub Actions، این یک نمونه فایل <code>.github/workflows/ci.yml</code> است:</p>
+<pre><code class="language-yaml">name: Cargo Build &amp; Test
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_and_test:
+    name: Rust project - latest
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain:
+          - stable
+          - beta
+          - nightly
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup update ${{ matrix.toolchain }} &amp;&amp; rustup default ${{ matrix.toolchain }}
+      - run: cargo build --verbose
+      - run: cargo test --verbose
+
+</code></pre>
+<p>این کار هر سه کانال انتشار را آزمون می‌کند (توجه کنید که شکست در هر نسخهٔ toolchain کل job را شکست می‌دهد). همچنین می‌توانید در رابط کاربری GitHub روی <code>"Actions" &gt; "new workflow"</code> کلیک کنید و Rust را انتخاب کنید تا <a href="https://github.com/actions/starter-workflows/blob/main/ci/rust.yml">پیکربندی پیش‌فرض</a> به مخزن شما اضافه شود. برای اطلاعات بیشتر <a href="https://docs.github.com/en/actions">مستندات GitHub Actions</a> را ببینید.</p>
+<h3 id="gitlab-ci"><a class="header" href="#gitlab-ci">GitLab CI</a></h3>
+<p>برای آزمون بستهٔ خود در GitLab CI، این یک نمونه فایل <code>.gitlab-ci.yml</code> است:</p>
+<pre><code class="language-yaml">stages:
+  - build
+
+rust-latest:
+  stage: build
+  image: rust:latest
+  script:
+    - cargo build --verbose
+    - cargo test --verbose
+
+rust-nightly:
+  stage: build
+  image: rustlang/rust:nightly
+  script:
+    - cargo build --verbose
+    - cargo test --verbose
+  allow_failure: true
+</code></pre>
+<p>این کار روی کانال stable و کانال nightly آزمون می‌گیرد، اما هر خرابی در nightly کل ساخت شما را شکست نمی‌دهد. برای اطلاعات بیشتر لطفاً <a href="https://docs.gitlab.com/ce/ci/yaml/index.html">مستندات GitLab CI</a> را ببینید.</p>
+<h3 id="buildssrht"><a class="header" href="#buildssrht">builds.sr.ht</a></h3>
+<p>برای آزمون بستهٔ خود در sr.ht، این یک نمونه فایل <code>.build.yml</code> است. حتماً <code>&lt;your repo&gt;</code> و <code>&lt;your project&gt;</code> را به مخزنی که باید کلون شود و پوشه‌ای که در آن کلون شده است تغییر دهید.</p>
+<pre><code class="language-yaml">image: archlinux
+packages:
+  - rustup
+sources:
+  - &lt;your repo&gt;
+tasks:
+  - setup: |
+      rustup toolchain install nightly stable
+      cd &lt;your project&gt;/
+      rustup run stable cargo fetch
+  - stable: |
+      rustup default stable
+      cd &lt;your project&gt;/
+      cargo build --verbose
+      cargo test --verbose
+  - nightly: |
+      rustup default nightly
+      cd &lt;your project&gt;/
+      cargo build --verbose ||:
+      cargo test --verbose  ||:
+  - docs: |
+      cd &lt;your project&gt;/
+      rustup run stable cargo doc --no-deps
+      rustup run nightly cargo doc --no-deps ||:
+</code></pre>
+<p>این کار آزمون و ساخت مستندات را روی کانال stable و کانال nightly انجام می‌دهد، اما هر خرابی در nightly کل ساخت شما را شکست نمی‌دهد. برای اطلاعات بیشتر لطفاً <a href="https://man.sr.ht/builds.sr.ht/">مستندات builds.sr.ht</a> را ببینید.</p>
+<h3 id="circleci"><a class="header" href="#circleci">CircleCI</a></h3>
+<p>برای آزمون بستهٔ خود در CircleCI، این یک نمونه فایل <code>.circleci/config.yml</code> است:</p>
+<pre><code class="language-yaml">version: 2.1
+jobs:
+  build:
+    docker:
+      # check https://circleci.com/developer/images/image/cimg/rust#image-tags for latest
+      - image: cimg/rust:1.77.2
+    steps:
+      - checkout
+      - run: cargo test
+</code></pre>
+<p>برای اجرای pipelineهای پیچیده‌تر، از جمله تشخیص آزمون‌های ناپایدار، کش کردن و مدیریت آرتیفکت‌ها، لطفاً <a href="https://circleci.com/docs/configuration-reference/">مرجع پیکربندی CircleCI</a> را ببینید.</p>
+<h2 id="verifying-latest-dependencies"><a class="header" href="#verifying-latest-dependencies">تأیید آخرین وابستگی‌ها</a></h2>
+<p>هنگام <a href="../reference/specifying-dependencies.html">مشخص کردن وابستگی‌ها</a> در <code>Cargo.toml</code>، آن‌ها معمولاً با یک بازه از نسخه‌ها مطابقت دارند. آزمون کامل همهٔ ترکیب‌های نسخه دست‌وپاگیر خواهد بود. بررسی آخرین نسخه‌ها دست‌کم برای کاربرانی که <a href="../commands/cargo-add.html"><code>cargo add</code></a> یا <a href="../commands/cargo-install.html"><code>cargo install</code></a> را اجرا می‌کنند آزمون می‌گیرد.</p>
+<p>هنگام آزمون آخرین نسخه‌ها، برخی ملاحظات عبارت‌اند از:</p>
+<ul>
+<li>به حداقل رساندن عوامل بیرونی که بر توسعهٔ محلی یا CI اثر می‌گذارند</li>
+<li>نرخ انتشار وابستگی‌های جدید</li>
+<li>سطح ریسکی که یک پروژه مایل به پذیرش آن است</li>
+<li>هزینه‌های CI، از جمله هزینه‌های غیرمستقیم مانند اینکه یک سرویس CI سقفی برای تعداد runnerهای موازی داشته باشد و در هنگام رسیدن به آن سقف، jobهای جدید به‌صورت سریالی اجرا شوند.</li>
+</ul>
+<p>برخی راه‌حل‌های ممکن عبارت‌اند از:</p>
+<ul>
+<li><a href="../faq.html#why-have-cargolock-in-version-control">ثبت نکردن <code>Cargo.lock</code></a>
+<ul>
+<li>بسته به سرعت PRها، ممکن است بسیاری از نسخه‌ها بدون آزمون بمانند</li>
+<li>این کار به قیمت قطعی بودن (determinism) تمام می‌شود</li>
+</ul>
+</li>
+<li>داشتن یک job در CI که آخرین وابستگی‌ها را تأیید می‌کند اما آن را «ادامه در صورت شکست» علامت می‌زند
+<ul>
+<li>بسته به سرویس CI، شکست‌ها ممکن است واضح نباشند</li>
+<li>بسته به سرعت PRها، ممکن است منابع بیش از حد لازم مصرف کند</li>
+</ul>
+</li>
+<li>داشتن یک job زمان‌بندی‌شدهٔ CI برای تأیید آخرین وابستگی‌ها
+<ul>
+<li>یک سرویس CI میزبانی‌شده ممکن است jobهای زمان‌بندی‌شده را برای مخزن‌هایی که مدتی است دست نخورده‌اند غیرفعال کند، که بر بسته‌هایی که به‌صورت منفعل نگهداری می‌شوند اثر می‌گذارد</li>
+<li>بسته به سرویس CI، ممکن است اعلان‌ها به افرادی که می‌توانند برای رفع شکست اقدام کنند نرسند</li>
+<li>اگر با نرخ انتشار وابستگی‌ها متوازن نشود، ممکن است نسخه‌های کافی را آزمون نکند یا آزمون‌های تکراری انجام دهد</li>
+</ul>
+</li>
+<li>به‌روزرسانی منظم وابستگی‌ها از طریق PRها، مانند <a href="https://docs.github.com/en/code-security/dependabot/working-with-dependabot">Dependabot</a> یا <a href="https://renovatebot.com/">RenovateBot</a>
+<ul>
+<li>می‌تواند وابستگی‌ها را در PR جداگانهٔ خودشان جدا کند یا همه را در یک PR واحد جمع کند</li>
+<li>فقط از منابع لازم استفاده می‌کند</li>
+<li>می‌توان بسامد را پیکربندی کرد تا میان منابع CI و پوشش نسخه‌های وابستگی توازن برقرار شود</li>
+</ul>
+</li>
+</ul>
+<p>یک نمونه job در CI برای تأیید آخرین وابستگی‌ها با استفاده از GitHub Actions:</p>
+<pre><code class="language-yaml">jobs:
+  latest_deps:
+    name: Latest Dependencies
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: allow
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup update stable &amp;&amp; rustup default stable
+      - run: cargo update --verbose
+      - run: cargo build --verbose
+      - run: cargo test --verbose
+</code></pre>
+<p>نکته‌ها:</p>
+<ul>
+<li><a href="../reference/config.html#resolverincompatible-rust-versions"><code>CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS</code></a> تنظیم شده است تا اطمینان حاصل شود <a href="../reference/resolver.html">resolver</a> به‌دلیل <a href="../reference/rust-version.html">نسخهٔ Rust</a> پروژهٔ شما، وابستگی‌های انتخاب‌شده را محدود نمی‌کند.</li>
+</ul>
+<p>برای پروژه‌هایی که ریسک بالاتری از شکست‌های مخصوص هر پلتفرم یا هر نسخهٔ Rust دارند، ممکن است بخواهید ترکیب‌های بیشتری آزمون شوند.</p>
+<h2 id="verifying-rust-version"><a class="header" href="#verifying-rust-version">تأیید <code>rust-version</code></a></h2>
+<p>هنگام انتشار بسته‌هایی که <a href="../reference/manifest.html#the-rust-version-field"><code>rust-version</code></a> را مشخص می‌کنند، مهم است که درستی آن فیلد تأیید شود.</p>
+<p>برخی ابزارهای شخص ثالث که می‌توانند در این کار کمک کنند عبارت‌اند از:</p>
+<ul>
+<li><a href="https://crates.io/crates/cargo-msrv"><code>cargo-msrv</code></a></li>
+<li><a href="https://crates.io/crates/cargo-hack"><code>cargo-hack</code></a></li>
+</ul>
+<p>یک نمونه از یکی از راه‌های انجام این کار با استفاده از GitHub Actions:</p>
+<pre><code class="language-yaml">jobs:
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - uses: taiki-e/install-action@cargo-hack
+    - run: cargo hack check --rust-version --workspace --all-targets --ignore-private
+</code></pre>
+<p>این کار می‌کوشد میان دقت و زمان بازخورد تعادل برقرار کند:</p>
+<ul>
+<li>از یک پلتفرم واحد استفاده می‌شود، چون بیشتر پروژه‌ها مستقل از پلتفرم هستند و به وابستگی‌های مخصوص پلتفرم اعتماد می‌شود که رفتار خود را تأیید کنند.</li>
+<li>از <code>cargo check</code> استفاده می‌شود، چون بیشتر مشکلاتی که مشارکت‌کنندگان با آن‌ها روبه‌رو می‌شوند دردسترس بودن API است و نه رفتار.</li>
+<li>بسته‌های منتشرنشده نادیده گرفته می‌شوند، چون فرض بر این است که فقط مصرف‌کنندگان پروژهٔ تأییدشده، از طریق یک registry، به <code>rust-version</code> اهمیت می‌دهند.</li>
+</ul>
+<h2 id="checking-for-warnings"><a class="header" href="#checking-for-warnings">بررسی هشدارها</a></h2>
+<p>معمولاً پروژه‌ها می‌خواهند روی شاخه‌های رسمی «بدون هشدار» باشند، در حالی که برای توسعهٔ محلی سخت‌گیری کمتری دارند. می‌توان از <a href="../reference/config.html#buildwarnings"><code>build.warnings = "deny"</code></a> استفاده کرد تا در صورت وجود هشدارها یک job در CI شکست بخورد.</p>
+<p>یک نمونه job در CI برای بررسی هشدارها با استفاده از GitHub Actions:</p>
+<pre><code class="language-yaml">jobs:
+  warnings:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_WARNINGS: deny
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup update stable &amp;&amp; rustup default stable
+      - run: rustup component add clippy
+      - run: cargo clippy --all-targets --all-features --keep-going
+</code></pre>
+<p>ملاحظات:</p>
+<ul>
+<li>CI ممکن است به‌دلیل نسخه‌های جدید toolchain شکست بخورد، چون ضمانت‌های سازگاری پیرامون هشدارها محدود است. پین کردن نسخهٔ toolchain را همراه با یک job خودکار که با هر انتشار جدید یک PR برای ارتقای toolchain می‌سازد در نظر بگیرید.</li>
+<li>در انتخاب ترکیب‌های پلتفرم‌ها، featureها و ترکیب‌های بسته/هدف ساخت برای بررسی، میان جامعیت و زمان بازخورد توازن برقرار کنید</li>
+<li>برخی سیستم‌های CI یکپارچگی مستقیم برای گزارش lintها دارند، مثلاً استفاده از <a href="https://crates.io/crates/clippy-sarif"><code>clippy-sarif</code></a> با GitHub</li>
+</ul>
+<h2 id="ensuring-the-lockfile-is-updated"><a class="header" href="#ensuring-the-lockfile-is-updated">اطمینان از به‌روز بودن lockfile</a></h2>
+<p>داشتن یک lockfile قدیمی، <a href="../faq.html#why-have-cargolock-in-version-control">مزایای commit کردن lockfile</a> را از بین می‌برد.</p>
+<p>نمونه‌ای از یک job در CI برای بررسی lockfileهای قدیمی با استفاده از GitHub Actions:</p>
+<pre><code class="language-yaml">jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup update stable &amp;&amp; rustup default stable
+      - run: cargo update --workspace --locked
+</code></pre><nav class="page-nav"><a href="tests.html">→ آزمون‌ها</a><a href="../reference/publishing.html">انتشار در crates.io ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

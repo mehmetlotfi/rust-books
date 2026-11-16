@@ -1,0 +1,451 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>افزودن lint — کتاب Clippy</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="development/adding_lints"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Clippy</a><small class="en-title" dir="ltr">The Clippy Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="adding-a-new-lint"><a class="header" href="#adding-a-new-lint">افزودن یک lint جدید</a></h1>
+<p>احتمالاً به این دلیل اینجا هستید که می‌خواهید یک lint جدید به Clippy اضافه کنید. اگر این نخستین بار است که در Clippy مشارکت می‌کنید، این سند شما را گام‌به‌گام در ساخت یک lint نمونه از صفر راهنمایی می‌کند.</p>
+<p>برای شروع، lintی می‌سازیم که تابع‌هایی با نام <code>foo</code> را شناسایی می‌کند، چون به‌وضوح نامی غیرتوصیفی است.</p>
+<ul>
+<li><a href="#adding-a-new-lint">افزودن یک lint جدید</a>
+<ul>
+<li><a href="#setup">آماده‌سازی</a></li>
+<li><a href="#getting-started">شروع کار</a>
+<ul>
+<li><a href="#defining-our-lint">تعریف lint ما</a>
+<ul>
+<li><a href="#standalone">مستقل</a></li>
+<li><a href="#specific-type">نوع مشخص</a></li>
+<li><a href="#tests-location">محل آزمون‌ها</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#testing">آزمایش</a>
+<ul>
+<li><a href="#cargo-lints">lintهای Cargo</a></li>
+</ul>
+</li>
+<li><a href="#rustfix-tests">آزمون‌های Rustfix</a></li>
+<li><a href="#testing-manually">آزمایش دستی</a></li>
+<li><a href="#lint-declaration">اعلام lint</a></li>
+<li><a href="#lint-registration">ثبت lint</a></li>
+<li><a href="#lint-passes">گذرهای lint</a></li>
+<li><a href="#emitting-a-lint">صدور یک lint</a></li>
+<li><a href="#adding-the-lint-logic">افزودن منطق lint</a></li>
+<li><a href="#specifying-the-lints-minimum-supported-rust-version-msrv">تعیین حداقل نسخهٔ پشتیبانی‌شدهٔ Rust (MSRV) برای lint</a></li>
+<li><a href="#author-lint">lint مربوط به author</a></li>
+<li><a href="#print-hir-lint">lint مربوط به print HIR</a></li>
+<li><a href="#documentation">مستندات</a></li>
+<li><a href="#running-rustfmt">اجرای rustfmt</a></li>
+<li><a href="#debugging">اشکال‌زدایی</a></li>
+<li><a href="#conflicting-lints">lintهای متعارض</a></li>
+<li><a href="#pr-checklist">چک‌لیست PR</a></li>
+<li><a href="#adding-configuration-to-a-lint">افزودن پیکربندی به یک lint</a></li>
+<li><a href="#cheat-sheet">برگهٔ تقلب</a></li>
+</ul>
+</li>
+</ul>
+<h2 id="setup"><a class="header" href="#setup">آماده‌سازی</a></h2>
+<p>مستندات <a href="basics.html#get-the-code">مبانی</a> را ببینید.</p>
+<h2 id="getting-started"><a class="header" href="#getting-started">شروع کار</a></h2>
+<p>هنگام ساخت یک lint جدید، مقداری کد boilerplate باید آماده شود. خوشبختانه می‌توانید با ابزارهای توسعهٔ Clippy این کار را به آن‌ها بسپارید. ما lint جدید خود را <code>foo_functions</code> نام‌گذاری می‌کنیم (نام lintها معمولاً به‌صورت snake case نوشته می‌شود) و به اطلاعات نوع نیازی نداریم، بنابراین از نوع early pass خواهد بود (در این مورد در ادامه بیشتر می‌گوییم). اگر مطمئن نیستید نامی که انتخاب کرده‌اید با lint مناسب است، به <a href="https://rust-lang.github.io/rfcs/0344-conventions-galore.html#lints">رهنمودهای نام‌گذاری lint</a> ما نگاهی بیندازید.</p>
+<h2 id="defining-our-lint"><a class="header" href="#defining-our-lint">تعریف lint ما</a></h2>
+<p>برای شروع، دو راه برای تعریف lint ما وجود دارد.</p>
+<h3 id="standalone"><a class="header" href="#standalone">مستقل</a></h3>
+<p>دستور: <code>cargo dev new_lint --name=foo_functions --pass=early --category=pedantic</code> (اگر category داده نشود، پیش‌فرض آن nursery است)</p>
+<p>این دستور یک فایل جدید با نام <code>clippy_lints/src/foo_functions.rs</code> می‌سازد و همچنین <a href="#lint-registration">lint را ثبت می‌کند</a>.</p>
+<h3 id="specific-type"><a class="header" href="#specific-type">نوع مشخص</a></h3>
+<p>دستور: <code>cargo dev new_lint --name=foo_functions --type=functions --category=pedantic</code></p>
+<p>این دستور یک فایل جدید با نام <code>clippy_lints/src/{type}/foo_functions.rs</code> می‌سازد.</p>
+<p>توجه کنید که این دستور به‌جای <code>--pass</code> پرچم <code>--type</code> دارد. برخلاف تعریف مستقل، این lint به معنای سنتی ثبت نمی‌شود. در عوض، lint خود را از داخل lint pass مربوط به آن نوع فراخوانی می‌کنید که در <code>clippy_lints/src/{type}/mod.rs</code> قرار دارد.</p>
+<p>«نوع» (type) فقط نام یک پوشه در <code>clippy_lints/src</code> است، مانند <code>functions</code> در دستور نمونه. این پوشه‌ها گروه‌بندی‌هایی از lintها با رفتارهای مشترک هستند، بنابراین اگر lint شما در یکی از آن‌ها می‌گنجد، بهتر است آن را به همان نوع اضافه کنید.</p>
+<h3 id="tests-location"><a class="header" href="#tests-location">محل آزمون‌ها</a></h3>
+<p>هر دو دستور یک فایل با نام <code>tests/ui/foo_functions.rs</code> می‌سازند. برای lintهای cargo، به‌طور پیش‌فرض دو سلسله‌مراتب پروژه (fail/pass) در <code>tests/ui-cargo</code> ساخته می‌شود.</p>
+<p>در ادامه این فایل‌ها را باز می‌کنیم و lint خود را اضافه می‌کنیم!</p>
+<h2 id="testing"><a class="header" href="#testing">آزمایش</a></h2>
+<p>بیایید ابتدا چند آزمون بنویسیم که بتوانیم هنگام تکرار و پیشرفت روی lint اجرایشان کنیم.</p>
+<p>Clippy برای آزمایش از آزمون‌های UI استفاده می‌کند. آزمون‌های UI بررسی می‌کنند که خروجی Clippy دقیقاً همان چیزی باشد که انتظار می‌رود. هر آزمون فقط یک فایل ساده از Rust است که کدی را که می‌خواهیم بررسی کنیم در خود دارد. خروجی Clippy با یک فایل <code>.stderr</code> مقایسه می‌شود. توجه کنید که لازم نیست این فایل را خودتان بسازید؛ تولید فایل‌های <code>.stderr</code> را در ادامه توضیح می‌دهیم.</p>
+<p>کار را با باز کردن فایل آزمونی که در <code>tests/ui/foo_functions.rs</code> ساخته شده است شروع می‌کنیم.</p>
+<p>فایل را با چند نمونه به‌روز کنید تا شروع کنیم:</p>
+<pre><code class="language-rust">#![allow(unused)]
+#![warn(clippy::foo_functions)]
+
+// Impl methods
+struct A;
+impl A {
+    pub fn fo(&amp;self) {}
+    pub fn foo(&amp;self) {}
+    //~^ foo_functions
+    pub fn food(&amp;self) {}
+}
+
+// Default trait methods
+trait B {
+    fn fo(&amp;self) {}
+    fn foo(&amp;self) {}
+    //~^ foo_functions
+    fn food(&amp;self) {}
+}
+
+// Plain functions
+fn fo() {}
+fn foo() {}
+//~^ foo_functions
+fn food() {}
+
+fn main() {
+    // We also don't want to lint method calls
+    foo();
+    let a = A;
+    a.foo();
+}</code></pre>
+<p>توجه کنید که ما کامنت‌های حاشیه‌نویسی‌ای با نام lint خود اضافه می‌کنیم تا خط‌هایی را که انتظار خطا در آن‌ها داریم علامت بزنیم. جز در موارد بسیار خاص (<code>//@check-pass</code>)، برای اینکه یک فایل آزمون پذیرفته شود، باید دست‌کم یک نشانگر خطا در آن وجود داشته باشد.</p>
+<p>وقتی lint را پیاده‌سازی کردیم، می‌توانیم <code>TESTNAME=foo_functions cargo uibless</code> را اجرا کنیم تا فایل <code>.stderr</code> تولید شود. اگر lint ما از پیشنهادهای ساخت‌یافته استفاده کند، این دستور فایل <code>.fixed</code> متناظر را نیز تولید می‌کند.</p>
+<p>تا زمانی که مشغول پیاده‌سازی lint هستیم، می‌توانیم آزمون UI را مرتب اجرا کنیم. این کار به ما امکان می‌دهد با بررسی فایل <code>.stderr</code> که در هر اجرای آزمون به‌روز می‌شود، ببینیم خروجی به آنچه می‌خواهیم نزدیک می‌شود یا نه.</p>
+<p>وقتی lint را پیاده‌سازی کردیم، اجرای <code>TESTNAME=foo_functions cargo uitest</code> باید به‌تنهایی موفق شود. هنگام commit کردن lint، باید فایل‌های <code>.stderr</code> تولیدشده و در صورت وجود، فایل‌های <code>.fixed</code> را نیز commit کنیم. به‌طور کلی باید فقط فایل‌هایی را commit کنید که <code>cargo bless</code> برای همان lintی که در حال ساخت یا ویرایش آن هستید تغییر داده است.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><em>توجه:</em> می‌توانید با تعیین فهرستی از نام‌ها که با ویرگول جدا شده‌اند، چند فایل آزمون را با هم اجرا کنید: <code>TESTNAME=foo_functions,test2,test3</code>.</p>
+</blockquote>
+<h3 id="cargo-lints"><a class="header" href="#cargo-lints">lintهای cargo</a></h3>
+<p>برای lintهای cargo، روند آزمایش از این جهت فرق دارد که ما به فایل مانیفست <code>Cargo.toml</code> علاقه‌مندیم. همچنین به یک crate کمینه نیاز داریم که با آن مانیفست مرتبط باشد.</p>
+<p>اگر نام lint جدید ما مثلاً <code>foo_categories</code> باشد، پس از اجرای <code>cargo dev new_lint --name=foo_categories --type=cargo --category=cargo</code> به‌طور پیش‌فرض دو crate جدید را می‌یابیم که هر کدام فایل مانیفست خود را دارند:</p>
+<ul>
+<li><code>tests/ui-cargo/foo_categories/fail/Cargo.toml</code>: این فایل باید باعث شود lint جدید خطا صادر کند.</li>
+<li><code>tests/ui-cargo/foo_categories/pass/Cargo.toml</code>: این فایل نباید lint را فعال کند.</li>
+</ul>
+<p>اگر به موارد بیشتری نیاز دارید، می‌توانید یکی از این crateها را (در <code>foo_categories</code>) کپی کنید و نام آن را تغییر دهید.</p>
+<p>روند تولید فایل <code>.stderr</code> یکسان است و قرار دادن متغیر <code>TESTNAME</code> پیش از <code>cargo uitest</code> نیز کار می‌کند.</p>
+<h2 id="rustfix-tests"><a class="header" href="#rustfix-tests">آزمون‌های Rustfix</a></h2>
+<p>اگر lintی که روی آن کار می‌کنید از پیشنهادهای ساخت‌یافته استفاده می‌کند، آزمون با اجرای <a href="https://github.com/rust-lang/cargo/tree/master/crates/rustfix">rustfix</a> برای آن آزمون، یک فایل <code>.fixed</code> می‌سازد. Rustfix پیشنهادهای lint را روی کد فایل آزمون اعمال می‌کند و نتیجه را با محتوای یک فایل <code>.fixed</code> مقایسه می‌کند.</p>
+<p>از <code>cargo bless</code> استفاده کنید تا فایل <code>.fixed</code> هنگام اجرای آزمون‌ها به‌طور خودکار تولید شود.</p>
+<h2 id="testing-manually"><a class="header" href="#testing-manually">آزمایش دستی</a></h2>
+<p>اگر چند <code>println!</code> اضافه کرده باشید و خروجی مجموعه آزمون‌ها ناخوانا شده باشد، آزمایش دستی روی یک فایل نمونه می‌تواند مفید باشد. برای امتحان Clippy با تغییرات محلی خود، دستور زیر را از پوشهٔ Clippy اجرا کنید:</p>
+<pre><code class="language-bash">cargo dev lint input.rs
+</code></pre>
+<p>برای اجرای Clippy روی یک پروژهٔ موجود، به‌جای یک فایل تکی، می‌توانید از این دستور استفاده کنید</p>
+<pre><code class="language-bash">cargo dev lint /path/to/project
+</code></pre>
+<p>یا یک toolchain از rustup راه‌اندازی کنید که به باینری‌های محلی Clippy اشاره کند</p>
+<pre><code class="language-bash">cargo dev setup toolchain
+
+# Then in `/path/to/project` you can run
+cargo +clippy clippy
+</code></pre>
+<h2 id="lint-declaration"><a class="header" href="#lint-declaration">اعلام lint</a></h2>
+<p>بیایید با باز کردن فایل جدیدی که در crate ‏<code>clippy_lints</code> در <code>clippy_lints/src/foo_functions.rs</code> ساخته شده است شروع کنیم. این همان crate ای است که همهٔ کد lintها در آن قرار دارد. این فایل از پیش چند چیز اولیه را که به آن‌ها نیاز داریم import کرده است:</p>
+<pre><code class="language-rust">use rustc_lint::{EarlyLintPass, EarlyContext};
+use rustc_session::declare_lint_pass;
+use rustc_ast::ast::*;</code></pre>
+<p>گام بعدی به‌روز کردن اعلام lint است. lintها با ماکروی <a href="https://github.com/rust-lang/rust-clippy/blob/557f6848bd5b7183f55c1e1522a326e9e1df6030/clippy_lints/src/lib.rs#L60"><code>declare_clippy_lint!</code></a> اعلام می‌شوند و ما فقط باید اعلام تولیدشدهٔ خودکار را به‌روز کنیم تا توضیح واقعی داشته باشد، چیزی شبیه این:</p>
+<pre><code class="language-rust">declare_clippy_lint! {
+    /// ### What it does
+    ///
+    /// ### Why is this bad?
+    ///
+    /// ### Example
+    /// ```rust
+    /// // example code
+    /// ```
+    #[clippy::version = "1.29.0"]
+    pub FOO_FUNCTIONS,
+    pedantic,
+    "function named `foo`, which is not a descriptive name"
+}</code></pre>
+<ul>
+<li>بخشی از خط‌ها که با <code>///</code> شروع می‌شوند، بخش مستندات lint را تشکیل می‌دهند. این سبک پیش‌فرض مستندسازی است و <a href="https://rust-lang.github.io/rust-clippy/main/index.html#redundant_closure">به این شکل</a> نمایش داده می‌شود. برای رندر کردن و باز کردن این مستندات به‌صورت محلی در مرورگر، <code>cargo dev serve</code> را اجرا کنید.</li>
+<li>attribute ‏<code>#[clippy::version]</code> به‌عنوان بخشی از مستندات lint نمایش داده می‌شود. مقدار آن باید نسخهٔ فعلی Rust باشد که lint در آن توسعه داده می‌شود؛ می‌توانید آن را با اجرای <code>rustc -vV</code> در پوشهٔ rust-clippy به دست آورید. نسخه زیر <em>release</em> فهرست شده است. (نسخه را بدون پسوند <code>-nightly</code> به کار ببرید.)</li>
+<li><code>FOO_FUNCTIONS</code> نام lint ما است. هنگام نام‌گذاری lint خود حتماً <a href="https://rust-lang.github.io/rfcs/0344-conventions-galore.html#lints">رهنمودهای نام‌گذاری lint</a> را رعایت کنید. به‌طور خلاصه، نام باید چیزی را که بررسی می‌شود بیان کند و هنگام استفاده با <code>allow</code>/<code>warn</code>/<code>deny</code> خوب خوانده شود.</li>
+<li><code>pedantic</code> سطح lint را روی <code>Allow</code> تنظیم می‌کند. نگاشت دقیق را می‌توانید <a href="../index.html">اینجا</a> بیابید</li>
+<li>بخش آخر باید متنی باشد که توضیح دهد دقیقاً چه چیزی در کد نادرست است</li>
+</ul>
+<p>بقیهٔ این فایل شامل یک پیاده‌سازی خالی برای lint pass ما است که در این مورد <code>EarlyLintPass</code> است و باید این شکل را داشته باشد:</p>
+<pre><code class="language-rust">// clippy_lints/src/foo_functions.rs
+
+// .. imports and lint declaration ..
+
+declare_lint_pass!(FooFunctions =&gt; [FOO_FUNCTIONS]);
+
+impl EarlyLintPass for FooFunctions {}</code></pre>
+<h2 id="lint-registration"><a class="header" href="#lint-registration">ثبت lint</a></h2>
+<p>هنگام استفاده از <code>cargo dev new_lint</code>، lint به‌طور خودکار ثبت می‌شود و کار دیگری لازم نیست.</p>
+<p>وقتی lint جدید را دستی اعلام می‌کنید و از <code>cargo dev update_lints</code> استفاده می‌شود، ممکن است لازم باشد lint pass را دستی ثبت کنید؛ برای این کار یک ورودی به فراخوانی ماکروی <code>early_lint_methods!</code> در <code>clippy_lints/src/lib.rs</code> و در محل نشانگر <code>// add early passes here</code> اضافه کنید:</p>
+<pre><code class="language-rust ignore">FooFunctions: foo_functions::FooFunctions = foo_functions::FooFunctions,</code></pre>
+<p>همان‌طور که انتظار می‌رود، یک ماکروی متناظر <code>late_lint_methods!</code> نیز وجود دارد. بدون یک ورودی در یکی از <code>early_lint_methods!</code> یا <code>late_lint_methods!</code>، lint pass مورد نظر اجرا نخواهد شد.</p>
+<p>یکی از دلایلی که <code>cargo dev update_lints</code> این گام را خودکار نمی‌کند این است که چند lint می‌توانند از یک lint pass مشترک استفاده کنند، بنابراین ممکن است هنگام افزودن یک lint جدید، ثبت lint pass پیش‌تر انجام شده باشد. دلیل دیگر خودکار نبودن این گام این است که ترتیب فهرست شدن passها ترتیب واقعی اجرای آن‌ها را تعیین می‌کند و این به نوبهٔ خود بر ترتیب خروجی lintهای صادرشده اثر می‌گذارد.</p>
+<h2 id="lint-passes"><a class="header" href="#lint-passes">lint passها</a></h2>
+<p>نوشتن lintی که فقط نام یک تابع را بررسی می‌کند به این معناست که فقط با AST سروکار داریم و اصلاً لازم نیست با سامانهٔ نوع کار کنیم. این خوب است، زیرا نوشتن این lint خاص را ساده‌تر می‌کند.</p>
+<p>این تصمیم را باید برای هر lint جدید Clippy بگیریم. در نهایت به انتخاب بین <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.EarlyLintPass.html"><code>EarlyLintPass</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.LateLintPass.html"><code>LateLintPass</code></a> برمی‌گردد.</p>
+<p><code>EarlyLintPass</code> پیش از بررسی نوع و lowering به <a href="https://rustc-dev-guide.rust-lang.org/hir.html">HIR</a> اجرا می‌شود، در حالی که <code>LateLintPass</code> پس از این مراحل اجرا می‌شود و به اطلاعات نوع دسترسی می‌دهد. دستور <code>cargo dev new_lint</code> به‌طور پیش‌فرض <code>LateLintPass</code> را که توصیه می‌شود انتخاب می‌کند، اما اگر lint شما فقط به تحلیل در سطح AST نیاز دارد، می‌توانید <code>--pass=early</code> را مشخص کنید.</p>
+<p>از آنجا که برای بررسی نام تابع به اطلاعات نوع نیازی نداریم، هنگام اجرای خودکارسازی lint جدید از <code>--pass=early</code> استفاده کردیم و همهٔ importها بر همین اساس اضافه شدند.</p>
+<h2 id="emitting-a-lint"><a class="header" href="#emitting-a-lint">صدور یک lint</a></h2>
+<p>با آماده بودن آزمون‌های UI و اعلام lint، می‌توانیم کار روی پیاده‌سازی منطق lint را شروع کنیم.</p>
+<p>بیایید با پیاده‌سازی <code>EarlyLintPass</code> برای <code>FooFunctions</code> خود شروع کنیم:</p>
+<pre><code class="language-rust ignore">impl EarlyLintPass for FooFunctions {
+    fn check_fn(&amp;mut self, cx: &amp;EarlyContext&lt;'_&gt;, fn_kind: FnKind&lt;'_&gt;, span: Span, _: NodeId) {
+        // TODO: Emit lint here
+    }
+}</code></pre>
+<p>ما متد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.EarlyLintPass.html#method.check_fn"><code>check_fn</code></a> را از صفت <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.EarlyLintPass.html"><code>EarlyLintPass</code></a> پیاده‌سازی می‌کنیم. این متد به ما دسترسی به اطلاعات گوناگونی دربارهٔ تابعی می‌دهد که در حال بررسی است. در بخش بعد بیشتر دربارهٔ آن می‌گوییم. فعلاً نگران جزئیات نباشیم و ابتدا lint خود را برای <em>هر</em> تعریف تابع صادر کنیم.</p>
+<p>بسته به اینکه پیام lint خود را چقدر پیچیده بخواهیم، می‌توانیم از میان طیف گسترده‌ای از تابع‌های صدور lint انتخاب کنیم. همهٔ آن‌ها در <a href="https://github.com/rust-lang/rust-clippy/blob/HEAD/clippy_utils/src/diagnostics.rs"><code>clippy_utils/src/diagnostics.rs</code></a> قرار دارند.</p>
+<p>در این مورد <code>span_lint_and_help</code> مناسب‌ترین به نظر می‌رسد. این تابع به ما اجازه می‌دهد یک پیام راهنمای اضافی ارائه کنیم و ما واقعاً نمی‌توانیم نام بهتری را به‌طور خودکار پیشنهاد دهیم. این‌طور به نظر می‌رسد:</p>
+<pre><code class="language-rust ignore">impl EarlyLintPass for FooFunctions {
+    fn check_fn(&amp;mut self, cx: &amp;EarlyContext&lt;'_&gt;, fn_kind: FnKind&lt;'_&gt;, span: Span, _: NodeId) {
+        span_lint_and_help(
+            cx,
+            FOO_FUNCTIONS,
+            span,
+            "function named `foo`",
+            None,
+            "consider using a more meaningful name"
+        );
+    }
+}</code></pre>
+<p>اکنون اجرای آزمون UI ما باید خروجی‌ای تولید کند که پیام lint را در خود دارد.</p>
+<p>طبق <a href="https://rustc-dev-guide.rust-lang.org/diagnostics.html">rustc-dev-guide</a>، متن باید عینی و بی‌پیرایه باشد و، مگر اینکه چند جمله لازم باشد، از حروف بزرگ و نقطه پرهیز کند. وقتی کد یا یک شناسه باید در پیام یا برچسب بیاید، باید داخل علامت‌های گراو (backtick) تکی قرار گیرد: `.</p>
+<h2 id="adding-the-lint-logic"><a class="header" href="#adding-the-lint-logic">افزودن منطق lint</a></h2>
+<p>نوشتن منطق lint شما به احتمال زیاد با مثال ما تفاوت خواهد داشت، بنابراین این بخش نسبتاً کوتاه نگه داشته شده است.</p>
+<p>استفاده از متد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.EarlyLintPass.html#method.check_fn"><code>check_fn</code></a> ما را به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/visit/enum.FnKind.html"><code>FnKind</code></a> دسترسی می‌دهد که دارای واریانت <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/visit/enum.FnKind.html#variant.Fn"><code>FnKind::Fn</code></a> است. این واریانت از طریق یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/symbol/struct.Ident.html"><code>Ident</code></a> به نام تابع/متد دسترسی می‌دهد.</p>
+<p>با این امکان می‌توانیم متد <code>check_fn</code> خود را به این شکل گسترش دهیم:</p>
+<pre><code class="language-rust">impl EarlyLintPass for FooFunctions {
+    fn check_fn(&amp;mut self, cx: &amp;EarlyContext&lt;'_&gt;, fn_kind: FnKind&lt;'_&gt;, span: Span, _: NodeId) {
+        if is_foo_fn(fn_kind) {
+            span_lint_and_help(
+                cx,
+                FOO_FUNCTIONS,
+                span,
+                "function named `foo`",
+                None,
+                "consider using a more meaningful name"
+            );
+        }
+    }
+}</code></pre>
+<p>ما شرط lint را از صدور lint جدا می‌کنیم، چون این کار خواندن کد را کمی آسان‌تر می‌کند. در برخی موارد این جداسازی همچنین امکان می‌دهد برای تابع جداشده چند آزمون واحد (در مقابل صرفاً آزمون‌های UI) بنویسیم.</p>
+<p>در مثال ما، <code>is_foo_fn</code> به این شکل است:</p>
+<pre><code class="language-rust">// use statements, impl EarlyLintPass, check_fn, ..
+
+fn is_foo_fn(fn_kind: FnKind&lt;'_&gt;) -&gt; bool {
+    match fn_kind {
+        FnKind::Fn(_, _, Fn { ident, .. }) =&gt; {
+            // check if `fn` name is `foo`
+            ident.name.as_str() == "foo"
+        }
+        // ignore closures
+        FnKind::Closure(..) =&gt; false
+    }
+}</code></pre>
+<p>اکنون باید مجموعهٔ کامل آزمون‌ها را نیز با <code>cargo test</code> اجرا کنیم. در این مرحله اجرای <code>cargo test</code> باید خروجی مورد انتظار را تولید کند. به یاد داشته باشید <code>cargo bless</code> را اجرا کنید تا فایل <code>.stderr</code> به‌روز شود.</p>
+<p><code>cargo test</code> (در مقابل <code>cargo uitest</code>) همچنین تضمین می‌کند که پیاده‌سازی lint ما خودش هیچ‌یک از lintهای Clippy را نقض نمی‌کند.</p>
+<p>پیاده‌سازی lint همین بود. اکنون اجرای <code>cargo test</code> باید موفق شود.</p>
+<h2 id="specifying-the-lints-minimum-supported-rust-version-msrv"><a class="header" href="#specifying-the-lints-minimum-supported-rust-version-msrv">تعیین حداقل نسخهٔ پشتیبانی‌شدهٔ Rust (MSRV) برای lint</a></h2>
+<p>گاهی یک lint پیشنهادهایی می‌دهد که به نسخهٔ مشخصی از Rust نیاز دارند. برای مثال، lint ‏<code>manual_strip</code> استفاده از <code>str::strip_prefix</code> و <code>str::strip_suffix</code> را پیشنهاد می‌کند که فقط پس از Rust 1.45 در دسترس هستند. در چنین مواردی باید مطمئن شوید MSRV پیکربندی‌شده برای پروژه بزرگ‌تر یا مساوی MSRV قابلیت مورد نیاز Rust است. اگر در یک پیشنهاد چند قابلیت به کار رفته است، MSRVی را انتخاب کنید که همهٔ آن‌ها را پشتیبانی کند.</p>
+<p>ابتدا یک نام مستعار MSRV برای قابلیت مورد نیاز در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/clippy_utils/msrvs/index.html"><code>clippy_utils::msrvs</code></a> اضافه کنید. بعداً می‌توان به آن مثلاً با <code>msrvs::STR_STRIP_PREFIX</code> دسترسی داشت.</p>
+<pre><code class="language-rust">msrv_aliases! {
+    ..
+    1,45,0 { STR_STRIP_PREFIX }
+}</code></pre>
+<p>برای دسترسی به MSRV پیکربندی‌شدهٔ پروژه، باید در ساختار LintPass یک فیلد <code>msrv</code> و یک سازنده برای مقداردهی اولیهٔ آن فیلد داشته باشید. مقدار <code>msrv</code> در <code>clippy_lints/lib.rs</code> به سازنده داده می‌شود.</p>
+<pre><code class="language-rust">pub struct ManualStrip {
+    msrv: Msrv,
+}
+
+impl ManualStrip {
+    pub fn new(conf: &amp;'static Conf) -&gt; Self {
+        Self { msrv: conf.msrv.into() }
+    }
+}</code></pre>
+<p>سپس می‌توان MSRV پروژه را در LintPass با استفاده از متد <code>Msrv::meets</code> با MSRV قابلیت مقایسه کرد.</p>
+<pre><code class="language-rust">if !self.msrv.meets(cx, msrvs::STR_STRIP_PREFIX) {
+    return;
+}</code></pre>
+<p>نکتهٔ مهم این است که اگر crate دارای attribute به نام <code>clippy::msrv</code> باشد، فراخوانی <code>Msrv::meets</code> نسبتاً پرهزینه است؛ بنابراین معمولاً باید MSRV را در انتهای یک زنجیرهٔ if let و پس از بررسی‌های دیگری که زودتر ارزیابی را متوقف می‌کنند (short-circuit) بررسی کنید.</p>
+<p>lint passهای early باید به‌جای آن از <code>MsrvStack</code> همراه با <code>extract_msrv_attr!()</code> استفاده کنند.</p>
+<p>وقتی <code>msrv</code> به lint اضافه شد، باید یک مورد آزمون مرتبط به فایل آزمون lint اضافه شود، که در این مثال <code>tests/ui/manual_strip.rs</code> است. این فایل باید یک مورد برای نسخه‌ای پایین‌تر از MSRV و یک مورد با همان محتوا اما برای خود نسخهٔ MSRV داشته باشد.</p>
+<pre><code class="language-rust ignore">...
+
+#[clippy::msrv = "1.44"]
+fn msrv_1_44() {
+    /* something that would trigger the lint */
+}
+
+#[clippy::msrv = "1.45"]
+fn msrv_1_45() {
+    /* something that would trigger the lint */
+}</code></pre>
+<p>به‌عنوان گام آخر، lint باید به مستندات lint اضافه شود. این کار در <code>clippy_config/src/conf.rs</code> انجام می‌شود:</p>
+<pre><code class="language-rust">define_Conf! {
+    #[lints(
+        allow_attributes,
+        allow_attributes_without_reason,
+        ..
+        &lt;the newly added lint name&gt;,
+        ..
+        unused_trait_names,
+        use_self,
+    )]
+    msrv: Msrv = Msrv::default(),
+    ...
+}</code></pre>
+<p>سپس مستندات کتاب را همان‌طور که در <a href="#adding-configuration-to-a-lint">افزودن پیکربندی به یک lint</a> توضیح داده شده است به‌روز کنید.</p>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>توجه داشته باشید که آیتم‌های کتابخانهٔ استاندارد معمولاً دو تاریخ پایداری دارند: یکی برای حالت عادی و دیگری برای زمینه‌های const. برای مثال، <code>str::split_at</code> در Rust 1.4 پایدار شد و در نسخهٔ 1.86 در const پایدار شد.</p>
+<p>برای رفع این مشکل، <code>clippy_utils::is_in_const_context(cx)</code> را همراه با بررسی‌های MSRV به کار ببرید. اگر MSRV پیشنهادها میان <code>std</code> و <code>core</code> متفاوت باشد، ممکن است <code>clippy_utils::std_or_core(cx)</code> نیز لازم شود. برای آزمودن پیشنهادها، یک تابع <code>const</code> را پیش از MSRV و پس از آن با <code>#[clippy::msrv]</code> علامت‌گذاری کنید.</p>
+</blockquote>
+<h2 id="author-lint"><a class="header" href="#author-lint">lint مربوط به author</a></h2>
+<p>اگر در پیاده‌سازی lint خود مشکل دارید، یک lint داخلی با نام <code>author</code> نیز وجود دارد که کد Clippy را برای شناسایی الگوی مشکل‌دار تولید می‌کند. این lint برای همهٔ نحو Rust کار نمی‌کند، اما می‌تواند نقطهٔ شروع خوبی به دست دهد.</p>
+<p>سریع‌ترین راه استفاده از آن، <a href="https://play.rust-lang.org/?version=nightly&amp;mode=debug&amp;edition=2024&amp;gist=9a12cb60e5c6ad4e3003ac6d5e63cf55">Rust playground: play.rust-lang.org</a> است. کدی را که می‌خواهید lint کنید در ویرایشگر قرار دهید و attribute ‏<code>#[clippy::author]</code> را بالای آیتم اضافه کنید. سپس Clippy را از طریق <code>Tools -&gt; Clippy</code> اجرا کنید و باید کد تولیدشده را در خروجی زیر ببینید.</p>
+<p><a href="https://play.rust-lang.org/?version=nightly&amp;mode=debug&amp;edition=2024&amp;gist=9a12cb60e5c6ad4e3003ac6d5e63cf55">اینجا</a> یک نمونه روی playground وجود دارد.</p>
+<p>اگر دستور با موفقیت اجرا شد، می‌توانید کد را به جایی که lint خود را پیاده‌سازی می‌کنید کپی کنید.</p>
+<h2 id="print-hir-lint"><a class="header" href="#print-hir-lint">lint چاپ HIR</a></h2>
+<p>برای پیاده‌سازی یک lint، مفید است ابتدا بازنمایی داخلی‌ای را که rustc استفاده می‌کند بشناسید. Clippy دارای attribute ‏<code>#[clippy::dump]</code> است که <a href="https://rustc-dev-guide.rust-lang.org/hir.html"><em>بازنمایی میانی سطح بالا (HIR)</em></a> آیتم، دستور یا عبارتی را که attribute به آن متصل شده است چاپ می‌کند. برای متصل کردن attribute به عبارت‌ها اغلب باید <code>#![feature(stmt_expr_attributes)]</code> را فعال کنید.</p>
+<p><a href="https://play.rust-lang.org/?version=nightly&amp;mode=debug&amp;edition=2024&amp;gist=daf14db3a7f39ca467cd1b86c34b9afb">اینجا</a> می‌توانید یک نمونه بیابید؛ فقط <em>Tools</em> را انتخاب کنید و <em>Clippy</em> را اجرا کنید.</p>
+<h2 id="documentation"><a class="header" href="#documentation">مستندات</a></h2>
+<p>آخرین کار پیش از ارسال PR، افزودن مقداری مستندات به اعلام lint ما است.</p>
+<p>لطفاً lint خود را با یک doc comment مشابه زیر مستند کنید:</p>
+<pre><code class="language-rust">declare_clippy_lint! {
+    /// ### What it does
+    /// Checks for ... (describe what the lint matches).
+    ///
+    /// ### Why is this bad?
+    /// Supply the reason for linting the code.
+    ///
+    /// ### Example
+    ///
+    /// ```rust,ignore
+    /// // A short example of code that triggers the lint
+    /// ```
+    ///
+    /// Use instead:
+    /// ```rust,ignore
+    /// // A short example of improved code that doesn't trigger the lint
+    /// ```
+    #[clippy::version = "1.29.0"]
+    pub FOO_FUNCTIONS,
+    pedantic,
+    "function named `foo`, which is not a descriptive name"
+}</code></pre>
+<p>اگر lint در گروه <code>restriction</code> است، چون چیزهایی را lint می‌کند که لزوماً «بد» نیستند و بیشتر انتخابی سبکی هستند، عنوان بخش «Why is this bad?» را با «Why restrict this?» جایگزین کنید تا از نوشتن عبارتی مانند «Why is this bad? It isn’t, but …» پرهیز شود.</p>
+<p>وقتی lint شما merge شود، این مستندات در <a href="https://rust-lang.github.io/rust-clippy/main/index.html">فهرست lintها</a> نمایش داده خواهد شد.</p>
+<h2 id="running-rustfmt"><a class="header" href="#running-rustfmt">اجرای rustfmt</a></h2>
+<p><a href="https://github.com/rust-lang/rustfmt">Rustfmt</a> ابزاری برای قالب‌بندی کد Rust مطابق رهنمودهای سبک است. کد شما باید پیش از merge شدن PR با <code>rustfmt</code> قالب‌بندی شده باشد. Clippy در CI از <code>rustfmt</code> نسخهٔ nightly استفاده می‌کند.</p>
+<p>می‌توان آن را از طریق <code>rustup</code> نصب کرد:</p>
+<pre><code class="language-bash">rustup component add rustfmt --toolchain=nightly
+</code></pre>
+<p>از <code>cargo dev fmt</code> برای قالب‌بندی کل کدبیس استفاده کنید. مطمئن شوید <code>rustfmt</code> برای toolchain نسخهٔ nightly نصب شده است.</p>
+<h2 id="debugging"><a class="header" href="#debugging">اشکال‌زدایی</a></h2>
+<p>اگر می‌خواهید بخش‌هایی از پیاده‌سازی lint خود را اشکال‌زدایی کنید، می‌توانید از ماکروی <a href="https://doc.rust-lang.org/std/macro.dbg.html"><code>dbg!</code></a> در هر جای کد استفاده کنید. در این صورت اجرای آزمون‌ها باید خروجی اشکال‌زدایی را در بخش <code>stdout</code> شامل شود.</p>
+<h2 id="conflicting-lints"><a class="header" href="#conflicting-lints">lintهای متعارض</a></h2>
+<p>چند lint وجود دارند که با یک الگوی واحد سروکار دارند اما رویکردهای متفاوتی پیشنهاد می‌دهند. به عبارت دیگر، برخی lintها ممکن است تغییراتی را پیشنهاد دهند که در جهت مخالف چیزی است که lintهای دیگر پیش‌تر برای همان کد پیشنهاد کرده‌اند و در نتیجه تشخیص‌های متعارض ایجاد شود.</p>
+<p>وقتی lintی می‌سازید که به چنین وضعیتی می‌رسد، توصیه می‌شود از نکات زیر برای راهنمایی در دسته‌بندی پیروی کنید:</p>
+<ul>
+<li>تنها موردی که این lintها باید در یک دسته باشند این است که آن دسته <code>restriction</code> باشد. برای مثال، <code>semicolon_inside_block</code> و <code>semicolon_outside_block</code>.</li>
+<li>در همهٔ موارد دیگر، باید در دسته‌های متفاوت با سطوح مجاز بودن متفاوت قرار گیرند. برای مثال، <code>implicit_return</code> (restriction، allow) و <code>needless_return</code> (style، warn).</li>
+</ul>
+<p>برای lintهایی که در دسته‌های متفاوت هستند، همچنین توصیه می‌شود دست‌کم یکی از آن‌ها در دستهٔ <code>restriction</code> باشد. دلیلش این است که گروه <code>restriction</code> تنها گروهی است که توصیه نمی‌کنیم کل مجموعهٔ آن فعال شود و در عوض lintها را از میان آن‌ها دستچین می‌کنیم.</p>
+<h2 id="pr-checklist"><a class="header" href="#pr-checklist">چک‌لیست PR</a></h2>
+<p>پیش از ارسال PR مطمئن شوید همهٔ الزامات پایه را رعایت کرده‌اید:</p>
+<!-- Sync this with `.github/PULL_REQUEST_TEMPLATE` -->
+<ul>
+<li>[ ] از <a href="https://rust-lang.github.io/rfcs/0344-conventions-galore.html#lints">قراردادهای نام‌گذاری lint</a> پیروی کرده‌ام</li>
+<li>[ ] آزمون‌های UI موفق اضافه کرده‌ام (از جمله فایل <code>.stderr</code> که commit شده است)</li>
+<li>[ ] <code>cargo test</code> به‌صورت محلی موفق می‌شود</li>
+<li>[ ] <code>cargo dev update_lints</code> را اجرا کرده‌ام</li>
+<li>[ ] مستندات lint را اضافه کرده‌ام</li>
+<li>[ ] <code>cargo dev fmt</code> را اجرا کرده‌ام</li>
+</ul>
+<h2 id="adding-configuration-to-a-lint"><a class="header" href="#adding-configuration-to-a-lint">افزودن پیکربندی به یک lint</a></h2>
+<p>Clippy از پیکربندی مقادیر lintها با استفاده از یک فایل <code>clippy.toml</code> پشتیبانی می‌کند که جست‌وجوی آن در این مکان‌ها انجام می‌شود:</p>
+<ol>
+<li>پوشه‌ای که متغیر محیطی <code>CLIPPY_CONF_DIR</code> مشخص می‌کند، یا</li>
+<li>پوشه‌ای که متغیر محیطی <a href="../../cargo/reference/environment-variables.html">CARGO_MANIFEST_DIR</a> مشخص می‌کند، یا</li>
+<li>پوشهٔ جاری.</li>
+</ol>
+<p>افزودن پیکربندی به یک lint می‌تواند برای آستانه‌ها یا محدود کردن رفتاری مفید باشد که برای برخی کاربران هشدار اشتباه به‌شمار می‌آید. افزودن پیکربندی در گام‌های زیر انجام می‌شود:</p>
+<ol>
+<li>
+<p>افزودن یک ورودی پیکربندی جدید به <a href="https://github.com/rust-lang/rust-clippy/blob/HEAD/clippy_config/src/conf.rs"><code>clippy_config::conf</code></a> به این شکل:</p>
+<pre><code class="language-rust ignore">/// Lint: LINT_NAME.
+///
+/// &lt;The configuration field doc comment&gt;
+(configuration_ident: Type = DefaultValue),</code></pre>
+<p>doc comment به‌طور خودکار به مستندات lintهای فهرست‌شده اضافه می‌شود. مقدار پیش‌فرض با استفاده از پیاده‌سازی <code>Debug</code> نوع مربوطه قالب‌بندی می‌شود.</p>
+</li>
+<li>
+<p>افزودن مقدار پیکربندی به struct پیاده‌سازی lint:</p>
+<ol>
+<li>
+<p>افزودن مقدار پیکربندی به ساختار پیاده‌سازی lint: 1. این کار ابتدا نیازمند تعریف یک ساختار پیاده‌سازی lint است. ساختارهای پیاده‌سازی lint معمولاً با ماکروی <code>declare_lint_pass!</code> تولید می‌شوند. این ساختار باید دستی تعریف شود تا نوعی فراداده به آن اضافه شود: ```rust // Generated struct definition declare_lint_pass!(StructName =&gt; [ LINT_NAME ]);</p>
+<pre><code class="language-rust">// Generated struct definition
+declare_lint_pass!(StructName =&gt; [
+    LINT_NAME
+]);
+
+// New manual definition struct
+pub struct StructName {}
+
+impl_lint_pass!(StructName =&gt; [
+    LINT_NAME
+]);</code></pre>
+</li>
+<li>
+<p>سپس مقدار پیکربندی و یک متد سازندهٔ متناظر را به این شکل اضافه کنید:</p>
+<pre><code class="language-rust">pub struct StructName {
+    configuration_ident: Type,
+}
+
+// ...
+
+impl StructName {
+    pub fn new(conf: &amp;'static Conf) -&gt; Self {
+        Self {
+            configuration_ident: conf.configuration_ident,
+        }
+    }
+}</code></pre>
+</li>
+</ol>
+</li>
+<li>
+<p>ارسال مقدار پیکربندی به ساختار پیاده‌سازی lint:</p>
+<p>ابتدا محل ساخت struct را در <a href="https://github.com/rust-lang/rust-clippy/blob/HEAD/clippy_lints/src/lib.rs">فایل lib مربوط به <code>clippy_lints</code></a> بیابید. مقدار پیکربندی اکنون در یک مقدار محلی clone یا copy می‌شود و سپس به این شکل به struct پیاده‌سازی ارسال می‌شود:</p>
+<pre><code class="language-rust ignore">// Default generated registration:
+store.register_*_pass(|| box module::StructName);
+
+// New registration with configuration value
+store.register_*_pass(move || box module::StructName::new(conf));</code></pre>
+<p>تبریک، کار تقریباً تمام است. اکنون می‌توان به مقدار پیکربندی در کد lint از طریق <code>self.configuration_ident</code> دسترسی داشت.</p>
+</li>
+<li>
+<p>افزودن آزمون‌ها:</p>
+<ol>
+<li>مقدار پیکربندی‌شدهٔ پیش‌فرض را می‌توان مانند هر lint معمولی در <a href="https://github.com/rust-lang/rust-clippy/blob/HEAD/tests/ui"><code>tests/ui</code></a> آزمود.</li>
+<li>خود پیکربندی به‌طور جداگانه در <a href="https://github.com/rust-lang/rust-clippy/blob/HEAD/tests/ui-toml"><code>tests/ui-toml</code></a> آزموده می‌شود. کافی است یک زیرپوشهٔ جدید با نامی مناسب اضافه کنید. این پوشه شامل یک فایل <code>clippy.toml</code> با مقدار پیکربندی و یک فایل rust است که باید توسط Clippy lint شود. آزمون را در غیر این صورت می‌توان طبق معمول نوشت.</li>
+</ol>
+</li>
+<li>
+<p>به‌روز کردن <a href="../lint_configuration.html">پیکربندی lint</a></p>
+<p>دستور <code>cargo bless --test config-metadata</code> را اجرا کنید تا تغییرات مستندات کتاب تولید شود.</p>
+</li>
+</ol>
+<h2 id="cheat-sheet"><a class="header" href="#cheat-sheet">برگهٔ تقلب</a></h2>
+<p>در اینجا چند اشاره‌گر به چیزهایی آمده است که احتمالاً برای هر lint به آن‌ها نیاز خواهید داشت:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/clippy_utils/index.html">ابزارهای Clippy</a> - تابع‌های کمکی گوناگون. شاید تابعی که لازم دارید از قبل اینجا باشد (<a href="https://doc.rust-lang.org/nightly/nightly-rustc/clippy_utils/ty/fn.implements_trait.html"><code>implements_trait</code></a>، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/clippy_utils/source/fn.snippet.html"><code>snippet</code></a> و غیره)</li>
+<li><a href="https://github.com/rust-lang/rust-clippy/blob/HEAD/clippy_utils/src/diagnostics.rs">تشخیص‌های Clippy</a></li>
+<li><a href="https://github.com/rust-lang/rust/pull/94927">let chainها</a></li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/struct.Span.html#method.from_expansion"><code>from_expansion</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/struct.Span.html#method.in_external_macro"><code>in_external_macro</code></a></li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/struct.Span.html"><code>Span</code></a></li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/enum.Applicability.html"><code>Applicability</code></a></li>
+<li><a href="common_tools_writing_lints.html">ابزارهای رایج برای نوشتن lintها</a> در عملیات رایج کمک می‌کند</li>
+<li><a href="https://rustc-dev-guide.rust-lang.org/">rustc-dev-guide</a> بسیاری از مفاهیم داخلی کامپایلر را توضیح می‌دهد</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/">مستندات rustc نسخهٔ nightly</a> که در سراسر این راهنما به آن لینک داده شده است</li>
+</ul>
+<p>برای lintهای <code>EarlyLintPass</code>:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.EarlyLintPass.html"><code>EarlyLintPass</code></a></li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/ast/index.html"><code>rustc_ast::ast</code></a></li>
+</ul>
+<p>برای lintهای <code>LateLintPass</code>:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.LateLintPass.html"><code>LateLintPass</code></a></li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/sty/index.html"><code>Ty::TyKind</code></a></li>
+</ul>
+<p>در حالی که بیشتر ابزارهای کمکی lint در Clippy مستند شده‌اند، بیشتر بخش‌های داخلی rustc فعلاً مستندات ندارند. این ناخوشایند است، اما در بیشتر موارد احتمالاً می‌توانید با کپی کردن چیزها از lintهای مشابه موجود کار را پیش ببرید. اگر گیر کردید، در پرسیدن از <a href="https://rust-lang.zulipchat.com/#narrow/stream/t-clippy">Zulip</a> یا در issue/PR تردید نکنید.</p><nav class="page-nav"><a href="basics.html">→ مبانی</a><a href="defining_lints.html">تعریف lint ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../clippy/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

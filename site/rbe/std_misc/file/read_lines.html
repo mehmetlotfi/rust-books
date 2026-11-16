@@ -1,0 +1,57 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>`read_lines` — Rust با مثال</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="std_misc/file/read_lines"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../../rbe/index.html" style="color:inherit;text-decoration:none">Rust با مثال</a><small class="en-title" dir="ltr">Rust By Example</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="read_lines"><a class="header" href="#read_lines"><code>read_lines</code></a></h1>
+<h2 id="a-naive-approach"><a class="header" href="#a-naive-approach">رویکردی ساده‌انگارانه</a></h2>
+<p>این می‌تواند نخستین تلاش معقول یک تازه‌کار برای خواندن خط‌های فایل باشد.</p>
+<pre><code class="language-rust no_run">use std::fs::read_to_string;
+
+fn read_lines(filename: &amp;str) -&gt; Vec&lt;String&gt; {
+    let mut result = Vec::new();
+
+    for line in read_to_string(filename).unwrap().lines() {
+        result.push(line.to_string())
+    }
+
+    result
+}</code></pre>
+<p>چون متد <code>lines()</code> تکرارگری روی خط‌های فایل برمی‌گرداند، می‌توانیم همان‌جا نگاشت را انجام دهیم و نتیجه‌ها را گردآوری کنیم تا عبارتی کوتاه‌تر و روان‌تر داشته باشیم.</p>
+<pre><code class="language-rust no_run">use std::fs::read_to_string;
+
+fn read_lines(filename: &amp;str) -&gt; Vec&lt;String&gt; {
+    read_to_string(filename)
+        .unwrap()  // panic on possible file-reading errors
+        .lines()  // split the string into an iterator of string slices
+        .map(String::from)  // make each slice into a string
+        .collect()  // gather them together into a vector
+}</code></pre>
+<p>توجه کنید در هر دو مثال باید ارجاع <code>&amp;str</code> بازگردانده‌شده از <code>lines()</code> را به نوع مالک <code>String</code> تبدیل کنیم؛ به‌ترتیب با <code>.to_string()</code> و <code>String::from</code>.</p>
+<h2 id="a-more-efficient-approach"><a class="header" href="#a-more-efficient-approach">رویکردی کارآمدتر</a></h2>
+<p>اینجا مالکیت <code>File</code> بازشده را به ساختار <code>BufReader</code> می‌دهیم. <code>BufReader</code> برای کاهش تخصیص‌های میانی از بافر داخلی استفاده می‌کند.</p>
+<p>همچنین <code>read_lines</code> را تغییر می‌دهیم تا به‌جای تخصیص یک <code>String</code> تازه برای هر خط، تکرارگر برگرداند.</p>
+<pre><code class="language-rust no_run">use std::fs::File;
+use std::io::{self, BufRead};
+use std::path::Path;
+
+fn main() {
+    // File hosts.txt must exist in the current path
+    if let Ok(lines) = read_lines("./hosts.txt") {
+        // Consumes the iterator, returns an (Optional) String
+        for line in lines.map_while(Result::ok) {
+            println!("{}", line);
+        }
+    }
+}
+
+// The output is wrapped in a Result to allow matching on errors.
+// Returns an Iterator to the Reader of the lines of the file.
+fn read_lines&lt;P&gt;(filename: P) -&gt; io::Result&lt;io::Lines&lt;io::BufReader&lt;File&gt;&gt;&gt;
+where P: AsRef&lt;Path&gt;, {
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
+}</code></pre>
+<p>اجرای برنامه، خط‌ها را جداگانه چاپ می‌کند.</p>
+<pre><code class="language-shell">$ echo -e "127.0.0.1\n192.168.0.1\n" &gt; hosts.txt
+$ rustc read_lines.rs &amp;&amp; ./read_lines
+127.0.0.1
+192.168.0.1
+</code></pre>
+<p>(چون <code>File::open</code> آرگومان عمومی <code>AsRef&lt;Path&gt;</code> می‌خواهد، متد عمومی <code>read_lines()</code> را با همان قید و کلیدواژهٔ <code>where</code> تعریف می‌کنیم.)</p>
+<p>این فرایند از ساخت یک <code>String</code> شامل تمام محتوای فایل کارآمدتر است؛ ساخت چنین رشته‌ای به‌ویژه برای فایل‌های بزرگ مشکل کارایی ایجاد می‌کند.</p><nav class="page-nav"><a href="../../../rbe/std_misc/file/create.html">→ `create`</a><a href="../../../rbe/std_misc/process.html">فرایندهای فرزند ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../rbe/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

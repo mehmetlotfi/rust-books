@@ -1,0 +1,227 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>مسیرها برای ارجاع به یک آیتم در درخت ماژول — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch07-03-paths-for-referring-to-an-item-in-the-module-tree"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="paths-for-referring-to-an-item-in-the-module-tree"><a class="header" href="#paths-for-referring-to-an-item-in-the-module-tree">مسیرها برای اشاره به یک آیتم در درخت ماژول</a></h2>
+<p>برای نشان دادن به Rust که یک آیتم را در درخت ماژول کجا پیدا کند، از یک مسیر استفاده می‌کنیم، مشابه استفاده از مسیر هنگام پیمایش در یک فایل‌سیستم. برای فراخوانی یک تابع، باید مسیر آن را بدانیم.</p>
+<p>یک مسیر می‌تواند به دو شکل باشد:</p>
+<ul>
+<li>یک <em>مسیر مطلق</em> مسیری کامل است که از ریشه جعبه (crate) شروع می‌شود؛ برای کدی که از یک جعبه (crate) خارجی می‌آید، مسیر مطلق با نام جعبه (crate) شروع می‌شود، و برای کدی که از جعبه (crate) فعلی می‌آید، با کلمه کلیدی <code>crate</code> شروع می‌شود.</li>
+<li>یک <em>مسیر نسبی</em> از ماژول فعلی شروع می‌شود و از <code>self</code>، <code>super</code> یا یک شناسه در ماژول فعلی استفاده می‌کند.</li>
+</ul>
+<p>هر دو مسیر مطلق و نسبی با یک یا چند شناسه که با دو نقطه دوبل (<code>::</code>) جدا شده‌اند دنبال می‌شوند.</p>
+<p>با بازگشت به لیستینگ 7-1، فرض کنید که می‌خواهیم تابع <code>add_to_waitlist</code> را فراخوانی کنیم. این کار مشابه پرسیدن این است: مسیر تابع <code>add_to_waitlist</code> چیست؟ لیستینگ 7-3 شامل لیستینگ 7-1 با حذف برخی از ماژول‌ها و توابع است.</p>
+<p>ما دو روش برای فراخوانی تابع <code>add_to_waitlist</code> از یک تابع جدید، <code>eat_at_restaurant</code>، که در ریشه جعبه (crate) تعریف شده است، نشان خواهیم داد. این مسیرها درست هستند، اما یک مشکل دیگر وجود دارد که مانع کامپایل این مثال به شکل فعلی می‌شود. بعداً توضیح خواهیم داد که چرا.</p>
+<p>تابع <code>eat_at_restaurant</code> بخشی از API عمومی جعبه (crate) کتابخانه‌ای ما است، بنابراین آن را با کلمه کلیدی <code>pub</code> علامت می‌زنیم. در بخش <a href="ch07-03-paths-for-referring-to-an-item-in-the-module-tree.html#exposing-paths-with-the-pub-keyword">«آشکار کردن مسیرها با کلمه کلیدی <code>pub</code>»</a>، به جزئیات بیشتری درباره <code>pub</code> خواهیم پرداخت.</p>
+<figure class="listing" id="listing-7-3">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust ignore does_not_compile">mod front_of_house {
+    mod hosting {
+        fn add_to_waitlist() {}
+    }
+}
+
+pub fn eat_at_restaurant() {
+    // Absolute path
+    crate::front_of_house::hosting::add_to_waitlist();
+
+    // Relative path
+    front_of_house::hosting::add_to_waitlist();
+}</code></pre>
+<figcaption><a href="#listing-7-3">لیست ۷-۳</a>: فراخوانی تابع &lt;code&gt;&lt;/x-listing&gt;add_to_waitlist&lt;/code&gt; با استفاده از مسیرهای مطلق و نسبی</figcaption>
+</figure>
+<p>بار اولی که تابع <code>add_to_waitlist</code> را در <code>eat_at_restaurant</code> فراخوانی می‌کنیم، از یک مسیر مطلق استفاده می‌کنیم. تابع <code>add_to_waitlist</code> در همان جعبه (crate) تعریف شده است که <code>eat_at_restaurant</code> در آن قرار دارد، که به این معنی است که می‌توانیم از کلمه کلیدی <code>crate</code> برای شروع مسیر مطلق استفاده کنیم. سپس هر یک از ماژول‌های متوالی را شامل می‌کنیم تا به <code>add_to_waitlist</code> برسیم. می‌توانید یک فایل‌سیستم با ساختار مشابه تصور کنید: ما مسیر <code>/front_of_house/hosting/add_to_waitlist</code> را برای اجرای برنامه <code>add_to_waitlist</code> مشخص می‌کنیم؛ استفاده از نام <code>crate</code> برای شروع از ریشه جعبه (crate) مانند استفاده از <code>/</code> برای شروع از ریشه فایل‌سیستم در شل است.</p>
+<p>بار دوم که تابع <code>add_to_waitlist</code> را در <code>eat_at_restaurant</code> فراخوانی می‌کنیم، از یک مسیر نسبی استفاده می‌کنیم. مسیر با <code>front_of_house</code> شروع می‌شود، که نام ماژولی است که در همان سطح از درخت ماژول به عنوان <code>eat_at_restaurant</code> تعریف شده است. اینجا معادل فایل‌سیستم استفاده از مسیر <code>front_of_house/hosting/add_to_waitlist</code> است. شروع با نام ماژول به این معنی است که مسیر نسبی است.</p>
+<p>انتخاب بین استفاده از مسیر نسبی یا مطلق یک تصمیم است که بر اساس پروژه شما گرفته می‌شود، و به این بستگی دارد که آیا احتمال بیشتری دارد کد تعریف آیتم را به طور مستقل از یا همراه با کدی که از آیتم استفاده می‌کند جابجا کنید. برای مثال، اگر ماژول <code>front_of_house</code> و تابع <code>eat_at_restaurant</code> را به یک ماژول به نام <code>customer_experience</code> منتقل کنیم، باید مسیر مطلق به <code>add_to_waitlist</code> را به‌روزرسانی کنیم، اما مسیر نسبی همچنان معتبر خواهد بود. با این حال، اگر تابع <code>eat_at_restaurant</code> را به طور مستقل به یک ماژول به نام <code>dining</code> منتقل کنیم، مسیر مطلق به فراخوانی <code>add_to_waitlist</code> تغییر نمی‌کند، اما مسیر نسبی باید به‌روزرسانی شود. ترجیح ما به طور کلی این است که مسیرهای مطلق را مشخص کنیم زیرا احتمال بیشتری دارد که بخواهیم تعریف کد و فراخوانی آیتم‌ها را مستقل از یکدیگر جابجا کنیم.</p>
+<p>بیایید سعی کنیم کد لیستینگ 7-3 را کامپایل کنیم و ببینیم چرا هنوز کامپایل نمی‌شود! خطاهایی که دریافت می‌کنیم در لیستینگ 7-4 نشان داده شده‌اند.</p>
+<figure class="listing" id="listing-7-4">
+<pre><code class="language-console">$ cargo build
+   Compiling restaurant v0.1.0 (file:///projects/restaurant)
+error[E0603]: module `hosting` is private
+ --&gt; src/lib.rs:9:28
+  |
+9 |     crate::front_of_house::hosting::add_to_waitlist();
+  |                            ^^^^^^^  --------------- function `add_to_waitlist` is not publicly re-exported
+  |                            |
+  |                            private module
+  |
+note: the module `hosting` is defined here
+ --&gt; src/lib.rs:2:5
+  |
+2 |     mod hosting {
+  |     ^^^^^^^^^^^
+
+error[E0603]: module `hosting` is private
+  --&gt; src/lib.rs:12:21
+   |
+12 |     front_of_house::hosting::add_to_waitlist();
+   |                     ^^^^^^^  --------------- function `add_to_waitlist` is not publicly re-exported
+   |                     |
+   |                     private module
+   |
+note: the module `hosting` is defined here
+  --&gt; src/lib.rs:2:5
+   |
+ 2 |     mod hosting {
+   |     ^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `restaurant` (lib) due to 2 previous errors
+</code></pre>
+<figcaption><a href="#listing-7-4">لیست ۷-۴</a>: خطاهای کامپایلر هنگام ساخت کد در لیستینگ 7-3</figcaption>
+</figure>
+<p>پیام‌های خطا می‌گویند که ماژول <code>hosting</code> خصوصی است. به عبارت دیگر، ما مسیرهای صحیح برای ماژول <code>hosting</code> و تابع <code>add_to_waitlist</code> داریم، اما Rust به ما اجازه نمی‌دهد از آن‌ها استفاده کنیم زیرا به بخش‌های خصوصی دسترسی ندارد. در Rust، تمام آیتم‌ها (توابع، متدها، ساختارها، enumها، ماژول‌ها و ثابت‌ها) به صورت پیش‌فرض برای ماژول‌های والد خصوصی هستند. اگر بخواهید آیتمی مانند یک تابع یا ساختار را خصوصی کنید، آن را در یک ماژول قرار می‌دهید.</p>
+<p>آیتم‌های موجود در یک ماژول والد نمی‌توانند از آیتم‌های خصوصی درون ماژول‌های فرزند استفاده کنند، اما آیتم‌های درون ماژول‌های فرزند می‌توانند از آیتم‌های ماژول‌های اجداد خود استفاده کنند. این به این دلیل است که ماژول‌های فرزند جزئیات پیاده‌سازی خود را بسته‌بندی و پنهان می‌کنند، اما ماژول‌های فرزند می‌توانند زمینه‌ای که در آن تعریف شده‌اند را ببینند. برای ادامه مثال، قواعد حریم خصوصی را مانند دفتر پشتی یک رستوران تصور کنید: آنچه در آنجا می‌گذرد برای مشتریان رستوران خصوصی است، اما مدیران دفتر می‌توانند همه چیز را در رستوران ببینند و انجام دهند.</p>
+<p>Rust تصمیم گرفته است که سیستم ماژول به این صورت کار کند تا پنهان کردن جزئیات پیاده‌سازی داخلی به صورت پیش‌فرض باشد. به این ترتیب، می‌دانید کدام بخش‌های کد داخلی را می‌توانید تغییر دهید بدون اینکه کد بیرونی را خراب کنید. با این حال، Rust به شما این امکان را می‌دهد که بخش‌های داخلی کد ماژول‌های فرزند را به ماژول‌های اجداد بیرونی با استفاده از کلمه کلیدی <code>pub</code> عمومی کنید.</p>
+<h3 id="exposing-paths-with-the-pub-keyword"><a class="header" href="#exposing-paths-with-the-pub-keyword">آشکار کردن مسیرها با کلمه کلیدی <code>pub</code></a></h3>
+<p>بیایید به خطای لیستینگ 7-4 برگردیم که به ما گفت ماژول <code>hosting</code> خصوصی است. ما می‌خواهیم تابع <code>eat_at_restaurant</code> در ماژول والد به تابع <code>add_to_waitlist</code> در ماژول فرزند دسترسی داشته باشد، بنابراین ماژول <code>hosting</code> را با کلمه کلیدی <code>pub</code> علامت می‌زنیم، همان‌طور که در لیستینگ 7-5 نشان داده شده است.</p>
+<figure class="listing" id="listing-7-5">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust ignore does_not_compile">mod front_of_house {
+    pub mod hosting {
+        fn add_to_waitlist() {}
+    }
+}
+
+// -- snip --
+<span class="boring">pub fn eat_at_restaurant() {
+</span><span class="boring">    // Absolute path
+</span><span class="boring">    crate::front_of_house::hosting::add_to_waitlist();
+</span><span class="boring">
+</span><span class="boring">    // Relative path
+</span><span class="boring">    front_of_house::hosting::add_to_waitlist();
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-7-5">لیست ۷-۵</a>: اعلان ماژول &lt;code&gt;&lt;/x-listing&gt;hosting&lt;/code&gt; به عنوان &lt;code&gt;pub&lt;/code&gt; برای استفاده از آن در &lt;code&gt;eat_at_restaurant&lt;/code&gt;</figcaption>
+</figure>
+<p>متأسفانه، کد در لیستینگ 7-5 همچنان به خطاهای کامپایلر منجر می‌شود، همان‌طور که در لیستینگ 7-6 نشان داده شده است.</p>
+<figure class="listing" id="listing-7-6">
+<pre><code class="language-console">$ cargo build
+   Compiling restaurant v0.1.0 (file:///projects/restaurant)
+error[E0603]: function `add_to_waitlist` is private
+  --&gt; src/lib.rs:10:37
+   |
+10 |     crate::front_of_house::hosting::add_to_waitlist();
+   |                                     ^^^^^^^^^^^^^^^ private function
+   |
+note: the function `add_to_waitlist` is defined here
+  --&gt; src/lib.rs:3:9
+   |
+ 3 |         fn add_to_waitlist() {}
+   |         ^^^^^^^^^^^^^^^^^^^^
+
+error[E0603]: function `add_to_waitlist` is private
+  --&gt; src/lib.rs:13:30
+   |
+13 |     front_of_house::hosting::add_to_waitlist();
+   |                              ^^^^^^^^^^^^^^^ private function
+   |
+note: the function `add_to_waitlist` is defined here
+  --&gt; src/lib.rs:3:9
+   |
+ 3 |         fn add_to_waitlist() {}
+   |         ^^^^^^^^^^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `restaurant` (lib) due to 2 previous errors
+</code></pre>
+<figcaption><a href="#listing-7-6">لیست ۷-۶</a>: خطاهای کامپایلر هنگام ساخت کد در لیستینگ 7-5</figcaption>
+</figure>
+<p>چه اتفاقی افتاد؟ اضافه کردن کلمه کلیدی <code>pub</code> در جلوی <code>mod hosting</code> ماژول را عمومی می‌کند. با این تغییر، اگر به <code>front_of_house</code> دسترسی داشته باشیم، می‌توانیم به <code>hosting</code> نیز دسترسی داشته باشیم. اما <em>محتویات</em> <code>hosting</code> همچنان خصوصی است؛ عمومی کردن ماژول به معنای عمومی کردن محتوای آن نیست. کلمه کلیدی <code>pub</code> روی یک ماژول فقط به کدهای موجود در ماژول‌های اجداد اجازه می‌دهد به آن ارجاع دهند، نه اینکه به کد داخلی آن دسترسی داشته باشند. از آنجایی که ماژول‌ها به عنوان ظرف عمل می‌کنند، تنها عمومی کردن ماژول کافی نیست؛ باید فراتر رفته و یک یا چند مورد از آیتم‌های درون ماژول را نیز عمومی کنیم.</p>
+<p>خطاهای موجود در لیستینگ 7-6 نشان می‌دهند که تابع <code>add_to_waitlist</code> خصوصی است. قواعد حریم خصوصی برای ساختارها، enumها، توابع، متدها و همچنین ماژول‌ها اعمال می‌شوند.</p>
+<p>بیایید تابع <code>add_to_waitlist</code> را نیز با اضافه کردن کلمه کلیدی <code>pub</code> قبل از تعریف آن عمومی کنیم، همان‌طور که در لیستینگ 7-7 نشان داده شده است.</p>
+<figure class="listing" id="listing-7-7">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground test_harness">mod front_of_house {
+    pub mod hosting {
+        pub fn add_to_waitlist() {}
+    }
+}
+
+// -- snip --
+<span class="boring">pub fn eat_at_restaurant() {
+</span><span class="boring">    // Absolute path
+</span><span class="boring">    crate::front_of_house::hosting::add_to_waitlist();
+</span><span class="boring">
+</span><span class="boring">    // Relative path
+</span><span class="boring">    front_of_house::hosting::add_to_waitlist();
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-7-7">لیست ۷-۷</a>: اضافه کردن کلمه کلیدی &lt;code&gt;&lt;/x-listing&gt;pub&lt;/code&gt; به &lt;code&gt;mod hosting&lt;/code&gt; و &lt;code&gt;fn add_to_waitlist&lt;/code&gt; به ما اجازه می‌دهد تابع را از &lt;code&gt;eat_at_restaurant&lt;/code&gt; فراخوانی کنیم</figcaption>
+</figure>
+<p>اکنون کد کامپایل می‌شود! برای فهمیدن اینکه چرا افزودن واژهٔ کلیدی <code>pub</code> با رعایت قواعد حریم خصوصی اجازه می‌دهد این مسیرها را در <code>eat_at_restaurant</code> به کار ببریم، مسیر مطلق و نسبی را بررسی می‌کنیم.</p>
+<p>در مسیر مطلق با <code>crate</code>، یعنی ریشهٔ درخت ماژول crate، آغاز می‌کنیم. ماژول <code>front_of_house</code> در ریشهٔ crate تعریف شده است. هرچند <code>front_of_house</code> عمومی نیست، تابع <code>eat_at_restaurant</code> در همان ماژولِ <code>front_of_house</code> تعریف شده است؛ یعنی <code>eat_at_restaurant</code> و <code>front_of_house</code> هم‌نیا هستند. بنابراین از <code>eat_at_restaurant</code> می‌توانیم به <code>front_of_house</code> ارجاع دهیم. سپس به ماژول <code>hosting</code> می‌رسیم که با <code>pub</code> علامت خورده است. چون به ماژول والد <code>hosting</code> دسترسی داریم، به خود <code>hosting</code> نیز دسترسی داریم. سرانجام تابع <code>add_to_waitlist</code> با <code>pub</code> علامت خورده و ما به ماژول والدش دسترسی داریم؛ پس فراخوانی تابع کار می‌کند!</p>
+<p>منطق مسیر نسبی به‌جز گام نخست با مسیر مطلق یکسان است: به‌جای آغاز از ریشهٔ crate، مسیر از <code>front_of_house</code> شروع می‌شود. ماژول <code>front_of_house</code> در همان ماژولِ <code>eat_at_restaurant</code> تعریف شده است، پس مسیر نسبیِ آغازشده از ماژول محل تعریف <code>eat_at_restaurant</code> کار می‌کند. سپس چون <code>hosting</code> و <code>add_to_waitlist</code> با <code>pub</code> علامت خورده‌اند، باقی مسیر نیز معتبر است و فراخوانی تابع انجام می‌شود.</p>
+<p>اگر قصد دارید crate کتابخانه‌ای خود را به اشتراک بگذارید تا پروژه‌های دیگر بتوانند از کد شما استفاده کنند، API عمومی شما قرارداد شما با کاربران crate است و تعیین می‌کند آن‌ها چگونه می‌توانند با کد شما تعامل کنند. ملاحظات بسیاری دربارهٔ مدیریت تغییرات API عمومی وجود دارد تا وابستگی دیگران به crate شما آسان‌تر شود. این ملاحظات از حوصلهٔ این کتاب خارج است؛ اگر به این موضوع علاقه دارید، <a href="https://rust-lang.github.io/api-guidelines/">رهنمودهای API در Rust</a> را ببینید.</p>
+<section class="note" aria-role="note">
+<h4 id="best-practices-for-packages-with-a-binary-and-a-library"><a class="header" href="#best-practices-for-packages-with-a-binary-and-a-library">بهترین شیوه‌ها برای بسته‌هایی که یک جعبه (crate) باینری و یک جعبه (crate) کتابخانه‌ای دارند</a></h4>
+<p>گفتیم که یک پکیج می‌تواند هم ریشهٔ crate باینری <em>src/main.rs</em> و هم ریشهٔ crate کتابخانه‌ای <em>src/lib.rs</em> را داشته باشد و هر دو crate به‌طور پیش‌فرض نام پکیج را می‌گیرند. معمولاً پکیج‌هایی با این الگو، فقط به‌اندازهٔ راه‌اندازی فایل اجرایی و فراخوانی کد crate کتابخانه‌ای در crate باینری کد دارند. بدین ترتیب پروژه‌های دیگر می‌توانند از بیشتر قابلیت‌های پکیج بهره‌مند شوند، زیرا کد crate کتابخانه‌ای قابل اشتراک‌گذاری است.</p>
+<p>درخت ماژول باید در <em>src/lib.rs</em> تعریف شود. سپس، هر آیتم عمومی را می‌توان در جعبه (crate) باینری با شروع مسیرها با نام بسته استفاده کرد. جعبه (crate) باینری به یک کاربر از جعبه (crate) کتابخانه‌ای تبدیل می‌شود، درست مثل اینکه یک جعبه (crate) کاملاً خارجی از جعبه (crate) کتابخانه‌ای استفاده می‌کند: تنها می‌تواند از API عمومی استفاده کند. این کار به شما کمک می‌کند یک API خوب طراحی کنید؛ نه تنها نویسنده آن هستید، بلکه یک کاربر نیز هستید!</p>
+<p>در <a href="ch12-00-an-io-project.html">فصل ۱۲</a> این شیوهٔ سازمان‌دهی را با برنامه‌ای خط فرمان نشان می‌دهیم که هم crate باینری و هم crate کتابخانه‌ای دارد.</p>
+</section>
+<h3 id="starting-relative-paths-with-super"><a class="header" href="#starting-relative-paths-with-super">آغاز مسیرهای نسبی با <code>super</code></a></h3>
+<p>با قرار دادن <code>super</code> در ابتدای مسیر می‌توانیم مسیر نسبی‌ای بسازیم که به‌جای ماژول جاری یا ریشهٔ crate، از ماژول والد آغاز شود. این کار شبیه آغاز مسیر سامانهٔ فایل با نحو <code>..</code> است. <code>super</code> اجازه می‌دهد به آیتمی ارجاع دهیم که می‌دانیم در ماژول والد قرار دارد. وقتی ماژول ارتباط نزدیکی با والد دارد اما ممکن است والد روزی به جای دیگری در درخت ماژول منتقل شود، این روش بازآرایی درخت را آسان‌تر می‌کند.</p>
+<p>کد فهرست ۷-۸ وضعیتی را مدل می‌کند که آشپز سفارش اشتباهی را اصلاح می‌کند و شخصاً آن را برای مشتری می‌برد. تابع <code>fix_incorrect_order</code> در ماژول <code>back_of_house</code> با مشخص‌کردن مسیر <code>deliver_order</code> که با <code>super</code> آغاز می‌شود، تابع <code>deliver_order</code> تعریف‌شده در ماژول والد را فراخوانی می‌کند.</p>
+<figure class="listing" id="listing-7-8">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground test_harness">fn deliver_order() {}
+
+mod back_of_house {
+    fn fix_incorrect_order() {
+        cook_order();
+        super::deliver_order();
+    }
+
+    fn cook_order() {}
+}</code></pre>
+<figcaption><a href="#listing-7-8">لیست ۷-۸</a>: فراخوانی یک تابع با استفاده از یک مسیر نسبی که با &lt;code&gt;&lt;/x-listing&gt;super&lt;/code&gt; شروع می‌شود</figcaption>
+</figure>
+<p>تابع <code>fix_incorrect_order</code> در ماژول <code>back_of_house</code> است، بنابراین می‌توانیم از <code>super</code> برای رفتن به ماژول والد <code>back_of_house</code> استفاده کنیم، که در این مورد <code>crate</code>، یعنی ریشه است. از آنجا به دنبال <code>deliver_order</code> می‌گردیم و آن را پیدا می‌کنیم. موفقیت! ما فکر می‌کنیم که ماژول <code>back_of_house</code> و تابع <code>deliver_order</code> احتمالاً در همان رابطه با یکدیگر باقی می‌مانند و اگر بخواهیم درخت ماژول جعبه (crate) را سازماندهی مجدد کنیم، با هم جابجا می‌شوند. بنابراین، از <code>super</code> استفاده کردیم تا در آینده، اگر این کد به ماژول دیگری منتقل شد، تغییرات کمتری در کد لازم باشد.</p>
+<h3 id="making-structs-and-enums-public"><a class="header" href="#making-structs-and-enums-public">عمومی کردن ساختارها و enumها</a></h3>
+<p>ما همچنین می‌توانیم از <code>pub</code> برای مشخص کردن ساختارها و enumها به عنوان عمومی استفاده کنیم، اما چند جزئیات اضافی در مورد استفاده از <code>pub</code> با ساختارها و enumها وجود دارد. اگر از <code>pub</code> قبل از تعریف یک ساختار استفاده کنیم، ساختار عمومی می‌شود، اما فیلدهای ساختار همچنان خصوصی خواهند بود. ما می‌توانیم هر فیلد را به صورت موردی عمومی یا خصوصی کنیم. در لیستینگ 7-9، یک ساختار عمومی به نام <code>back_of_house::Breakfast</code> تعریف کرده‌ایم که یک فیلد عمومی به نام <code>toast</code> دارد اما فیلد <code>seasonal_fruit</code> خصوصی است. این مدل‌سازی حالتی است که در آن مشتری می‌تواند نوع نان همراه با وعده غذایی را انتخاب کند، اما سرآشپز تصمیم می‌گیرد که کدام میوه همراه وعده غذایی باشد بر اساس آنچه در فصل و موجودی است. میوه‌های موجود به سرعت تغییر می‌کنند، بنابراین مشتریان نمی‌توانند میوه را انتخاب کنند یا حتی ببینند که چه میوه‌ای دریافت خواهند کرد.</p>
+<figure class="listing" id="listing-7-9">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">mod back_of_house {
+    pub struct Breakfast {
+        pub toast: String,
+        seasonal_fruit: String,
+    }
+
+    impl Breakfast {
+        pub fn summer(toast: &amp;str) -&gt; Breakfast {
+            Breakfast {
+                toast: String::from(toast),
+                seasonal_fruit: String::from("peaches"),
+            }
+        }
+    }
+}
+
+pub fn eat_at_restaurant() {
+    // Order a breakfast in the summer with Rye toast.
+    let mut meal = back_of_house::Breakfast::summer("Rye");
+    // Change our mind about what bread we'd like.
+    meal.toast = String::from("Wheat");
+    println!("I'd like {} toast please", meal.toast);
+
+    // The next line won't compile if we uncomment it; we're not allowed
+    // to see or modify the seasonal fruit that comes with the meal.
+    // meal.seasonal_fruit = String::from("blueberries");
+}</code></pre>
+<figcaption><a href="#listing-7-9">لیست ۷-۹</a>: یک ساختار با برخی فیلدهای عمومی و برخی خصوصی</figcaption>
+</figure>
+<p>از آنجا که فیلد <code>toast</code> در struct با نام <code>back_of_house::Breakfast</code> عمومی (public) است، در <code>eat_at_restaurant</code> می‌توانیم با نقطه‌گذاری روی فیلد <code>toast</code> بنویسیم و از آن بخوانیم. توجه کنید که نمی‌توانیم از فیلد <code>seasonal_fruit</code> در <code>eat_at_restaurant</code> استفاده کنیم، چون <code>seasonal_fruit</code> خصوصی (private) است. خطی را که مقدار فیلد <code>seasonal_fruit</code> را تغییر می‌دهد از حالت کامنت خارج کنید تا ببینید چه خطایی می‌گیرید!</p>
+<p>همچنین توجه کنید که چون <code>back_of_house::Breakfast</code> یک فیلد خصوصی دارد، ساختار باید یک تابع وابسته عمومی ارائه دهد که یک نمونه از <code>Breakfast</code> بسازد (ما آن را اینجا <code>summer</code> نامیده‌ایم). اگر <code>Breakfast</code> چنین تابعی نداشت، نمی‌توانستیم یک نمونه از <code>Breakfast</code> را در <code>eat_at_restaurant</code> ایجاد کنیم، زیرا نمی‌توانستیم مقدار فیلد خصوصی <code>seasonal_fruit</code> را در <code>eat_at_restaurant</code> تنظیم کنیم.</p>
+<p>در مقابل، اگر یک enum را عمومی کنیم، تمام متغیرهای آن نیز عمومی می‌شوند. ما فقط به <code>pub</code> قبل از کلمه کلیدی <code>enum</code> نیاز داریم، همان‌طور که در لیستینگ 7-10 نشان داده شده است.</p>
+<figure class="listing" id="listing-7-10">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">mod back_of_house {
+    pub enum Appetizer {
+        Soup,
+        Salad,
+    }
+}
+
+pub fn eat_at_restaurant() {
+    let order1 = back_of_house::Appetizer::Soup;
+    let order2 = back_of_house::Appetizer::Salad;
+}</code></pre>
+<figcaption><a href="#listing-7-10">لیست ۷-۱۰</a>: Designating an enum as public makes all its variants public</figcaption>
+</figure>
+<p>از آنجایی که enum <code>Appetizer</code> را عمومی کردیم، می‌توانیم از متغیرهای <code>Soup</code> و <code>Salad</code> در <code>eat_at_restaurant</code> استفاده کنیم.</p>
+<p>Enums خیلی مفید نیستند مگر اینکه متغیرهای آن‌ها عمومی باشند؛ اضافه کردن <code>pub</code> به تمام متغیرهای enum در هر مورد کار خسته‌کننده‌ای خواهد بود، بنابراین به طور پیش‌فرض متغیرهای enum عمومی هستند. ساختارها اغلب بدون عمومی بودن فیلدهایشان مفید هستند، بنابراین فیلدهای ساختار از قانون کلی پیروی می‌کنند که همه چیز به صورت پیش‌فرض خصوصی است مگر اینکه با <code>pub</code> مشخص شود.</p>
+<p>یک وضعیت دیگر مرتبط با <code>pub</code> وجود دارد که هنوز آن را پوشش نداده‌ایم، و آن آخرین ویژگی سیستم ماژول ما است: کلمه کلیدی <code>use</code>. ابتدا <code>use</code> را به تنهایی بررسی خواهیم کرد، و سپس نشان خواهیم داد چگونه <code>pub</code> و <code>use</code> را ترکیب کنیم.</p><nav class="page-nav"><a href="ch07-02-defining-modules-to-control-scope-and-privacy.html">→ کنترل دامنه و حریم خصوصی با ماژول‌ها</a><a href="ch07-04-bringing-paths-into-scope-with-the-use-keyword.html">آوردن مسیرها به دامنه با کلیدواژهٔ use ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

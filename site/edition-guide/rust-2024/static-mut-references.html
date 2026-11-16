@@ -1,0 +1,259 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>ممنوعیت ارجاع به static mut — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2024/static-mut-references"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="disallow-references-to-static-mut"><a class="header" href="#disallow-references-to-static-mut">ممنوعیت ارجاع به static mut</a></h1>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<ul>
+<li>سطح lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#static-mut-refs"><code>static_mut_refs</code></a> اکنون به‌طور پیش‌فرض <code>deny</code> است. این lint بررسی می‌کند که آیا یک ارجاع مشترک یا تغییرپذیر به یک <code>static mut</code> گرفته شده است یا نه.</li>
+</ul>
+<h2 id="details"><a class="header" href="#details">جزئیات</a></h2>
+<p>lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#static-mut-refs"><code>static_mut_refs</code></a> گرفتن ارجاع به یک <a href="../../reference/items/static-items.html#mutable-statics"><code>static mut</code></a> را شناسایی می‌کند. در ویرایش ۲۰۲۴ این lint به‌طور پیش‌فرض <code>deny</code> شده است تا تأکید شود که باید از ساختن چنین ارجاع‌هایی پرهیز کنید.</p>
+<!-- edition2024 -->
+<pre><code class="language-rust">static mut X: i32 = 23;
+static mut Y: i32 = 24;
+
+unsafe {
+    let y = &amp;X;             // ERROR: shared reference to mutable static
+    let ref x = X;          // ERROR: shared reference to mutable static
+    let (x, y) = (&amp;X, &amp;Y);  // ERROR: shared reference to mutable static
+}</code></pre>
+<p>صرفِ گرفتن چنین ارجاعی، که قاعدهٔ «قابل‌تغییر یا هم‌نام، نه هر دو» (mutability XOR aliasing) در Rust را نقض می‌کند، همیشه <em>بلافاصله</em> <a href="../../reference/behavior-considered-undefined.html">رفتار تعریف‌نشده</a> به شمار می‌رفته است، <strong>حتی اگر از ارجاع هرگز خوانده یا در آن نوشته نشود</strong>. افزون بر این، برقرار نگه‌داشتن این قاعده برای یک <code>static mut</code> مستلزم <em>استدلال دربارهٔ کد شما در مقیاس سراسری</em> است، که در حضور بازورود (reentrancy) و/یا چندنخی (multithreading) می‌تواند به‌ویژه دشوار باشد.</p>
+<p>توجه کنید که حالت‌هایی وجود دارد که در آن‌ها ارجاع‌های ضمنی بدون عملگر <code>&amp;</code> مشهود به‌طور خودکار ساخته می‌شوند. برای مثال، این موقعیت‌ها نیز lint را فعال می‌کنند:</p>
+<!-- edition2024 -->
+<pre><code class="language-rust">static mut NUMS: &amp;[u8; 3] = &amp;[0, 1, 2];
+
+unsafe {
+    println!("{NUMS:?}");   // ERROR: shared reference to mutable static
+    let n = NUMS.len();     // ERROR: shared reference to mutable static
+}</code></pre>
+<h2 id="alternatives"><a class="header" href="#alternatives">جایگزین‌ها</a></h2>
+<p>تا جایی که ممکن است، <strong>اکیداً توصیه می‌شود</strong> به‌جای آن از یک <code>static</code> <em>تغییرناپذیر</em> از نوعی استفاده کنید که <em>تغییرپذیری درونی</em> (interior mutability) را پشت یک <em>انتزاع با استدلال موضعی</em> فراهم می‌کند (که پیچیدگی تضمین رعایت قاعدهٔ «قابل‌تغییر یا هم‌نام، نه هر دو» در Rust را به‌شدت کاهش می‌دهد).</p>
+<p>در موقعیت‌هایی که هیچ انتزاع با استدلال موضعی ممکن نیست و ناچارید همچنان دربارهٔ دسترسی‌ها به متغیر <code>static</code> خود به‌صورت سراسری استدلال کنید، اکنون باید از اشاره‌گرهای خام (raw pointer) استفاده کنید؛ مثلاً اشاره‌گرهایی که از <a href="../../reference/expressions/operator-expr.html#raw-borrow-operators">عملگرهای <code>&amp;raw const</code> یا <code>&amp;raw mut</code></a> به دست می‌آیند. اگر به‌جای گرفتن مستقیم ارجاع، ابتدا یک اشاره‌گر خام بگیرید، (الزامات ایمنی) دسترسی‌ها از طریق آن اشاره‌گر برای توسعه‌دهندگان <code>unsafe</code> آشناتر خواهد بود و می‌توان آن‌ها را به بعد موکول کرد یا به بخش‌های کوچک‌تری از کد محدود نمود.</p>
+<p>توجه کنید که مثال‌های زیر صرفاً نمونه‌های توضیحی هستند و قرار نیست پیاده‌سازی‌های کامل باشند. آن‌ها را عیناً کپی نکنید. جزئیاتی مربوط به وضعیت خاص شما وجود دارد که ممکن است برای تطبیق با نیازهایتان به تغییراتی نیاز داشته باشد. هدف از این مثال‌ها کمک به شماست تا راه‌های مختلف برخورد با مسئله‌تان را ببینید.</p>
+<p>توصیه می‌شود مستندات نوع‌های مشخص در کتابخانهٔ استاندارد، مرجع <a href="../../reference/behavior-considered-undefined.html">رفتار تعریف‌نشده</a>، و <a href="https://doc.rust-lang.org/nomicon/index.html">Rustonomicon</a> را مطالعه کنید و اگر پرسشی دارید، در یکی از انجمن‌های Rust مانند <a href="https://users.rust-lang.org/">انجمن کاربران</a> مطرح کنید.</p>
+<h3 id="dont-use-globals"><a class="header" href="#dont-use-globals">از متغیرهای سراسری استفاده نکنید</a></h3>
+<p>این احتمالاً چیزی است که از قبل می‌دانید، اما در صورت امکان بهتر است از حالت سراسری قابل‌تغییر پرهیز کنید. البته گاهی این کار کمی دست‌وپاگیرتر یا دشوارتر است، به‌ویژه اگر لازم باشد یک ارجاع قابل‌تغییر را میان توابع بسیاری دست‌به‌دست کنید.</p>
+<h3 id="atomics"><a class="header" href="#atomics">اتمی‌ها</a></h3>
+<p><a href="https://doc.rust-lang.org/std/sync/atomic/index.html">نوع‌های اتمی</a> اعداد صحیح، اشاره‌گرها و مقادیر بولی‌ای را فراهم می‌کنند که می‌توان آن‌ها را در یک <code>static</code> (بدون <code>mut</code>) به کار برد.</p>
+<pre><code class="language-rust edition2024"><span class="boring">use std::sync::atomic::Ordering;
+</span><span class="boring">use std::sync::atomic::AtomicU64;
+</span>
+// Change from this:
+//   static mut COUNTER: u64 = 0;
+// to this:
+static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+fn main() {
+    // Be sure to analyze your use case to determine the correct Ordering to use.
+    COUNTER.fetch_add(1, Ordering::Relaxed);
+}</code></pre>
+<h3 id="mutex-or-rwlock"><a class="header" href="#mutex-or-rwlock">Mutex یا RwLock</a></h3>
+<p>وقتی نوع شما پیچیده‌تر از یک نوع اتمی است، استفاده از <a href="https://doc.rust-lang.org/std/sync/struct.Mutex.html"><code>Mutex</code></a> یا <a href="https://doc.rust-lang.org/std/sync/struct.RwLock.html"><code>RwLock</code></a> را برای تضمین دسترسی درست به مقدار سراسری در نظر بگیرید.</p>
+<pre><code class="language-rust edition2024"><span class="boring">use std::sync::Mutex;
+</span><span class="boring">use std::collections::VecDeque;
+</span>
+// Change from this:
+//     static mut QUEUE: VecDeque&lt;String&gt; = VecDeque::new();
+// to this:
+static QUEUE: Mutex&lt;VecDeque&lt;String&gt;&gt; = Mutex::new(VecDeque::new());
+
+fn main() {
+    QUEUE.lock().unwrap().push_back(String::from("abc"));
+    let first = QUEUE.lock().unwrap().pop_front();
+}</code></pre>
+<h3 id="oncelock-or-lazylock"><a class="header" href="#oncelock-or-lazylock">OnceLock یا LazyLock</a></h3>
+<p>اگر از <code>static mut</code> استفاده می‌کنید چون باید مقداردهی اولیه‌ای یک‌باره انجام دهید که نمی‌تواند <code>const</code> باشد، می‌توانید به‌جای آن از <a href="https://doc.rust-lang.org/std/sync/struct.OnceLock.html"><code>OnceLock</code></a> یا <a href="https://doc.rust-lang.org/std/sync/struct.LazyLock.html"><code>LazyLock</code></a> استفاده کنید.</p>
+<pre><code class="language-rust edition2024"><span class="boring">use std::sync::LazyLock;
+</span><span class="boring">
+</span><span class="boring">struct GlobalState;
+</span><span class="boring">
+</span><span class="boring">impl GlobalState {
+</span><span class="boring">    fn new() -&gt; GlobalState {
+</span><span class="boring">        GlobalState
+</span><span class="boring">    }
+</span><span class="boring">    fn example(&amp;self) {}
+</span><span class="boring">}
+</span>
+// Instead of some temporary or uninitialized type like:
+//     static mut STATE: Option&lt;GlobalState&gt; = None;
+// use this instead:
+static STATE: LazyLock&lt;GlobalState&gt; = LazyLock::new(|| {
+    GlobalState::new()
+});
+
+fn main() {
+    STATE.example();
+}</code></pre>
+<p><a href="https://doc.rust-lang.org/std/sync/struct.OnceLock.html"><code>OnceLock</code></a> شبیه <a href="https://doc.rust-lang.org/std/sync/struct.LazyLock.html"><code>LazyLock</code></a> است، اما اگر لازم باشد اطلاعاتی را به سازنده (constructor) بدهید می‌توان از آن استفاده کرد؛ این ویژگی با نقاط مقداردهی اولیهٔ یگانه (مانند <code>main</code>) یا زمانی که ورودی‌ها در هر جایی که به مقدار سراسری دسترسی دارید در دسترس‌اند، به‌خوبی کار می‌کند.</p>
+<pre><code class="language-rust edition2024"><span class="boring">use std::sync::OnceLock;
+</span><span class="boring">
+</span><span class="boring">struct GlobalState;
+</span><span class="boring">
+</span><span class="boring">impl GlobalState {
+</span><span class="boring">    fn new(verbose: bool) -&gt; GlobalState {
+</span><span class="boring">        GlobalState
+</span><span class="boring">    }
+</span><span class="boring">    fn example(&amp;self) {}
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct Args {
+</span><span class="boring">    verbose: bool
+</span><span class="boring">}
+</span><span class="boring">fn parse_arguments() -&gt; Args {
+</span><span class="boring">    Args { verbose: true }
+</span><span class="boring">}
+</span>
+static STATE: OnceLock&lt;GlobalState&gt; = OnceLock::new();
+
+fn main() {
+    let args = parse_arguments();
+    let state = GlobalState::new(args.verbose);
+    let _ = STATE.set(state);
+    // ...
+    STATE.get().unwrap().example();
+}</code></pre>
+<h3 id="no_std-one-time-initialization"><a class="header" href="#no_std-one-time-initialization">مقداردهی اولیهٔ یک‌باره در <code>no_std</code></a></h3>
+<p>این مثال از این جهت شبیه <a href="https://doc.rust-lang.org/std/sync/struct.OnceLock.html"><code>OnceLock</code></a> است که مقداردهی اولیهٔ یک‌بارهٔ یک مقدار سراسری را فراهم می‌کند، اما به <code>std</code> نیاز ندارد، که در یک محیط <code>no_std</code> مفید است. با فرض اینکه هدف (target) شما از عملیات اتمی پشتیبانی می‌کند، می‌توانید از یک مقدار اتمی برای بررسی مقداردهی اولیهٔ مقدار سراسری استفاده کنید. این الگو ممکن است چیزی شبیه این باشد:</p>
+<pre><code class="language-rust edition2024"><span class="boring">use core::sync::atomic::AtomicUsize;
+</span><span class="boring">use core::sync::atomic::Ordering;
+</span><span class="boring">
+</span><span class="boring">struct Args {
+</span><span class="boring">    verbose: bool,
+</span><span class="boring">}
+</span><span class="boring">fn parse_arguments() -&gt; Args {
+</span><span class="boring">    Args { verbose: true }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct GlobalState {
+</span><span class="boring">    verbose: bool,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl GlobalState {
+</span><span class="boring">    const fn default() -&gt; GlobalState {
+</span><span class="boring">        GlobalState { verbose: false }
+</span><span class="boring">    }
+</span><span class="boring">    fn new(verbose: bool) -&gt; GlobalState {
+</span><span class="boring">        GlobalState { verbose }
+</span><span class="boring">    }
+</span><span class="boring">    fn example(&amp;self) {}
+</span><span class="boring">}
+</span>
+const UNINITIALIZED: usize = 0;
+const INITIALIZING: usize = 1;
+const INITIALIZED: usize = 2;
+
+static STATE_INITIALIZED: AtomicUsize = AtomicUsize::new(UNINITIALIZED);
+static mut STATE: GlobalState = GlobalState::default();
+
+fn set_global_state(state: GlobalState) {
+    if STATE_INITIALIZED
+        .compare_exchange(
+            UNINITIALIZED,
+            INITIALIZING,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        )
+        .is_ok()
+    {
+        // SAFETY: The reads and writes to STATE are guarded with the INITIALIZED guard.
+        unsafe {
+            STATE = state;
+        }
+        STATE_INITIALIZED.store(INITIALIZED, Ordering::SeqCst);
+    } else {
+        panic!("already initialized, or concurrent initialization");
+    }
+}
+
+fn get_state() -&gt; &amp;'static GlobalState {
+    if STATE_INITIALIZED.load(Ordering::Acquire) != INITIALIZED {
+        panic!("not initialized");
+    } else {
+        // SAFETY: Mutable access is not possible after state has been initialized.
+        unsafe { &amp;*&amp;raw const STATE }
+    }
+}
+
+fn main() {
+    let args = parse_arguments();
+    let state = GlobalState::new(args.verbose);
+    set_global_state(state);
+    // ...
+    let state = get_state();
+    state.example();
+}</code></pre>
+<p>این مثال فرض می‌کند که می‌توانید پیش از مقداردهی اولیه یک مقدار پیش‌فرض در <code>static</code> قرار دهید (در این مثال، سازندهٔ <code>default</code> از نوع const). اگر این ممکن نیست، استفاده از <a href="https://doc.rust-lang.org/core/mem/union.MaybeUninit.html"><code>MaybeUninit</code></a>، یا توزیع پویای trait (dynamic trait dispatch) با یک نوع ساختگی که یک trait را پیاده‌سازی می‌کند، یا هر رویکرد دیگری برای داشتن یک جانگهدار پیش‌فرض را در نظر بگیرید.</p>
+<p>crateهایی نیز توسط جامعه فراهم شده‌اند که مقداردهی اولیهٔ یک‌بارهٔ مشابهی ارائه می‌دهند، مانند crate با نام <a href="https://crates.io/crates/static_cell"><code>static-cell</code></a> (که با استفاده از <a href="https://crates.io/crates/portable-atomic"><code>portable-atomic</code></a> از هدف‌هایی که عملیات اتمی ندارند نیز پشتیبانی می‌کند).</p>
+<h3 id="raw-pointers"><a class="header" href="#raw-pointers">اشاره‌گرهای خام</a></h3>
+<p>در برخی موارد می‌توانید همچنان از <code>static mut</code> استفاده کنید، اما از ساختن ارجاع پرهیز کنید. برای مثال، اگر فقط لازم است <a href="../../reference/types/pointer.html#raw-pointers-const-and-mut">اشاره‌گرهای خام</a> را به یک کتابخانهٔ C بدهید، ارجاع میانی نسازید. در عوض می‌توانید از <a href="../../reference/expressions/operator-expr.html#raw-borrow-operators">عملگرهای قرض خام</a> استفاده کنید، مانند مثال زیر:</p>
+<pre><code class="language-rust edition2024 no_run"><span class="boring">#[repr(C)]
+</span><span class="boring">struct GlobalState {
+</span><span class="boring">    value: i32
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl GlobalState {
+</span><span class="boring">    const fn new() -&gt; GlobalState {
+</span><span class="boring">        GlobalState { value: 0 }
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>
+static mut STATE: GlobalState = GlobalState::new();
+
+unsafe extern "C" {
+    fn example_ffi(state: *mut GlobalState);
+}
+
+fn main() {
+    unsafe {
+        // Change from this:
+        //     example_ffi(&amp;mut STATE as *mut GlobalState);
+        // to this:
+        example_ffi(&amp;raw mut STATE);
+    }
+}</code></pre>
+<p>فقط توجه داشته باشید که همچنان باید محدودیت‌های هم‌نامی (aliasing) پیرامون اشاره‌گرهای قابل‌تغییر را رعایت کنید. این ممکن است مستلزم نوعی هم‌گام‌سازی درونی یا بیرونی، یا اثبات‌هایی دربارهٔ نحوهٔ استفاده از آن در نخ‌ها، مدیریت‌کننده‌های وقفه (interrupt handler) و بازورود باشد.</p>
+<h3 id="unsafecell-with-sync"><a class="header" href="#unsafecell-with-sync"><code>UnsafeCell</code> همراه با <code>Sync</code></a></h3>
+<p><a href="https://doc.rust-lang.org/std/cell/struct.UnsafeCell.html"><code>UnsafeCell</code></a> trait با نام <code>Sync</code> را پیاده‌سازی (impl) نمی‌کند، بنابراین نمی‌توان آن را در یک <code>static</code> به کار برد. می‌توانید پوششی (wrapper) دور <a href="https://doc.rust-lang.org/std/cell/struct.UnsafeCell.html"><code>UnsafeCell</code></a> بسازید و یک پیاده‌سازی <code>Sync</code> به آن اضافه کنید تا برای پیاده‌سازی تغییرپذیری درونی در یک <code>static</code> قابل استفاده شود. این رویکرد زمانی مفید است که قفل‌های بیرونی یا تضمین‌های دیگری دارید که ناورداهای ایمنی (safety invariants) مورد نیاز اشاره‌گرهای تغییرپذیر را برقرار نگه می‌دارند.</p>
+<p>توجه کنید که این رویکرد تا حد زیادی همان مثال <a href="#raw-pointers">اشاره‌گرهای خام</a> است. پوشش کمک می‌کند نحوهٔ استفادهٔ شما از نوع برجسته شود و بر الزامات ایمنی‌ای که باید مراقبشان باشید تمرکز شود. اما در غیر این صورت این دو تقریباً یکسان‌اند.</p>
+<pre><code class="language-rust edition2024"><span class="boring">use std::cell::UnsafeCell;
+</span><span class="boring">
+</span><span class="boring">fn with_interrupts_disabled&lt;T: Fn()&gt;(f: T) {
+</span><span class="boring">    // A real example would disable interrupts.
+</span><span class="boring">    f();
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">#[repr(C)]
+</span><span class="boring">struct GlobalState {
+</span><span class="boring">    value: i32,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl GlobalState {
+</span><span class="boring">    const fn new() -&gt; GlobalState {
+</span><span class="boring">        GlobalState { value: 0 }
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>
+#[repr(transparent)]
+pub struct SyncUnsafeCell&lt;T&gt;(UnsafeCell&lt;T&gt;);
+
+unsafe impl&lt;T: Sync&gt; Sync for SyncUnsafeCell&lt;T&gt; {}
+
+static STATE: SyncUnsafeCell&lt;GlobalState&gt; = SyncUnsafeCell(UnsafeCell::new(GlobalState::new()));
+
+fn set_value(value: i32) {
+    with_interrupts_disabled(|| {
+        let state = STATE.0.get();
+        unsafe {
+            // SAFETY: This value is only ever read in our interrupt handler,
+            // and interrupts are disabled, and we only use this in one thread.
+            (*state).value = value;
+        }
+    });
+}</code></pre>
+<p>کتابخانهٔ استاندارد گونه‌ای صرفاً nightly (ناپایدار) از <a href="https://doc.rust-lang.org/std/cell/struct.UnsafeCell.html"><code>UnsafeCell</code></a> با نام <a href="https://doc.rust-lang.org/std/cell/struct.SyncUnsafeCell.html"><code>SyncUnsafeCell</code></a> دارد. مثال بالا نسخهٔ بسیار ساده‌شده‌ای از نوع کتابخانهٔ استاندارد را نشان می‌دهد، اما تقریباً به همان شیوه به کار می‌رود. این نوع می‌تواند جداسازی حتی بهتری فراهم کند، پس برای جزئیات بیشتر پیاده‌سازی آن را ببینید.</p>
+<p>این مثال شامل تابعی خیالی با نام <code>with_interrupts_disabled</code> است که نمونه‌ای از چیزی است که ممکن است در یک محیط نهفته (embedded) ببینید. برای مثال، crate با نام <a href="https://crates.io/crates/critical-section"><code>critical-section</code></a> قابلیتی مشابه فراهم می‌کند که می‌توان از آن در یک محیط نهفته استفاده کرد.</p>
+<h3 id="safe-references"><a class="header" href="#safe-references">ارجاع‌های ایمن</a></h3>
+<p>در برخی موارد ممکن است ساختن ارجاع به یک <code>static mut</code> ایمن باشد. تمام فلسفهٔ lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#static-mut-refs"><code>static_mut_refs</code></a> این است که انجام درست این کار بسیار دشوار است! با این حال، این به معنای <em>ناممکن</em> بودن آن نیست. اگر در وضعیتی هستید که می‌توانید رعایت الزامات هم‌نامی (aliasing) را تضمین کنید، مثلاً تضمین کنید که دامنهٔ static محدود است (فقط در یک ماژول یا تابع کوچک استفاده می‌شود)، هم‌گام‌سازی درونی یا بیرونی دارد، و وقفه‌ها، بازورود، ایمنی در برابر panic، مدیریت‌کننده‌های drop و مانند آن را در نظر می‌گیرد، آنگاه گرفتن ارجاع ممکن است اشکالی نداشته باشد.</p>
+<p>برای این کار دو رویکرد دارید. یا می‌توانید lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#static-mut-refs"><code>static_mut_refs</code></a> را مجاز کنید (ترجیحاً تا حد ممکن در محدودهٔ باریک)، یا اشاره‌گرهای خام را به ارجاع تبدیل کنید، مانند <code>&amp;mut *&amp;raw mut MY_STATIC</code>.</p>
+<!-- TODO: Should we prefer one or the other here? -->
+<h4 id="short-lived-references"><a class="header" href="#short-lived-references">ارجاع‌های کوتاه‌عمر</a></h4>
+<p>اگر ناچارید ارجاعی به یک <code>static mut</code> بسازید، توصیه می‌شود مدتی را که آن ارجاع وجود دارد به حداقل برسانید. از پنهان کردن ارجاع در جایی یا زنده نگه‌داشتن آن در بخش بزرگی از کد پرهیز کنید. کوتاه‌عمر نگه‌داشتن آن به ممیزی و بررسی اینکه دسترسی انحصاری در تمام مدت حفظ می‌شود کمک می‌کند. اشاره‌گرها باید واحد پیش‌فرض شما باشند و فقط در صورت نیاز مطلق و به‌صورت درخواستی اشاره‌گر را به ارجاع تبدیل کنید.</p>
+<h2 id="migration"><a class="header" href="#migration">مهاجرت</a></h2>
+<p>مهاجرت خودکاری برای اصلاح این ارجاع‌ها به <code>static mut</code> وجود ندارد. برای پرهیز از رفتار تعریف‌نشده باید کد خود را طبق رویکردهای توصیه‌شده در بخش <a href="#alternatives">جایگزین‌ها</a> بازنویسی کنید تا از روش دیگری استفاده کند.</p><nav class="page-nav"><a href="unsafe-op-in-unsafe-fn.html">→ هشدار unsafe_op_in_unsafe_fn</a><a href="never-type-fallback.html">تغییر fallback نوع never ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,59 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>قرض‌های دو‌فازی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="borrow-check/two-phase-borrows"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="two-phase-borrows"><a class="header" href="#two-phase-borrows">قرض‌های دوفازی</a></h1>
+<p>قرض‌های دوفازی (two-phase borrows) نسخه‌ای آزادتر از قرض‌های تغییرپذیر هستند که اجازه می‌دهند فراخوانی‌های متد تودرتو مانند <code>vec.push(vec.len())</code> نوشته شوند. چنین قرض‌هایی ابتدا در یک فاز «رزرو» مانند قرض‌های اشتراکی عمل می‌کنند و بعداً می‌توانند به یک قرض تغییرپذیر کامل «فعال» شوند.</p>
+<p>تنها برخی قرض‌های تغییرپذیر ضمنی می‌توانند دوفازی باشند؛ هر <code>&amp;mut</code> یا <code>ref mut</code> که در کد منبع نوشته شود هرگز قرض دوفازی نیست. مواردی که قرض دوفازی تولید می‌کنیم عبارت‌اند از:</p>
+<ol>
+<li>قرض خودکار (autoref) هنگام فراخوانی متدی که گیرنده‌اش ارجاع تغییرپذیر است.</li>
+<li>یک قرض مجدد (reborrow) تغییرپذیر در آرگومان‌های تابع.</li>
+<li>قرض تغییرپذیر ضمنی در عملگر انتساب مرکب سربارگذاری‌شده.</li>
+</ol>
+<p>برای ارائه‌ی چند مثال:</p>
+<pre><code class="language-rust edition2018">// In the source code
+
+// Case 1:
+let mut v = Vec::new();
+v.push(v.len());
+let r = &amp;mut Vec::new();
+r.push(r.len());
+
+// Case 2:
+std::mem::replace(r, vec![1, r.len()]);
+
+// Case 3:
+let mut x = std::num::Wrapping(2);
+x += x;</code></pre>
+<p>با بازکردن این‌ها به‌قدری که قرض‌های دوفازی نمایان شوند:</p>
+<pre><code class="language-rust ignore">// Case 1:
+let mut v = Vec::new();
+let temp1 = &amp;two_phase v;
+let temp2 = v.len();
+Vec::push(temp1, temp2);
+let r = &amp;mut Vec::new();
+let temp3 = &amp;two_phase *r;
+let temp4 = r.len();
+Vec::push(temp3, temp4);
+
+// Case 2:
+let temp5 = &amp;two_phase *r;
+let temp6 = vec![1, r.len()];
+std::mem::replace(temp5, temp6);
+
+// Case 3:
+let mut x = std::num::Wrapping(2);
+let temp7 = &amp;two_phase x;
+let temp8 = x;
+std::ops::AddAssign::add_assign(temp7, temp8);</code></pre>
+<p>اینکه یک قرض می‌تواند دوفازی باشد یا نه، پس از بررسی نوع با یک پرچم روی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/adjustment/enum.AutoBorrow.html"><code>AutoBorrow</code></a> ردیابی می‌شود و سپس هنگام ساخت MIR به یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_build/thir/cx/expr/trait.ToBorrowKind.html#method.to_borrow_kind"><code>BorrowKind</code></a> می‌شود.</p>
+<p>هر قرض دوفازی به یک مقدار موقت اختصاص می‌یابد که فقط یک‌بار استفاده می‌شود. بنابراین می‌توانیم تعریف کنیم:</p>
+<ul>
+<li>نقطه‌ای که مقدار موقت در آن مقداردهی می‌شود، <em>نقطه‌ی رزرو</em> قرض دوفازی نامیده می‌شود.</li>
+<li>نقطه‌ای که مقدار موقت در آن استفاده می‌شود، که عملاً همیشه یک فراخوانی تابع است، <em>نقطه‌ی فعال‌سازی</em> نامیده می‌شود.</li>
+</ul>
+<p>نقطه‌های فعال‌سازی با بازدیدکننده‌ی (visitor) <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/borrow_set/struct.GatherBorrows.html"><code>GatherBorrows</code></a> پیدا می‌شوند. سپس <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/borrow_set/struct.BorrowData.html"><code>BorrowData</code></a> هم نقطه‌ی رزرو و هم نقطه‌ی فعال‌سازی قرض را نگه می‌دارد.</p>
+<h2 id="checking-two-phase-borrows"><a class="header" href="#checking-two-phase-borrows">بررسی قرض‌های دوفازی</a></h2>
+<p>قرض‌های دوفازی طوری در نظر گرفته می‌شوند که انگار قرض تغییرپذیر هستند، با این استثناها:</p>
+<ol>
+<li>در هر مکان از MIR <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/struct.MirBorrowckCtxt.html#method.check_activations">بررسی می‌کنیم</a> آیا قرض دوفازی‌ای در این مکان فعال می‌شود. اگر یک قرض دوفازی زنده در یک مکان فعال شود، بررسی می‌کنیم که هیچ قرضی با آن قرض دوفازی تداخل نداشته باشد.</li>
+<li>در نقطه‌ی رزرو، اگر قرض‌های <em>تغییرپذیر</em> زنده‌ی متداخل وجود داشته باشند خطا می‌دهیم، و اگر قرض‌های اشتراکی متداخل وجود داشته باشند lint صادر می‌کنیم.</li>
+<li>میان نقطه‌ی رزرو و نقطه‌ی فعال‌سازی، قرض دوفازی مانند یک قرض اشتراکی عمل می‌کند. اینکه آیا در چنین نقطه‌ای هستیم (در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/path_utils/fn.is_active.html"><code>is_active</code></a>) را با استفاده از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_data_structures/graph/dominators/struct.Dominators.html"><code>Dominators</code></a> برای گراف MIR تعیین می‌کنیم.</li>
+<li>پس از نقطه‌ی فعال‌سازی، قرض دوفازی مانند یک قرض تغییرپذیر عمل می‌کند.</li>
+</ol><nav class="page-nav"><a href="region-inference/error-reporting.html">→ گزارش خطا (ناقص)</a><a href="debugging.html">اشکال‌زدایی بررسی‌کنندهٔ قرض ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

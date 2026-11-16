@@ -1,0 +1,119 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>جریان داده MIR — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="mir/dataflow"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="dataflow-analysis"><a class="header" href="#dataflow-analysis">Dataflow Analysis</a></h1>
+<p>اگر روی MIR کار کنید، مکرراً با انواع مختلف <a href="https://en.wikipedia.org/wiki/Data-flow_analysis#Basic_principles">تحلیل جریان داده (dataflow)</a> روبه‌رو می‌شوید.
+<code>rustc</code> از dataflow برای یافتن متغیرهای مقداردهی‌نشده، تعیین اینکه چه متغیرهایی در دستور <code>yield</code> یک generator زنده‌اند، و محاسبهٔ اینکه کدام <code>Place</code>ها در نقطهٔ مشخصی از گراف جریان کنترل borrow شده‌اند استفاده می‌کند.
+تحلیل جریان داده مفهوم بنیادی در کامپایلرهای مدرن است و آشنایی با این موضوع برای مشارکت‌کنندگان آینده مفید خواهد بود.</p>
+<p>با این حال، این مستندات مقدمهٔ عمومی تحلیل جریان داده نیست.
+صرفاً توصیف چارچوبی است که برای تعریف این تحلیل‌ها در <code>rustc</code> به‌کار می‌رود.
+فرض می‌کند خواننده با ایده‌های اصلی و برخی اصطلاحات پایه مثل «تابع انتقال (transfer function)»، «نقطهٔ ثابت (fixpoint)» و «شبکه (lattice)» آشناست.
+اگر با این اصطلاحات آشنا نیستید یا مرور سریع می‌خواهید،
+<a href="https://cs.au.dk/~amoeller/spa/"><em>Static Program Analysis</em></a> کتاب درسی عالی و رایگانی است.
+برای کسانی که یادگیری صوتی‌تصویری را ترجیح می‌دهند، پیش‌تر مجموعه‌ای از سخنرانی‌های کوتاه از دانشگاه گوته فرانکفورت در YouTube توصیه می‌کردیم، اما حذف شده است.
+برای زمینه <a href="https://github.com/rust-lang/rustc-dev-guide/pull/1295">این PR</a> و برای سخنرانی‌های جایگزین <a href="https://github.com/rust-lang/rustc-dev-guide/pull/1295#issuecomment-1118131294">این کامنت</a> را ببینید.</p>
+<h2 id="defining-a-dataflow-analysis"><a class="header" href="#defining-a-dataflow-analysis">تعریف یک تحلیل جریان داده</a></h2>
+<p>تحلیل جریان داده با trait با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_dataflow/trait.Analysis.html"><code>Analysis</code></a> تعریف می‌شود.
+علاوه بر نوع حالت جریان داده، این trait مقدار اولیهٔ آن حالت را
+در ورودی هر بلوک و همچنین جهت تحلیل (جلو یا عقب) تعریف می‌کند.
+دامنهٔ تحلیل جریان داده باید یک <a href="https://en.wikipedia.org/wiki/Lattice_(order)">شبکه (lattice)</a> باشد
+(دقیقاً یک نیم‌شبکهٔ join) با عملگر <code>join</code> رفتارپذیر.
+برای اطلاعات بیشتر مستندات ماژول <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_dataflow/lattice/index.html"><code>lattice</code></a> و همچنین trait با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_dataflow/lattice/trait.JoinSemiLattice.html"><code>JoinSemiLattice</code></a> را ببینید.</p>
+<h3 id="transfer-functions-and-effects"><a class="header" href="#transfer-functions-and-effects">توابع انتقال و اثرها</a></h3>
+<p>چارچوب جریان داده در <code>rustc</code> اجازه می‌دهد هر دستور (و terminator) درون basic block تابع انتقال خودش را تعریف کند.
+برای اختصار، این توابع انتقال جداگانه «اثر (effect)» نامیده می‌شوند.
+هر اثر به ترتیب جریان داده به‌طور متوالی اعمال می‌شود،
+و با هم تابع انتقال کل basic block را تعریف می‌کنند.
+همچنین می‌توان برای یال‌های خروجی مشخصی از برخی terminatorها اثر تعریف کرد (مثلاً
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_dataflow/trait.Analysis.html#tymethod.apply_call_return_effect"><code>apply_call_return_effect</code></a> برای یال <code>success</code> از terminator با نام <code>Call</code>).
+در مجموع، این‌ها «اثرهای هر یال (per-edge effects)» نامیده می‌شوند.</p>
+<h3 id="before-effects"><a class="header" href="#before-effects">“Before” Effects</a></h3>
+<p>خوانندگان دقیق مستندات ممکن است متوجه شوند در واقع برای هر دستور و terminator <em>دو</em> اثر ممکن است، اثر «before» و اثر بدون پیشوند (یا «اصلی»).
+اثرهای «before» بلافاصله پیش از اثر بدون پیشوند اعمال می‌شوند <strong>صرف‌نظر از جهت تحلیل</strong>.
+به عبارت دیگر، تحلیل عقب‌رو هنگام محاسبهٔ تابع انتقال یک basic block ابتدا اثر «before» و سپس اثر «اصلی» را اعمال می‌کند، دقیقاً مثل تحلیل جلو‌رو.</p>
+<p>اکثر تحلیل‌ها باید فقط از اثرهای بدون پیشوند استفاده کنند: داشتن چند اثر برای هر دستور تشخیص اینکه مصرف‌کنندگان باید کجا نگاه کنند را دشوار می‌کند.</p>
+<h3 id="convergence"><a class="header" href="#convergence">Convergence</a></h3>
+<p>تحلیل شما باید به «نقطهٔ ثابت (fixpoint)» همگرا شود، وگرنه تا ابد اجرا می‌شود.
+همگرایی به نقطهٔ ثابت فقط راه دیگری برای گفتن «رسیدن به تعادل» است.
+برای رسیدن به تعادل، تحلیل شما باید از چند قانون پیروی کند.
+یکی از قوانینی که باید رعایت کند این است که مقدار bottom<sup class="footnote-reference" id="fr-bottom-purpose-1"><a href="#footnote-bottom-purpose">1</a></sup> با مقدار دیگری join شود و حاصل برابر مقدار دوم باشد.
+یا به‌صورت معادله:</p>
+<blockquote>
+<p><em>bottom</em> join <em>x</em> = <em>x</em></p>
+</blockquote>
+<p>قانون دیگر این است که تحلیل شما باید «مقدار top» داشته باشد به‌طوری که</p>
+<blockquote>
+<p><em>top</em> join <em>x</em> = <em>top</em></p>
+</blockquote>
+<p>داشتن مقدار top تضمین می‌کند نیم‌شبکهٔ شما ارتفاع متناهی دارد، و قانون بالا تضمین می‌کند وقتی حالت جریان داده به top رسید دیگر تغییر نمی‌کند (نقطهٔ ثابت همان top خواهد بود).</p>
+<h2 id="a-brief-example"><a class="header" href="#a-brief-example">یک مثال کوتاه</a></h2>
+<p>این بخش مثال کوتاهی از تحلیل جریان داده ساده را در سطح بالا ارائه می‌دهد.
+همه‌چیزی را که باید بدانید توضیح نمی‌دهد، اما امیدواریم بقیهٔ این صفحه را روشن‌تر کند.</p>
+<p>فرض کنید می‌خواهیم تحلیل ساده‌ای انجام دهیم تا بفهمیم آیا <code>mem::transmute</code> ممکن است تا نقطهٔ مشخصی از برنامه فراخوانی شده باشد.
+دامنهٔ تحلیل ما فقط یک <code>bool</code> است که ثبت می‌کند آیا <code>transmute</code> تاکنون فراخوانی شده است.
+مقدار bottom برابر <code>false</code> خواهد بود، چون به‌طور پیش‌فرض <code>transmute</code> فراخوانی نشده است.
+مقدار top برابر <code>true</code> خواهد بود، چون به‌محض اینکه تشخیص دهیم <code>transmute</code> فراخوانی شده تحلیل ما کامل است.
+عملگر join ما فقط عملگر OR بولی (<code>||</code>) خواهد بود.
+از OR استفاده می‌کنیم نه AND به‌خاطر این حالت:</p>
+<pre><code class="language-rust"><span class="boring">unsafe fn example(some_cond: bool) {
+</span>let x = if some_cond {
+    std::mem::transmute::&lt;i32, u32&gt;(0_i32) // transmute was called!
+} else {
+    1_u32 // transmute was not called
+};
+
+// Has transmute been called by this point? We conservatively approximate that
+// as yes, and that is why we use the OR operator.
+println!("x: {}", x);
+<span class="boring">}</span></code></pre>
+<h2 id="inspecting-the-results-of-a-dataflow-analysis"><a class="header" href="#inspecting-the-results-of-a-dataflow-analysis">بررسی نتایج یک تحلیل جریان داده</a></h2>
+<p>پس از ساخت تحلیل، باید <code>iterate_to_fixpoint</code> را فراخوانی کنید
+که <code>Results</code> برمی‌گرداند و حالت جریان داده در نقطهٔ ثابت را هنگام ورود به هر بلوک دارد.
+پس از داشتن <code>Results</code>، می‌توانید حالت جریان داده در نقطهٔ ثابت را در هر نقطه از CFG بررسی کنید.
+اگر فقط حالت را در چند مکان لازم دارید (مثلاً هر terminator از نوع <code>Drop</code>) از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_dataflow/struct.ResultsCursor.html"><code>ResultsCursor</code></a> استفاده کنید. اگر
+حالت را در <em>هر</em> مکان لازم دارید، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_dataflow/trait.ResultsVisitor.html"><code>ResultsVisitor</code></a> کارآمدتر است.</p>
+<pre><code class="language-text">                         Analysis
+                            |
+                            | iterate_to_fixpoint()
+                            |
+                         Results
+                         /     \
+ into_results_cursor(…) /       \  visit_with(…)
+                       /         \
+               ResultsCursor  ResultsVisitor
+</code></pre>
+<p>برای مثال، کد زیر از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_dataflow/trait.ResultsVisitor.html"><code>ResultsVisitor</code></a> استفاده می‌کند…</p>
+<pre><code class="language-rust ignore">// Assuming `MyVisitor` implements `ResultsVisitor&lt;FlowState = MyAnalysis::Domain&gt;`...
+let mut my_visitor = MyVisitor::new();
+
+// inspect the fixpoint state for every location within every block in RPO.
+let results = MyAnalysis::new()
+    .iterate_to_fixpoint(tcx, body, None);
+results.visit_with(body, &amp;mut my_visitor);`</code></pre>
+<p>در حالی که این کد از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_dataflow/struct.ResultsCursor.html"><code>ResultsCursor</code></a> استفاده می‌کند:</p>
+<pre><code class="language-rust ignore">let mut results = MyAnalysis::new()
+    .iterate_to_fixpoint(tcx, body, None);
+    .into_results_cursor(body);
+
+// Inspect the fixpoint state immediately before each `Drop` terminator.
+for (bb, block) in body.basic_blocks().iter_enumerated() {
+    if let TerminatorKind::Drop { .. } = block.terminator().kind {
+        results.seek_before_primary_effect(body.terminator_loc(bb));
+        let state = results.get();
+        println!("state before drop: {:#?}", state);
+    }
+}</code></pre>
+<h3 id="graphviz-diagrams"><a class="header" href="#graphviz-diagrams">Graphviz Diagrams</a></h3>
+<p>وقتی نتایج تحلیل جریان داده آن‌طور که انتظار دارید نیست، اغلب تجسم آن‌ها کمک می‌کند.
+این را می‌توان با پرچم‌های <code>-Z dump-mir</code> که در <a href="./debugging.html">اشکال‌زدایی MIR</a> توضیح داده شده انجام داد.
+با <code>-Z dump-mir=F -Z dump-mir-dataflow</code> شروع کنید، که <code>F</code>
+یا «all» است یا نام بدنهٔ MIR مورد علاقهٔ شما.</p>
+<p>این فایل‌های <code>.dot</code> در پوشهٔ <code>mir_dump</code> شما ذخیره می‌شوند و
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_dataflow/trait.Analysis.html#associatedconstant.NAME"><code>NAME</code></a> تحلیل (مثلاً <code>maybe_inits</code>) را در نام فایلشان دارند. هر
+تجسم حالت کامل جریان داده را هنگام ورود و خروج از هر بلوک، و همچنین هر تغییری که در هر دستور و terminator رخ می‌دهد نشان می‌دهد.
+مثال زیر را ببینید:</p>
+<img alt="A graphviz diagram for a dataflow analysis" src="../img/dataflow-graphviz-example.png">
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-bottom-purpose">
+<p>هدف اصلی مقدار bottom این است که حالت اولیهٔ جریان داده باشد.
+حالت ورودی هر basic block پیش از شروع تحلیل به bottom مقداردهی می‌شود. <a href="#fr-bottom-purpose-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="../unsafety-checking.html">→ بررسی ایمنی</a><a href="drop-elaboration.html">Drop elaboration ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

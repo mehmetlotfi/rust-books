@@ -1,0 +1,62 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>حل‌کننده — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="solve/the-solver"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="the-solver"><a class="header" href="#the-solver">حل‌گر</a></h1>
+<p>مطالعهٔ مستندات <a href="https://rust-lang.github.io/chalk/book/recursive.html">حل‌گر بازگشتی در chalk</a> نیز پیشنهاد می‌شود،
+چون بسیار شبیه این پیاده‌سازی است و دربارهٔ محدودیت‌های این رویکرد هم صحبت می‌کند.</p>
+<h2 id="a-rough-walkthrough"><a class="header" href="#a-rough-walkthrough">مروری تقریبی</a></h2>
+<p>نقطهٔ ورود حل‌گر <code>SolverDelegateEvalExt::evaluate_root_goal</code> است.
+این تابع <code>EvalCtxt</code> ریشه را راه‌اندازی می‌کند و سپس <code>EvalCtxt::evaluate_goal</code> را فرا می‌خواند
+تا واقعاً وارد حل‌گر صفت شود.</p>
+<p><code>EvalCtxt::evaluate_goal</code> کار <a href="./canonicalization.html">canonicalization</a>، کش کردن،
+سرریز (overflow) و چرخه‌های حل‌گر را انجام می‌دهد.
+پس از آن، یک <code>EvalCtxt</code> تودرتو با
+<code>InferCtxt</code> محلیِ جداگانه می‌سازد و <code>EvalCtxt::compute_goal</code> را فرا می‌خواند که مسئول
+«رفتار واقعی حل‌گر» است.
+روی <code>PredicateKind</code> تطبیق (match) می‌کنیم و برای هر کدام به تابعی جداگانه واگذار می‌کنیم.</p>
+<p>برای goalهای صفت، مانند <code>Vec&lt;T&gt;: Clone</code>، <code>EvalCtxt::compute_trait_goal</code> باید
+همهٔ راه‌های ممکن برای اثبات این goal را از طریق
+<code>EvalCtxt::assemble_and_evaluate_candidates</code> جمع‌آوری کند.
+هر candidate در یک «probe» جداگانه بررسی می‌شود
+تا قیدهای استنتاج به candidateهای دیگر نشت نکنند.
+سپس تلاش می‌کنیم candidateهای جمع‌آوری‌شده را از طریق <code>EvalCtxt::merge_candidates</code> ادغام کنیم.</p>
+<h2 id="important-concepts-and-design-patterns"><a class="header" href="#important-concepts-and-design-patterns">مفاهیم مهم و الگوهای طراحی</a></h2>
+<h3 id="evalctxtadd_goal"><a class="header" href="#evalctxtadd_goal"><code>EvalCtxt::add_goal</code></a></h3>
+<p>برای اثبات goalهای تودرتو، مستقیماً <code>EvalCtxt::compute_goal</code> را فرا نمی‌خوانیم، بلکه
+goal را به <code>EvalCtxt</code> و با <code>EvalCtxt::add_goal</code> اضافه می‌کنیم.
+سپس همهٔ goalهای تودرتو را با هم در <code>EvalCtxt::try_evaluate_added_goals</code> یا
+<code>EvalCtxt::evaluate_added_goals_and_make_canonical_response</code> اثبات می‌کنیم.
+این کار به ما اجازه می‌دهد قیدهای استنتاج goalهای بعدی را هم مدیریت کنیم.</p>
+<p>برای مثال، اگر هر دوی <code>?x: Debug</code> و <code>(): ConstrainToU8&lt;?x&gt;</code> به‌عنوان goalهای تودرتو داشته باشیم،
+اثبات <code>?x: Debug</code> در ابتدا مبهم است، اما پس از اثبات <code>(): ConstrainToU8&lt;?x&gt;</code>
+مقدار <code>?x</code> به <code>u8</code> مقید می‌شود و اثبات <code>u8: Debug</code> موفق می‌شود.</p>
+<h3 id="matching-on-tykind"><a class="header" href="#matching-on-tykind">تطبیق روی <code>TyKind</code></a></h3>
+<p>ما نوع‌ها را در حل‌گر به‌صورت lazy نرمال‌سازی می‌کنیم، بنابراین همیشه باید فرض کنیم هر نوع
+و ثابتی ممکن است نرمال‌سازی نشده باشد.
+این یعنی تطبیق روی <code>TyKind</code> به‌راحتی می‌تواند نادرست باشد.</p>
+<p>نرمال‌سازی را به دو شیوهٔ متفاوت مدیریت می‌کنیم.
+هنگام اثبات goalهای <code>Trait</code> و هنگام نرمال‌سازی نوع‌های وابسته،
+candidateها را بسته به اینکه آیا از نظر ساختاری
+با نوع self تطبیق می‌کنند یا نه، جداگانه جمع‌آوری می‌کنیم.
+candidateهایی که روی نوع self تطبیق می‌کنند در
+<code>EvalCtxt::assemble_candidates_via_self_ty</code> مدیریت می‌شوند که از طریق
+<code>EvalCtxt::assemble_candidates_after_normalizing_self_ty</code> به‌صورت بازگشتی عمل می‌کند
+و نوع self را یک سطح نرمال‌سازی می‌کند.
+در همهٔ حالت‌های دیگر که باید روی یک <code>TyKind</code> تطبیق کنیم،
+ابتدا از <code>EvalCtxt::try_normalize_ty</code> برای نرمال‌سازی نوع تا حد ممکن استفاده می‌کنیم.</p>
+<h3 id="higher-ranked-goals"><a class="header" href="#higher-ranked-goals">goalهای مرتبهٔ بالاتر</a></h3>
+<p>اگر goal مرتبهٔ بالاتر (higher-ranked) باشد، مثلاً <code>for&lt;'a&gt; F: FnOnce(&amp;'a ())</code>، <code>EvalCtxt::compute_goal</code>
+بلافاصله <code>'a</code> را با یک placeholder نمونه‌سازی می‌کند و سپس
+<code>F: FnOnce(&amp;'!a ())</code> را به‌صورت بازگشتی به‌عنوان goal تودرتو اثبات می‌کند.</p>
+<h3 id="dealing-with-choice"><a class="header" href="#dealing-with-choice">مواجهه با انتخاب</a></h3>
+<p>برخی goalها را می‌توان به چند طریق اثبات کرد.
+در این موارد،
+هر گزینه را در یک «probe» جداگانه امتحان می‌کنیم
+و سپس با <code>EvalCtxt::try_merge_responses</code> تلاش می‌کنیم پاسخ‌های حاصل را ادغام کنیم.
+اگر ادغام پاسخ‌ها شکست بخورد، به‌جای آن از <code>EvalCtxt::flounder</code> استفاده می‌کنیم و ابهام برمی‌گردانیم.
+برای برخی goalها،
+در صورت شکست <code>EvalCtxt::try_merge_responses</code> سعی می‌کنیم به‌صورت ناقص
+برخی انتخاب‌ها را بر بقیه ترجیح دهیم.</p>
+<h2 id="learning-more"><a class="header" href="#learning-more">یادگیری بیشتر</a></h2>
+<p>حل‌گر باید نسبتاً مستقل و خودبسنده باشد.
+امیدوارم اطلاعات بالا هنگام نگاه کردن به خود کد پایهٔ خوبی فراهم کند.
+اگر هنگام این کار گیر کردید
+یا نکته‌ها و تصمیم‌های طراحی‌ای وجود داشت که مبهم بود و سزاوار
+توضیح بهتر یا ذکر در اینجاست، لطفاً در Zulip پیام بدهید.</p><nav class="page-nav"><a href="invariants.html">→ ناورداهای سامانهٔ نوع</a><a href="candidate-preference.html">اولویت کاندیدا ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

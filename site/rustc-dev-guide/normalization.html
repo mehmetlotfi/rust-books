@@ -1,0 +1,301 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>نام‌های مستعار و نرمال‌سازی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="normalization"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="aliases-and-normalization"><a class="header" href="#aliases-and-normalization">نام‌های مستعار و نرمال‌سازی (Aliases and normalization)</a></h1>
+<h2 id="aliases"><a class="header" href="#aliases">نام‌های مستعار (Aliases)</a></h2>
+<p>در Rust تعدادی نوع وجود دارد که برابر با یک نوع «زیرین» در نظر گرفته می‌شوند.
+نمونه‌ها عبارت‌اند از نوع‌های وابستهٔ ذاتی (inherent)، نوع‌های وابستهٔ صفت، نام‌های مستعار نوع آزاد (<code>type Foo = u32</code>) و نوع‌های opaque (<code>-&gt; impl RPIT</code>).
+چنین نوع‌هایی را «alias» (نام مستعار) می‌نامیم.
+نوع‌های alias با گونهٔ <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/enum.TyKind.html#variant.Alias"><code>TyKind::Alias</code></a> نمایش داده می‌شوند و نوع alias را enum ‏<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/enum.AliasTyKind.html"><code>AliasTyKind</code></a> ردیابی می‌کند.</p>
+<p>نرمال‌سازی (normalization) فرایند گرفتن این نوع‌های alias و جایگزین کردن آن‌ها با نوع زیرینی است که با آن برابرند.
+برای مثال، با داشتن نام مستعار <code>type Foo = u32</code>، نرمال کردن <code>Foo</code> نتیجهٔ <code>u32</code> را می‌دهد.</p>
+<p>افزون بر <em>نوع‌ها</em>، مفهوم alias دربارهٔ ثابت‌ها/const generics نیز صدق می‌کند.
+اما در حال حاضر در کامپایلر، aliasهای const را واقعاً «مفهومی درجه‌یک» تلقی نمی‌کنیم،
+بنابراین این فصل بیشتر مطالب را در بستر نوع‌ها بحث می‌کند (هرچند مفاهیم به‌خوبی منتقل می‌شوند).</p>
+<h3 id="rigid-ambiguous-and-unnormalized-aliases"><a class="header" href="#rigid-ambiguous-and-unnormalized-aliases">aliasهای صلب، مبهم و نرمال‌نشده</a></h3>
+<p>aliasها یا «صلب» (rigid)، یا «مبهم» (ambiguous) و یا صرفاً نرمال‌نشده‌اند.</p>
+<p>نوع‌ها را صلب می‌دانیم اگر «شکل» آن‌ها تغییر نکند.
+برای مثال، <code>Box</code> صلب است چون هیچ مقدار نرمال‌سازی نمی‌تواند <code>Box</code> را به <code>u32</code> تبدیل کند،
+در حالی که <code>&lt;vec::IntoIter&lt;u32&gt; as Iterator&gt;::Item</code> صلب نیست چون می‌توان آن را به <code>u32</code> نرمال کرد.</p>
+<p>aliasها زمانی صلب‌اند که هرگز نتوانیم آن‌ها را بیشتر نرمال کنیم.
+یک نمونهٔ مشخص از alias <em>صلب</em>، <code>&lt;T as Iterator&gt;::Item</code> در محیطی است که کران <code>T: Iterator&lt;Item = ...&gt;</code> در آن وجود ندارد
+و فقط کران <code>T: Iterator</code> هست:</p>
+<pre><code class="language-rust">fn foo&lt;T: Iterator&gt;() {
+    // This alias is *rigid*
+    let _: &lt;T as Iterator&gt;::Item;
+}
+
+fn bar&lt;T: Iterator&lt;Item = u32&gt;&gt;() {
+    // This alias is *not* rigid as it can be normalized to `u32`
+    let _: &lt;T as Iterator&gt;::Item;
+}</code></pre>
+<p>وقتی یک alias هنوز نمی‌تواند نرمال شود اما ممکن است در <a href="./typing-parameter-envs.html">محیط جاری</a> نرمال‌پذیر از آب درآید،
+آن را alias «مبهم» می‌دانیم.
+این می‌تواند وقتی رخ دهد که alias شامل متغیرهای استنتاج باشد
+که مانع از تعیین چگونگی پیاده‌سازی صفت می‌شوند:</p>
+<pre><code class="language-rust">fn foo&lt;T: Iterator, U: Iterator&gt;() {
+    // This alias is considered to be "ambiguous"
+    let _: &lt;_ as Iterator&gt;::Item;
+}</code></pre>
+<p>دلیل اینکه آن‌ها را aliasهای «مبهم» می‌نامیم این است که <em>مبهم</em> است که این alias صلب هست یا نه.</p>
+<p>منبع پیاده‌سازی صفت <code>_: Iterator</code> <em>مبهم</em> (یعنی ناشناخته) است.
+ممکن است یک <code>impl Iterator for u32</code> باشد یا یک کران صفت <code>T: Iterator</code>؛ هنوز نمی‌دانیم.
+بسته به اینکه چرا <code>_: Iterator</code> برقرار است،
+alias می‌تواند نرمال‌نشده یا صلب باشد؛ <em>مبهم</em> است که این چه نوع aliasی است.</p>
+<p>سرانجام، یک alias می‌تواند صرفاً نرمال‌نشده باشد.
+<code>&lt;Vec&lt;u32&gt; as IntoIterator&gt;::Iter</code> یک alias نرمال‌نشده است چون از پیش می‌توان آن را به <code>std::vec::IntoIter&lt;u32&gt;</code> نرمال کرد،
+فقط هنوز این کار انجام نشده است.</p>
+<hr>
+<p>شایان ذکر است که aliasهای آزاد (Free) و ذاتی (Inherent) نمی‌توانند صلب یا مبهم باشند، چون نام بردن از آن‌ها به معنای حل‌شدن تعریف alias نیز هست که نوع زیرین alias را مشخص می‌کند.</p>
+<h3 id="diverging-aliases"><a class="header" href="#diverging-aliases">aliasهای واگرا (Diverging)</a></h3>
+<p>یک alias «واگرا» (diverge) تلقی می‌شود اگر تعریفش نوع زیرین غیر-aliasی را برای نرمال شدن مشخص نکند.
+یک نمونهٔ مشخص از aliasهای واگرا:</p>
+<pre><code class="language-rust">type Diverges = Diverges;
+
+trait Trait {
+    type DivergingAssoc;
+}
+impl Trait for () {
+    type DivergingAssoc = &lt;() as Trait&gt;::DivergingAssoc;
+}</code></pre>
+<p>در این مثال، هم <code>Diverges</code> و هم <code>DivergingAssoc</code> موارد «بدیهی» نام‌های مستعار نوع واگرا هستند که در آن‌ها برابر با خودشان تعریف شده‌اند.
+هیچ نوع زیرینی وجود ندارد که <code>Diverges</code> هرگز بتواند به آن نرمال شود.</p>
+<p>عموماً سعی می‌کنیم هنگام تعریف aliasهای واگرا خطا بدهیم، اما این کاملاً بررسی «با بهترین تلاش» است.
+در مثال قبل، تعریف‌ها «به‌اندازهٔ کافی ساده‌اند» که شناسایی شوند و در نتیجه خطا صادر می‌شود.
+اما در موارد پیچیده‌تر، یا مواردی که فقط برخی نمونه‌سازی‌های پارامترهای جنریک به alias واگرا می‌انجامند، خطا صادر نمی‌کنیم:</p>
+<pre><code class="language-rust">trait Trait {
+    type DivergingAssoc&lt;U: Trait&gt;;
+}
+impl&lt;T: ?Sized&gt; Trait for T {
+    // This alias always diverges but we don't emit an error because
+    // the compiler can't "see" that.
+    type DivergingAssoc&lt;U: Trait&gt; = &lt;U as Trait&gt;::DivergingAssoc&lt;U&gt;;
+}</code></pre>
+<p>در نهایت این یعنی هیچ تضمینی نداریم که aliasها در سامانهٔ نوع واگرا نباشند.
+از آنجا که aliasها ممکن است فقط برای برخی آرگومان‌های جنریک مشخص واگرا شوند، همچنین یعنی فقط وقتی می‌دانیم alias واگراست که کاملاً مشخص (concrete) شده باشد.
+این یعنی codegen/ارزیابی const نیز باید aliasهای واگرا را مدیریت کند:</p>
+<pre><code class="language-rust">trait Trait {
+    type Diverges&lt;U: Trait&gt;;
+}
+impl&lt;T: ?Sized&gt; Trait for T {
+    type Diverges&lt;U: Trait&gt; = &lt;U as Trait&gt;::Diverges&lt;U&gt;;
+}
+
+fn foo&lt;T: Trait&gt;() {
+    let a: T::Diverges&lt;T&gt;;
+}
+
+fn main() {
+    foo::&lt;()&gt;();
+}</code></pre>
+<p>در این مثال، فقط در حین codegen مربوط به <code>foo::&lt;()&gt;</code> با خطای alias واگرا روبه‌رو می‌شویم.
+اگر فراخوانی <code>foo</code> حذف شود، هیچ خطای کامپایلی صادر نخواهد شد.</p>
+<h3 id="opaque-types"><a class="header" href="#opaque-types">نوع‌های opaque</a></h3>
+<p>نوع‌های opaque نوع نسبتاً ویژه‌ای از alias هستند و در <a href="opaque-types-type-alias-impl-trait.html">فصل مخصوص خودشان</a> پوشش داده شده‌اند.</p>
+<h3 id="const-aliases"><a class="header" href="#const-aliases">aliasهای const</a></h3>
+<p>برخلاف نام‌های مستعار نوع، aliasهای const مستقیماً در سامانهٔ نوع نمایش داده نمی‌شوند.
+در عوض، aliasهای const همیشه یک بدنهٔ ناشناس‌اند که حاوی یک عبارت مسیر به یک آیتم const است.
+این یعنی تنها «alias const» در سامانهٔ نوع، یک بدنهٔ const ناشناسِ ارزیابی‌نشده است.</p>
+<p>به همین دلیل <code>ConstKind::Alias(AliasCtKind::Projection/Inherent/Free, _)</code> وجود ندارد.
+در عوض فقط <code>ConstKind::Unevaluated</code> داریم که برای نمایش ثابت‌های ناشناس به کار می‌رود.</p>
+<pre><code class="language-rust">fn foo&lt;const N: usize&gt;() {}
+
+const FREE_CONST: usize = 1 + 1;
+
+fn bar() {
+    foo::&lt;{ FREE_CONST }&gt;();
+    // The const arg is represented with some anonymous constant:
+    // ```pseudo-rust
+    // const ANON: usize = FREE_CONST;
+    // foo::&lt;ConstKind::Unevaluated(DefId(ANON), [])&gt;();
+    // ```
+}</code></pre>
+<p>این احتمالاً با بهبود قابلیت const generics تغییر خواهد کرد.
+برای مثال، <code>feature(associated_const_equality)</code> و <code>feature(gca_min_const_items)</code> هر دو نیاز دارند aliasهای const مشابه نوع‌ها مدیریت شوند (بدون ثابت ناشناسی که همهٔ آرگومان‌های const را بپوشاند).</p>
+<h2 id="what-is-normalization"><a class="header" href="#what-is-normalization">نرمال‌سازی چیست</a></h2>
+<h3 id="structural-vs-deep-normalization"><a class="header" href="#structural-vs-deep-normalization">نرمال‌سازی ساختاری در برابر عمیق</a></h3>
+<p>دو شکل نرمال‌سازی وجود دارد: ساختاری (structural، که گاهی <em>سطحی</em> نامیده می‌شود) و عمیق (deep).
+نرمال‌سازی ساختاری را باید فقط نرمال کردن بخش «بیرونی‌ترین» یک نوع دانست.
+در مقابل، نرمال‌سازی عمیق <em>همهٔ</em> aliasها را در یک نوع نرمال می‌کند.</p>
+<p>در عمل، نرمال‌سازی ساختاری می‌تواند به نرمال شدن چیزی بیش از لایهٔ بیرونی نوع بینجامد، اما نباید به این رفتار تکیه کرد.
+aliasهای غیرصلبِ نرمال‌ناپذیر که از متغیرهای مقید (<code>for&lt;'a&gt;</code>) استفاده می‌کنند را هیچ‌یک از دو نوع نرمال‌سازی نمی‌تواند نرمال کند.</p>
+<p>برای نمونه: از نظر مفهومی، نرمال‌سازی ساختاری نوع <code>Vec&lt;&lt;u8 as Identity&gt;::Assoc&gt;</code> هیچ کاری نمی‌کند، در حالی که نرمال‌سازی عمیق <code>Vec&lt;u8&gt;</code> می‌دهد.
+در عمل، حتی نرمال‌سازی ساختاری هم <code>Vec&lt;u8&gt;</code> می‌دهد، اما باز هم نباید به آن تکیه کرد.</p>
+<p>تغییر alias به‌گونه‌ای که از متغیرهای مقید استفاده کند رفتار متفاوتی به بار می‌آورد؛
+<code>Vec&lt;for&lt;'a&gt; fn(&lt;&amp;'a u8 as Identity&gt;::Assoc)&gt;</code> با نرمال‌سازی ساختاری تغییری نمی‌کند، اما با نرمال‌سازی عمیق به <code>Vec&lt;for&lt;'a&gt; fn(&amp;'a u8)&gt;</code> می‌رسد.</p>
+<h3 id="core-normalization-logic"><a class="header" href="#core-normalization-logic">منطق هستهٔ نرمال‌سازی</a></h3>
+<p>نرمال‌سازی ساختاری aliasها کمی ظریف‌تر از جایگزین کردن alias با هر چیزی است که تعریفش آن را برابر با آن می‌داند؛
+نتیجهٔ نرمال کردن یک alias باید یا یک نوع صلب باشد یا یک متغیر استنتاج (که بعداً به یک نوع صلب استنتاج خواهد شد).
+برای دستیابی به این، دو کار می‌کنیم:</p>
+<p>اول، هنگام نرمال کردن یک alias مبهم، آن را به‌جای رها کردن به همان صورت، به یک متغیر استنتاج نرمال می‌کنیم.
+این دو اثر اصلی دارد:</p>
+<ul>
+<li>هرچند متغیر استنتاج نوع صلب نیست، همیشه در نهایت <em>به</em> یک نوع صلب استنتاج می‌شود، پس مطمئن می‌شویم نتیجهٔ نرمال‌سازی نیازی به نرمال شدن دوباره نخواهد داشت</li>
+<li>متغیرهای استنتاج در همهٔ مواردی که نوع غیرصلب است به کار می‌روند و به بقیهٔ کامپایلر اجازه می‌دهند مجبور نباشد <em>هم</em> با aliasهای مبهم <em>و</em> هم با متغیرهای استنتاج سروکار داشته باشد</li>
+</ul>
+<p>دوم، به‌جای اینکه نرمال‌سازی مستقیماً نوع مشخص‌شده در تعریف alias را برگرداند، ابتدا آن نوع را نرمال می‌کنیم و بعد برمی‌گردانیم<sup class="footnote-reference" id="fr-1-1"><a href="#footnote-1">1</a></sup>.
+این را انجام می‌دهیم تا نرمال‌سازی خودتوان (idempotent) باشد/فراخواننده‌ها نیازی نداشته باشند آن را در یک حلقه اجرا کنند.</p>
+<pre><code class="language-rust">#![feature(checked_type_alias)]
+
+type Foo&lt;T: Iterator&gt; = Bar&lt;T&gt;;
+type Bar&lt;T: Iterator&gt; = &lt;T as Iterator&gt;::Item;
+
+fn foo() {
+    let a_: Foo&lt;_&gt;;
+}</code></pre>
+<p>در این مثال:</p>
+<ul>
+<li>نرمال کردن <code>Foo&lt;?x&gt;</code> به <code>Bar&lt;?x&gt;</code> می‌انجامد، جز اینکه می‌خواهیم aliasها را در نوعی که <code>Foo</code> برابر با آن تعریف شده نرمال کنیم</li>
+<li>نرمال کردن <code>Bar&lt;?x&gt;</code> به <code>&lt;?x as Iterator&gt;::Item</code> می‌انجامد، جز اینکه باز هم می‌خواهیم aliasها را در نوعی که <code>Bar</code> برابر با آن تعریف شده نرمال کنیم</li>
+<li>نرمال کردن <code>&lt;?x as Iterator&gt;::Item</code> به یک متغیر استنتاج جدید <code>?y</code> می‌انجامد، چون <code>&lt;?x as Iterator&gt;::Item</code> یک alias مبهم است</li>
+<li>نتیجهٔ نهایی این است که نرمال کردن <code>Foo&lt;?x&gt;</code> به <code>?y</code> می‌انجامد</li>
+</ul>
+<h2 id="how-to-normalize"><a class="header" href="#how-to-normalize">چگونه نرمال کنیم</a></h2>
+<p>هنگام تعامل با سامانهٔ نوع، اغلب لازم می‌شود درخواست نرمال شدن یک نوع داده شود.
+چند نقطهٔ ورودی مختلف به منطق نرمال‌سازی زیرین وجود دارد
+و هر نقطهٔ ورود فقط باید در بخش‌های مشخصی از کامپایلر استفاده شود.</p>
+<p>پیچیدگی دیگر این است که کامپایلر در حال حاضر در حال گذار از solver قدیمی صفت به solver جدید صفت است.
+به‌عنوان بخشی از این گذار، رویکرد ما به نرمال‌سازی در کامپایلر به‌طور نسبتاً قابل‌توجهی تغییر کرده است،
+و در نتیجه برخی نقاط ورود نرمال‌سازی «فقط برای solver قدیمی» هستند و قرار است پس از پایدار شدن solver جدید در بلندمدت حذف شوند.
+می‌توانید این گذار را از طریق <a href="https://github.com/rust-lang/rust/labels/WG-trait-system-refactor">برچسب WG-trait-system-refactor</a> در GitHub دنبال کنید.</p>
+<p>در ادامه مروری کلی بر نقاط ورود مختلف نرمال‌سازی در کامپایلر آمده است:</p>
+<ul>
+<li><code>infcx.at.structurally_normalize</code></li>
+<li><code>infcx.at.(deeply_)?normalize</code></li>
+<li><code>infcx.query_normalize</code></li>
+<li><code>tcx.normalize_erasing_regions</code></li>
+<li><code>traits::normalize_with_depth(_to)</code></li>
+<li><code>EvalCtxt::structurally_normalize</code></li>
+</ul>
+<h3 id="outside-of-the-trait-solver"><a class="header" href="#outside-of-the-trait-solver">بیرون از solver صفت</a></h3>
+<p>نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/infer/struct.InferCtxt.html"><code>InferCtxt</code></a> راه‌های «اصلی» نرمال‌سازی در حین تحلیل را در دسترس می‌گذارد:
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/infer/at/struct.At.html#method.normalize"><code>normalize</code></a>, <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/traits/normalize/trait.NormalizeExt.html#tymethoz"><code>deeply_normalize</code></a>, and <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/traits/trait.StructurallyNormalizeExt.html#tymethod.structurally_normalize_ty"><code>structurally_normalize</code></a>.
+این توابع اغلب بسته‌بندی شده و روی انواع wrapper گوناگون <code>InferCtxt</code> دوباره در دسترس قرار می‌گیرند،
+مانند <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_typeck/fn_ctxt/struct.FnCtxt.html"><code>FnCtxt</code></a> یا <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/traits/struct.ObligationCtxt.html"><code>ObligationCtxt</code></a>،
+با تغییرات جزئی API برای مدیریت خودکار برخی آرگومان‌ها یا بخش‌هایی از نوع بازگشتی.</p>
+<h4 id="structural-inferctxt-normalization"><a class="header" href="#structural-inferctxt-normalization">نرمال‌سازی ساختاری <code>InferCtxt</code></a></h4>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/traits/trait.StructurallyNormalizeExt.html#tymethod.structurally_normalize_ty"><code>infcx.at.structurally_normalize</code></a> نرمال‌سازی ساختاری‌ای را فراهم می‌کند که می‌تواند متغیرهای استنتاج و regionها را مدیریت کند.
+عموماً باید هر زمان که نوعِ (kind) یک type بررسی می‌شود به کار رود.</p>
+<p>در درون HIR Typeck،
+روش نرمال‌سازی مرتبط دیگری هست، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_typeck/fn_ctxt/struct.FnCtxt.html#method.structurally_resolve_type"><code>fcx.structurally_resolve</code></a>،
+که اگر نوعِ در حال حل، یک متغیر استنتاج حل‌نشده باشد خطا می‌دهد.
+وقتی solver جدید فعال باشد، سعی می‌کند نوع را به‌صورت ساختاری نیز نرمال کند.</p>
+<p>به همین دلیل، الگویی در HIR typeck هست که در آن یک نوع ابتدا با <code>normalize</code> نرمال می‌شود (که فقط در solver قدیمی نرمال می‌کند)،
+و سپس <code>structurally_resolve</code> می‌شود (که فقط در solver جدید نرمال می‌کند).
+این الگو باید بر فراخوانی <code>structurally_normalize</code> در حین HIR typeck ترجیح داده شود، زیرا <code>structurally_resolve</code> سعی می‌کند با ارزیابی goalها پیشرفت استنتاج ایجاد کند،
+در حالی که <code>structurally_normalize</code> این کار را نمی‌کند.</p>
+<h4 id="deep-inferctxt-normalization"><a class="header" href="#deep-inferctxt-normalization">نرمال‌سازی عمیق <code>InferCtxt</code></a></h4>
+<h5 id="infcxatdeeply_normalize"><a class="header" href="#infcxatdeeply_normalize"><code>infcx.at.(deeply_)?normalize</code></a></h5>
+<p>دو راه برای نرمال‌سازی عمیق با <code>InferCtxt</code> وجود دارد: <code>normalize</code> و <code>deeply_normalize</code>.
+دلیلش این است که <code>normalize</code> یک نقطهٔ ورود نرمال‌سازی «قدیمی» است که فقط solver قدیمی از آن استفاده می‌کند،
+در حالی که <code>deeply_normalize</code> قرار است راه بلندمدت نرمال‌سازی عمیق باشد.
+هر دوی این متدها می‌توانند regionها را مدیریت کنند.</p>
+<p>وقتی solver جدید پایدار شود،
+تابع <code>infcx.at.normalize</code> حذف خواهد شد
+و همه‌چیز به متدهای جدید نرمال‌سازی عمیق یا ساختاری مهاجرت داده شده خواهد بود.
+به همین دلیل، تابع <code>normalize</code> در solver جدید هیچ کاری نمی‌کند،
+و فقط وقتی مناسب است که solver قدیمی به نرمال‌سازی نیاز دارد اما solver جدید ندارد.</p>
+<p>استفاده از <code>deeply_normalize</code> هنگام برخورد با aliasهای مبهم<sup class="footnote-reference" id="fr-2-1"><a href="#footnote-2">2</a></sup> به صدور خطا می‌انجامد، چون امکان ندارد نرمال کردن <em>همهٔ</em> aliasهای مبهم به متغیرهای استنتاج پشتیبانی شود<sup class="footnote-reference" id="fr-3-1"><a href="#footnote-3">3</a></sup>.
+<code>deeply_normalize</code> عموماً فقط باید در مواردی به کار رود که انتظار نداریم با aliasهای مبهم روبه‌رو شویم،
+مثلاً هنگام کار با نوع‌های امضای آیتم‌ها.</p>
+<h5 id="infcxquery_normalize"><a class="header" href="#infcxquery_normalize"><code>infcx.query_normalize</code></a></h5>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/infer/at/struct.At.html#method.query_normalize"><code>infcx.query_normalize</code></a> بسیار به‌ندرت استفاده می‌شود؛
+تقریباً همهٔ محدودیت‌های <code>normalize_erasing_regions</code> را دارد (نمی‌تواند متغیرهای استنتاج را مدیریت کند، پشتیبانی diagnostics ندارد)،
+و تفاوت اصلی‌اش این است که اطلاعات طول عمر را حفظ می‌کند.
+به همین دلیل، <code>normalize_erasing_regions</code> تقریباً در همهٔ شرایط انتخاب بهتری است،
+چون به‌دلیل کش کردن queryهای بدون طول عمر کاراتر است.</p>
+<p>در عمل، <code>query_normalize</code> برای نرمال‌سازی در borrow checker و جاهای دیگر به‌عنوان بهینه‌سازی عملکرد نسبت به <code>infcx.normalize</code> استفاده می‌شود.
+پس از پایدار شدن solver جدید،
+انتظار می‌رود <code>query_normalize</code> بتواند از کامپایلر حذف شود، چون پیاده‌سازی نرمال‌سازی solver جدید باید به‌اندازهٔ کافی کارا باشد که افت عملکرد ایجاد نکند.</p>
+<h5 id="tcxnormalize_erasing_regions"><a class="header" href="#tcxnormalize_erasing_regions"><code>tcx.normalize_erasing_regions</code></a></h5>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html#method.normalize_erasing_regions"><code>normalize_erasing_regions</code></a> عموماً توسط بخش‌هایی از کامپایلر استفاده می‌شود که تحلیل سامانهٔ نوع انجام نمی‌دهند.
+این نقطهٔ ورود نرمال‌سازی متغیرهای استنتاج، طول عمرها یا هیچ diagnosticsی را مدیریت نمی‌کند.
+lintها و codegen استفادهٔ زیادی از این نقطهٔ ورود می‌کنند، چون معمولاً با aliasهای کاملاً استنتاج‌شده کار می‌کنند که می‌توان آن‌ها را well formed فرض کرد
+(یا دست‌کم مسئول خطا دادن دربارهٔ آن‌ها نیستند).</p>
+<h3 id="inside-of-the-trait-solver"><a class="header" href="#inside-of-the-trait-solver">درون solver صفت</a></h3>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/traits/normalize/fn.normalize_with_depth.html"><code>traits::normalize_with_depth(_to)</code></a> and <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_next_trait_solver/solve/struct.EvalCtxt.html#method.structurally_normalize_term"><code>EvalCtxt::structurally_normalize</code></a> فقط توسط درونیات solverهای صفت (به‌ترتیب قدیمی و جدید) استفاده می‌شوند.
+در عمل یک نقطهٔ ورود خام به درونیات چگونگی پیاده‌سازی نرمال‌سازی توسط هر solver صفت است.
+نقاط ورود نرمال‌سازی دیگر را نمی‌توان از درون درونیات حل صفت به کار برد، چون چرخه‌های goal و عمق بازگشت را درست مدیریت نمی‌کنند.</p>
+<h2 id="whenwhere-to-normalize-old-vs-new-solver"><a class="header" href="#whenwhere-to-normalize-old-vs-new-solver">چه زمانی/کجا نرمال کنیم (solver قدیمی در برابر جدید)</a></h2>
+<p>یکی از تغییرات بزرگ میان solver قدیمی و جدید، رویکرد ما به این است که چه زمانی انتظار داریم aliasها نرمال شده باشند.</p>
+<h3 id="old-solver"><a class="header" href="#old-solver">solver قدیمی</a></h3>
+<p>انتظار می‌رود همهٔ نوع‌ها در اولین فرصت نرمال شوند،
+به‌طوری که همهٔ نوع‌هایی که در سامانهٔ نوع با آن‌ها روبه‌رو می‌شویم یا صلب باشند یا متغیر استنتاج
+(که بعداً به یک term صلب استنتاج خواهد شد).</p>
+<p>به‌عنوان یک مثال مشخص،
+برابری aliasها با فرض صلب بودن آن‌ها و برابر کردن بازگشتی آرگومان‌های جنریک alias پیاده‌سازی می‌شود.</p>
+<h3 id="new-solver"><a class="header" href="#new-solver">solver جدید</a></h3>
+<p>انتظار می‌رود همهٔ نوع‌ها بالقوه شامل aliasهای مبهم یا نرمال‌نشده باشند.
+هر زمان عملیاتی انجام می‌شود که نیاز دارد aliasها نرمال شوند،
+مسئولیت نرمال کردن alias با همان منطق است.
+این یعنی تطبیق روی <code>ty.kind()</code> تقریباً همیشه باید ابتدا به‌صورت ساختاری نرمال کند.</p>
+<p>به‌عنوان یک مثال مشخص،
+برابری aliasها با یک نوع goal سفارشی (<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.PredicateKind.html#variant.AliasRelate"><code>PredicateKind::AliasRelate</code></a>) پیاده‌سازی می‌شود تا بتواند خودش نرمال‌سازی aliasها را مدیریت کند،
+به‌جای اینکه فرض کند همهٔ نوع‌های alias در حال برابر شدن صلب‌اند.</p>
+<p>با وجود این رویکرد، همچنان در حین <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_typeck/writeback/index.html">writeback</a> برای عملکرد/سادگی به‌صورت عمیق نرمال می‌کنیم،
+تا بتوان همچنان فرض کرد نوع‌ها در MIR به‌صورت عمیق نرمال شده‌اند.</p>
+<hr>
+<p>چند مشکل اصلی در رویکرد solver قدیمی به نرمال‌سازی وجود داشت که انگیزهٔ تغییر در solver جدید بود:</p>
+<h3 id="missing-normalization-calls"><a class="header" href="#missing-normalization-calls">فراخوانی‌های نرمال‌سازی جاافتاده</a></h3>
+<p>اغلب پیش می‌آمد که فراخوانی‌های نرمال‌سازی جا بیفتند
+و در نتیجه نوع‌های نرمال‌نشده به APIهایی داده شوند که انتظار دارند همه‌چیز از پیش نرمال شده باشد.
+رفتار با aliasهای مبهم یا نرمال‌نشده به‌عنوان صلب به انواع خطاهای عجیب می‌انجامید، از جمله برابر دانسته نشدن aliasها با یکدیگر،
+یا هدایت‌های استنتاج شگفت‌انگیز ناشی از برابر کردن آرگومان‌های جنریک aliasهای نرمال‌نشده.</p>
+<h3 id="normalizing-parameter-environments"><a class="header" href="#normalizing-parameter-environments">نرمال‌سازی محیط‌های پارامتر</a></h3>
+<p>مشکل دیگر این بود که در solver قدیمی نمی‌شد <code>ParamEnv</code>ها را درست نرمال کرد، چون خود نرمال‌سازی برای نتیجهٔ درست انتظار یک <code>ParamEnv</code> نرمال‌شده را دارد.
+برای اطلاعات بیشتر فصل <code>ParamEnv</code>ها را ببینید: <a href="./typing-parameter-envs.html#normalizing-all-bounds"><code>Typing/ParamEnv</code>s: نرمال کردن همهٔ کران‌ها</a></p>
+<h3 id="unnormalizable-non-rigid-aliases-in-higher-ranked-types"><a class="header" href="#unnormalizable-non-rigid-aliases-in-higher-ranked-types">aliasهای غیرصلبِ نرمال‌ناپذیر در نوع‌های رتبه‌بالاتر</a></h3>
+<p>با داشتن نوعی مانند <code>for&lt;'a&gt; fn(&lt;?x as Trait&lt;'a&gt;::Assoc&gt;)</code>،
+با رویکرد solver قدیمی به نرمال‌سازی نمی‌توان این را درست مدیریت کرد.</p>
+<p>اگر آن را به <code>for&lt;'a&gt; fn(?y)</code> نرمال کنیم و یک goal برای نرمال کردن <code>for&lt;'a&gt; &lt;?x as Trait&lt;'a&gt;&gt;::Assoc -&gt; ?y</code> ثبت کنیم،
+این در مواردی که <code>&lt;?x as Trait&lt;'a&gt;&gt;::Assoc</code> به <code>&amp;'a u32</code> نرمال می‌شد به خطا می‌انجامید.
+متغیر استنتاج <code>?y</code> در <a href="borrow-check/region-inference/placeholders-and-universes.html">universe</a> پایین‌تری از جانگهدارهای ساخته‌شده هنگام نمونه‌سازی binder ‏<code>for&lt;'a&gt;</code> قرار می‌گرفت.</p>
+<p>رها کردن alias به‌صورت نرمال‌نشده هم نادرست است چون solver قدیمی انتظار دارد همهٔ aliasها صلب باشند.
+این پیش از پایدار شدن solver جدید در coherence یک باگ سلامت (soundness) بود:
+<a href="https://github.com/rust-lang/rust/issues/102048">relating projection substs is unsound during coherence</a>.</p>
+<p>در نهایت، این یعنی همیشه نمی‌توان اطمینان یافت که همهٔ aliasهای درون یک مقدار صلب‌اند.</p>
+<h2 id="handling-uses-of-diverging-aliases"><a class="header" href="#handling-uses-of-diverging-aliases">مدیریت استفاده از aliasهای واگرا</a></h2>
+<p>aliasهای واگرا، مانند aliasهای مبهم، به متغیرهای استنتاج نرمال می‌شوند.
+از آنجا که نرمال کردن aliasهای واگرا به چرخه‌های solver صفت می‌انجامد، در solver قدیمی همیشه به خطا می‌انجامد.
+در solver جدید فقط وقتی به خطا می‌انجامد که در نهایت لازم باشد همهٔ goalها در بستر جاری برقرار باشند.
+برای مثال، نرمال کردن aliasهای واگرا در حین HIR typeck در هر دو solver به خطا می‌انجامد.</p>
+<p>well formedness مربوط به alias لازم نمی‌کند که alias واگرا نباشد<sup class="footnote-reference" id="fr-4-1"><a href="#footnote-4">4</a></sup>.
+این یعنی بررسی well formed بودن یک alias برای صدور خطا دربارهٔ aliasهای واگرا کافی نیست؛
+در واقع تلاش برای نرمال کردن alias لازم است.</p>
+<p>اینکه خطا دادن دربارهٔ aliasهای واگرا اثر جانبی نرمال‌سازی باشد یعنی اینکه واقعاً خطا صادر شود یا نه بسیار <em>دلبخواهی</em> است،
+و همچنین میان solver قدیمی و جدید فرق می‌کند چون اکنون در جاهای کمتری نرمال می‌کنیم.</p>
+<p>نمونه‌ای از ماهیت ad-hoc خطا دادن دربارهٔ aliasهای واگرا که «مشکل» ایجاد می‌کند:</p>
+<pre><code class="language-rust">trait Trait {
+    type Diverges&lt;D: Trait&gt;;
+}
+
+impl&lt;T&gt; Trait for T {
+    type Diverges&lt;D: Trait&gt; = D::Diverges&lt;D&gt;;
+}
+
+struct Bar&lt;T: ?Sized = &lt;u8 as Trait&gt;::Diverges&lt;u8&gt;&gt;(Box&lt;T&gt;);</code></pre>
+<p>در این مثال، یک alias واگرا استفاده شده،
+اما اتفاقاً خطایی صادر نمی‌شود چون هرگز مقادیر پیش‌فرض پارامترهای جنریک را صراحتاً نرمال نمی‌کنیم.
+اگر انصراف <code>?Sized</code> حذف شود،
+خطا صادر می‌شود چون در نهایت یک goal ‏<code>&lt;u8 as Trait&gt;::Diverges&lt;u8&gt;: Sized</code> را نرمال می‌کنیم،
+که به‌عنوان اثر جانبی به خطا دادن دربارهٔ alias واگرا می‌انجامد.</p>
+<p>aliasهای const در اینجا اندکی با نام‌های مستعار نوع تفاوت دارند؛
+well formedness مربوط به aliasهای const لازم می‌کند که بتوان آن‌ها را با موفقیت ارزیابی کرد (از طریق goalهای <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.ClauseKind.html#variant.ConstEvaluatable"><code>ConstEvaluatable</code></a>).
+این یعنی صرفاً بررسی well formedness آرگومان‌های const برای خطا دادن در صورت شکست ارزیابی کافی است.
+تا حدی نامشخص است که آیا اتخاذ این روش برای نام‌های مستعار نوع هم منطقی است،
+یا aliasهای const باید دیگر برای well formedness این را الزام نکنند<sup class="footnote-reference" id="fr-5-1"><a href="#footnote-5">5</a></sup>.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-1">
+<p>در solver جدید این به‌صورت ضمنی انجام می‌شود <a href="#fr-1-1">↩</a></p>
+</li>
+<li id="footnote-2">
+<p>تفاوت ظریفی در نحوهٔ مدیریت aliasهای مبهم درون binderها میان solver قدیمی و جدید وجود دارد. در solver قدیمی دربارهٔ برخی aliasهای مبهم درون نوع‌های رتبه‌بالاتر خطا نمی‌دهیم، در حالی که solver جدید درست خطا می‌دهد. <a href="#fr-2-1">↩</a></p>
+</li>
+<li id="footnote-3">
+<p>aliasهای مبهم درون binderها را نمی‌توان به متغیرهای استنتاج نرمال کرد؛ این در ادامه بیشتر پوشش داده می‌شود. <a href="#fr-3-1">↩</a></p>
+</li>
+<li id="footnote-4">
+<p>از آنجا که بررسی واگرا نبودن aliasها تا وقتی کاملاً مشخص (concrete) نشده‌اند ممکن نیست، این یا یعنی نمی‌توانیم well formed بودن aliasها را پیش از codegen/ارزیابی const بررسی کنیم یا اینکه aliasها پس از monomorphization از well-formed به غیر well-formed تغییر حالت می‌دهند. <a href="#fr-4-1">↩</a></p>
+</li>
+<li id="footnote-5">
+<p>اگر این کار را متوقف کنیم، aliasهای const قطعاً <em>کمتر</em> از نام‌های مستعار نوع سالم (sound) نخواهند بود <a href="#fr-5-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="ty-fold.html">→ TypeFolder و TypeFoldable</a><a href="typing-parameter-envs.html">محیط‌های Typing/Param ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

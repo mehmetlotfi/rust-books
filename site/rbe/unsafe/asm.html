@@ -1,0 +1,329 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>اسمبلی درون‌خطی — Rust با مثال</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="unsafe/asm"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../rbe/index.html" style="color:inherit;text-decoration:none">Rust با مثال</a><small class="en-title" dir="ltr">Rust By Example</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="inline-assembly"><a class="header" href="#inline-assembly">اسمبلی درون‌خطی</a></h1>
+<p>Rust از طریق ماکروی <code>asm!</code> از اسمبلی درون‌خطی پشتیبانی می‌کند. با آن می‌توان اسمبلی دست‌نویس را در خروجی اسمبلی کامپایلر گنجاند. معمولاً نیازی به این کار نیست، اما گاهی کارایی یا زمان‌بندی موردنیاز از راه دیگری به‌دست نمی‌آید. دسترسی به امکانات سطح‌پایین سخت‌افزار، مثلاً در کد هسته، نیز ممکن است این قابلیت را لازم کند.</p>
+<blockquote>
+<p><strong>نکته:</strong> مثال‌ها با اسمبلی x86/x86-64 نوشته شده‌اند، اما معماری‌های دیگر نیز پشتیبانی می‌شوند.</p>
+</blockquote>
+<p>اسمبلی درون‌خطی در حال حاضر روی معماری‌های زیر پشتیبانی می‌شود:</p>
+<ul>
+<li>x86 و x86-64</li>
+<li>ARM</li>
+<li>AArch64</li>
+<li>RISC-V</li>
+</ul>
+<h2 id="basic-usage"><a class="header" href="#basic-usage">استفادهٔ پایه</a></h2>
+<p>با ساده‌ترین مثال ممکن شروع کنیم:</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+unsafe {
+    asm!("nop");
+}
+<span class="boring">}</span></code></pre>
+<p>این کد یک دستورالعمل NOP (بدون عملیات) به اسمبلی تولیدشده توسط کامپایلر اضافه می‌کند. توجه کنید که همهٔ فراخوانی‌های <code>asm!</code> باید درون یک بلوک <code>unsafe</code> باشند، زیرا می‌توانند دستورالعمل‌های دلخواه درج کنند و ناورداهای گوناگونی را نقض کنند. دستورالعمل‌هایی که باید درج شوند، به‌صورت یک لیترال رشته‌ای در آرگومان اول ماکروی <code>asm!</code> فهرست می‌شوند.</p>
+<h2 id="inputs-and-outputs"><a class="header" href="#inputs-and-outputs">ورودی‌ها و خروجی‌ها</a></h2>
+<p>افزودن دستوری که کاری نمی‌کند چندان جذاب نیست؛ بیایید روی داده عمل کنیم:</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+let x: u64;
+unsafe {
+    asm!("mov {}, 5", out(reg) x);
+}
+assert_eq!(x, 5);
+<span class="boring">}</span></code></pre>
+<p>این کد مقدار <code>5</code> را در متغیر <code>x</code> از نوع <code>u64</code> می‌نویسد. رشتهٔ مشخص‌کنندهٔ دستورها در واقع رشتهٔ قالب است و از قواعد <a href="https://doc.rust-lang.org/std/fmt/#syntax">رشته‌های قالب Rust</a> پیروی می‌کند. آرگومان‌های درج‌شده در قالب کمی متفاوت‌اند. نخست باید ورودی یا خروجی‌بودن متغیر را مشخص کنیم؛ اینجا با <code>out</code> آن را خروجی اعلام کرده‌ایم. نوع ثبات مورد انتظار را نیز تعیین می‌کنیم؛ <code>reg</code> یعنی یک ثبات همه‌منظورهٔ دلخواه. کامپایلر ثبات مناسبی را در قالب قرار می‌دهد و پس از پایان اسمبلی، مقدار متغیر را از آن می‌خواند.</p>
+<p>مثال دیگری را ببینیم که ورودی نیز دارد:</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+let i: u64 = 3;
+let o: u64;
+unsafe {
+    asm!(
+        "mov {0}, {1}",
+        "add {0}, 5",
+        out(reg) o,
+        in(reg) i,
+    );
+}
+assert_eq!(o, 8);
+<span class="boring">}</span></code></pre>
+<p>این کد <code>5</code> را به ورودی <code>i</code> می‌افزاید و نتیجه را در <code>o</code> می‌نویسد. ابتدا مقدار <code>i</code> را در خروجی کپی و سپس <code>5</code> را به آن اضافه می‌کند.</p>
+<p>این مثال چند نکته را نشان می‌دهد:</p>
+<p>نخست، <code>asm!</code> چند آرگومان رشتهٔ قالب می‌پذیرد و هرکدام مانند یک خط جداگانهٔ اسمبلی رفتار می‌کنند؛ گویی با خط جدید به هم پیوسته‌اند. این ویژگی قالب‌بندی اسمبلی را آسان می‌کند.</p>
+<p>دوم، ورودی‌ها با <code>in</code> به‌جای <code>out</code> اعلان می‌شوند.</p>
+<p>سوم، مانند هر رشتهٔ قالب می‌توان شماره یا نام آرگومان را مشخص کرد. این قابلیت در اسمبلی درون‌خطی بسیار مفید است، چون آرگومان‌ها اغلب چند بار استفاده می‌شوند. در اسمبلی پیچیده، نام‌گذاری خوانایی را بهتر می‌کند و اجازه می‌دهد بدون تغییر ترتیب آرگومان‌ها، دستورها را جابه‌جا کنید.</p>
+<p>می‌توانیم مثال را بیشتر بهبود دهیم و دستور <code>mov</code> را حذف کنیم:</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+let mut x: u64 = 3;
+unsafe {
+    asm!("add {0}, 5", inout(reg) x);
+}
+assert_eq!(x, 8);
+<span class="boring">}</span></code></pre>
+<p><code>inout</code> آرگومانی را مشخص می‌کند که هم ورودی و هم خروجی است. برخلاف اعلان جداگانهٔ ورودی و خروجی، تضمین می‌کند هر دو به یک ثبات اختصاص یابند.</p>
+<p>همچنین می‌توان برای بخش‌های ورودی و خروجی عملوند <code>inout</code> متغیرهای متفاوتی تعیین کرد:</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+let x: u64 = 3;
+let y: u64;
+unsafe {
+    asm!("add {0}, 5", inout(reg) x =&gt; y);
+}
+assert_eq!(y, 8);
+<span class="boring">}</span></code></pre>
+<h2 id="late-output-operands"><a class="header" href="#late-output-operands">عملوندهای خروجی دیرهنگام</a></h2>
+<p>کامپایلر Rust در تخصیص عملوندها محافظه‌کار است. فرض می‌شود <code>out</code> هر لحظه ممکن است نوشته شود، پس نمی‌تواند مکانش را با آرگومان دیگری مشترک کند. برای کارایی بهینه باید کمترین تعداد ثبات را مصرف کرد تا پیرامون بلوک اسمبلی ذخیره و بازیابی نشوند. مشخص‌کنندهٔ <code>lateout</code> برای خروجی‌ای است که فقط پس از مصرف همهٔ ورودی‌ها نوشته می‌شود؛ گونهٔ <code>inlateout</code> نیز وجود دارد.</p>
+<p>مثالی که در حالت <code>release</code> یا بهینه‌شده <em>نمی‌توان</em> از <code>inlateout</code> استفاده کرد:</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+let mut a: u64 = 4;
+let b: u64 = 4;
+let c: u64 = 4;
+unsafe {
+    asm!(
+        "add {0}, {1}",
+        "add {0}, {2}",
+        inout(reg) a,
+        in(reg) b,
+        in(reg) c,
+    );
+}
+assert_eq!(a, 12);
+<span class="boring">}</span></code></pre>
+<p>در حالت‌های بهینه‌نشده (مثلاً حالت <code>Debug</code>)، جایگزین‌کردن <code>inout(reg) a</code> با <code>inlateout(reg) a</code> در مثال بالا همچنان می‌تواند نتیجهٔ مورد انتظار را بدهد. اما در حالت <code>release</code> یا سایر حالت‌های بهینه‌شده، استفاده از <code>inlateout(reg) a</code> می‌تواند به‌جای آن به مقدار نهایی <code>a = 16</code> منجر شود و باعث شکست assertion شود.</p>
+<p>زیرا در حالت بهینه کامپایلر می‌تواند برای <code>b</code> و <code>c</code> یک ثبات بگذارد، چون مقدارشان یکسان است. با <code>inlateout</code>، ممکن است <code>a</code> و <code>c</code> نیز یک ثبات بگیرند و نخستین <code>add</code> بارگذاری اولیهٔ <code>c</code> را بازنویسی کند. در مقابل، <code>inout(reg) a</code> ثبات جداگانه‌ای برای <code>a</code> تضمین می‌کند.</p>
+<p>اما مثال زیر می‌تواند از <code>inlateout</code> استفاده کند، چون خروجی فقط پس از خواندن همهٔ ثبات‌های ورودی تغییر می‌کند:</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+let mut a: u64 = 4;
+let b: u64 = 4;
+unsafe {
+    asm!("add {0}, {1}", inlateout(reg) a, in(reg) b);
+}
+assert_eq!(a, 8);
+<span class="boring">}</span></code></pre>
+<p>همان‌طور که می‌بینید، حتی اگر <code>a</code> و <code>b</code> به یک ثبات اختصاص یابند این قطعه درست کار می‌کند.</p>
+<h2 id="explicit-register-operands"><a class="header" href="#explicit-register-operands">عملوندهای ثبات صریح</a></h2>
+<p>برخی دستورها می‌خواهند عملوند در ثبات مشخصی باشد. ازاین‌رو اسمبلی درون‌خطی Rust قیدهای دقیق‌تری فراهم می‌کند. <code>reg</code> عموماً روی هر معماری موجود است، اما ثبات صریح به معماری وابستگی زیادی دارد؛ مثلاً در x86 می‌توان ثبات‌های همه‌منظورهٔ <code>eax</code>، <code>ebx</code>، <code>ecx</code>، <code>edx</code>، <code>ebp</code>، <code>esi</code> و <code>edi</code> را با نامشان مشخص کرد.</p>
+<pre><code class="language-rust no_run"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+let cmd = 0xd1;
+unsafe {
+    asm!("out 0x64, eax", in("eax") cmd);
+}
+<span class="boring">}</span></code></pre>
+<p>در این مثال دستور <code>out</code> محتوای <code>cmd</code> را به درگاه <code>0x64</code> می‌فرستد. چون <code>out</code> فقط <code>eax</code> و زیرثبات‌هایش را می‌پذیرد، باید قید <code>eax</code> را به‌کار ببریم.</p>
+<blockquote>
+<p><strong>نکته:</strong> برخلاف دیگر عملوندها، ثبات صریح را نمی‌توان با <code>{}</code> در رشتهٔ قالب آورد و باید نام ثبات را مستقیم نوشت. همچنین باید پس از همهٔ نوع‌های دیگر، در انتهای فهرست عملوندها بیاید.</p>
+</blockquote>
+<p>این مثال از دستور <code>mul</code> در x86 استفاده می‌کند:</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+fn mul(a: u64, b: u64) -&gt; u128 {
+    let lo: u64;
+    let hi: u64;
+
+    unsafe {
+        asm!(
+            // The x86 mul instruction takes rax as an implicit input and writes
+            // the 128-bit result of the multiplication to rax:rdx.
+            "mul {}",
+            in(reg) a,
+            inlateout("rax") b =&gt; lo,
+            lateout("rdx") hi
+        );
+    }
+
+    ((hi as u128) &lt;&lt; 64) + lo as u128
+}
+<span class="boring">}</span></code></pre>
+<p>دستور <code>mul</code> دو ورودی ۶۴ بیتی را با نتیجهٔ ۱۲۸ بیتی ضرب می‌کند. تنها عملوند صریح ثباتی است که از <code>a</code> پر می‌شود. عملوند دوم ضمنی و الزاماً <code>rax</code> است که از <code>b</code> پر می‌شود. ۶۴ بیت پایین نتیجه در <code>rax</code> و سپس <code>lo</code>، و ۶۴ بیت بالا در <code>rdx</code> و سپس <code>hi</code> قرار می‌گیرد.</p>
+<h2 id="clobbered-registers"><a class="header" href="#clobbered-registers">ثبات‌های تخریب‌شده</a></h2>
+<p>اسمبلی درون‌خطی اغلب وضعیتی را تغییر می‌دهد که به‌عنوان خروجی لازم نیست؛ یا ثباتی موقت مصرف می‌شود یا دستورها وضعیتی را تغییر می‌دهند که دیگر بررسی نمی‌کنیم. به این وضعیت «تخریب‌شده» می‌گویند. باید کامپایلر را آگاه کنیم، چون شاید لازم باشد آن را پیرامون بلوک اسمبلی ذخیره و بازیابی کند.</p>
+<pre><code class="language-rust">use std::arch::asm;
+
+<span class="boring">#[cfg(target_arch = "x86_64")]
+</span>fn main() {
+    // three entries of four bytes each
+    let mut name_buf = [0_u8; 12];
+    // String is stored as ascii in ebx, edx, ecx in order
+    // Because ebx is reserved, the asm needs to preserve the value of it.
+    // So we push and pop it around the main asm.
+    // 64 bit mode on 64 bit processors does not allow pushing/popping of
+    // 32 bit registers (like ebx), so we have to use the extended rbx register instead.
+
+    unsafe {
+        asm!(
+            "push rbx",
+            "cpuid",
+            "mov [rdi], ebx",
+            "mov [rdi + 4], edx",
+            "mov [rdi + 8], ecx",
+            "pop rbx",
+            // We use a pointer to an array for storing the values to simplify
+            // the Rust code at the cost of a couple more asm instructions
+            // This is more explicit with how the asm works however, as opposed
+            // to explicit register outputs such as `out("ecx") val`
+            // The *pointer itself* is only an input even though it's written behind
+            in("rdi") name_buf.as_mut_ptr(),
+            // select cpuid 0, also specify eax as clobbered
+            inout("eax") 0 =&gt; _,
+            // cpuid clobbers these registers too
+            out("ecx") _,
+            out("edx") _,
+        );
+    }
+
+    let name = core::str::from_utf8(&amp;name_buf).unwrap();
+    println!("CPU Manufacturer ID: {}", name);
+}
+
+<span class="boring">#[cfg(not(target_arch = "x86_64"))]
+</span><span class="boring">fn main() {}</span></code></pre>
+<p>در مثال بالا، دستور <code>cpuid</code> شناسهٔ سازندهٔ پردازنده را می‌خواند. این دستور بیشترین آرگومان پشتیبانی‌شدهٔ <code>cpuid</code> را در <code>eax</code> و بایت‌های ASCII شناسهٔ سازنده را به‌ترتیب در <code>ebx</code>، <code>edx</code> و <code>ecx</code> می‌نویسد.</p>
+<p>با اینکه <code>eax</code> خوانده نمی‌شود، باید تغییرش را به کامپایلر بگوییم تا مقدار پیش از اسمبلی را در صورت نیاز حفظ کند. آن را خروجی با <code>_</code> به‌جای نام متغیر اعلان می‌کنیم؛ یعنی مقدار خروجی دور انداخته شود.</p>
+<p>این کد محدودیت ثبات رزروشدهٔ <code>ebx</code> در LLVM را نیز دور می‌زند. LLVM کنترل کامل آن را برای خود می‌داند و پیش از خروج از بلوک باید به حالت اصلی بازگردد؛ بنابراین جز وقتی کامپایلر آن را برای کلاس عمومی مانند <code>in(reg)</code> برگزیند، ورودی یا خروجی نمی‌شود. پس عملوندهای <code>reg</code> در حضور ثبات رزروشده خطرناکند، زیرا اشتراک ثبات می‌تواند ناخواسته ورودی یا خروجی را خراب کند.</p>
+<p>برای دور زدن این مشکل، از <code>rdi</code> برای نگه‌داشتن اشاره‌گر به آرایهٔ خروجی استفاده می‌کنیم، <code>ebx</code> را با <code>push</code> ذخیره می‌کنیم، درون بلوک asm از <code>ebx</code> می‌خوانیم و در آرایه می‌نویسیم و سپس <code>ebx</code> را با <code>pop</code> به حالت اولیه‌اش بازمی‌گردانیم. <code>push</code> و <code>pop</code> از نسخهٔ کامل ۶۴ بیتی ثبات یعنی <code>rbx</code> استفاده می‌کنند تا اطمینان حاصل شود که کل ثبات ذخیره می‌شود. روی هدف‌های ۳۲ بیتی، کد به‌جای آن در <code>push</code>/<code>pop</code> از <code>ebx</code> استفاده می‌کند.</p>
+<p>این روش را می‌توان با کلاس ثبات عمومی برای گرفتن یک ثبات موقت در اسمبلی نیز به‌کار برد:</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+// Multiply x by 6 using shifts and adds
+let mut x: u64 = 4;
+unsafe {
+    asm!(
+        "mov {tmp}, {x}",
+        "shl {tmp}, 1",
+        "shl {x}, 2",
+        "add {x}, {tmp}",
+        x = inout(reg) x,
+        tmp = out(reg) _,
+    );
+}
+assert_eq!(x, 4 * 6);
+<span class="boring">}</span></code></pre>
+<h2 id="symbol-operands-and-abi-clobbers"><a class="header" href="#symbol-operands-and-abi-clobbers">عملوندهای نماد و تخریب‌های ABI</a></h2>
+<p>به‌طور پیش‌فرض، <code>asm!</code> فرض می‌کند که محتوای هر ثباتی که به‌عنوان خروجی مشخص نشده باشد توسط کد اسمبلی حفظ می‌شود. آرگومان <a href="../../reference/inline-assembly.html#abi-clobbers"><code>clobber_abi</code></a> در <code>asm!</code> به کامپایلر می‌گوید که عملوندهای clobber لازم را مطابق ABI قرارداد فراخوانی داده‌شده به‌طور خودکار درج کند: هر ثباتی که در آن ABI به‌طور کامل حفظ نمی‌شود، clobber‌شده تلقی می‌شود. می‌توان چند آرگومان <code>clobber_abi</code> ارائه کرد و همهٔ clobberهای تمام ABIهای مشخص‌شده درج می‌شوند.</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+extern "C" fn foo(arg: i32) -&gt; i32 {
+    println!("arg = {}", arg);
+    arg * 2
+}
+
+fn call_foo(arg: i32) -&gt; i32 {
+    unsafe {
+        let result;
+        asm!(
+            "call {}",
+            // Function pointer to call
+            in(reg) foo,
+            // 1st argument in rdi
+            in("rdi") arg,
+            // Return value in rax
+            out("rax") result,
+            // Mark all registers which are not preserved by the "C" calling
+            // convention as clobbered.
+            clobber_abi("C"),
+        );
+        result
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="register-template-modifiers"><a class="header" href="#register-template-modifiers">اصلاح‌کننده‌های قالب ثبات</a></h2>
+<p>گاهی باید شیوهٔ قالب‌بندی نام ثبات در رشتهٔ قالب را دقیق کنترل کرد؛ به‌ویژه وقتی زبان اسمبلی برای یک ثبات چند نام دارد که هرکدام نمایی از بخشی از آن‌اند، مانند ۳۲ بیت پایین ثبات ۶۴ بیتی.</p>
+<p>کامپایلر به‌طور پیش‌فرض نام اندازهٔ کامل ثبات را برمی‌گزیند؛ مانند <code>rax</code> در x86-64 و <code>eax</code> در x86.</p>
+<p>با اصلاح‌کننده‌های عملوند رشتهٔ قالب، همانند رشته‌های قالب معمولی، می‌توان این پیش‌فرض را تغییر داد:</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+let mut x: u16 = 0xab;
+
+unsafe {
+    asm!("mov {0:h}, {0:l}", inout(reg_abcd) x);
+}
+
+assert_eq!(x, 0xabab);
+<span class="boring">}</span></code></pre>
+<p>در این مثال کلاس <code>reg_abcd</code> تخصیص‌دهنده را به چهار ثبات قدیمی x86 یعنی <code>ax</code>، <code>bx</code>، <code>cx</code> و <code>dx</code> محدود می‌کند که دو بایت نخستشان جداگانه قابل آدرس‌دهی‌اند.</p>
+<p>فرض کنید تخصیص‌دهنده <code>x</code> را در <code>ax</code> قرار داده است. اصلاح‌کنندهٔ <code>h</code> نام بایت بالا و <code>l</code> نام بایت پایین را تولید می‌کند؛ پس کد به <code>mov ah, al</code> گسترش می‌یابد و بایت پایین را در بایت بالا کپی می‌کند.</p>
+<p>اگر نوع کوچک‌تری مانند <code>u16</code> را بدون اصلاح‌کننده به‌کار ببرید، کامپایلر هشدار می‌دهد و اصلاح‌کنندهٔ درست را پیشنهاد می‌کند.</p>
+<h2 id="memory-address-operands"><a class="header" href="#memory-address-operands">عملوندهای نشانی حافظه</a></h2>
+<p>گاهی دستور اسمبلی عملوند را از طریق نشانی یا مکان حافظه می‌خواهد. باید نحو نشانی حافظهٔ معماری هدف را دستی به‌کار ببرید. مثلاً در نحو Intel روی x86/x86_64، ورودی و خروجی را در <code>[]</code> بگذارید تا عملوند حافظه باشد:</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+fn load_fpu_control_word(control: u16) {
+    unsafe {
+        asm!("fldcw [{}]", in(reg) &amp;control, options(nostack));
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="labels"><a class="header" href="#labels">برچسب‌ها</a></h2>
+<p>استفادهٔ دوباره از برچسب نام‌دار، محلی یا غیرمحلی، ممکن است خطای اسمبلر یا پیونددهنده و رفتارهای عجیب ایجاد کند. این تکرار به چند شکل رخ می‌دهد:</p>
+<ul>
+<li>صریح: استفادهٔ چندباره از یک برچسب در یک بلوک <code>asm!</code> یا بلوک‌های مختلف.</li>
+<li>ضمنی از راه درون‌خطی‌سازی: کامپایلر می‌تواند چند نسخه از بلوک <code>asm!</code> بسازد، مثلاً وقتی تابع در چند محل درون‌خطی شود.</li>
+<li>ضمنی از راه LTO: ممکن است کد <em>crateهای دیگر</em> در همان واحد تولید کد قرار گیرد و برچسب‌های دلخواه را وارد کند.</li>
+</ul>
+<p>در نتیجه، درون کد اسمبلی درون‌خطی فقط باید از <a href="https://sourceware.org/binutils/docs/as/Symbol-Names.html#Local-Labels">برچسب‌های محلی</a> <strong>عددی</strong> اسمبلر GNU استفاده کنید. تعریف نمادها در کد اسمبلی ممکن است به‌دلیل تعریف‌های تکراری نماد به خطاهای اسمبلر و/یا لینکر منجر شود.</p>
+<p>علاوه بر این، در x86 هنگام استفاده از نحو پیش‌فرض Intel، به‌دلیل <a href="https://github.com/llvm/llvm-project/issues/99547">یک باگ LLVM</a> نباید از برچسب‌هایی استفاده کنید که فقط از رقم‌های <code>0</code> و <code>1</code> ساخته شده‌اند، مانند <code>0</code>، <code>11</code> یا <code>101010</code>، چون ممکن است در نهایت به‌عنوان مقدار دودویی تفسیر شوند. استفاده از <code>options(att_syntax)</code> هر ابهامی را از میان می‌برد، اما بر نحو <em>کل</em> بلوک <code>asm!</code> اثر می‌گذارد. (برای اطلاعات بیشتر دربارهٔ <code>options</code>، <a href="#options">گزینه‌ها</a> را در ادامه ببینید.)</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+let mut a = 0;
+unsafe {
+    asm!(
+        "mov {0}, 10",
+        "2:",
+        "sub {0}, 1",
+        "cmp {0}, 3",
+        "jle 2f",
+        "jmp 2b",
+        "2:",
+        "add {0}, 2",
+        out(reg) a
+    );
+}
+assert_eq!(a, 5);
+<span class="boring">}</span></code></pre>
+<p>این کد مقدار ثبات <code>{0}</code> را از ۱۰ تا ۳ کم می‌کند، سپس ۲ می‌افزاید و در <code>a</code> ذخیره می‌کند.</p>
+<p>این مثال چند نکته را نشان می‌دهد:</p>
+<ul>
+<li>نخست، یک عدد را می‌توان چند بار به‌عنوان برچسب در همان بلوک به‌کار برد.</li>
+<li>دوم اینکه، وقتی یک برچسب عددی به‌عنوان ارجاع استفاده می‌شود (مثلاً به‌عنوان عملوند یک دستورالعمل)، باید پسوندهای «b» («backward»، یعنی رو به عقب) یا «f» («forward»، یعنی رو به جلو) به برچسب عددی اضافه شود. در این صورت به نزدیک‌ترین برچسبی اشاره می‌کند که با این عدد در آن جهت تعریف شده است.</li>
+</ul>
+<h2 id="options"><a class="header" href="#options">گزینه‌ها</a></h2>
+<p>بلوک اسمبلی درون‌خطی به‌طور پیش‌فرض مانند فراخوانی تابع خارجی FFI با قرارداد سفارشی رفتار می‌کند: ممکن است حافظه را بخواند یا بنویسد و اثر جانبی قابل مشاهده داشته باشد. در بسیاری موارد بهتر است اطلاعات بیشتری از عملکرد واقعی کد به کامپایلر بدهیم تا بهتر بهینه‌سازی کند.</p>
+<p>مثال قبلی دستور <code>add</code> را در نظر بگیریم:</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(target_arch = "x86_64")] {
+</span>use std::arch::asm;
+
+let mut a: u64 = 4;
+let b: u64 = 4;
+unsafe {
+    asm!(
+        "add {0}, {1}",
+        inlateout(reg) a, in(reg) b,
+        options(pure, nomem, nostack),
+    );
+}
+assert_eq!(a, 8);
+<span class="boring">}</span></code></pre>
+<p>گزینه‌ها را می‌توان به‌عنوان آخرین آرگومان اختیاری <code>asm!</code> داد. اینجا سه گزینه داریم:</p>
+<ul>
+<li><code>pure</code> یعنی کد اثر جانبی قابل مشاهده ندارد و خروجی فقط به ورودی‌ها وابسته است؛ بهینه‌ساز می‌تواند آن را کمتر اجرا یا کاملاً حذف کند.</li>
+<li><code>nomem</code> یعنی کد حافظه را نمی‌خواند و نمی‌نویسد. در حالت عادی کامپایلر دسترسی اسمبلی به هر نشانی قابل دسترس را فرض می‌کند.</li>
+<li><code>nostack</code> یعنی کد داده‌ای روی پشته push نمی‌کند؛ در نتیجه بهینه‌سازی‌هایی مانند ناحیهٔ قرمز پشته در x86-64 ممکن می‌شوند.</li>
+</ul>
+<p>این گزینه‌ها به کامپایلر اجازه می‌دهند کدی را که از <code>asm!</code> استفاده می‌کند بهتر بهینه کند؛ مثلاً با حذف بلوک‌های <code>asm!</code> خالص (pure) که خروجی‌هایشان لازم نیست.</p>
+<p>برای فهرست کامل گزینه‌ها و اثرشان، <a href="../../reference/inline-assembly.html">مرجع</a> را ببینید.</p><nav class="page-nav"><a href="../../rbe/unsafe.html">→ عملیات ناامن (Unsafe)</a><a href="../../rbe/compatibility.html">سازگاری (Compatibility) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rbe/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

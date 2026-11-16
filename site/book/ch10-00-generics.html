@@ -1,0 +1,99 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>نوع‌های جنریک، صفت‌ها و طول عمر — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch10-00-generics"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="generic-types-traits-and-lifetimes"><a class="header" href="#generic-types-traits-and-lifetimes">انواع جنریک، ویژگی‌ها (Traits)، و طول عمرها (Lifetimes)</a></h1>
+<p>هر زبان برنامه‌نویسی ابزارهایی برای مدیریت موثر تکرار مفاهیم دارد. در Rust، یکی از این ابزارها <em>جنریک‌ها</em> هستند: جایگزین‌های انتزاعی برای انواع مشخص یا ویژگی‌های دیگر. ما می‌توانیم رفتار جنریک‌ها یا نحوه ارتباط آن‌ها با جنریک‌های دیگر را بیان کنیم بدون اینکه بدانیم هنگام کامپایل و اجرای کد چه چیزی جایگزین آن‌ها خواهد شد.</p>
+<p>توابع می‌توانند پارامترهایی از نوع جنریک بگیرند، به جای یک نوع مشخص مانند <code>i32</code> یا <code>String</code>، به همان روشی که پارامترهایی با مقادیر ناشناخته می‌گیرند تا بتوانند کد مشابهی را روی مقادیر مشخص مختلف اجرا کنند. در واقع، ما قبلاً در فصل ۶ با <code>Option&lt;T&gt;</code>، در فصل ۸ با <code>Vec&lt;T&gt;</code> و <code>HashMap&lt;K, V&gt;</code>، و در فصل ۹ با <code>Result&lt;T, E&gt;</code> از جنریک‌ها استفاده کرده‌ایم. در این فصل، یاد خواهید گرفت که چگونه انواع، توابع، و متدهای خود را با جنریک‌ها تعریف کنید!</p>
+<p>ابتدا نحوه استخراج یک تابع برای کاهش تکرار کد را مرور می‌کنیم. سپس از همان تکنیک برای ایجاد یک تابع جنریک از دو تابع که تنها در نوع پارامترهایشان متفاوت هستند استفاده خواهیم کرد. همچنین توضیح خواهیم داد که چگونه می‌توان از انواع جنریک در تعریف ساختار داده‌ها (struct) و شمارش‌ها (enum) استفاده کرد.</p>
+<p>سپس یاد می‌گیرید که چگونه از <em>ویژگی‌ها</em> (Traits) برای تعریف رفتار به صورت جنریک استفاده کنید. می‌توانید ویژگی‌ها را با انواع جنریک ترکیب کنید تا نوع جنریک را محدود کنید که فقط آن نوع‌هایی را بپذیرد که رفتار خاصی دارند، به جای هر نوعی.</p>
+<p>در نهایت، درباره <em>طول عمر‌ها</em> (Lifetimes) صحبت خواهیم کرد: نوعی از جنریک‌ها که به کامپایلر اطلاعاتی درباره نحوه ارتباط مراجع با یکدیگر می‌دهند. طول عمرها به ما اجازه می‌دهند اطلاعات کافی درباره مقادیر قرض گرفته شده به کامپایلر بدهیم تا اطمینان حاصل کند که مراجع در شرایط بیشتری معتبر خواهند بود.</p>
+<h2 id="removing-duplication-by-extracting-a-function"><a class="header" href="#removing-duplication-by-extracting-a-function">حذف تکرار با استخراج یک تابع</a></h2>
+<p>جنریک‌ها به ما اجازه می‌دهند که نوع‌های مشخص را با یک جایگزین که نمایانگر چندین نوع است جایگزین کنیم تا تکرار کد را حذف کنیم. قبل از ورود به نحو جنریک‌ها، ابتدا به نحوه حذف تکرار به روشی که شامل انواع جنریک نمی‌شود، با استخراج یک تابع که مقادیر مشخص را با یک جایگزین که نمایانگر مقادیر چندگانه است جایگزین می‌کند، نگاه خواهیم کرد. سپس از همان تکنیک برای استخراج یک تابع جنریک استفاده خواهیم کرد! با بررسی نحوه تشخیص کد تکراری که می‌توانید به یک تابع استخراج کنید، شروع به تشخیص کد تکراری خواهید کرد که می‌تواند از جنریک‌ها استفاده کند.</p>
+<p>با برنامه کوتاه در لیست ۱۰-۱ که بزرگ‌ترین عدد را در یک لیست پیدا می‌کند، شروع می‌کنیم.</p>
+<figure class="listing" id="listing-10-1">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let number_list = vec![34, 50, 25, 100, 65];
+
+    let mut largest = &amp;number_list[0];
+
+    for number in &amp;number_list {
+        if number &gt; largest {
+            largest = number;
+        }
+    }
+
+    println!("The largest number is {largest}");
+<span class="boring">    assert_eq!(*largest, 100);
+</span>}</code></pre>
+<figcaption><a href="#listing-10-1">لیست ۱۰-۱</a>: یافتن بزرگ‌ترین عدد در یک لیست اعداد</figcaption>
+</figure>
+<p>ما یک لیست از اعداد صحیح را در متغیر <code>number_list</code> ذخیره می‌کنیم و یک مرجع به اولین عدد در لیست را در متغیری به نام <code>largest</code> قرار می‌دهیم. سپس تمام اعداد لیست را پیمایش می‌کنیم و اگر عدد فعلی بزرگ‌تر از عدد ذخیره شده در <code>largest</code> باشد، مرجع در آن متغیر را جایگزین می‌کنیم. با این حال، اگر عدد فعلی کوچک‌تر یا مساوی با بزرگ‌ترین عدد دیده شده تاکنون باشد، متغیر تغییری نمی‌کند و کد به عدد بعدی در لیست می‌رود. پس از بررسی تمام اعداد در لیست، <code>largest</code> باید به بزرگ‌ترین عدد اشاره کند که در این مورد ۱۰۰ است.</p>
+<p>اکنون از ما خواسته شده است که بزرگ‌ترین عدد را در دو لیست مختلف اعداد پیدا کنیم. برای انجام این کار، می‌توانیم انتخاب کنیم که کد در لیست ۱۰-۱ را تکرار کنیم و از همان منطق در دو مکان مختلف در برنامه استفاده کنیم، همانطور که در لیست ۱۰-۲ نشان داده شده است.</p>
+<figure class="listing" id="listing-10-2">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let number_list = vec![34, 50, 25, 100, 65];
+
+    let mut largest = &amp;number_list[0];
+
+    for number in &amp;number_list {
+        if number &gt; largest {
+            largest = number;
+        }
+    }
+
+    println!("The largest number is {largest}");
+
+    let number_list = vec![102, 34, 6000, 89, 54, 2, 43, 8];
+
+    let mut largest = &amp;number_list[0];
+
+    for number in &amp;number_list {
+        if number &gt; largest {
+            largest = number;
+        }
+    }
+
+    println!("The largest number is {largest}");
+}</code></pre>
+<figcaption><a href="#listing-10-2">لیست ۱۰-۲</a>: کدی برای یافتن بزرگ‌ترین عدد در <em>دو</em> لیست اعداد</figcaption>
+</figure>
+<p>اگرچه این کد کار می‌کند، تکرار کد خسته‌کننده و مستعد خطاست. همچنین وقتی بخواهیم کد را تغییر دهیم، باید به یاد داشته باشیم که آن را در مکان‌های مختلف به‌روزرسانی کنیم.</p>
+<p>برای حذف این تکرار، یک انتزاع ایجاد خواهیم کرد با تعریف یک تابع که روی هر لیستی از اعداد صحیح که به عنوان پارامتر پاس داده می‌شود عمل می‌کند. این راه‌حل کد ما را واضح‌تر می‌کند و به ما اجازه می‌دهد مفهوم یافتن بزرگ‌ترین عدد در یک لیست را به صورت انتزاعی بیان کنیم.</p>
+<p>در لیست ۱۰-۳، کدی که بزرگ‌ترین عدد را پیدا می‌کند در تابعی به نام <code>largest</code> استخراج می‌کنیم. سپس این تابع را فراخوانی می‌کنیم تا بزرگ‌ترین عدد را در دو لیست از لیست ۱۰-۲ پیدا کنیم. همچنین می‌توانیم از این تابع روی هر لیست دیگری از مقادیر <code>i32</code> که ممکن است در آینده داشته باشیم استفاده کنیم.</p>
+<figure class="listing" id="listing-10-3">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn largest(list: &amp;[i32]) -&gt; &amp;i32 {
+    let mut largest = &amp;list[0];
+
+    for item in list {
+        if item &gt; largest {
+            largest = item;
+        }
+    }
+
+    largest
+}
+
+fn main() {
+    let number_list = vec![34, 50, 25, 100, 65];
+
+    let result = largest(&amp;number_list);
+    println!("The largest number is {result}");
+<span class="boring">    assert_eq!(*result, 100);
+</span>
+    let number_list = vec![102, 34, 6000, 89, 54, 2, 43, 8];
+
+    let result = largest(&amp;number_list);
+    println!("The largest number is {result}");
+<span class="boring">    assert_eq!(*result, 6000);
+</span>}</code></pre>
+<figcaption><a href="#listing-10-3">لیست ۱۰-۳</a>: کد انتزاعی برای یافتن بزرگ‌ترین عدد در دو لیست</figcaption>
+</figure>
+<p>تابع <code>largest</code> یک پارامتر به نام <code>list</code> دارد که نمایانگر هر بخش مشخصی از مقادیر <code>i32</code> است که ممکن است به تابع پاس دهیم. در نتیجه، وقتی تابع را فراخوانی می‌کنیم، کد روی مقادیر مشخصی که پاس می‌دهیم اجرا می‌شود.</p>
+<p>به طور خلاصه، مراحل زیر را برای تغییر کد از لیست ۱۰-۲ به لیست ۱۰-۳ طی کردیم:</p>
+<ol>
+<li>کد تکراری را شناسایی کنید.</li>
+<li>کد تکراری را به بدنه یک تابع استخراج کرده و ورودی‌ها و مقادیر بازگشتی آن کد را در امضای تابع مشخص کنید.</li>
+<li>دو نمونه از کد تکراری را به جای آن با فراخوانی تابع به‌روزرسانی کنید.</li>
+</ol>
+<p>در مرحله بعد، از همین مراحل با جنریک‌ها برای کاهش تکرار کد استفاده خواهیم کرد. همانطور که بدنه تابع می‌تواند روی یک <code>list</code> انتزاعی به جای مقادیر مشخص عمل کند، جنریک‌ها به کد اجازه می‌دهند که روی انواع انتزاعی عمل کند.</p>
+<p>برای مثال، فرض کنید دو تابع داشتیم: یکی که بزرگ‌ترین مورد را در یک بخش از مقادیر <code>i32</code> پیدا می‌کند و دیگری که بزرگ‌ترین مورد را در یک بخش از مقادیر <code>char</code> پیدا می‌کند. چگونه می‌توانیم این تکرار را حذف کنیم؟ بیایید پیدا کنیم!</p><nav class="page-nav"><a href="ch09-03-to-panic-or-not-to-panic.html">→ استفاده از panic! یا عدم استفاده از آن</a><a href="ch10-01-syntax.html">نوع‌های داده جنریک ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

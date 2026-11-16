@@ -1,0 +1,64 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0728 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0728"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p><a href="https://doc.rust-lang.org/std/keyword.await.html"><code>await</code></a> خارج از تابع <a href="https://doc.rust-lang.org/std/keyword.async.html"><code>async</code></a> یا بلوک <a href="https://doc.rust-lang.org/std/keyword.async.html"><code>async</code></a> به کار رفته است.</p>
+<p>نمونه کد خطادار:</p>
+<pre><code class="language-edition2018 compile_fail E0728"># use std::pin::Pin;
+# use std::future::Future;
+# use std::task::{Context, Poll};
+#
+# struct WakeOnceThenComplete(bool);
+#
+# fn wake_and_yield_once() -&gt; WakeOnceThenComplete {
+#     WakeOnceThenComplete(false)
+# }
+#
+# impl Future for WakeOnceThenComplete {
+#     type Output = ();
+#     fn poll(mut self: Pin&lt;&amp;mut Self&gt;, cx: &amp;mut Context&lt;'_&gt;) -&gt; Poll&lt;()&gt; {
+#         if self.0 {
+#             Poll::Ready(())
+#         } else {
+#             cx.waker().wake_by_ref();
+#             self.0 = true;
+#             Poll::Pending
+#         }
+#     }
+# }
+#
+fn foo() {
+    wake_and_yield_once().await // `await` is used outside `async` context
+}
+</code></pre>
+<p><a href="https://doc.rust-lang.org/std/keyword.await.html"><code>await</code></a> برای متوقف کردن محاسبه جاری تا زمانی که future داده‌شده آماده تولید مقدار شود، به کار می‌رود. بنابراین فقط درون یک بافتار <a href="https://doc.rust-lang.org/std/keyword.async.html"><code>async</code></a>، مانند یک تابع <code>async</code> یا یک بلوک <code>async</code>، مجاز است.</p>
+<pre><code class="language-edition2018"># use std::pin::Pin;
+# use std::future::Future;
+# use std::task::{Context, Poll};
+#
+# struct WakeOnceThenComplete(bool);
+#
+# fn wake_and_yield_once() -&gt; WakeOnceThenComplete {
+#     WakeOnceThenComplete(false)
+# }
+#
+# impl Future for WakeOnceThenComplete {
+#     type Output = ();
+#     fn poll(mut self: Pin&lt;&amp;mut Self&gt;, cx: &amp;mut Context&lt;'_&gt;) -&gt; Poll&lt;()&gt; {
+#         if self.0 {
+#             Poll::Ready(())
+#         } else {
+#             cx.waker().wake_by_ref();
+#             self.0 = true;
+#             Poll::Pending
+#         }
+#     }
+# }
+#
+async fn foo() {
+    wake_and_yield_once().await // `await` is used within `async` function
+}
+
+fn bar(x: u8) -&gt; impl Future&lt;Output = u8&gt; {
+    async move {
+        wake_and_yield_once().await; // `await` is used within `async` block
+        x
+    }
+}
+</code></pre><nav class="page-nav"><a href="../errors/E0727.html">→ E0727</a><a href="../errors/E0729.html">E0729 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

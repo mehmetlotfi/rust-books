@@ -1,0 +1,302 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>مثال‌هایی از اسکریپت‌های ساخت — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/build-script-examples"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="build-script-examples"><a class="header" href="#build-script-examples">نمونه‌های build script</a></h1>
+<p>بخش‌های زیر چند نمونه از نوشتن build scriptها را نشان می‌دهند.</p>
+<p>برخی قابلیت‌های رایج build script را می‌توان از طریق crateهای موجود در <a href="https://crates.io/">crates.io</a> به دست آورد. <a href="https://crates.io/keywords/build-dependencies">کلیدواژهٔ <code>build-dependencies</code></a> را ببینید تا بدانید چه چیزهایی در دسترس است. فهرست زیر نمونه‌ای از چند crate محبوب است<sup class="footnote-reference" id="fr-†-1"><a href="#footnote-†">1</a></sup>:</p>
+<ul>
+<li><a href="https://crates.io/crates/bindgen"><code>bindgen</code></a> — به‌طور خودکار bindingهای FFI زبان Rust را برای کتابخانه‌های C تولید می‌کند.</li>
+<li><a href="https://crates.io/crates/cc"><code>cc</code></a> — کد C/C++/اسمبلی را کامپایل می‌کند.</li>
+<li><a href="https://crates.io/crates/pkg-config"><code>pkg-config</code></a> — کتابخانه‌های سیستم را با استفاده از ابزار <code>pkg-config</code> شناسایی می‌کند.</li>
+<li><a href="https://crates.io/crates/cmake"><code>cmake</code></a> — ابزار ساخت <code>cmake</code> را برای ساخت یک کتابخانهٔ بومی (native) اجرا می‌کند.</li>
+<li><a href="https://crates.io/crates/autocfg"><code>autocfg</code></a>، <a href="https://crates.io/crates/rustc_version"><code>rustc_version</code></a>، <a href="https://crates.io/crates/version_check"><code>version_check</code></a> — این crateها راه‌هایی برای پیاده‌سازی کامپایل شرطی بر اساس <code>rustc</code> فعلی، مانند نسخهٔ کامپایلر، فراهم می‌کنند.</li>
+</ul>
+<h2 id="code-generation"><a class="header" href="#code-generation">تولید کد</a></h2>
+<p>برخی بسته‌های Cargo به دلایل گوناگون لازم است درست پیش از کامپایل، کدشان تولید شود. در اینجا یک مثال ساده را بررسی می‌کنیم که به‌عنوان بخشی از build script یک فراخوانی کتابخانه تولید می‌کند.</p>
+<p>ابتدا ساختار دایرکتوری این بسته را ببینیم:</p>
+<pre><code class="language-text">.
+├── Cargo.toml
+├── build.rs
+└── src
+    └── main.rs
+
+1 directory, 3 files
+</code></pre>
+<p>همان‌طور که می‌بینیم، یک build script به نام <code>build.rs</code> و باینری ما در <code>main.rs</code> قرار دارد. این بسته یک manifest ساده دارد:</p>
+<pre><code class="language-toml"># Cargo.toml
+
+[package]
+name = "hello-from-generated-code"
+version = "0.1.0"
+edition = "2024"
+</code></pre>
+<p>ببینیم داخل build script چیست:</p>
+<pre><code class="language-rust no_run">// build.rs
+
+use std::env;
+use std::fs;
+use std::path::Path;
+
+fn main() {
+    let out_dir = env::var_os("OUT_DIR").unwrap();
+    let dest_path = Path::new(&amp;out_dir).join("hello.rs");
+    fs::write(
+        &amp;dest_path,
+        "pub fn message() -&gt; &amp;'static str {
+            \"Hello, World!\"
+        }
+        "
+    ).unwrap();
+    println!("cargo::rerun-if-changed=build.rs");
+}</code></pre>
+<p>چند نکتهٔ قابل‌توجه در اینجا وجود دارد:</p>
+<ul>
+<li>این اسکریپت از متغیر محیطی <code>OUT_DIR</code> استفاده می‌کند تا محل فایل‌های خروجی را پیدا کند. می‌تواند از دایرکتوری کاری فعلی فرایند برای یافتن محل فایل‌های ورودی استفاده کند، اما در این مثال هیچ فایل ورودی نداریم.</li>
+<li>به‌طور کلی، build scriptها نباید هیچ فایلی را بیرون از <code>OUT_DIR</code> تغییر دهند. در نگاه اول ممکن است اشکالی نداشته باشد، اما وقتی چنین crateی را به‌عنوان وابستگی به کار ببرید مشکل ایجاد می‌کند، چون یک پیش‌شرط <em>ضمنی</em> وجود دارد که سورس‌های داخل <code>.cargo/registry</code> باید تغییرناپذیر باشند. <code>cargo</code> هنگام بسته‌بندی چنین اسکریپت‌هایی را مجاز نمی‌داند.
+<ul>
+<li>گاهی پروژه‌ها می‌خواهند یک فایل تولیدشده را در مخزن ثبت (check in) کنند و آن را مانند کد منبع در نظر بگیرند. با این حال، در این صورت نباید فایل از <code>build.rs</code> تولید شود. در عوض، یک آزمون یا مشابه آن داشته باشید که بررسی کند فایل دقیقاً با نسخهٔ تولیدشده یکسان است <em>و اگر نتیجه یکسان نبود شکست بخورد</em>، و آن آزمون را به‌عنوان بخشی از CI اجرا کنید. (آزمون می‌تواند یک فایل موقت برای مقایسه تولید کند و اگر خواستید فایل تولیدشده را به‌روز کنید، می‌توانید فایل ثبت‌شده را با آن فایل موقت جایگزین کنید.)</li>
+</ul>
+</li>
+<li>این اسکریپت نسبتاً ساده است، چون فقط یک فایل تولیدشدهٔ کوچک می‌نویسد. می‌توان تصور کرد که عملیات پیچیده‌تر دیگری نیز انجام شود، مثلاً تولید یک ماژول Rust از یک فایل سرآیند C یا تعریف یک زبان دیگر.</li>
+<li><a href="build-scripts.html#rerun-if-changed">دستور <code>rerun-if-changed</code></a> به Cargo می‌گوید که build script فقط وقتی باید دوباره اجرا شود که خود build script تغییر کند. بدون این خط، Cargo اگر هر فایلی در بسته تغییر کند، build script را خودکار اجرا می‌کند. اگر تولید کد شما از چند فایل ورودی استفاده می‌کند، اینجا همان جایی است که فهرست هر یک از آن فایل‌ها را چاپ می‌کنید.</li>
+</ul>
+<p>سپس نگاهی به خود کتابخانه بیندازیم:</p>
+<pre><code class="language-rust ignore">// src/main.rs
+
+include!(concat!(env!("OUT_DIR"), "/hello.rs"));
+
+fn main() {
+    println!("{}", message());
+}</code></pre>
+<p>اینجا جادوی اصلی اتفاق می‌افتد. کتابخانه از <a href="https://doc.rust-lang.org/std/macro.include.html">ماکرو <code>include!</code></a> تعریف‌شده در rustc همراه با ماکروهای <a href="https://doc.rust-lang.org/std/macro.concat.html"><code>concat!</code></a> و <a href="https://doc.rust-lang.org/std/macro.env.html"><code>env!</code></a> استفاده می‌کند تا فایل تولیدشده (<code>hello.rs</code>) را در کامپایل crate بگنجاند.</p>
+<p>با استفاده از ساختاری که اینجا نشان داده شد، crateها می‌توانند هر تعداد فایل تولیدشده را از خود build script بگنجانند.</p>
+<h2 id="building-a-native-library"><a class="header" href="#building-a-native-library">ساخت یک کتابخانهٔ بومی</a></h2>
+<p>گاهی لازم است بخشی از کد بومی C یا C++ به‌عنوان بخشی از یک بسته ساخته شود. این هم یک مورد استفادهٔ عالی دیگر از build script است: ساخت یک کتابخانهٔ بومی پیش از خود crate مربوط به Rust. به‌عنوان مثال، یک کتابخانهٔ Rust می‌سازیم که به C فراخوانی می‌کند تا «Hello, World!» را چاپ کند.</p>
+<p>مانند مثال قبل، ابتدا چیدمان بسته را ببینیم:</p>
+<pre><code class="language-text">.
+├── Cargo.toml
+├── build.rs
+└── src
+    ├── hello.c
+    └── main.rs
+
+1 directory, 4 files
+</code></pre>
+<p>بسیار شبیه قبل! سپس manifest:</p>
+<pre><code class="language-toml"># Cargo.toml
+
+[package]
+name = "hello-world-from-c"
+version = "0.1.0"
+edition = "2024"
+</code></pre>
+<p>فعلاً قصد نداریم از هیچ وابستگی ساخت (build dependency) استفاده کنیم، پس بیایید build script را ببینیم:</p>
+<pre><code class="language-rust no_run">// build.rs
+
+use std::process::Command;
+use std::env;
+use std::path::Path;
+
+fn main() {
+    let out_dir = env::var("OUT_DIR").unwrap();
+
+    // Note that there are a number of downsides to this approach, the comments
+    // below detail how to improve the portability of these commands.
+    Command::new("gcc").args(&amp;["src/hello.c", "-c", "-fPIC", "-o"])
+                       .arg(&amp;format!("{}/hello.o", out_dir))
+                       .status().unwrap();
+    Command::new("ar").args(&amp;["crus", "libhello.a", "hello.o"])
+                      .current_dir(&amp;Path::new(&amp;out_dir))
+                      .status().unwrap();
+
+    println!("cargo::rustc-link-search=native={}", out_dir);
+    println!("cargo::rustc-link-lib=static=hello");
+    println!("cargo::rerun-if-changed=src/hello.c");
+}</code></pre>
+<p>این build script ابتدا فایل C ما را به یک فایل شیء کامپایل می‌کند (با فراخوانی <code>gcc</code>) و سپس این فایل شیء را به یک کتابخانهٔ ایستا تبدیل می‌کند (با فراخوانی <code>ar</code>). گام پایانی بازخورد به خود Cargo است تا بگوید خروجی ما در <code>out_dir</code> بود و کامپایلر باید crate را با پرچم <code>-l static=hello</code> به‌صورت ایستا به <code>libhello.a</code> پیوند (link) دهد.</p>
+<p>توجه کنید که این رویکرد با مقادیر ثابت (hard-coded) چند عیب دارد:</p>
+<ul>
+<li>خود فرمان <code>gcc</code> بین پلتفرم‌ها قابل‌حمل نیست. برای مثال بعید است پلتفرم‌های ویندوز <code>gcc</code> داشته باشند و حتی همهٔ پلتفرم‌های یونیکس هم لزوماً <code>gcc</code> ندارند. فرمان <code>ar</code> نیز وضعیت مشابهی دارد.</li>
+<li>این فرمان‌ها کامپایل متقابل (cross-compilation) را در نظر نمی‌گیرند. اگر برای پلتفرمی مانند اندروید کامپایل متقابل انجام دهیم، بعید است <code>gcc</code> یک فایل اجرایی ARM تولید کند.</li>
+</ul>
+<p>اما جای نگرانی نیست؛ اینجاست که یک مدخل <code>build-dependencies</code> کمک می‌کند! اکوسیستم Cargo بسته‌های متعددی دارد که این‌گونه کارها را بسیار ساده‌تر، قابل‌حمل‌تر و استاندارد می‌کنند. بیایید <a href="https://crates.io/crates/cc">crate <code>cc</code></a> را از <a href="https://crates.io/">crates.io</a> امتحان کنیم. ابتدا آن را به <code>build-dependencies</code> در <code>Cargo.toml</code> اضافه کنید:</p>
+<pre><code class="language-toml">[build-dependencies]
+cc = "1.0"
+</code></pre>
+<p>و build script را برای استفاده از این crate بازنویسی کنید:</p>
+<pre><code class="language-rust ignore">// build.rs
+
+fn main() {
+    cc::Build::new()
+        .file("src/hello.c")
+        .compile("hello");
+    println!("cargo::rerun-if-changed=src/hello.c");
+}</code></pre>
+<p><a href="https://crates.io/crates/cc">crate <code>cc</code></a> طیفی از نیازهای build script برای کد C را انتزاعی می‌کند:</p>
+<ul>
+<li>کامپایلر مناسب را فراخوانی می‌کند (MSVC برای ویندوز، <code>gcc</code> برای MinGW، <code>cc</code> برای پلتفرم‌های یونیکس و غیره).</li>
+<li>متغیر <code>TARGET</code> را با ارسال پرچم‌های مناسب به کامپایلر مورداستفاده در نظر می‌گیرد.</li>
+<li>سایر متغیرهای محیطی، مانند <code>OPT_LEVEL</code>، <code>DEBUG</code> و غیره، همگی خودکار مدیریت می‌شوند.</li>
+<li>خروجی stdout و محل‌های <code>OUT_DIR</code> نیز توسط کتابخانهٔ <code>cc</code> مدیریت می‌شوند.</li>
+</ul>
+<p>اینجا می‌توانیم برخی از مزایای اصلی واگذار کردن هرچه بیشتر قابلیت‌ها به وابستگی‌های ساخت مشترک را ببینیم، به‌جای اینکه منطق در همهٔ build scriptها تکرار شود!</p>
+<p>اما به مطالعهٔ موردی برگردیم؛ نگاه سریعی به محتوای دایرکتوری <code>src</code> بیندازیم:</p>
+<pre><code class="language-c">// src/hello.c
+
+#include &lt;stdio.h&gt;
+
+void hello() {
+    printf("Hello, World!\n");
+}
+</code></pre>
+<pre><code class="language-rust ignore">// src/main.rs
+
+// Note the lack of the `#[link]` attribute. We’re delegating the responsibility
+// of selecting what to link over to the build script rather than hard-coding
+// it in the source file.
+unsafe extern { fn hello(); }
+
+fn main() {
+    unsafe { hello(); }
+}</code></pre>
+<p>و تمام! این مثال ساخت مقداری کد C از یک بستهٔ Cargo را با استفاده از خود build script کامل می‌کند. همچنین نشان می‌دهد چرا استفاده از یک وابستگی ساخت در بسیاری از موارد می‌تواند حیاتی و حتی بسیار مختصرتر باشد!</p>
+<p>همچنین مثال کوتاهی دیدیم از اینکه چگونه یک build script می‌تواند از یک crate صرفاً برای فرایند ساخت به‌عنوان وابستگی استفاده کند و نه برای خود crate در زمان اجرا.</p>
+<h2 id="linking-to-system-libraries"><a class="header" href="#linking-to-system-libraries">پیوند دادن به کتابخانه‌های سیستم</a></h2>
+<p>این مثال نشان می‌دهد چگونه یک کتابخانهٔ سیستم را پیوند دهیم و build script چگونه برای پشتیبانی از این کاربرد استفاده می‌شود.</p>
+<p>بسیار پیش می‌آید که یک crate در Rust بخواهد به کتابخانه‌ای بومی که روی سیستم موجود است پیوند بخورد تا قابلیت‌های آن را bind کند یا صرفاً از آن به‌عنوان بخشی از جزئیات پیاده‌سازی استفاده کند. وقتی بخواهیم این کار را به شکلی مستقل از پلتفرم انجام دهیم، مسئله‌ای بسیار ظریف است. بهتر است، در صورت امکان، تا جای ممکن آن را به چیزی واگذار کنیم که کار را برای مصرف‌کنندگان تا حد امکان آسان کند.</p>
+<p>در این مثال، یک binding برای کتابخانهٔ zlib سیستم می‌سازیم. این کتابخانه‌ای است که معمولاً در بیشتر سیستم‌های شبه‌یونیکس یافت می‌شود و فشرده‌سازی داده را فراهم می‌کند. این کتابخانه پیش‌تر در <a href="https://crates.io/crates/libz-sys">crate <code>libz-sys</code></a> بسته‌بندی شده است، اما برای این مثال یک نسخهٔ بسیار ساده‌شده می‌سازیم. برای مثال کامل <a href="https://github.com/rust-lang/libz-sys">کد منبع</a> را ببینید.</p>
+<p>برای اینکه یافتن محل کتابخانه آسان شود، از <a href="https://crates.io/crates/pkg-config">crate <code>pkg-config</code></a> استفاده می‌کنیم. این crate از ابزار <code>pkg-config</code> سیستم استفاده می‌کند تا اطلاعات یک کتابخانه را کشف کند. به‌طور خودکار به Cargo می‌گوید برای پیوند دادن کتابخانه چه چیزی لازم است. این روش احتمالاً فقط روی سیستم‌های شبه‌یونیکسی که <code>pkg-config</code> نصب دارند کار می‌کند. بیایید با تنظیم manifest شروع کنیم:</p>
+<pre><code class="language-toml"># Cargo.toml
+
+[package]
+name = "libz-sys"
+version = "0.1.0"
+edition = "2024"
+links = "z"
+
+[build-dependencies]
+pkg-config = "0.3.16"
+</code></pre>
+<p>توجه کنید که کلید <code>links</code> را در جدول <code>package</code> گنجانده‌ایم. این به Cargo می‌گوید که به کتابخانهٔ <code>libz</code> پیوند می‌خوریم. برای مثالی که از این بهره می‌برد، <a href="#using-another-sys-crate">«استفاده از یک crate از نوع sys دیگر»</a> را ببینید.</p>
+<p>build script نسبتاً ساده است:</p>
+<pre><code class="language-rust ignore">// build.rs
+
+fn main() {
+    pkg_config::Config::new().probe("zlib").unwrap();
+    println!("cargo::rerun-if-changed=build.rs");
+}</code></pre>
+<p>بیایید مثال را با یک binding ساده برای FFI کامل کنیم:</p>
+<pre><code class="language-rust ignore">// src/lib.rs
+
+use std::os::raw::{c_uint, c_ulong};
+
+unsafe extern "C" {
+    pub fn crc32(crc: c_ulong, buf: *const u8, len: c_uint) -&gt; c_ulong;
+}
+
+#[test]
+fn test_crc32() {
+    let s = "hello";
+    unsafe {
+        assert_eq!(crc32(0, s.as_ptr(), s.len() as c_uint), 0x3610a686);
+    }
+}</code></pre>
+<p>برای دیدن خروجی build script دستور <code>cargo build -vv</code> را اجرا کنید. روی سیستمی که <code>libz</code> از قبل روی آن نصب است، ممکن است چیزی شبیه این ببینید:</p>
+<pre><code class="language-text">[libz-sys 0.1.0] cargo::rustc-link-search=native=/usr/lib
+[libz-sys 0.1.0] cargo::rustc-link-lib=z
+[libz-sys 0.1.0] cargo::rerun-if-changed=build.rs
+</code></pre>
+<p>عالی! <code>pkg-config</code> همهٔ کار پیدا کردن کتابخانه و اطلاع دادن محل آن به Cargo را انجام داد.</p>
+<p>غیرعادی نیست که بسته‌ها سورس کتابخانه را هم شامل شوند و اگر کتابخانه روی سیستم پیدا نشد، یا یک feature یا متغیر محیطی تنظیم شده بود، آن را به‌صورت ایستا بسازند. برای مثال، <a href="https://crates.io/crates/libz-sys">crate <code>libz-sys</code></a> واقعی متغیر محیطی <code>LIBZ_SYS_STATIC</code> یا feature به نام <code>static</code> را بررسی می‌کند تا به‌جای استفاده از کتابخانهٔ سیستم آن را از روی سورس بسازد. برای مثالی کامل‌تر <a href="https://github.com/rust-lang/libz-sys">سورس</a> را ببینید.</p>
+<h2 id="using-another-sys-crate"><a class="header" href="#using-another-sys-crate">استفاده از یک crate از نوع <code>sys</code> دیگر</a></h2>
+<p>هنگام استفاده از کلید <code>links</code>، crateها می‌توانند فراداده‌ای تنظیم کنند که crateهای وابسته به آن‌ها بتوانند بخوانند. این سازوکاری برای انتقال اطلاعات بین crateها فراهم می‌کند. در این مثال، یک کتابخانهٔ C می‌سازیم که از zlib در <a href="https://crates.io/crates/libz-sys">crate <code>libz-sys</code></a> واقعی استفاده می‌کند.</p>
+<p>اگر کتابخانهٔ C دارید که به zlib وابسته است، می‌توانید از <a href="https://crates.io/crates/libz-sys">crate <code>libz-sys</code></a> برای یافتن یا ساخت خودکار آن بهره ببرید. این برای پشتیبانی چندپلتفرمی عالی است، مثلاً در ویندوز که zlib معمولاً نصب نیست. <code>libz-sys</code> <a href="https://github.com/rust-lang/libz-sys/blob/3c594e677c79584500da673f918c4d2101ac97a1/build.rs#L156">فراداده <code>include</code> را تنظیم می‌کند</a> تا به بسته‌های دیگر بگوید فایل‌های سرآیند zlib کجا هستند. build script ما می‌تواند آن فراداده را با متغیر محیطی <code>DEP_Z_INCLUDE</code> بخواند. این هم یک مثال:</p>
+<pre><code class="language-toml"># Cargo.toml
+
+[package]
+name = "z_user"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libz-sys = "1.0.25"
+
+[build-dependencies]
+cc = "1.0.46"
+</code></pre>
+<p>اینجا <code>libz-sys</code> را گنجانده‌ایم که تضمین می‌کند در کتابخانهٔ نهایی فقط یک <code>libz</code> استفاده شود و دسترسی به آن را از build script به ما می‌دهد:</p>
+<pre><code class="language-rust ignore">// build.rs
+
+fn main() {
+    let mut cfg = cc::Build::new();
+    cfg.file("src/z_user.c");
+    if let Some(include) = std::env::var_os("DEP_Z_INCLUDE") {
+        cfg.include(include);
+    }
+    cfg.compile("z_user");
+    println!("cargo::rerun-if-changed=src/z_user.c");
+}</code></pre>
+<p>با اینکه <code>libz-sys</code> همهٔ کار سنگین را انجام می‌دهد، کد C اکنون می‌تواند سرآیند zlib را include کند و باید آن را پیدا کند، حتی روی سیستم‌هایی که از قبل نصب نشده است.</p>
+<pre><code class="language-c">// src/z_user.c
+
+#include "zlib.h"
+
+// … rest of code that makes use of zlib.
+</code></pre>
+<h2 id="reading-target-configuration"><a class="header" href="#reading-target-configuration">خواندن پیکربندی هدف</a></h2>
+<p>وقتی یک build script باید بر اساس پلتفرم هدف تصمیم بگیرد، باید متغیرهای محیطی <code>CARGO_CFG_*</code> را بخواند، نه اینکه از <code>cfg!</code> یا attributeهای <code>#[cfg]</code> استفاده کند. دلیلش این است که build script برای ماشین <em>میزبان</em> (host) کامپایل می‌شود و روی آن اجرا می‌شود، در حالی که متغیرهای <code>CARGO_CFG_*</code> پلتفرم <em>هدف</em> را نشان می‌دهند؛ تمایزی مهم هنگام کامپایل متقابل.</p>
+<pre><code class="language-rust ignore">// build.rs
+
+fn main() {
+    // reads the TARGET configuration
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+
+    if target_os == "windows" {
+        println!("cargo::rustc-link-lib=userenv");
+    } else if target_os == "linux" {
+        println!("cargo::rustc-link-lib=pthread");
+    }
+}</code></pre>
+<p>توجه کنید که برخی مقادیر پیکربندی ممکن است چند مقدار داشته باشند که با کاما جدا شده‌اند (برای مثال، <code>CARGO_CFG_TARGET_FAMILY</code> ممکن است <code>unix,wasm</code> باشد). هنگام بررسی این مقادیر، حتماً آن را به‌درستی مدیریت کنید.</p>
+<p>برای یک API تایپ‌دار و راحت‌تر، استفاده از crate به نام <a href="https://crates.io/crates/build-rs"><code>build-rs</code></a> را در نظر بگیرید که این جزئیات را برای شما مدیریت می‌کند.</p>
+<h2 id="conditional-compilation"><a class="header" href="#conditional-compilation">کامپایل شرطی</a></h2>
+<p>یک build script می‌تواند <a href="build-scripts.html#rustc-cfg">دستورهای <code>rustc-cfg</code></a> صادر کند که می‌توانند شرط‌هایی را فعال کنند که در زمان کامپایل قابل بررسی‌اند. در این مثال، می‌بینیم که <a href="https://crates.io/crates/openssl">crate <code>openssl</code></a> چگونه از این برای پشتیبانی از نسخه‌های متعدد کتابخانهٔ OpenSSL استفاده می‌کند.</p>
+<p><a href="https://crates.io/crates/openssl-sys">crate <code>openssl-sys</code></a> ساخت و پیوند کتابخانهٔ OpenSSL را پیاده‌سازی می‌کند. از چندین پیاده‌سازی مختلف (مانند LibreSSL) و چندین نسخه پشتیبانی می‌کند. از کلید <code>links</code> استفاده می‌کند تا بتواند اطلاعات را به build scriptهای دیگر منتقل کند. یکی از چیزهایی که منتقل می‌کند کلید <code>version_number</code> است که نسخهٔ OpenSSL شناسایی‌شده را نشان می‌دهد. کد داخل build script چیزی <a href="https://github.com/sfackler/rust-openssl/blob/dc72a8e2c429e46c275e528b61a733a66e7877fc/openssl-sys/build/main.rs#L216">شبیه به این</a> است:</p>
+<pre><code class="language-rust ignore">println!("cargo::metadata=version_number={openssl_version:x}");</code></pre>
+<p>این دستور باعث می‌شود متغیر محیطی <code>DEP_OPENSSL_VERSION_NUMBER</code> در همهٔ crateهایی که مستقیماً به <code>openssl-sys</code> وابسته‌اند تنظیم شود.</p>
+<p>crate به نام <code>openssl</code> که رابط سطح بالاتر را فراهم می‌کند، <code>openssl-sys</code> را به‌عنوان وابستگی مشخص می‌کند. build script مربوط به <code>openssl</code> می‌تواند اطلاعات نسخهٔ تولیدشده توسط build script مربوط به <code>openssl-sys</code> را با متغیر محیطی <code>DEP_OPENSSL_VERSION_NUMBER</code> بخواند. از این برای تولید چند <a href="https://github.com/sfackler/rust-openssl/blob/dc72a8e2c429e46c275e528b61a733a66e7877fc/openssl/build.rs#L18-L36">مقدار <code>cfg</code></a> استفاده می‌کند:</p>
+<pre><code class="language-rust ignore">// (portion of build.rs)
+
+println!("cargo::rustc-check-cfg=cfg(ossl101,ossl102)");
+println!("cargo::rustc-check-cfg=cfg(ossl110,ossl110g,ossl111)");
+
+if let Ok(version) = env::var("DEP_OPENSSL_VERSION_NUMBER") {
+    let version = u64::from_str_radix(&amp;version, 16).unwrap();
+
+    if version &gt;= 0x1_00_01_00_0 {
+        println!("cargo::rustc-cfg=ossl101");
+    }
+    if version &gt;= 0x1_00_02_00_0 {
+        println!("cargo::rustc-cfg=ossl102");
+    }
+    if version &gt;= 0x1_01_00_00_0 {
+        println!("cargo::rustc-cfg=ossl110");
+    }
+    if version &gt;= 0x1_01_00_07_0 {
+        println!("cargo::rustc-cfg=ossl110g");
+    }
+    if version &gt;= 0x1_01_01_00_0 {
+        println!("cargo::rustc-cfg=ossl111");
+    }
+}</code></pre>
+<p>سپس می‌توان این مقادیر <code>cfg</code> را با <a href="../../reference/conditional-compilation.html#the-cfg-attribute">attribute <code>cfg</code></a> یا <a href="https://doc.rust-lang.org/std/macro.cfg.html">ماکرو <code>cfg</code></a> برای گنجاندن شرطی کد به کار برد. برای مثال، پشتیبانی از SHA3 در OpenSSL 1.1.1 اضافه شد، بنابراین برای نسخه‌های قدیمی‌تر <a href="https://github.com/sfackler/rust-openssl/blob/dc72a8e2c429e46c275e528b61a733a66e7877fc/openssl/src/hash.rs#L67-L85">به‌صورت شرطی کنار گذاشته می‌شود</a>:</p>
+<pre><code class="language-rust ignore">// (portion of openssl crate)
+
+#[cfg(ossl111)]
+pub fn sha3_224() -&gt; MessageDigest {
+    unsafe { MessageDigest(ffi::EVP_sha3_224()) }
+}</code></pre>
+<p>البته باید هنگام استفاده از این روش دقت کرد، زیرا باینری حاصل را حتی بیشتر به محیط ساخت وابسته می‌کند. در این مثال، اگر باینری روی سیستم دیگری توزیع شود، ممکن است دقیقاً همان کتابخانه‌های مشترک را نداشته باشد که می‌تواند مشکل‌ساز شود.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-†">
+<p>این فهرست به معنای تأیید یا توصیه نیست. وابستگی‌های خود را ارزیابی کنید تا ببینید کدام‌یک برای پروژهٔ شما مناسب است. <a href="#fr-†-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="build-scripts.html">→ اسکریپت‌های ساخت</a><a href="build-cache.html">کش ساخت ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

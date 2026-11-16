@@ -1,0 +1,151 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>attributeهای پایداری — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="stability"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="stability-attributes"><a class="header" href="#stability-attributes">Stability attributes</a></h1>
+<p>این بخش دربارهٔ attributeها و طرح‌های پایداری است که به APIهای پایدار اجازه می‌دهند در کتابخانهٔ استاندارد rustc
+از APIهای ناپایدار در داخل استفاده کنند.</p>
+<p><strong>نکته</strong>: این بخش برای قابلیت‌های <em>کتابخانه</em> است، نه قابلیت‌های <em>زبان</em>.
+برای دستورالعمل پایدارسازی قابلیت زبان،
+<a href="./stabilization-guide.html">پایدارسازی قابلیت‌ها</a> را ببینید.</p>
+<h2 id="unstable"><a class="header" href="#unstable">unstable</a></h2>
+<p>attribute با نام <code>#[unstable(feature = "foo", issue = "1234", reason = "lorem ipsum")]</code>
+یک آیتم را صراحتاً ناپایدار علامت می‌زند.
+آیتم‌هایی که «ناپایدار» علامت‌گذاری شده‌اند
+بدون attribute متناظر <code>#![feature]</code> روی crate قابل‌استفاده نیستند، حتی روی کامپایلر nightly.
+این محدودیت فقط از مرز crateها اعمال می‌شود؛ آیتم‌های ناپایدار را می‌توان درون crateای که آن‌ها را تعریف می‌کند به‌کار برد.</p>
+<p>فیلد <code>issue</code> <a href="https://github.com/rust-lang/rust/issues">شمارهٔ issue</a> مرتبط در GitHub را مشخص می‌کند.
+این فیلد الزامی است،
+و همهٔ قابلیت‌های ناپایدار باید issue پیگیری متناظر داشته باشند.
+در موارد نادری که مقدار معقولی وجود ندارد، <code>issue = "none"</code> استفاده می‌شود.</p>
+<p>attribute با نام <code>unstable</code> همهٔ زیرآیتم‌ها را آلوده می‌کند و لازم نیست دوباره اعمال شود.
+پس اگر آن را روی یک ماژول اعمال کنید، همهٔ آیتم‌های ماژول ناپایدار می‌شوند.</p>
+<p>اگر نام یک feature را تغییر دهید، می‌توانید <code>old_name = "old_name"</code> را اضافه کنید تا پیام خطای مفیدی تولید شود.</p>
+<p>می‌توانید با استفاده از attribute با نام <code>#[stable]</code> روی زیرآیتم‌های مشخص آن‌ها را پایدار کنید.
+طرح پایداری مشابه نحوهٔ کار <code>pub</code> است.
+می‌توانید توابع عمومی از ماژول‌های غیرعمومی داشته باشید،
+و می‌توانید توابع پایدار در ماژول‌های ناپایدار یا برعکس داشته باشید.</p>
+<p>پیش‌تر، به دلیل یک <a href="https://github.com/rust-lang/rust/issues/15702">باگ rustc</a>، آیتم‌های پایدار درون ماژول‌های ناپایدار
+در آن مکان برای کد پایدار در دسترس بودند.
+از سپتامبر 2024 <!-- date-check -->، آیتم‌هایی با <a href="https://github.com/rust-lang/rust/issues/113387">مسیرهای تصادفاً پایدارشده</a> با attribute با نام <code>#[rustc_allowed_through_unstable_modules]</code> علامت‌گذاری می‌شوند
+تا کدی که به آن مسیرها وابسته است نشکند.
+این attribute را به آیتم‌های بیشتری <em>اضافه نکنید</em>،
+مگر برای پرهیز از تغییرات شکننده لازم باشد.</p>
+<p>attribute با نام <code>unstable</code> ممکن است مقدار <code>soft</code> هم داشته باشد که آن را به‌جای خطای سخت، یک
+lint ناسازگار با آینده و پیش‌فرض ممنوع (deny-by-default) می‌کند.
+این توسط attribute با نام <code>bench</code> به‌کار می‌رود که در گذشته به‌طور تصادفی پذیرفته می‌شد.
+این با بهره‌گیری از lint capping در Cargo از شکستن وابستگی‌ها جلوگیری می‌کند.</p>
+<h2 id="stable"><a class="header" href="#stable">stable</a></h2>
+<p>attribute با نام <code>#[stable(feature = "foo", since = "1.420.69")]</code> یک آیتم را صراحتاً پایدارشده علامت می‌زند.
+توجه کنید توابع پایدار ممکن است در بدنهٔ خود از چیزهای ناپایدار استفاده کنند.</p>
+<h2 id="rustc_const_unstable"><a class="header" href="#rustc_const_unstable">rustc_const_unstable</a></h2>
+<p><code>#[rustc_const_unstable(feature = "foo", issue = "1234", reason = "lorem ipsum")]</code> همان رابط attribute با نام <code>unstable</code> را دارد.
+برای علامت‌گذاری <code>const fn</code> به‌عنوان تابعی که const بودنش ناپایدار است به‌کار می‌رود.
+این فقط در موارد نادر لازم است:</p>
+<ul>
+<li>اگر <code>const fn</code> از قابلیت‌های زبان یا intrinsicهای ناپایدار استفاده کند.
+(اگر به این برخورد کنید کامپایلر به شما می‌گوید attribute را اضافه کنید.)</li>
+<li>اگر <code>const fn</code> با <code>#[stable]</code> است اما هنوز قرار نیست const-stable باشد.</li>
+<li>برای تغییر feature gate لازم برای فراخوانی intrinsic ناپایدار از نظر const.</li>
+</ul>
+<p>پایداری const با پایداری معمول فرق دارد چون <em>بازگشتی</em> است: تابع
+<code>#[rustc_const_unstable(...)]</code> حتی به‌طور غیرمستقیم هم نمی‌تواند از کد پایدار فراخوانی شود.
+این برای پرهیز از نشت تصادفی آرتیفکت‌های پیاده‌سازی ناپایدار کامپایلر به کد پایدار یا قفل‌شدن
+روی عجیب‌گی‌های تصادفی یک پیاده‌سازی ناقص است.
+برای تنظیم دقیق این بررسی attributeهای rustc_const_stable_indirect
+و rustc_allow_const_fn_unstable را در ادامه ببینید.</p>
+<h2 id="rustc_const_stable"><a class="header" href="#rustc_const_stable">rustc_const_stable</a></h2>
+<p>attribute با نام <code>#[rustc_const_stable(feature = "foo", since = "1.420.69")]</code> صراحتاً
+یک <code>const fn</code> را به‌عنوان تابعی که const بودنش <code>stable</code> است علامت می‌زند.</p>
+<h2 id="rustc_const_stable_indirect"><a class="header" href="#rustc_const_stable_indirect">rustc_const_stable_indirect</a></h2>
+<p>attribute با نام <code>#[rustc_const_stable_indirect]</code> را می‌توان به تابع <code>#[rustc_const_unstable(...)]</code> اضافه کرد
+تا از توابع <code>#[rustc_const_stable(...)]</code> قابل‌فراخوانی شود.
+این نشان می‌دهد تابع
+از نظر پیاده‌سازی برای پایدار‌شدن آماده است (یعنی از قابلیت ناپایدار کامپایلر استفاده نمی‌کند)؛ تنها دلیل اینکه هنوز const-stable نیست نگرانی‌های API است.</p>
+<p>این باید به lang itemهایی هم اضافه شود که فراخوانی‌های const آن‌ها در کامپایلر سنتز می‌شود، تا
+مطمئن شویم آن فراخوانی‌ها قواعد بازگشتی پایداری const را دور نمی‌زنند.</p>
+<h2 id="rustc_intrinsic_const_stable_indirect"><a class="header" href="#rustc_intrinsic_const_stable_indirect">rustc_intrinsic_const_stable_indirect</a></h2>
+<p>روی یک intrinsic، این attribute آن را «آمادهٔ استفاده توسط توابع پایدار عمومی» علامت می‌زند.
+اگر intrinsic attribute با نام <code>rustc_const_unstable</code> دارد، باید حذف شود.
+<strong>افزودن این attribute به یک intrinsic نیازمند تأیید t-lang و wg-const-eval است!</strong></p>
+<h2 id="rustc_default_body_unstable"><a class="header" href="#rustc_default_body_unstable">rustc_default_body_unstable</a></h2>
+<p>attribute با نام <code>#[rustc_default_body_unstable(feature = "foo", issue = "1234", reason = "lorem ipsum")]</code> همان رابط attribute با نام <code>unstable</code> را دارد.
+برای علامت‌گذاری پیاده‌سازی پیش‌فرض یک آیتم درون trait به‌عنوان ناپایدار به‌کار می‌رود.
+یک trait با آیتم default-body-unstable را می‌توان به‌طور پایدار با ارائهٔ
+بدنهٔ صریح برای هر چنین آیتمی پیاده‌سازی کرد، یا می‌توان با فعال‌کردن
+<code>#![feature]</code> متناظر از بدنهٔ پیش‌فرض استفاده کرد.</p>
+<h2 id="stabilizing-a-library-feature"><a class="header" href="#stabilizing-a-library-feature">پایدارسازی یک قابلیت کتابخانه</a></h2>
+<p>برای پایدارسازی یک قابلیت، این گام‌ها را دنبال کنید:</p>
+<ol>
+<li>از یکی از اعضای <strong>@T-libs</strong> بخواهید روی issue پیگیری FCP شروع کند و منتظر تکمیل
+FCP (با <code>disposition-merge</code>) بمانید.</li>
+<li><code>#[unstable(...)]</code> را به <code>#[stable(since = "CURRENT_RUSTC_VERSION")]</code> تغییر دهید.</li>
+<li><code>#![feature(...)]</code> را از هر تست یا doc-test این API حذف کنید.
+اگر قابلیت در کامپایلر یا ابزارها استفاده شده، از آنجا هم حذف کنید.</li>
+<li>اگر این یک <code>const fn</code> است، <code>#[rustc_const_stable(since = "CURRENT_RUSTC_VERSION")]</code> را اضافه کنید.
+یا اگر قرار نیست هنوز const-stabilize شود،
+<code>#[rustc_const_unstable(...)]</code> را برای یک feature gate جدید (با issue پیگیری جدید) اضافه کنید.</li>
+<li>Open a PR against <code>rust-lang/rust</code>.
+<ul>
+<li>برچسب‌های مناسب را اضافه کنید: <code>@rustbot modify labels: +T-libs</code>.</li>
+<li>به issue پیگیری پیوند دهید و بنویسید «Closes #XXXXX».</li>
+</ul>
+</li>
+</ol>
+<p>می‌توانید نمونه‌ای از پایدارسازی یک قابلیت را با
+<a href="https://github.com/rust-lang/rust/issues/81656">issue پیگیری #81656 همراه با FCP</a>
+و <a href="https://github.com/rust-lang/rust/pull/84642">PR پیاده‌سازی #84642</a> مرتبط با آن ببینید.</p>
+<h2 id="allow_internal_unstable"><a class="header" href="#allow_internal_unstable">allow_internal_unstable</a></h2>
+<p>ماکروها و desugaringهای کامپایلر بدنهٔ خود را در محل فراخوانی نمایان می‌کنند.
+برای دورزدن ناتوانی در استفاده از چیزهای ناپایدار در ماکروهای کتابخانهٔ استاندارد،
+attribute با نام <code>#[allow_internal_unstable(feature1, feature2)]</code> هست
+که اجازه می‌دهد قابلیت‌های داده‌شده در ماکروهای پایدار به‌کار روند.</p>
+<p>توجه کنید که اگر ماکرویی در زمینهٔ const استفاده شود و فراخوانی به تابع
+<code>#[rustc_const_unstable(...)]</code> تولید کند، حتی با <code>allow_internal_unstable</code> هم <em>همچنان</em> رد می‌شود.
+<code>#[rustc_const_stable_indirect]</code> را به تابع اضافه کنید تا مطمئن شوید ماکرو
+نمی‌تواند به‌طور تصادفی بررسی‌های بازگشتی پایداری const را دور بزند.</p>
+<h2 id="rustc_allow_const_fn_unstable"><a class="header" href="#rustc_allow_const_fn_unstable">rustc_allow_const_fn_unstable</a></h2>
+<p>همان‌طور که بالا توضیح داده شد، هیچ قابلیت const ناپایداری درون <code>const fn</code> پایدار مجاز نیست، حتی به‌طور غیرمستقیم.</p>
+<p>با این حال، گاهی می‌دانیم یک قابلیت پایدار خواهد شد، فقط نه چه زمانی، یا راه‌حل پایدار (اما مثلاً کند در زمان اجرا) وجود دارد، پس همیشه می‌توانستیم
+اگر قابلیت ناپایدار را کنار می‌گذاشتیم به نسخهٔ پایدار برگردیم.
+در آن موارد، attribute با نام <code>[rustc_allow_const_fn_unstable(feature1, feature2)]</code> را می‌توان برای مجاز‌کردن برخی قابلیت‌های ناپایدار در بدنهٔ <code>const fn</code> پایدار (یا غیرمستقیم پایدار) به‌کار برد.</p>
+<p>همچنین باید مراقب حفظ پایای <code>const fn</code> باشید که فراخوانی آن در زمان اجرا و
+زمان کامپایل باید یکسان رفتار کند (<a href="https://www.ralfj.de/blog/2018/07/19/const.html">این پست وبلاگ</a> را هم ببینید).
+یعنی ممکن است <code>const fn</code>ای نسازید که مثلاً آدرس حافظه را به عدد صحیح transmute کند،
+چون آدرس چیزها غیرقطعی و اغلب در زمان کامپایل نامعلوم است.</p>
+<p><strong>اگر attributeهای <code>rustc_allow_const_fn_unstable</code> بیشتری به <code>const fn</code>ی اضافه می‌کنید همیشه @rust-lang/wg-const-eval را ping کنید.</strong></p>
+<h2 id="staged_api"><a class="header" href="#staged_api">staged_api</a></h2>
+<p>هر crateای که از attributeهای <code>stable</code> یا <code>unstable</code> استفاده می‌کند باید attribute با نام
+<code>#![feature(staged_api)]</code> را روی crate بگنجاند.</p>
+<h2 id="deprecated"><a class="header" href="#deprecated">deprecated</a></h2>
+<p>منسوخ‌سازی‌ها (deprecation) در کتابخانهٔ استاندارد تقریباً با منسوخ‌سازی در کد کاربر یکسان‌اند.
+وقتی <code>#[deprecated]</code> روی آیتمی به‌کار می‌رود، باید attribute با نام <code>stable</code>
+یا <code>unstable </code>هم داشته باشد.</p>
+<p><code>deprecated</code> شکل زیر را دارد:</p>
+<pre><code class="language-rust ignore">#[deprecated(
+    since = "1.38.0",
+    note = "explanation for deprecation",
+    suggestion = "other_function"
+)]</code></pre>
+<p>فیلد <code>suggestion</code> اختیاری است.
+اگر داده شود، باید رشته‌ای باشد که می‌تواند
+به‌عنوان پیشنهاد machine-applicable برای اصلاح هشدار به‌کار رود.
+این معمولاً وقتی به‌کار می‌رود که شناسه تغییر نام داده می‌شود اما تغییر مهم دیگری لازم نیست.
+وقتی از فیلد <code>suggestion</code> استفاده می‌شود، باید
+<code>#![feature(deprecated_suggestion)]</code> را در ریشهٔ crate داشته باشید.</p>
+<p>تفاوت دیگر با کد کاربر این است که فیلد <code>since</code> واقعاً با نسخهٔ فعلی <code>rustc</code> بررسی می‌شود.
+اگر <code>since</code> در نسخهٔ آینده باشد،
+lint با نام <code>deprecated_in_future</code> فعال می‌شود که پیش‌فرض <code>allow</code> است، اما بیشتر
+کتابخانهٔ استاندارد آن را با <code>#![warn(deprecated_in_future)]</code> به هشدار ارتقا می‌دهد.</p>
+<h2 id="unstable_feature_bound"><a class="header" href="#unstable_feature_bound">unstable_feature_bound</a></h2>
+<p>attribute با نام <code>#[unstable_feature_bound(foo)]</code> را می‌توان همراه attribute با نام <code>#[unstable]</code> برای علامت‌گذاری <code>impl</code> یک نوع پایدار و trait پایدار به‌عنوان ناپایدار به‌کار برد.
+در std/core، آیتمی که با <code>#[unstable_feature_bound(foo)]</code> annotate شده فقط توسط آیتم دیگری قابل‌استفاده است که آن هم با <code>#[unstable_feature_bound(foo)]</code> annotate شده باشد.
+بیرون از std/core، استفاده از آیتم با <code>#[unstable_feature_bound(foo)]</code> نیازمند فعال‌شدن قابلیت با attribute با نام <code>#![feature(foo)]</code> روی crate است.</p>
+<p>فعلاً آیتم‌هایی که می‌توان با <code>#[unstable_feature_bound]</code> annotate کرد این‌ها هستند:</p>
+<ul>
+<li><code>impl</code></li>
+<li>free function</li>
+<li>trait</li>
+</ul>
+<h2 id="renamed-and-removed-features"><a class="header" href="#renamed-and-removed-features">قابلیت‌های تغییرنام‌یافته و حذف‌شده</a></h2>
+<p>قابلیت‌های ناپایدار می‌توانند تغییر نام یابند و حذف شوند.
+اگر نام یک قابلیت را تغییر دهید، می‌توانید <code>old_name = "old_name"</code> را به attribute با نام <code>#[unstable]</code> اضافه کنید.
+اگر قابلیتی را حذف کنید، attribute با نام <code>#![unstable_removed(feature = "foo", reason = "brief description", link = "link", since = "1.90.0")]</code>
+باید برای تولید پیام خطای خوب برای کاربران قابلیت حذف‌شده به‌کار رود.</p>
+<p>فیلد <code>link</code> را می‌توان برای پیوند به مرتبط‌ترین اطلاعات دربارهٔ حذف قابلیت، مثل issue، کامنت یا PR در GitHub به‌کار برد.</p><nav class="page-nav"><a href="stability-guarantees.html">→ تضمین‌های پایداری</a><a href="stabilization-guide.html">پایدارسازی قابلیت‌های زبان ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

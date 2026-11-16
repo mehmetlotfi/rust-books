@@ -1,0 +1,205 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>آزمودن (ناقص) — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="debuginfo/testing"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="testing"><a class="header" href="#testing">آزمودن</a></h1>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>مهم</p>
+<p>مجموعه آزمون اطلاعات اشکال‌زدایی (debug info) در حال بازنویسی اساسی است. این بخش با پیشرفت بازنویسی
+تکمیل خواهد شد.</p>
+<p>برای اطلاعات بیشتر، لطفاً <a href="https://github.com/rust-lang/rust/issues/148483">این issue پیگیری</a> را ببینید.</p>
+</blockquote>
+<p>آزمون‌های اطلاعات اشکال‌زدایی چند چیز مهم را بررسی می‌کنند:</p>
+<ul>
+<li>آیا اطلاعات را همان‌طور که انتظار داریم تولید می‌کنیم؟</li>
+<li>آیا آنچه تولید می‌کنیم برای دیباگر خوانا است؟</li>
+<li>آیا نمایش‌دهنده‌های (visualizer) ما همان‌طور که انتظار داریم کار می‌کنند؟</li>
+</ul>
+<p>به پرسش اول معمولاً <code>tests/codegen-llvm</code> پاسخ می‌دهد، اما تولید اطلاعات اشکال‌زدایی اغلب
+به‌صورت تصادفی آزموده می‌شود، نه عمدی.
+از <!-- date-check --> ژوئیهٔ ۲۰۲۶، تمرکز بسیار بیشتری روی دو پرسش اخیر وجود دارد
+و در اینجا به‌تفصیل به آن‌ها پرداخته می‌شود.
+آزمون‌هایی که به این پرسش‌ها پاسخ می‌دهند در <code>tests/debuginfo</code> قرار دارند و <code>compiletest</code> آن‌ها را اجرا می‌کند.</p>
+<p>در بخش عمده‌ای از عمر این مجموعه آزمون، دیباگرها به‌طور خودکار کشف می‌شدند و آزمون‌ها از
+دستورالعمل‌های (directive) <code>$DEBUGGER-command</code> و <code>$DEBUGGER-check</code> (یعنی مقایسه‌های خام رشته‌ای)
+تشکیل می‌شدند که چاپ متغیرها، مکان نقاط توقف (breakpoint) و مانند آن را بررسی می‌کردند. رک بگوییم، این سامانه
+یک کابوس بود و به <a href="https://github.com/rust-lang/rust/issues/134682">انبوهی از مشکلات</a> انجامید.
+برای رفع این وضع:</p>
+<ol>
+<li><a href="https://github.com/rust-lang/rust/pull/159455"><code>tests/debuginfo</code> اکنون برای GDB و LLDB اختیاری (opt-in) است</a>.</li>
+<li>یک دستورالعمل جدید اضافه شد: <code>$DEBUGGER-repr</code>.
+این دستورالعمل به منطق سفارشی ارجاع می‌دهد که از دیباگر
+اطلاعات اضافی‌ای را که در خروجی چاپ‌شده دیده نمی‌شود می‌پرسد.
+همچنین خروجی را به‌طور خودکار بر اساس هدف (target) جدا می‌کند
+و اجازه می‌دهد آزمون‌ها بدون تعارض روی پلتفرم‌های مختلف اجرا شوند.</li>
+</ol>
+<h1 id="the-repr-directive"><a class="header" href="#the-repr-directive">دستورالعمل <code>repr</code></a></h1>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>مهم</p>
+<p>از <!-- date check --> سپتامبر ۲۰۲۶، این دستور فقط برای LLDB و GDB پشتیبانی می‌شود.
+معلوم نیست که این دستورالعمل هرگز برای استفاده با CDB مناسب شود یا نه.</p>
+</blockquote>
+<p>به‌طور خلاصه، دستورهای <code>$DEBUGGER-repr</code> به این شکل باز می‌شوند (desugar):</p>
+<pre><code>//@ $DEBUGGER-command:repr $VAR_NAME
+//@ $DEBUGGER-check:$VAR_NAME ok
+</code></pre>
+<p>وقتی دستورها به دیباگر داده می‌شوند، چارچوب آزمون ما شبه‌دستورهای <code>repr</code> را رهگیری می‌کند
+و منطق ویژه‌ای را روی آن‌ها اجرا می‌کند و نتیجه را با داده‌های ذخیره‌شده در
+<code>tests/debuginfo/&lt;test_name&gt;/input/&lt;debugger&gt;_input/&lt;target_group&gt;.json</code> می‌آزماید.</p>
+<p>«گروه‌های هدف» (target groups) مجموعهٔ هدف‌هایی را پوشش می‌دهند که نمی‌توانیم خروجی یکسان را در آن‌ها تضمین کنیم.
+این هدف‌ها با
+<a href="https://github.com/rust-lang/rust/blob/c26ce708de5d14682647895d2f3caf38f70b5aa6/src/etc/debugger_tester/common.py#L54"><code>Target</code> (یک enum) در <code>common.py</code></a> تعریف می‌شوند.
+از <!-- date-check --> ژوئیهٔ ۲۰۲۶، این فهرست شامل <code>non_windows</code>، <code>windows_gnu</code> و <code>windows_msvc</code> است.
+این فهرست عمداً تا حد ممکن کوتاه نگه داشته می‌شود،
+زیرا هر هدف مجموعهٔ تازه‌ای از داده‌های آزمون است که با هر تغییر باید به‌روز شود.
+هنوز راه‌حل کاملی وجود ندارد برای اینکه مشارکت‌کنندگانی که به همهٔ هدف‌ها دسترسی ندارند
+چگونه <code>--bless</code> کنند.</p>
+<p>داده‌های ورودی را می‌توان برای تغییرات مورد انتظار به‌طور خودکار به‌روز کرد؛ برای این کار <code>--bless</code> را به فراخوانی آزمون اضافه کنید
+(مثلاً <code>./x test tests/debuginfo/basic-types/main.rs --bless</code>).
+<code>--bless</code> بازنمایی درون‌حافظه را به‌روز می‌کند، آزمون را روی آن اجرا می‌کند
+و اگر خطایی رخ ندهد، داده‌ها را دوباره در فایل هدف ذخیره می‌کند (یا در صورت لزوم فایل جدیدی می‌سازد).</p>
+<p>طرح‌واره (schema) داده‌های ورودی با کلاس‌های موجود در
+<a href="https://github.com/rust-lang/rust/blob/c26ce708de5d14682647895d2f3caf38f70b5aa6/src/etc/debugger_tester/common.py"><code>common.py</code></a> تعریف می‌شود.
+ظرف سطح بالا <code>TargetData</code> است.
+این طرح‌واره برای همهٔ دیباگرها یکسان است.</p>
+<h2 id="converting-existing-tests"><a class="header" href="#converting-existing-tests">تبدیل آزمون‌های موجود</a></h2>
+<p>تقریباً هر زمان که یک متغیر آزموده می‌شود، دستورالعمل <code>repr</code> بر <code>command</code> +
+<code>check</code> ترجیح دارد.
+از <!-- date-check --> ژوئیهٔ ۲۰۲۶، فقط یک آزمون تبدیل شده است، اما آزمون‌های بیشتری
+در چارچوب بازنویسی آزمون‌هایی که در بالا اشاره شد تبدیل خواهند شد.
+خوشبختانه فرایند تبدیل نسبتاً آسان است.
+برای یک بررسی مشخص:</p>
+<pre><code>//@ lldb-command:v foo
+//@ lldb-check:&lt;foo output&gt;
+</code></pre>
+<p>آزمون معادل با <code>repr</code> این است:</p>
+<pre><code>//@ lldb-repr:foo
+</code></pre>
+<p>پس از آنکه همهٔ <code>command</code> + <code>checks</code>ها به <code>repr</code> تبدیل شدند، آزمون‌ها را با گزینهٔ <code>--bless</code> اجرا کنید.
+اگر به هدف‌های دیگری دسترسی دارید، <code>--bless</code> را برای داده‌های بقیهٔ گروه‌های هدف نیز اجرا کنید
+(مثلاً اگر روی ماشین Windows هستید، یک بار برای <code>x86_64-pc-windows-msvc</code>، یک بار برای
+<code>x86_64-pc-windows-gnu</code> bless کنید و از WSL برای bless کردن <code>x86_64-unknown-linux-gnu</code> استفاده کنید).</p>
+<h2 id="implementation"><a class="header" href="#implementation">پیاده‌سازی</a></h2>
+<p>بسیاری از جزئیات پیاده‌سازی بین LLDB و GDB مشترک است
+و در <code>src/etc/debugger_tester/common.py</code> قرار دارد.
+نکتهٔ مهم اینکه قابلیت‌های اجرای دسته‌ای (batch) در LLDB دستورها را بدون انتظار برای رسیدن به نقاط توقف اجرا می‌کنند
+و به همین دلیل عموماً برای اهداف ما مناسب نیستند.
+از این رو <code>debugger_tester/lldb/lldb_batchmode.py</code> رفتار حالت دسته‌ای GDB را شبیه‌سازی می‌کند و دستورهای
+اسکریپت آزمون را به‌صورت دستی از طریق اشیای <code>lldb.SBDebugger</code> و <code>lldb.SBCommandInterpreter</code> فراخوانی می‌کند.</p>
+<h3 id="serde"><a class="header" href="#serde">Ser/De</a></h3>
+<p><code>TargetData</code> با <code>dataclasses.asdict</code> به یک دیکشنری تبدیل می‌شود و با کتابخانهٔ JSON داخلی
+Python سریال‌سازی می‌شود.
+هنگام آزمودن، داده‌ها در یک <code>dict</code> خوانده می‌شوند، به <code>TargetData</code> تبدیل می‌شوند
+و در متغیر سطح بالای <code>INPUT_DATA</code> ذخیره می‌شوند.
+منطق فعلی ناسریال‌سازی (deserialization) باید در برابر تغییرات طرح‌واره تاب‌آور باشد،
+اما لازم است همهٔ فیلدها فقط نوع‌هایی داشته باشند که
+<code>json.dumps</code> بتواند مستقیماً سریال‌سازی/ناسریال‌سازی کند.
+نوع‌های قابل قبول همان‌هایی هستند که
+<a href="https://github.com/rust-lang/rust/blob/c26ce708de5d14682647895d2f3caf38f70b5aa6/src/etc/debugger_tester/common.py#L17"><code>common.JsonType</code></a> را تشکیل می‌دهند.</p>
+<p>از آنجا که سریال‌سازی/ناسریال‌سازی از منطق دیباگر جدا است، اگر جایگزین بهتری برای JSON پیدا کنیم،
+می‌توانیم به‌راحتی به قالب دیگری تغییر دهیم.</p>
+<p>منطق تبدیل از بازنمایی داخلی دیباگر به کلاس‌های طرح‌واره ما در
+<code>from_$DEBUGGER.py</code> قرار دارد.</p>
+<p>پس از import شدن، <code>common</code> به‌طور خودکار هر داده ورودی موجود را ناسریال‌سازی می‌کند و <a href="https://github.com/rust-lang/rust/blob/c26ce708de5d14682647895d2f3caf38f70b5aa6/src/etc/debugger_tester/common.py#L601">آن را در
+متغیر سراسری <code>INPUT_DATA</code> ذخیره می‌کند</a>.
+این داده‌ها همان چیزی هستند که آزمون را بر اساس آن انجام می‌دهیم.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>نکته</p>
+<p>دقت ویژه‌ای شده است که <code>debugger_tester</code> ماژول <code>common</code> را import نکند، مگر آنکه یک دستور <code>repr</code>
+واقعاً پردازش شود. این کار ما را از خواندن/نوشتن داده‌های ورودی برای آزمون‌هایی
+که به آن نیاز ندارند معاف می‌کند.</p>
+</blockquote>
+<h4 id="format-minutae"><a class="header" href="#format-minutae">ریزه‌کاری‌های قالب</a></h4>
+<p>از آنجا که اطلاعات نوع پس از آغاز نشست اشکال‌زدایی یکتا و تغییرناپذیر است، نوع‌ها فقط
+یک بار در سطح بالا ذخیره می‌شوند و در جاهای دیگر با نام به آن‌ها ارجاع داده می‌شود.</p>
+<p>مقدار اشاره‌گرها از اجرایی به اجرای دیگر تغییر می‌کند.
+برای جلوگیری از ناهمخوانی، متغیرهای اشاره‌گر مقدار خود را ذخیره نمی‌کنند.
+این معادل wildcard یعنی <code>[...]</code> است که در دستورالعمل‌های <code>-check</code> به‌کار می‌رود.</p>
+<p><code>BlessMetadata</code> در <code>TargetData</code> گنجانده شده است، اما آزمونی روی آن انجام نمی‌شود.
+این فقط به‌عنوان سابقه‌ای از نحوهٔ تولید داده‌های آزمون وجود دارد
+تا در تشخیص مشکلاتی که ممکن است به‌دلیل تغییر نسخهٔ Python یا دیباگر رخ دهند کمک کند.</p>
+<h3 id="entry-point-and---bless"><a class="header" href="#entry-point-and---bless">نقطهٔ ورود و <code>--bless</code></a></h3>
+<ul>
+<li>
+<p>GDB: هنگام import، دستور <code>repr</code> از طریق API پایتونی ثبت می‌شود، در
+[<code>debugger_tester/gdb/gdb_commands.py](https://github.com/rust-lang/rust/blob/c26ce708de5d14682647895d2f3caf38f70b5aa6/src/etc/debugger_tester/gdb/gdb_commands.py). </code>ReprCommand.invoke` منطق بررسی را با متغیر داده‌شده آغاز می‌کند و گزارش خطاهای سطح بالا را بر عهده دارد.</p>
+</li>
+<li>
+<p>LLDB: هنگام مواجهه با یک شبه‌دستور <code>repr</code>، <code>lldb_batchmode.main</code> به <code>check_lldb.check()</code> ارجاع می‌دهد.</p>
+</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>نکته</p>
+<p>LLDB از ثبت
+<a href="https://lldb.llvm.org/use/tutorials/writing-custom-commands.html">دستورهای CLI سفارشی از طریق API پایتونی</a> هم پشتیبانی می‌کند.
+در آینده ممکن است منطق <code>repr</code> در LLDB بازآرایی شود تا رفتاری شبیه‌تر به GDB داشته باشد.</p>
+</blockquote>
+<p>اگر گزینهٔ <code>--bless</code> مشخص شده باشد، متغیر از
+بازنمایی درون‌حافظه به کلاس طرح‌واره معادل ما تبدیل می‌شود.
+این شامل نوع متغیر،
+نمایش‌دهنده‌ها (visualizer)، فرزندان، نوع فرزندان و مانند آن است.
+پس از درج در <code>TargetData</code>،
+شیء متغیر دیباگر در برابر داده‌ای که همین حالا به <code>TargetData</code> افزوده شده، آزمون سلامت (sanity test) می‌شود.</p>
+<p>اگر هیچ استثنا یا خطایی رخ نداده باشد و گزینهٔ <code>--bless</code> مشخص شده باشد، <code>INPUT_DATA</code> درست پیش از خروج <code>debugger_tester</code>
+در فایل مناسب نوشته می‌شود.
+اگر خطاهایی رخ دهد، داده‌های bless‌شده صرفاً کنار گذاشته می‌شوند.</p>
+<p>در حال حاضر، شبه‌دستور <code>repr</code> مستقیماً بررسی می‌شود.
+GDB و LLDB هر دو از ایجاد دستورهای CLI سفارشی از طریق کد Python پشتیبانی می‌کنند.
+در آینده ممکن است <code>repr</code> برای یکی از دیباگرها یا هر دو به‌صورت یک دستور CLI پیاده‌سازی شود.</p>
+<h3 id="check-logic"><a class="header" href="#check-logic">منطق بررسی</a></h3>
+<p><code>check_$DEBUGGER.check</code> شیء متغیر دیباگر را به یک شیء <code>Variable</code> تبدیل می‌کند و
+این دو را با هم مقایسه می‌کند.
+اگر ناهمخوانی‌ای پیدا شود، پردازش بیشتری انجام می‌شود تا خطاها به شکلی مفیدتر گزارش شوند.
+این یعنی خطاها بلافاصله پیدا و گزارش می‌شوند که مزایای متعددی دارد.
+مهم‌تر از همه، از آنجا که وضعیت دیباگر از زمان شکست تغییر نکرده است و
+هنوز به شیء متغیر دیباگر دسترسی داریم، می‌توانیم برای ارائهٔ پیام‌های خطای مفیدتر
+اطلاعات بیشتری از دیباگر بپرسیم.</p>
+<p>برای نمونه، LLDB در گزارش خطاهایی که درون
+فراخوانی‌های ارائه‌دهندهٔ synthetic/summary رخ می‌دهند می‌تواند کمی کم‌حرف باشد.
+این به‌ویژه زمانی صادق است که دستور درون یک دستور دیگر اجرا شود،
+همان‌طور که آزمون‌ها با فراخوانی <code>script import debugger_tester; debugger_tester.main()</code> و
+اجرای دستورها در آن بافتار این کار را می‌کنند.</p>
+<p>وقتی با یک خطا مواجه می‌شویم، می‌توانیم ارائه‌دهندهٔ summary مناسب را import کنیم، شیء متغیر را
+به آن بدهیم و استثنا را خودمان چاپ کنیم.
+همچنین می‌توانیم کلاس ارائه‌دهندهٔ synthetic را بررسی کنیم
+تا مطمئن شویم همهٔ تابع‌های اجباری را پیاده‌سازی کرده است.</p>
+<p>خطاها آزمون را بلافاصله <em>پایان نمی‌دهند</em>.
+این اکنون که گزینهٔ <code>--bless</code> اضافه شده اهمیت ویژه‌ای دارد.
+<code>--bless</code> همهٔ داده‌های ورودی را به‌روز می‌کند، پس باید همهٔ خطاها چاپ شوند تا خواننده
+بتواند آگاهانه تصمیم بگیرد که آیا تغییرات دیگری لازم است یا نه.
+قطعاً نمی‌خواهیم افراد به‌طور تصادفی داده‌های بد را bless کنند
+فقط به این دلیل که نخستین خطا اتفاقاً یک تغییر مورد انتظار بوده است.</p>
+<p>خطاها مستقیماً در <code>stdout</code> چاپ می‌شوند تا به‌عنوان خروجی قابل مشاهدهٔ شبه‌دستور <code>repr</code> ظاهر شوند.
+<a href="https://github.com/rust-lang/rust/blob/c26ce708de5d14682647895d2f3caf38f70b5aa6/src/etc/debugger_tester/common.py#L35-L51">چند تابع کمکی خطا</a> وجود دارد
+تا قالب‌بندی یکدست بماند.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>نکته</p>
+<p>وقتی LLDB یک دستور <code>script</code> را اجرا می‌کند، <code>stderr</code> مفسر Python را چاپ نمی‌کند.
+اگر مفسر با یک استثنا خارج شود، همان را چاپ می‌کند، اما بقیهٔ <code>stderr</code> را نه.
+در عوض، اگر بخواهیم در <code>stderr</code> چاپ کنیم، می‌توانیم از خروجی خطای خود دیباگر استفاده کنیم؛ با فراخوانی
+<code>lldb.debugger.GetErrorFileHandle</code> که یک <code>io.TextIoWrapper</code> در Python برمی‌گرداند.</p>
+</blockquote>
+<p>اگر برای یک متغیر خطایی رخ نداده باشد، <code>$VAR_NAME ok</code> در <code>stdout</code> چاپ می‌شود تا <code>compiletest</code>
+آن را تطبیق دهد.</p>
+<p>پیش از خروج <code>debugger_tester</code>، یک بررسی نهایی انجام می‌شود تا مطمئن شویم همهٔ نوع‌ها و متغیرهایی
+که در <code>INPUT_DATA</code> وجود داشتند آزموده شده‌اند.
+اگر این بررسی شکست بخورد، اسکریپت نوع‌ها/متغیرهای آزموده‌نشده را گزارش می‌کند و با کد خطا خارج می‌شود.</p>
+<h1 id="lldb-versioning"><a class="header" href="#lldb-versioning">نسخه‌بندی LLDB</a></h1>
+<p>Apple همراه Xcode یک فورک از LLDB توزیع می‌کند که پشتیبانی از Swift را دارد.
+این فورک از LLDB از همان طرح نسخه‌بندی LLDB در LLVM استفاده نمی‌کند:</p>
+<pre><code># Apple:
+lldb-1703.0.236.21 Apple Swift version 6.2.3 (swiftlang-6.2.3.3.21 clang-1700.6.3.2)
+# LLVM:
+lldb version 22.1.2 (https://github.com/llvm/llvm-project revision 1ab49a973e210e97d61e5db6557180dcb92c3e98)
+  clang revision 1ab49a973e210e97d61e5db6557180dcb92c3e98
+  llvm revision 1ab49a973e210e97d61e5db6557180dcb92c3e98
+</code></pre>
+<p>به نظر نمی‌رسد نسخهٔ LLDB اپل از نسخهٔ LLVM مشتق شده باشد، بنابراین نمی‌توانیم به‌آسانی
+یا به‌طور خودکار بین این دو تبدیل کنیم.
+خوشبختانه همچنان می‌توانیم نسخهٔ پایهٔ LLVM را به‌صورت دستی
+با بررسی شاخهٔ انتشار (release branch) مناسب در مخزن Swift LLVM بررسی کنیم.
+برای مثال بالا، شاخه‌ای برای <code>Swift 6.2.3</code> وجود ندارد، اما برای <code>6.2.2</code> هست.
+نسخهٔ LLVM در
+<a href="https://github.com/swiftlang/llvm-project/blob/swift/release/6.2.2/llvm/utils/gn/secondary/llvm/version.gni"><code>llvm/utils/gn/secondary/llvm/version.gni</code></a> قرار دارد.
+همان‌طور که از آن مثال می‌بینیم، نسخهٔ LLDB اپل در بالا تقریباً با LLDB نسخهٔ
+<code>19.1.5</code> در LLVM متناظر است.</p>
+<p>این هنگام تشخیص مشکل یا نوشتن آزمون‌های جدید می‌تواند مفید باشد، زیرا تصور بهتری می‌دهد از اینکه
+چه قابلیت‌هایی در LLDB اپل که در CI استفاده می‌شود در دسترس است.
+برای مثال، LLDB 19 نخستین نسخه‌ای بود که از تابع‌های Type Recognizer پشتیبانی کرد،
+بنابراین می‌توانیم فرض کنیم LLDB اپلِ نمونهٔ ما از آن‌ها پشتیبانی می‌کند.</p><nav class="page-nav"><a href="natvis-visualizers.html">→ CDB - Natvis (ناقص)</a><a href="../debugging-support-in-rustc.html">(یادداشت‌های درس) پشتیبانی از اشکال‌زدایی در کامپایلر Rust ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

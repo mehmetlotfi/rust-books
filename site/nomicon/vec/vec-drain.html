@@ -1,0 +1,129 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>Drain — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="vec/vec-drain"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="drain"><a class="header" href="#drain">Drain</a></h1>
+<p>بیایید به سراغ Drain برویم. Drain تا حد زیادی مانند IntoIter است، با این تفاوت که به‌جای مصرف کردن Vec، آن را قرض می‌گیرد و تخصیص آن را دست‌نخورده باقی می‌گذارد. فعلاً فقط نسخهٔ «پایه»ٔ بازهٔ کامل را پیاده‌سازی می‌کنیم.</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">use std::marker::PhantomData;
+
+struct Drain&lt;'a, T: 'a&gt; {
+    // Need to bound the lifetime here, so we do it with `&amp;'a mut Vec&lt;T&gt;`
+    // because that's semantically what we contain. We're "just" calling
+    // `pop()` and `remove(0)`.
+    vec: PhantomData&lt;&amp;'a mut Vec&lt;T&gt;&gt;,
+    start: *const T,
+    end: *const T,
+}
+
+impl&lt;'a, T&gt; Iterator for Drain&lt;'a, T&gt; {
+    type Item = T;
+    fn next(&amp;mut self) -&gt; Option&lt;T&gt; {
+        if self.start == self.end {
+            None</code></pre>
+<p>– صبر کنید، این دارد آشنا به نظر می‌رسد. بیایید کمی بیشتر فشرده‌سازی کنیم. IntoIter و Drain هر دو دقیقاً ساختار یکسانی دارند، پس بیایید آن را جدا کنیم.</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">struct RawValIter&lt;T&gt; {
+    start: *const T,
+    end: *const T,
+}
+
+impl&lt;T&gt; RawValIter&lt;T&gt; {
+    // unsafe to construct because it has no associated lifetimes.
+    // This is necessary to store a RawValIter in the same struct as
+    // its actual allocation. OK since it's a private implementation
+    // detail.
+    unsafe fn new(slice: &amp;[T]) -&gt; Self {
+        RawValIter {
+            start: slice.as_ptr(),
+            end: if slice.len() == 0 {
+                // if `len = 0`, then this is not actually allocated memory.
+                // Need to avoid offsetting because that will give wrong
+                // information to LLVM via GEP.
+                slice.as_ptr()
+            } else {
+                slice.as_ptr().add(slice.len())
+            }
+        }
+    }
+}
+
+// Iterator and DoubleEndedIterator impls identical to IntoIter.</code></pre>
+<p>و IntoIter به این شکل درمی‌آید:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">pub struct IntoIter&lt;T&gt; {
+    _buf: RawVec&lt;T&gt;, // we don't actually care about this. Just need it to live.
+    iter: RawValIter&lt;T&gt;,
+}
+
+impl&lt;T&gt; Iterator for IntoIter&lt;T&gt; {
+    type Item = T;
+    fn next(&amp;mut self) -&gt; Option&lt;T&gt; { self.iter.next() }
+    fn size_hint(&amp;self) -&gt; (usize, Option&lt;usize&gt;) { self.iter.size_hint() }
+}
+
+impl&lt;T&gt; DoubleEndedIterator for IntoIter&lt;T&gt; {
+    fn next_back(&amp;mut self) -&gt; Option&lt;T&gt; { self.iter.next_back() }
+}
+
+impl&lt;T&gt; Drop for IntoIter&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        for _ in &amp;mut *self {}
+    }
+}
+
+impl&lt;T&gt; IntoIterator for Vec&lt;T&gt; {
+    type Item = T;
+    type IntoIter = IntoIter&lt;T&gt;;
+    fn into_iter(self) -&gt; IntoIter&lt;T&gt; {
+        unsafe {
+            let iter = RawValIter::new(&amp;self);
+
+            let buf = ptr::read(&amp;self.buf);
+            mem::forget(self);
+
+            IntoIter {
+                iter,
+                _buf: buf,
+            }
+        }
+    }
+}</code></pre>
+<p>توجه کنید که چند ویژگی عجیب را در این طراحی باقی گذاشته‌ام تا ارتقای Drain برای کار با زیربازه‌های دلخواه کمی آسان‌تر شود. به‌طور خاص، <em>می‌توانستیم</em> RawValIter را وادار کنیم هنگام drop شدن خودش را تخلیه (drain) کند، اما این برای یک Drain پیچیده‌تر درست کار نمی‌کند. همچنین یک slice می‌گیریم تا مقداردهی اولیهٔ Drain ساده شود.</p>
+<p>بسیار خب، حالا Drain واقعاً آسان است:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">use std::marker::PhantomData;
+
+pub struct Drain&lt;'a, T: 'a&gt; {
+    vec: PhantomData&lt;&amp;'a mut Vec&lt;T&gt;&gt;,
+    iter: RawValIter&lt;T&gt;,
+}
+
+impl&lt;'a, T&gt; Iterator for Drain&lt;'a, T&gt; {
+    type Item = T;
+    fn next(&amp;mut self) -&gt; Option&lt;T&gt; { self.iter.next() }
+    fn size_hint(&amp;self) -&gt; (usize, Option&lt;usize&gt;) { self.iter.size_hint() }
+}
+
+impl&lt;'a, T&gt; DoubleEndedIterator for Drain&lt;'a, T&gt; {
+    fn next_back(&amp;mut self) -&gt; Option&lt;T&gt; { self.iter.next_back() }
+}
+
+impl&lt;'a, T&gt; Drop for Drain&lt;'a, T&gt; {
+    fn drop(&amp;mut self) {
+        for _ in &amp;mut *self {}
+    }
+}
+
+impl&lt;T&gt; Vec&lt;T&gt; {
+    pub fn drain(&amp;mut self) -&gt; Drain&lt;T&gt; {
+        let iter = unsafe { RawValIter::new(&amp;self) };
+
+        // this is a mem::forget safety thing. If Drain is forgotten, we just
+        // leak the whole Vec's contents. Also we need to do this *eventually*
+        // anyway, so why not do it now?
+        self.len = 0;
+
+        Drain {
+            iter,
+            vec: PhantomData,
+        }
+    }
+}</code></pre>
+<p>برای جزئیات بیشتر دربارهٔ مسئلهٔ <code>mem::forget</code>، <a href="../leaking.html">بخش مربوط به نشت‌ها</a> را ببینید.</p><nav class="page-nav"><a href="vec-raw.html">→ RawVec</a><a href="vec-zsts.html">مدیریت نوع‌های با اندازهٔ صفر ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../nomicon/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,176 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>استنتاج نوع — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="type-inference"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="type-inference"><a class="header" href="#type-inference">استنتاج نوع</a></h1>
+<p>استنتاج نوع فرایند تشخیص خودکار نوع یک
+عبارت است.</p>
+<p>همین است که به Rust اجازه می‌دهد با حاشیه‌نویسی نوع کمتر یا بدون آن کار کند
+و کار را برای کاربران آسان‌تر می‌کند:</p>
+<pre><code class="language-rust">fn main() {
+    let mut things = vec![];
+    things.push("thing");
+}</code></pre>
+<p>در اینجا نوع <code>things</code> <em>استنتاج</em> می‌شود که <code>Vec&lt;&amp;str&gt;</code> است، به‌دلیل مقداری
+که به <code>things</code> push می‌کنیم.</p>
+<p>استنتاج نوع بر پایهٔ الگوریتم استاندارد استنتاج نوع Hindley-Milner (HM) است،
+اما به شیوه‌های گوناگون گسترش یافته تا زیرنوع‌سازی، استنتاج
+ناحیه و نوع‌های مرتبه‌بالاتر (higher-ranked) را در خود جای دهد.</p>
+<h2 id="a-note-on-terminology"><a class="header" href="#a-note-on-terminology">نکته‌ای دربارهٔ اصطلاحات</a></h2>
+<p>از نماد <code>?T</code> برای اشاره به متغیرهای استنتاج استفاده می‌کنیم که
+متغیرهای وجودی (existential) هم نامیده می‌شوند.</p>
+<p>اصطلاح‌های «ناحیه (region)» و «طول عمر (lifetime)» را به‌جای یکدیگر به کار می‌بریم. هر دو به
+<code>'a</code> در <code>&amp;'a T</code> اشاره دارند.</p>
+<p>اصطلاح «ناحیهٔ مقید (bound region)» به ناحیه‌ای اشاره دارد که در امضای یک تابع
+مقید شده است، مانند <code>'a</code> در <code>for&lt;'a&gt; fn(&amp;'a u32)</code>. یک ناحیه
+«آزاد (free)» است اگر مقید نباشد.</p>
+<h2 id="creating-an-inference-context"><a class="header" href="#creating-an-inference-context">ساخت یک بافت استنتاج</a></h2>
+<p>یک بافت استنتاج را با انجام کاری شبیه
+مورد زیر می‌سازید:</p>
+<pre><code class="language-rust ignore">let infcx = tcx.infer_ctxt().build();
+// Use the inference context `infcx` here.</code></pre>
+<p><code>infcx</code> از نوع <code>InferCtxt&lt;'tcx&gt;</code> است، با همان طول عمر <code>'tcx</code> که روی
+<code>tcx</code>ای است که از آن ساخته شده است.</p>
+<p>متد <code>tcx.infer_ctxt</code> در واقع یک builder برمی‌گرداند، یعنی
+پیش از ساخته شدن <code>infcx</code> می‌توانید چند نوع پیکربندی انجام دهید.
+برای اطلاعات بیشتر <code>InferCtxtBuilder</code> را ببینید.</p>
+<p><a id="vars"></a></p>
+<h2 id="inference-variables"><a class="header" href="#inference-variables">متغیرهای استنتاج</a></h2>
+<p>هدف اصلی بافت استنتاج نگه‌داری مجموعه‌ای از
+<strong>متغیرهای استنتاج</strong> است – این‌ها نوع‌ها یا نواحی‌ای را نشان می‌دهند که مقدار دقیقشان
+هنوز معلوم نیست، اما هنگام بررسی نوع آشکار خواهد شد.</p>
+<p>اگر با ایده‌های پایهٔ یکسان‌سازی (unification) از سامانه‌های نوع H-M
+یا زبان‌های منطقی مانند Prolog آشنا هستید، این همان مفهوم است. اگر
+آشنا نیستید، شاید بخواهید آموزشی دربارهٔ نحوهٔ کار استنتاج نوع H-M بخوانید، یا شاید این نوشتهٔ وبلاگ دربارهٔ
+<a href="http://smallcultfollowing.com/babysteps/blog/2017/03/25/unification-in-chalk-part-1/">یکسان‌سازی در پروژهٔ Chalk</a>.</p>
+<p>روی‌هم‌رفته، بافت استنتاج پنج نوع متغیر استنتاج را ذخیره می‌کند
+(تا <!-- date-check --> مارس ۲۰۲۳):</p>
+<ul>
+<li>متغیرهای نوع، که سه گونه دارند:
+<ul>
+<li>متغیرهای نوع عمومی (رایج‌ترین). این‌ها را می‌توان با هر
+نوعی یکسان‌سازی کرد.</li>
+<li>متغیرهای نوع صحیح (integral)، که فقط با یک نوع صحیح یکسان‌سازی می‌شوند
+و از عبارت لیترال عدد صحیح مانند <code>22</code> پدید می‌آیند.</li>
+<li>متغیرهای نوع ممیز شناور (float)، که فقط با یک نوع float یکسان‌سازی می‌شوند و
+از عبارت لیترال float مانند <code>22.0</code> پدید می‌آیند.</li>
+</ul>
+</li>
+<li>متغیرهای ناحیه، که طول عمرها را نشان می‌دهند و همه‌جا پدید می‌آیند.</li>
+<li>متغیرهای ثابت (const)، که ثابت‌ها را نشان می‌دهند.</li>
+</ul>
+<p>همهٔ متغیرهای نوع تقریباً به یک شکل کار می‌کنند: می‌توانید یک
+متغیر نوع جدید بسازید و آنچه به دست می‌آورید <code>Ty&lt;'tcx&gt;</code> است که
+نوع حل‌نشدهٔ <code>?T</code> را نشان می‌دهد. سپس بعداً می‌توانید عملیات گوناگونی را اعمال کنید
+که استنتاج‌گر پشتیبانی می‌کند، مانند برابری یا زیرنوع‌سازی، و
+احتمالاً در نتیجه آن <code>?T</code> را به مقدار مشخصی <strong>نمونه‌سازی (instantiate)</strong> (یا <strong>مقید (bind)</strong>) می‌کند.</p>
+<p>متغیرهای ناحیه تا حدی متفاوت کار می‌کنند و
+در بخشی جداگانه در ادامه توضیح داده می‌شوند.</p>
+<h2 id="enforcing-equality--subtyping"><a class="header" href="#enforcing-equality--subtyping">اعمال برابری / زیرنوع‌سازی</a></h2>
+<p>پایه‌ای‌ترین عملیاتی که می‌توانید در استنتاج‌گر نوع انجام دهید
+<strong>برابری</strong> است که دو نوع <code>T</code> و <code>U</code> را مجبور می‌کند یکسان باشند.
+روش توصیه‌شده برای افزودن قید برابری استفاده از متد <code>at</code>
+است، تقریباً به این شکل:</p>
+<pre><code class="language-rust ignore">infcx.at(...).eq(t, u);</code></pre>
+<p>فراخوانی اول <code>at()</code> کمی بافت فراهم می‌کند، یعنی اینکه چرا
+این یکسان‌سازی را انجام می‌دهید و در چه محیطی، و متد <code>eq</code>
+قید برابری واقعی را اعمال می‌کند.</p>
+<p>وقتی چیزها را برابر می‌کنید، آن‌ها را مجبور می‌کنید دقیقاً برابر باشند. برابرسازی
+یک <code>InferResult</code> برمی‌گرداند – اگر <code>Err(err)</code> برگرداند، برابرسازی
+شکست خورده است و <code>TypeError</code> دربرگیرنده به شما می‌گوید چه چیزی اشتباه بوده.</p>
+<p>حالت موفقیت شاید جالب‌تر باشد. نوع بازگشتی «اصلی»
+<code>eq</code> برابر <code>()</code> است – یعنی وقتی موفق می‌شود، مقداری که
+اهمیت خاصی داشته باشد برنمی‌گرداند. بلکه به‌خاطر
+اثرهای جانبی‌اش، مثل مقید کردن متغیرهای نوع و غیره، اجرا می‌شود. با این حال،
+نوع بازگشتی واقعی <code>()</code> نیست، بلکه <code>InferOk&lt;()&gt;</code> است.
+نوع <code>InferOk</code> برای حمل تعهدهای صفت اضافی به کار می‌رود – کار شما
+این است که مطمئن شوید این‌ها برآورده می‌شوند (معمولاً با ثبت آن‌ها در یک
+بافت fulfillment). برای پیش‌زمینهٔ بیشتر <a href="traits/resolution.html">فصل صفت</a> را ببینید.</p>
+<p>به‌همین‌ترتیب می‌توانید زیرنوع‌سازی را با <code>infcx.at(..).sub(..)</code> اعمال کنید. همان
+مفاهیم پایهٔ بالا صدق می‌کنند.</p>
+<h2 id="trying-equality"><a class="header" href="#trying-equality">«آزمودن» برابری</a></h2>
+<p>گاهی می‌خواهید بدانید آیا برابر کردن دو
+نوع بدون خطا <em>ممکن</em> است.  این را با <code>infcx.can_eq</code> (یا
+<code>infcx.can_sub</code> برای زیرنوع‌سازی) می‌توانید آزمود. اگر <code>Ok</code> برگرداند، برابری
+ممکن است – اما در همهٔ حالت‌ها، هر اثر جانبی برگردانده می‌شود.</p>
+<p>اما آگاه باشید که موفقیت یا شکست این متدها همیشه
+<strong>به‌پیمانهٔ نواحی (modulo regions)</strong> است. یعنی دو نوع <code>&amp;'a u32</code> و <code>&amp;'b u32</code>
+مقدار <code>Ok</code> را برای <code>can_eq</code> برمی‌گردانند، حتی اگر <code>'a != 'b</code>.  این از
+ماهیت «دوفازی» نحوهٔ حل قیدهای ناحیه ناشی می‌شود.</p>
+<h2 id="snapshots"><a class="header" href="#snapshots">اسنپ‌شات‌ها (Snapshots)</a></h2>
+<p>همان‌طور که در بخش پیشین دربارهٔ <code>can_eq</code> توضیح داده شد، اغلب مفید است
+بتوانیم مجموعه‌ای از عملیات را انجام دهیم و سپس اثرهای جانبی‌شان را بازگردانیم. این به دلایل مختلفی
+انجام می‌شود: یکی از آن‌ها امکان عقب‌گرد (backtrack) است، یعنی
+آزمودن چند امکان پیش از تصمیم دربارهٔ اینکه کدام مسیر را برویم. دیگری
+تضمین اینکه مجموعه‌ای از تغییرهای کوچک‌تر به‌صورت اتمی یا اصلاً رخ ندهند.</p>
+<p>برای اجازهٔ این کار، بافت استنتاج متد <code>snapshot</code> را پشتیبانی می‌کند.
+وقتی آن را فراخوانی کنید، شروع به ثبت تغییرهایی می‌کند که از
+عملیاتی که انجام می‌دهید رخ می‌دهند. وقتی کارتان تمام شد، می‌توانید یا
+<code>rollback_to</code> را فراخوانی کنید که آن تغییرها را واگرد می‌کند، یا <code>confirm</code> که
+آن‌ها را دائمی می‌کند. اسنپ‌شات‌ها تا زمانی که از یک انضباط پشته‌مانند پیروی کنید می‌توانند
+تودرتو باشند.</p>
+<p>به‌جای استفادهٔ مستقیم از اسنپ‌شات‌ها، اغلب مفید است از
+متدهایی مانند <code>commit_if_ok</code> یا <code>probe</code> استفاده کنید که الگوهای
+سطح بالاتر را کپسوله می‌کنند.</p>
+<h2 id="subtyping-obligations"><a class="header" href="#subtyping-obligations">تعهدهای زیرنوع‌سازی</a></h2>
+<p>یکی از چیزهایی که ارزش بحث دارد تعهدهای زیرنوع‌سازی است. وقتی
+دو نوع را مجبور می‌کنید زیرنوع باشند، مانند <code>?T &lt;: i32</code>، اغلب می‌توانیم آن‌ها را
+به قیدهای برابری تبدیل کنیم. این از مفهوم نسبتاً محدود Rust دربارهٔ
+زیرنوع‌سازی ناشی می‌شود: پس در حالت بالا، <code>?T &lt;: i32</code> معادل <code>?T = i32</code> است.</p>
+<p>با این حال، در برخی موارد باید دقیق‌تر باشیم. برای مثال وقتی
+نواحی درگیرند. پس اگر <code>?T &lt;: &amp;'a i32</code> داشته باشید، کاری که می‌کنیم
+این است که ابتدا <code>&amp;'a i32</code> را به نوعی با یک متغیر ناحیه «تعمیم (generalize)» می‌دهیم:
+<code>&amp;'?b i32</code>، و سپس <code>?T</code> را با آن یکسان‌سازی می‌کنیم (<code>?T = &amp;'?b i32</code>). سپس
+این متغیر جدید را با کران اصلی مرتبط می‌کنیم:</p>
+<pre><code class="language-text">&amp;'?b i32 &lt;: &amp;'a i32
+</code></pre>
+<p>این به یک قید ناحیه (به ادامه رجوع کنید) به شکل <code>'?b: 'a</code> می‌انجامد.</p>
+<p>یک حالت جالب نهایی مرتبط کردن دو متغیر نوع بدون مقدار است،
+مانند <code>?T &lt;: ?U</code>.  در آن حالت نمی‌توانیم پیشرفت کنیم، پس
+تعهد <code>Subtype(?T, ?U)</code> را در صف می‌گذاریم و آن را از طریق سازوکار <code>InferOk</code>
+برمی‌گردانیم. وقتی جزئیات بیشتری دربارهٔ <code>?T</code> یا
+<code>?U</code> معلوم شد باید دوباره امتحان کنید.</p>
+<h2 id="region-constraints"><a class="header" href="#region-constraints">قیدهای ناحیه</a></h2>
+<p>نواحی تا حدی متفاوت از نوع‌ها استنتاج می‌شوند. به‌جای
+یکسان‌سازی مشتاقانهٔ چیزها، صرفاً در حین کار قیدها را جمع می‌کنیم، اما
+(تقریباً) هیچ تلاشی برای حل نواحی نمی‌کنیم. این قیدها
+شکل قید «outlives» را دارند:</p>
+<pre><code class="language-text">'a: 'b
+</code></pre>
+<p>در واقع کد تمایل دارد آن‌ها را به‌صورت رابطهٔ زیرناحیه ببیند، اما ایده همان است:</p>
+<pre><code class="language-text">'b &lt;= 'a
+</code></pre>
+<p>(انواع دیگری از قیدها هم وجود دارد، مانند «verify»ها؛ برای جزئیات
+ماژول <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_infer/infer/region_constraints/index.html"><code>region_constraints</code></a> را ببینید.)</p>
+<p>یک حالت وجود دارد که در آن مقداری یکسان‌سازی مشتاقانه انجام می‌دهیم. اگر قید برابری
+میان دو ناحیه داشته باشید</p>
+<pre><code class="language-text">'a = 'b
+</code></pre>
+<p>این واقعیت را در یک جدول یکسان‌سازی ثبت می‌کنیم. سپس می‌توانید از
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_infer/infer/region_constraints/struct.RegionConstraintCollector.html#method.opportunistic_resolve_var"><code>opportunistic_resolve_var</code></a> برای تبدیل <code>'b</code> به <code>'a</code> (یا
+برعکس) استفاده کنید. این گاهی برای تضمین پایان یافتن
+الگوریتم‌های نقطهٔ ثابت لازم است.</p>
+<h2 id="solving-region-constraints"><a class="header" href="#solving-region-constraints">حل قیدهای ناحیه</a></h2>
+<p>قیدهای ناحیه فقط در پایان بررسی نوع حل می‌شوند، وقتی
+همهٔ قیدهای دیگر معلوم باشند و
+همهٔ تعهدهای دیگر اثبات شده باشند. اکنون دو
+راه برای حل قیدهای ناحیه وجود دارد: لغوی (lexical) و
+غیرلغوی (non-lexical). در نهایت فقط یکی خواهد ماند.</p>
+<p>یک استثنا در اینجا leak-check است که هنگام حل صفت به کار می‌رود
+و به قیدهای ناحیه‌ای که نواحی مرتبه‌بالاتر دارند متکی است. قیدهای ناحیه
+در universe ریشه (یعنی ناشی از <code>for&lt;'a&gt;</code> نباشند) نباید
+بر سامانهٔ صفت اثر بگذارند، چون این نواحی همه در طول
+codegen پاک می‌شوند.</p>
+<p>برای حل قیدهای ناحیهٔ <strong>لغوی</strong>،
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/traits/struct.ObligationCtxt.html#method.resolve_regions_and_report_errors"><code>resolve_regions_and_report_errors</code></a> را فراخوانی می‌کنید.  این فرایند قید ناحیه را «می‌بندد» و کد
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_infer/infer/lexical_region_resolve/index.html"><code>lexical_region_resolve</code></a> را فراخوانی می‌کند. پس از
+انجام این کار، هر تلاش بیشتر برای برابر کردن یا ساخت رابطهٔ زیرنوع‌سازی
+به یک ICE می‌انجامد.</p>
+<p>حل‌کنندهٔ NLL (در واقع، type-checker مربوط به MIR) کارها را اندکی
+متفاوت انجام می‌دهد. برای حل صفت از query‌های کانونی استفاده می‌کند که در پایان
+از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_infer/infer/struct.InferCtxt.html#method.take_and_reset_region_constraints"><code>take_and_reset_region_constraints</code></a> استفاده می‌کنند. این همهٔ
+قیدهای outlives افزوده‌شده در طول query کانونی را استخراج می‌کند. این لازم است
+چون حل‌کنندهٔ NLL باید نه‌تنها بداند <em>کدام</em> نواحی از یکدیگر بیشتر عمر می‌کنند،
+بلکه <em>کجا</em> هم. سرانجام، حل‌کنندهٔ NLL <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_infer/infer/struct.InferCtxt.html#method.get_region_var_infos"><code>get_region_var_infos</code></a> را فراخوانی می‌کند
+و همهٔ متغیرهای ناحیه را در اختیار حل‌کننده می‌گذارد.</p>
+<h2 id="lexical-region-resolution"><a class="header" href="#lexical-region-resolution">حل ناحیهٔ لغوی (Lexical region resolution)</a></h2>
+<p>حل ناحیهٔ لغوی با تخصیص اولیهٔ مقدار تهی به هر متغیر ناحیه انجام می‌شود.
+سپس هر قید outlives را مکرراً پردازش می‌کنیم و متغیرهای ناحیه را رشد می‌دهیم تا به نقطهٔ ثابت برسیم.
+متغیرهای ناحیه را می‌توان با رابطهٔ کوچک‌ترین کران بالا (least-upper-bound) روی
+شبکهٔ ناحیه به شیوه‌ای نسبتاً سرراست رشد داد.</p><nav class="page-nav"><a href="typing-parameter-envs.html">→ محیط‌های Typing/Param</a><a href="traits/resolution.html">حل صفت ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,815 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>چیدمان نوع (Type layout) — مرجع زبان Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="type-layout"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="introduction.html" style="color:inherit;text-decoration:none">مرجع زبان Rust</a><small class="en-title" dir="ltr">The Rust Reference</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><div class="rule" id="r-layout"><a class="rule-link" href="#r-layout" title="layout"><span>[layout]</span></a>
+</div>
+
+<h1 id="type-layout"><a class="header" href="#type-layout">چیدمان نوع‌ها</a></h1>
+<div class="rule" id="r-layout.intro"><a class="rule-link" href="#r-layout.intro" title="layout.intro"><span>[layout<wbr>.intro]</span></a>
+</div>
+
+<p>چیدمان یک نوع شامل اندازه، هم‌ترازی و آفست نسبی فیلدهای آن است. برای برشمردنی‌ها، شیوهٔ چیدمان و تفسیر ممیز نیز بخشی از چیدمان نوع به شمار می‌آید.</p>
+<div class="rule" id="r-layout.guarantees"><a class="rule-link" href="#r-layout.guarantees" title="layout.guarantees"><span>[layout<wbr>.guarantees]</span></a>
+</div>
+
+<p>چیدمان نوع ممکن است در هر بار کامپایل تغییر کند. به‌جای مستندسازی دقیق کاری که در حال حاضر انجام می‌شود، تنها تضمین‌های امروزی را مستند می‌کنیم.</p>
+<p>توجه کنید حتی نوع‌هایی با چیدمان یکسان نیز ممکن است هنگام عبور از مرز تابع‌ها متفاوت منتقل شوند. برای سازگاری ABI نوع‌ها در فراخوانی تابع، <a href="https://doc.rust-lang.org/core/primitive.fn.html#abi-compatibility">اینجا</a> را ببینید.</p>
+<div class="rule" id="r-layout.properties"><a class="rule-link" href="#r-layout.properties" title="layout.properties"><span>[layout<wbr>.properties]</span></a>
+</div>
+
+<h2 id="size-and-alignment"><a class="header" href="#size-and-alignment">اندازه و هم‌ترازی</a></h2>
+<div class="rule" id="r-layout.properties.intro"><a class="rule-link" href="#r-layout.properties.intro" title="layout.properties.intro"><span>[layout<wbr>.properties<wbr>.intro]</span></a>
+</div>
+
+<p>همهٔ مقدارها دارای هم‌ترازی و اندازه هستند.</p>
+<div class="rule" id="r-layout.properties.align"><a class="rule-link" href="#r-layout.properties.align" title="layout.properties.align"><span>[layout<wbr>.properties<wbr>.align]</span></a>
+</div>
+
+<p><em>هم‌ترازی</em> یک مقدار مشخص می‌کند ذخیره‌کردن آن در چه آدرس‌هایی معتبر است. مقداری با هم‌ترازی <code>n</code> تنها باید در آدرسی ذخیره شود که مضربی از n باشد. برای نمونه، مقدار دارای هم‌ترازی ۲ باید در آدرسی زوج ذخیره شود، در حالی که مقدار دارای هم‌ترازی ۱ را می‌توان در هر آدرسی ذخیره کرد. هم‌ترازی با بایت سنجیده می‌شود، دست‌کم ۱ است و همیشه توانی از ۲ خواهد بود. هم‌ترازی یک مقدار را می‌توان با تابع <code>align_of_val</code> بررسی کرد.</p>
+<div class="rule" id="r-layout.properties.size"><a class="rule-link" href="#r-layout.properties.size" title="layout.properties.size"><span>[layout<wbr>.properties<wbr>.size]</span></a>
+</div>
+
+<p><em>اندازهٔ</em> یک مقدار، فاصلهٔ بایتی میان دو عنصر پیاپی در آرایه‌ای از همان نوع عنصر است و فضای پرکنندهٔ هم‌ترازی را نیز در بر می‌گیرد. اندازهٔ مقدار همیشه مضربی از هم‌ترازی آن است. توجه کنید برخی نوع‌ها <a href="glossary.html#r-glossary.zst">اندازهٔ صفر</a> دارند؛ صفر مضربی از هر هم‌ترازی در نظر گرفته می‌شود (برای نمونه در بعضی سکوها، نوع <code>[u16; 0]</code> اندازهٔ ۰ و هم‌ترازی ۲ دارد). اندازهٔ یک مقدار را می‌توان با تابع <code>size_of_val</code> بررسی کرد.</p>
+<div class="rule" id="r-layout.properties.sized"><a class="rule-link" href="#r-layout.properties.sized" title="layout.properties.sized"><span>[layout<wbr>.properties<wbr>.sized]</span></a>
+</div>
+
+<p>نوع‌هایی که تمام مقدارهایشان اندازه و هم‌ترازی یکسان و معلوم در زمان کامپایل دارند، صفت <code>Sized</code> را پیاده‌سازی می‌کنند و می‌توان آن‌ها را با تابع‌های <code>size_of</code> و <code>align_of</code> بررسی کرد. نوع‌هایی که <code>Sized</code> نیستند، <a href="dynamically-sized-types.html">نوع‌های با اندازهٔ پویا</a> نامیده می‌شوند. چون همهٔ مقدارهای یک نوع <code>Sized</code> اندازه و هم‌ترازی مشترکی دارند، این دو مقدار مشترک را به‌ترتیب اندازهٔ نوع و هم‌ترازی نوع می‌نامیم.</p>
+<div class="rule" id="r-layout.primitive"><a class="rule-link" href="#r-layout.primitive" title="layout.primitive"><span>[layout<wbr>.primitive]</span></a>
+</div>
+
+<h2 id="primitive-data-layout"><a class="header" href="#primitive-data-layout">چیدمان داده‌های ابتدایی</a></h2>
+<div class="rule" id="r-layout.primitive.size"><a class="rule-link" href="#r-layout.primitive.size" title="layout.primitive.size"><span>[layout<wbr>.primitive<wbr>.size]</span></a>
+</div>
+
+<p>اندازهٔ بیشتر نوع‌های ابتدایی در جدول زیر آمده است.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>نوع</th><th><code>size_of::&lt;Type&gt;()</code></th></tr>
+</thead>
+<tbody>
+<tr><td><code>bool</code></td><td>1</td></tr>
+<tr><td><code>u8</code> / <code>i8</code></td><td>1</td></tr>
+<tr><td><code>u16</code> / <code>i16</code></td><td>2</td></tr>
+<tr><td><code>u32</code> / <code>i32</code></td><td>4</td></tr>
+<tr><td><code>u64</code> / <code>i64</code></td><td>8</td></tr>
+<tr><td><code>u128</code> / <code>i128</code></td><td>16</td></tr>
+<tr><td><code>usize</code> / <code>isize</code></td><td>به ادامه مراجعه کنید</td></tr>
+<tr><td><code>f32</code></td><td>4</td></tr>
+<tr><td><code>f64</code></td><td>8</td></tr>
+<tr><td><code>char</code></td><td>4</td></tr>
+<tr><td><code>!</code></td><td>0</td></tr>
+</tbody>
+</table>
+</div>
+<div class="rule" id="r-layout.primitive.size-minimum"><a class="rule-link" href="#r-layout.primitive.size-minimum" title="layout.primitive.size-minimum"><span>[layout<wbr>.primitive<wbr>.size-minimum]</span></a>
+</div>
+
+<p>اندازهٔ <code>usize</code> و <code>isize</code> به‌اندازه‌ای است که هر آدرسی را در سکوی مقصد در خود جای دهد. برای نمونه، این اندازه در مقصد ۳۲ بیتی ۴ بایت و در مقصد ۶۴ بیتی ۸ بایت است.</p>
+<div class="rule" id="r-layout.primitive.size-align"><a class="rule-link" href="#r-layout.primitive.size-align" title="layout.primitive.size-align"><span>[layout<wbr>.primitive<wbr>.size-align]</span></a>
+</div>
+
+<p><code>usize</code> و <code>isize</code> اندازه و هم‌ترازی یکسانی دارند.</p>
+<div class="rule" id="r-layout.primitive.platform-specific-alignment"><a class="rule-link" href="#r-layout.primitive.platform-specific-alignment" title="layout.primitive.platform-specific-alignment"><span>[layout<wbr>.primitive<wbr>.platform-specific-alignment]</span></a>
+</div>
+
+<p>هم‌ترازی نوع‌های ابتدایی به سکو وابسته است. در بیشتر موارد هم‌ترازی آن‌ها با اندازه‌شان برابر است، اما ممکن است کمتر باشد. به‌طور خاص، <code>i128</code> و <code>u128</code> با وجود اندازهٔ ۱۶ بایتی، اغلب روی ۴ یا ۸ بایت هم‌تراز می‌شوند؛ و در بسیاری از سکوهای ۳۲ بیتی، <code>i64</code>، <code>u64</code> و <code>f64</code> تنها روی ۴ بایت هم‌ترازند، نه ۸ بایت.</p>
+<div class="rule" id="r-layout.primitive.integer-alignment"><a class="rule-link" href="#r-layout.primitive.integer-alignment" title="layout.primitive.integer-alignment"><span>[layout<wbr>.primitive<wbr>.integer-alignment]</span></a>
+</div>
+
+<p>تضمین می‌شود هم‌ترازی گونه‌های صحیح علامت‌دار و بدون علامتِ با پهنای ثابت و اندازهٔ یکسان برابر باشد؛ یعنی برای اندازهٔ معین <code>N</code>، رابطهٔ <code>align_of::&lt;uN&gt;() == align_of::&lt;iN&gt;()</code> برقرار است.</p>
+<div class="rule" id="r-layout.pointer"><a class="rule-link" href="#r-layout.pointer" title="layout.pointer"><span>[layout<wbr>.pointer]</span></a>
+</div>
+
+<h2 id="pointers-and-references-layout"><a class="header" href="#pointers-and-references-layout">چیدمان اشاره‌گرها و ارجاع‌ها</a></h2>
+<div class="rule" id="r-layout.pointer.intro"><a class="rule-link" href="#r-layout.pointer.intro" title="layout.pointer.intro"><span>[layout<wbr>.pointer<wbr>.intro]</span></a>
+</div>
+
+<p>اشاره‌گرها و ارجاع‌ها چیدمان یکسانی دارند. تغییرپذیری اشاره‌گر یا ارجاع، چیدمان را تغییر نمی‌دهد.</p>
+<div class="rule" id="r-layout.pointer.thin"><a class="rule-link" href="#r-layout.pointer.thin" title="layout.pointer.thin"><span>[layout<wbr>.pointer<wbr>.thin]</span></a>
+</div>
+
+<p>اشاره‌گرهای نوع‌های اندازه‌دار، اندازه و هم‌ترازی یکسانی با <code>usize</code> دارند.</p>
+<div class="rule" id="r-layout.pointer.unsized"><a class="rule-link" href="#r-layout.pointer.unsized" title="layout.pointer.unsized"><span>[layout<wbr>.pointer<wbr>.unsized]</span></a>
+</div>
+
+<p>اشاره‌گرهای نوع‌های بدون اندازه، خود اندازه‌دارند. تضمین می‌شود اندازه و هم‌ترازی اشاره‌گر به یک نوع بدون اندازه، هر کدام بزرگ‌تر یا مساوی اندازه و هم‌ترازی اشاره‌گر به یک نوع اندازه‌دار باشند.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> هرچند نباید به این موضوع تکیه کنید، در حال حاضر همهٔ اشاره‌گرهای <abbr title="نوع‌های با اندازهٔ پویا">DST</abbr> دو برابر <code>usize</code> اندازه دارند و هم‌ترازی‌شان با آن یکسان است.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-layout.array"><a class="rule-link" href="#r-layout.array" title="layout.array"><span>[layout<wbr>.array]</span></a>
+</div>
+
+<h2 id="array-layout"><a class="header" href="#array-layout">چیدمان آرایه</a></h2>
+<p>یک آرایه از <code>[T; N]</code> اندازه‌ای برابر <code>size_of::&lt;T&gt;() * N</code> و هم‌ترازی یکسان با <code>T</code> دارد. آرایه‌ها طوری چیده می‌شوند که فاصلهٔ عنصر <code>nth</code> آرایه (با شماره‌گذاری از صفر) از ابتدای آرایه برابر <code>n * size_of::&lt;T&gt;()</code> بایت باشد.</p>
+<div class="rule" id="r-layout.slice"><a class="rule-link" href="#r-layout.slice" title="layout.slice"><span>[layout<wbr>.slice]</span></a>
+</div>
+
+<h2 id="slice-layout"><a class="header" href="#slice-layout">چیدمان برش</a></h2>
+<p>برش‌ها همان چیدمان بخشی از آرایه را دارند که برش می‌دهند.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> این مطلب دربارهٔ نوع خام <code>[T]</code> است، نه اشاره‌گرهای برش مانند <code>&amp;[T]</code> و <code>Box&lt;[T]&gt;</code>.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-layout.str"><a class="rule-link" href="#r-layout.str" title="layout.str"><span>[layout<wbr>.str]</span></a>
+</div>
+
+<h2 id="str-layout"><a class="header" href="#str-layout">چیدمان <code>str</code></a></h2>
+<p>برش‌های رشته‌ای، نمایش UTF-8 نویسه‌ها هستند و چیدمانی یکسان با برش‌های نوع <code>[u8]</code> دارند. ارجاع <code>&amp;str</code> نیز همان چیدمان ارجاع <code>&amp;[u8]</code> را دارد.</p>
+<div class="rule" id="r-layout.tuple"><a class="rule-link" href="#r-layout.tuple" title="layout.tuple"><span>[layout<wbr>.tuple]</span></a>
+</div>
+
+<h2 id="tuple-layout"><a class="header" href="#tuple-layout">چیدمان چندتایی</a></h2>
+<div class="rule" id="r-layout.tuple.def"><a class="rule-link" href="#r-layout.tuple.def" title="layout.tuple.def"><span>[layout<wbr>.tuple<wbr>.def]</span></a>
+</div>
+
+<p>چندتایی‌ها مطابق نمایش <a href="#the-rust-representation"><code>Rust</code></a> چیده می‌شوند.</p>
+<div class="rule" id="r-layout.tuple.unit"><a class="rule-link" href="#r-layout.tuple.unit" title="layout.tuple.unit"><span>[layout<wbr>.tuple<wbr>.unit]</span></a>
+</div>
+
+<p>استثنا، چندتایی واحد (<code>()</code>) است که تضمین می‌شود به‌عنوان یک <a href="glossary.html#r-glossary.zst">نوع با اندازهٔ صفر</a>، اندازهٔ ۰ و هم‌ترازی ۱ داشته باشد.</p>
+<div class="rule" id="r-layout.trait-object"><a class="rule-link" href="#r-layout.trait-object" title="layout.trait-object"><span>[layout<wbr>.trait-object]</span></a>
+</div>
+
+<h2 id="trait-object-layout"><a class="header" href="#trait-object-layout">چیدمان شیء صفت</a></h2>
+<p>اشیای صفت همان چیدمان مقداری را دارند که شیء صفت از آن ساخته شده است.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> این مطلب دربارهٔ نوع خام شیء صفت است، نه اشاره‌گرهای آن مانند <code>&amp;dyn Trait</code> و <code>Box&lt;dyn Trait&gt;</code>.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-layout.closure"><a class="rule-link" href="#r-layout.closure" title="layout.closure"><span>[layout<wbr>.closure]</span></a>
+</div>
+
+<h2 id="closure-layout"><a class="header" href="#closure-layout">چیدمان بستار</a></h2>
+<p>چیدمان بستارها هیچ تضمینی ندارد.</p>
+<div class="rule" id="r-layout.repr"><a class="rule-link" href="#r-layout.repr" title="layout.repr"><span>[layout<wbr>.repr]</span></a>
+</div>
+
+<h2 id="representations"><a class="header" href="#representations">نمایش‌ها (Representations)</a></h2>
+<div class="rule" id="r-layout.repr.intro"><a class="rule-link" href="#r-layout.repr.intro" title="layout.repr.intro"><span>[layout<wbr>.repr<wbr>.intro]</span></a>
+</div>
+
+<p>همهٔ نوع‌های مرکب تعریف‌شده به‌دست کاربر (<code>struct</code>، <code>enum</code> و <code>union</code>) دارای یک <em>نمایش</em> هستند که چیدمان نوع را مشخص می‌کند.</p>
+<div class="rule" id="r-layout.repr.kinds"><a class="rule-link" href="#r-layout.repr.kinds" title="layout.repr.kinds"><span>[layout<wbr>.repr<wbr>.kinds]</span></a>
+</div>
+
+<p>نمایش‌های ممکن برای یک نوع عبارت‌اند از:</p>
+<ul>
+<li><a href="#the-rust-representation"><code>Rust</code></a> (پیش‌فرض)</li>
+<li><a href="#the-c-representation"><code>C</code></a></li>
+<li><a href="#primitive-representations">نمایش‌های ابتدایی</a></li>
+<li><a href="#the-transparent-representation"><code>transparent</code></a></li>
+</ul>
+<div class="rule" id="r-layout.repr.attribute"><a class="rule-link" href="#r-layout.repr.attribute" title="layout.repr.attribute"><span>[layout<wbr>.repr<wbr>.attribute]</span></a>
+</div>
+
+<p>نمایش نوع را می‌توان با اعمال ویژگی <code>repr</code> تغییر داد. نمونهٔ زیر ساختاری با نمایش <a href="#the-c-representation"><code>C</code></a> را نشان می‌دهد.</p>
+<pre><code class="language-rust">#[repr(C)]
+struct ThreeInts {
+    first: i16,
+    second: i8,
+    third: i32
+}</code></pre>
+<div class="rule" id="r-layout.repr.align-packed"><a class="rule-link" href="#r-layout.repr.align-packed" title="layout.repr.align-packed"><span>[layout<wbr>.repr<wbr>.align-packed]</span></a>
+</div>
+
+<p>هم‌ترازی را می‌توان به‌ترتیب با اصلاح‌گرهای <code>align</code> و <code>packed</code> افزایش یا کاهش داد. این اصلاح‌گرها نمایش مشخص‌شده در ویژگی را تغییر می‌دهند. اگر نمایشی مشخص نشده باشد، نمایش پیش‌فرض تغییر می‌کند.</p>
+<pre><code class="language-rust">// Default representation, alignment lowered to 2.
+#[repr(packed(2))]
+struct PackedStruct {
+    first: i16,
+    second: i8,
+    third: i32
+}
+
+// C representation, alignment raised to 8
+#[repr(C, align(8))]
+struct AlignedStruct {
+    first: i16,
+    second: i8,
+    third: i32
+}</code></pre>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> چون نمایش یک ویژگی روی آیتم است، به پارامترهای عام وابسته نیست. هر دو نوع با نام یکسان، نمایش یکسانی دارند. برای نمونه، <code>Foo&lt;Bar&gt;</code> و <code>Foo&lt;Baz&gt;</code> هر دو نمایش یکسانی دارند.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-layout.repr.inter-field"><a class="rule-link" href="#r-layout.repr.inter-field" title="layout.repr.inter-field"><span>[layout<wbr>.repr<wbr>.inter-field]</span></a>
+</div>
+
+<p>نمایش یک نوع می‌تواند فضای پرکنندهٔ میان فیلدها را تغییر دهد، اما چیدمان خود فیلدها را تغییر نمی‌دهد. برای نمونه، ساختاری با نمایش <code>C</code> که ساختار <code>Inner</code> با نمایش <code>Rust</code> را در خود دارد، چیدمان <code>Inner</code> را تغییر نمی‌دهد.</p>
+<p><a id="the-default-representation"></a></p>
+<div class="rule" id="r-layout.repr.rust"><a class="rule-link" href="#r-layout.repr.rust" title="layout.repr.rust"><span>[layout<wbr>.repr<wbr>.rust]</span></a>
+</div>
+
+<h3 id="the-rust-representation"><a class="header" href="#the-rust-representation">نمایش <code>Rust</code></a></h3>
+<div class="rule" id="r-layout.repr.rust.intro"><a class="rule-link" href="#r-layout.repr.rust.intro" title="layout.repr.rust.intro"><span>[layout<wbr>.repr<wbr>.rust<wbr>.intro]</span></a>
+</div>
+
+<p>نمایش <code>Rust</code>، نمایش پیش‌فرض نوع‌های نام‌دارِ بدون ویژگی <code>repr</code> است. تضمین می‌شود استفادهٔ صریح از این نمایش از راه ویژگی <code>repr</code>، دقیقاً مانند حذف کامل آن ویژگی باشد.</p>
+<div class="rule" id="r-layout.repr.rust.layout"><a class="rule-link" href="#r-layout.repr.rust.layout" title="layout.repr.rust.layout"><span>[layout<wbr>.repr<wbr>.rust<wbr>.layout]</span></a>
+</div>
+
+<p>تنها تضمین‌های چیدمان داده در این نمایش، موارد لازم برای درستی و ایمنی هستند:</p>
+<ol>
+<li>آفست هر فیلد بر هم‌ترازی همان فیلد بخش‌پذیر است.</li>
+<li>هم‌ترازی نوع دست‌کم برابر بیشترین هم‌ترازی فیلدهای آن است.</li>
+</ol>
+<div class="rule" id="r-layout.repr.rust.struct"><a class="rule-link" href="#r-layout.repr.rust.struct" title="layout.repr.rust.struct"><span>[layout<wbr>.repr<wbr>.rust<wbr>.struct]</span></a>
+</div>
+
+<p>برای <a href="items/structs.html">ساختارها</a> همچنین تضمین می‌شود که فیلدها روی هم نیفتند. یعنی می‌توان فیلدها را چنان مرتب کرد که آفست هر فیلد به‌اضافهٔ اندازهٔ آن، کوچک‌تر یا مساوی آفست فیلد بعدی در ترتیب باشد. این ترتیب لازم نیست با ترتیب مشخص‌شدن فیلدها در اعلان نوع یکسان باشد.</p>
+<p>توجه داشته باشید این تضمین به معنای متفاوت‌بودن آدرس فیلدها نیست: <a href="glossary.html#r-glossary.zst">نوع‌های با اندازهٔ صفر</a> ممکن است با فیلدهای دیگر همان ساختار آدرس یکسانی داشته باشند.</p>
+<div class="rule" id="r-layout.repr.rust.struct-zst"><a class="rule-link" href="#r-layout.repr.rust.struct-zst" title="layout.repr.rust.struct-zst"><span>[layout<wbr>.repr<wbr>.rust<wbr>.struct-zst]</span></a>
+</div>
+
+<p><a href="items/structs.html">برشمردنی‌های</a> بدون هیچ گونه‌ای (و بدون <a href="glossary.html#r-glossary.zst">نمایش ابتدایی</a> مشخص‌شده) <a href="glossary.html#r-glossary.zst">اندازهٔ صفر</a> دارند.</p>
+<div class="rule" id="r-layout.repr.rust.enum-empty-zst"><a class="rule-link" href="#r-layout.repr.rust.enum-empty-zst" title="layout.repr.rust.enum-empty-zst"><span>[layout<wbr>.repr<wbr>.rust<wbr>.enum-empty-zst]</span></a>
+</div>
+
+<p><strong>نکته</strong> چنین برشمردنی‌هایی <a href="glossary.html#r-glossary.uninhabited">غیرقابل‌سکونت</a> هستند.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p>چنین enumهایی <a href="glossary.html#r-glossary.uninhabited">غیرمسکون</a> هستند.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-layout.repr.rust.enum-struct-like-zst"><a class="rule-link" href="#r-layout.repr.rust.enum-struct-like-zst" title="layout.repr.rust.enum-struct-like-zst"><span>[layout<wbr>.repr<wbr>.rust<wbr>.enum-struct-like-zst]</span></a>
+</div>
+
+<p>برای <a href="items/enumerations.html">برشمردنی‌هایی</a> که <a href="#primitive-representations">نمایش ابتدایی</a> ندارند و تنها یک <a href="items/enumerations.html#grammar-EnumVariantStruct">گونهٔ شبیه ساختار فیلددار</a>، یک <a href="items/enumerations.html#grammar-EnumVariant">گونهٔ شبیه ساختار واحد</a> یا یک <a href="items/enumerations.html#grammar-EnumVariantTuple">گونهٔ شبیه ساختار چندتایی</a> دارند، اگر آن ساختارگونه هیچ فیلدی نداشته باشد یا همهٔ فیلدهایش <a href="glossary.html#r-glossary.zst">اندازهٔ صفر</a> باشند، خود برشمردنی نیز <a href="glossary.html#r-glossary.zst">اندازهٔ صفر</a> است.</p>
+<pre><code class="language-rust"><span class="boring">use core::mem::size_of;
+</span>enum E1 {
+    V {},
+}
+
+enum E2 {
+    V { f: () },
+}
+
+enum E3 {
+    V,
+}
+
+enum E4 {
+    V(),
+}
+
+enum E5 {
+    V(()),
+}
+
+assert_eq!(size_of::&lt;E1&gt;(), 0);
+assert_eq!(size_of::&lt;E2&gt;(), 0);
+assert_eq!(size_of::&lt;E3&gt;(), 0);
+assert_eq!(size_of::&lt;E4&gt;(), 0);
+assert_eq!(size_of::&lt;E5&gt;(), 0);</code></pre>
+<div class="rule" id="r-layout.repr.rust.unspecified"><a class="rule-link" href="#r-layout.repr.rust.unspecified" title="layout.repr.rust.unspecified"><span>[layout<wbr>.repr<wbr>.rust<wbr>.unspecified]</span></a>
+</div>
+
+<p>این نمایش هیچ تضمین دیگری دربارهٔ چیدمان داده ارائه نمی‌کند.</p>
+<div class="rule" id="r-layout.repr.c"><a class="rule-link" href="#r-layout.repr.c" title="layout.repr.c"><span>[layout<wbr>.repr<wbr>.c]</span></a>
+</div>
+
+<h3 id="the-c-representation"><a class="header" href="#the-c-representation">نمایش <code>C</code></a></h3>
+<div class="rule" id="r-layout.repr.c.intro"><a class="rule-link" href="#r-layout.repr.c.intro" title="layout.repr.c.intro"><span>[layout<wbr>.repr<wbr>.c<wbr>.intro]</span></a>
+</div>
+
+<p>نمایش <code>C</code> با دو هدف طراحی شده است. هدف نخست ساخت نوع‌هایی است که با زبان C تعامل‌پذیر باشند. هدف دوم ساخت نوع‌هایی است که بتوان عملیات متکی بر چیدمان داده، مانند تفسیر دوبارهٔ مقدارها به‌عنوان نوعی دیگر، را به‌شکلی درست روی آن‌ها انجام داد.</p>
+<p>به‌سبب این هدف دوگانه، ممکن است نوع‌هایی ساخته شوند که برای ارتباط با زبان برنامه‌نویسی C سودمند نباشند.</p>
+<div class="rule" id="r-layout.repr.c.constraint"><a class="rule-link" href="#r-layout.repr.c.constraint" title="layout.repr.c.constraint"><span>[layout<wbr>.repr<wbr>.c<wbr>.constraint]</span></a>
+</div>
+
+<p>این نمایش را می‌توان روی ساختارها، اجتماع‌ها و برشمردنی‌ها اعمال کرد. استثنا <a href="items/enumerations.html#zero-variant-enums">برشمردنی‌های بدون گونه</a> هستند که نمایش <code>C</code> برای آن‌ها خطاست.</p>
+<div class="rule" id="r-layout.repr.c.struct"><a class="rule-link" href="#r-layout.repr.c.struct" title="layout.repr.c.struct"><span>[layout<wbr>.repr<wbr>.c<wbr>.struct]</span></a>
+</div>
+
+<h4 id="reprc-structs"><a class="header" href="#reprc-structs">ساختارهای <code>#[repr(C)]</code></a></h4>
+<div class="rule" id="r-layout.repr.c.struct.align"><a class="rule-link" href="#r-layout.repr.c.struct.align" title="layout.repr.c.struct.align"><span>[layout<wbr>.repr<wbr>.c<wbr>.struct<wbr>.align]</span></a>
+</div>
+
+<p>هم‌ترازی ساختار برابر هم‌ترازیِ دارای بیشترین هم‌ترازی در میان فیلدهای آن است، یا اگر فیلدی وجود نداشته باشد برابر یک است.</p>
+<div class="rule" id="r-layout.repr.c.struct.size-field-offset"><a class="rule-link" href="#r-layout.repr.c.struct.size-field-offset" title="layout.repr.c.struct.size-field-offset"><span>[layout<wbr>.repr<wbr>.c<wbr>.struct<wbr>.size-field-offset]</span></a>
+</div>
+
+<p>اندازه و آفست فیلدها با الگوریتم زیر تعیین می‌شود.</p>
+<p>با آفست جاری ۰ بایت آغاز کنید.</p>
+<p>برای هر فیلد به ترتیب اعلان در ساختار، ابتدا اندازه و هم‌ترازی فیلد را تعیین کنید. اگر آفست جاری مضربی از هم‌ترازی فیلد نیست، آن‌قدر بایت پرکننده به آفست جاری بیفزایید تا مضربی از هم‌ترازی فیلد شود. آفست کنونی، آفست آن فیلد است. سپس آفست جاری را به‌اندازهٔ فیلد افزایش دهید.</p>
+<p>در پایان، اندازهٔ ساختار برابر آفست جاری است که به نزدیک‌ترین مضرب بزرگ‌تر یا مساویِ هم‌ترازی ساختار گرد شده است.</p>
+<p>الگوریتم چنین است:</p>
+<pre><code class="language-rust"><span class="boring">/// A field of a struct.
+</span><span class="boring">#[derive(Debug)]
+</span>struct Field {
+    alignment: usize,
+    size: usize,
+}
+<span class="boring">/// Layout of user-defined structs.
+</span><span class="boring">#[derive(Debug)]
+</span>struct MockLayout {
+<span class="boring">    /// Fields stored in declaration order.
+</span>    fields: Vec&lt;Field&gt;,
+<span class="boring">    /// Offset of each field from the start of the struct.
+</span>    field_offsets: Vec&lt;usize&gt;,
+<span class="boring">    /// Overall alignment.
+</span>    alignment: usize,
+<span class="boring">    /// Overall size.
+</span>    size: usize,
+}
+
+impl MockLayout {
+    /// Returns the amount of padding needed after `offset` to ensure that the
+    /// following address will be aligned to `alignment`.
+    fn padding_needed_for(offset: usize, alignment: usize) -&gt; usize {
+        let misalignment = offset % alignment;
+        if misalignment &gt; 0 {
+            // Round up to next multiple of `alignment`.
+            alignment - misalignment
+        } else {
+            // Already a multiple of `alignment`.
+            0
+        }
+    }
+
+    /// Fields must be in declaration order. By this point, they have already
+    /// had their alignments and sizes calculated.
+    pub fn from_fields(fields: Vec&lt;Field&gt;) -&gt; Self {
+        // "The alignment of the struct is the alignment of the most-aligned
+        // field in it, or one if there are no fields."
+        let alignment = fields
+            .iter()
+            .map(|field| field.alignment)
+            .max()
+            .unwrap_or(1);
+
+        // "Start with a current offset of 0 bytes."
+        let mut current_offset = 0;
+
+        let mut field_offsets = vec![];
+        for field in &amp;fields {
+            // "If the current offset is not a multiple of the field's
+            // alignment, then add padding bytes to the current offset until it
+            // is a multiple of the field's alignment."
+            current_offset += Self::padding_needed_for(
+                current_offset,
+                field.alignment
+            );
+
+            // "The offset for the field is what the current offset is now."
+            field_offsets.push(current_offset);
+
+            // "Then increase the current offset by the size of the field."
+            current_offset += field.size;
+        }
+
+        // "Finally, the size of the struct is the current offset rounded up to
+        // the nearest multiple of the struct's alignment."
+        let size = current_offset + Self::padding_needed_for(
+            current_offset,
+            alignment
+        );
+
+        MockLayout { fields, field_offsets, alignment, size }
+    }
+}
+<span class="boring">
+</span><span class="boring">#[repr(C)]
+</span><span class="boring">struct Demo {
+</span><span class="boring">    first: u8,
+</span><span class="boring">    second: u32,
+</span><span class="boring">    third: u64,
+</span><span class="boring">}
+</span><span class="boring">macro_rules! fields {
+</span><span class="boring">    ( $( $t:ty ),+ ) =&gt; {
+</span><span class="boring">        vec![
+</span><span class="boring">            $( Field {
+</span><span class="boring">                alignment: std::mem::align_of::&lt;$t&gt;(),
+</span><span class="boring">                size: std::mem::size_of::&lt;$t&gt;(),
+</span><span class="boring">            }),+
+</span><span class="boring">        ]
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">let fields = fields![u8, u32, u64];
+</span><span class="boring">let demo_layout = MockLayout::from_fields(fields);
+</span><span class="boring">assert_eq!(std::mem::align_of::&lt;Demo&gt;(), demo_layout.alignment);
+</span><span class="boring">assert_eq!(std::mem::size_of::&lt;Demo&gt;(), demo_layout.size);</span></code></pre>
+<div class="alert alert-warning">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+
+<p><strong>هشدار</strong> این پیاده‌سازی نمونه برای خوانایی از الگوریتمی ساده‌لوحانه استفاده می‌کند که مسائل سرریز را نادیده می‌گیرد. برای محاسبهٔ چیدمان حافظه در کد واقعی از <code>Layout</code> استفاده کنید.</p>
+</blockquote>
+</div>
+
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> این الگوریتم می‌تواند ساختارهای <a href="glossary.html#r-glossary.zst">با اندازهٔ صفر</a> تولید کند. در C، اعلان ساختار خالی مانند <code>struct Foo { }</code> غیرمجاز است. با این حال gcc و clang گزینه‌هایی برای فعال‌کردن چنین ساختارهایی دارند و اندازهٔ صفر به آن‌ها می‌دهند. در مقابل، C++ به ساختار خالی اندازهٔ ۱ می‌دهد، مگر آنکه از آن ارث‌بری شده باشد یا فیلدی با ویژگی <code>[[no_unique_address]]</code> باشد؛ در آن صورت اندازهٔ کلی ساختار را افزایش نمی‌دهد.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-layout.repr.c.union"><a class="rule-link" href="#r-layout.repr.c.union" title="layout.repr.c.union"><span>[layout<wbr>.repr<wbr>.c<wbr>.union]</span></a>
+</div>
+
+<h4 id="reprc-unions"><a class="header" href="#reprc-unions">اجتماع‌های <code>#[repr(C)]</code></a></h4>
+<div class="rule" id="r-layout.repr.c.union.intro"><a class="rule-link" href="#r-layout.repr.c.union.intro" title="layout.repr.c.union.intro"><span>[layout<wbr>.repr<wbr>.c<wbr>.union<wbr>.intro]</span></a>
+</div>
+
+<p>اجتماعی که با <code>#[repr(C)]</code> اعلان شده باشد، در سکوی مقصد همان اندازه و هم‌ترازی اعلان اجتماع معادل در زبان C را خواهد داشت.</p>
+<div class="rule" id="r-layout.repr.c.union.size-align"><a class="rule-link" href="#r-layout.repr.c.union.size-align" title="layout.repr.c.union.size-align"><span>[layout<wbr>.repr<wbr>.c<wbr>.union<wbr>.size-align]</span></a>
+</div>
+
+<p>اندازهٔ اجتماع برابر بیشترین اندازهٔ فیلدهایش است که تا هم‌ترازی اجتماع گرد می‌شود، و هم‌ترازی آن برابر بیشترین هم‌ترازی فیلدهایش است. این دو بیشینه ممکن است از فیلدهای متفاوتی بیایند. هر فیلد در آفست بایتی ۰ از ابتدای اجتماع قرار دارد.</p>
+<pre><code class="language-rust">#[repr(C)]
+union Union {
+    f1: u16,
+    f2: [u8; 4],
+}
+
+assert_eq!(std::mem::size_of::&lt;Union&gt;(), 4);  // From f2
+assert_eq!(std::mem::align_of::&lt;Union&gt;(), 2); // From f1
+
+assert_eq!(std::mem::offset_of!(Union, f1), 0);
+assert_eq!(std::mem::offset_of!(Union, f2), 0);
+
+#[repr(C)]
+union SizeRoundedUp {
+   a: u32,
+   b: [u16; 3],
+}
+
+assert_eq!(std::mem::size_of::&lt;SizeRoundedUp&gt;(), 8);  // Size of 6 from b,
+                                                      // rounded up to 8 from
+                                                      // alignment of a.
+assert_eq!(std::mem::align_of::&lt;SizeRoundedUp&gt;(), 4); // From a
+
+assert_eq!(std::mem::offset_of!(SizeRoundedUp, a), 0);
+assert_eq!(std::mem::offset_of!(SizeRoundedUp, b), 0);</code></pre>
+<div class="rule" id="r-layout.repr.c.enum"><a class="rule-link" href="#r-layout.repr.c.enum" title="layout.repr.c.enum"><span>[layout<wbr>.repr<wbr>.c<wbr>.enum]</span></a>
+</div>
+
+<h4 id="reprc-field-less-enums"><a class="header" href="#reprc-field-less-enums">برشمردنی‌های بی‌فیلد <code>#[repr(C)]</code></a></h4>
+<div class="rule" id="r-layout.repr.c.enum.discriminant"><a class="rule-link" href="#r-layout.repr.c.enum.discriminant" title="layout.repr.c.enum.discriminant"><span>[layout<wbr>.repr<wbr>.c<wbr>.enum<wbr>.discriminant]</span></a>
+</div>
+
+<p>برای یک <a href="items/enumerations.html#r-items.enum.fieldless">برشمردنی بی‌فیلد</a> با نمایش <code>C</code>، همهٔ مقدارهای ممیز باید یا با نوع <code>int</code> در ABI زبان C سکوی مقصد قابل نمایش باشند، یا همگی با نوع <code>unsigned int</code> آن قابل نمایش باشند.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> ممیزهای برشمردنی <a href="#reprc-enums-with-fields"><code>repr(C)</code></a> بدون نمایش ابتدایی، از نوع <code>isize</code> هستند. <a href="items/enumerations.html#r-items.enum.discriminant.type">items.enum.discriminant.type</a> را ببینید. اندازه و هم‌ترازی پس از تبدیل ممیزها به <code>isize</code>، طبق قاعدهٔ زیر از مقدارهایشان تعیین می‌شود.</p>
+</blockquote>
+</div>
+
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> <code>rustc</code> برشمردنی‌هایی را که مقدار ممیزشان این شرط را برآورده نمی‌کند می‌پذیرد، اما برایشان هشدار lint می‌دهد. این وضعیت در آینده به خطا تبدیل خواهد شد.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-layout.repr.c.enum.size-align"><a class="rule-link" href="#r-layout.repr.c.enum.size-align" title="layout.repr.c.enum.size-align"><span>[layout<wbr>.repr<wbr>.c<wbr>.enum<wbr>.size-align]</span></a>
+</div>
+
+<p>یک <a href="items/enumerations.html#r-items.enum.fieldless">برشمردنی بی‌فیلد</a> با نمایش <code>C</code>، اندازه و هم‌ترازی یکسانی با برشمردنی C دارای همان مقدارهای ممیز و بدون نوع زیربنایی ثابت دارد.</p>
+<pre><code class="language-rust"><span class="boring">use core::ffi::c_int;
+</span><span class="boring">use core::mem::{align_of, size_of};
+</span>#[repr(C)]
+enum E {
+    V1,
+    V2,
+}
+
+#[cfg(target_arch = "x86_64")]
+{
+    assert_eq!(size_of::&lt;E&gt;(), size_of::&lt;c_int&gt;());
+    assert_eq!(align_of::&lt;E&gt;(), align_of::&lt;c_int&gt;());
+}</code></pre>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> نمایش برشمردنی در C به پیاده‌سازی وابسته است، پس این نتیجه در واقع «بهترین حدس» است. به‌ویژه ممکن است وقتی کد C موردنظر با بعضی پرچم‌ها کامپایل شود، نادرست باشد.</p>
+<p>برای بیشترین قابلیت حمل، بهتر است اندازه و هم‌ترازی را در سمت Rust با یک <a href="#primitive-representations">نمایش ابتدایی</a> و در سمت C با یک نوع زیربنایی ثابت (معرفی‌شده در C23) به‌طور صریح تعیین کنید.</p>
+</blockquote>
+</div>
+
+<div class="alert alert-warning">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+
+<p>تفاوت‌های مهمی میان یک <code>enum</code> در زبان C و <a href="items/enumerations.html#field-less-enum">enumهای بدون فیلد</a> در Rust با این بازنمایی وجود دارد. یک <code>enum</code> در C عمدتاً یک <code>typedef</code> به‌همراه چند ثابت نام‌دار است؛ به بیان دیگر، یک شیء از نوع <code>enum</code> می‌تواند هر مقدار صحیحی را نگه دارد. برای نمونه، این ویژگی اغلب برای پرچم‌های بیتی (bitflags) در <code>C</code> به‌کار می‌رود. در مقابل، <a href="items/enumerations.html#field-less-enum">enumهای بدون فیلد</a> در Rust تنها می‌توانند مقدارهای ممیز (discriminant) را به‌صورت معتبر نگه دارند و هر چیز دیگری <a href="behavior-considered-undefined.html">رفتار تعریف‌نشده</a> است. بنابراین استفاده از enum بدون فیلد در FFI برای مدل‌کردن یک <code>enum</code> در C اغلب نادرست است.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-layout.repr.c.adt"><a class="rule-link" href="#r-layout.repr.c.adt" title="layout.repr.c.adt"><span>[layout<wbr>.repr<wbr>.c<wbr>.adt]</span></a>
+</div>
+
+<h4 id="reprc-enums-with-fields"><a class="header" href="#reprc-enums-with-fields">برشمردنی‌های فیلددار <code>#[repr(C)]</code></a></h4>
+<div class="rule" id="r-layout.repr.c.adt.intro"><a class="rule-link" href="#r-layout.repr.c.adt.intro" title="layout.repr.c.adt.intro"><span>[layout<wbr>.repr<wbr>.c<wbr>.adt<wbr>.intro]</span></a>
+</div>
+
+<p>نمایش یک برشمردنی فیلددار <code>repr(C)</code>، ساختاری <code>repr(C)</code> با دو فیلد است که در C به آن «اجتماع برچسب‌دار» نیز می‌گویند:</p>
+<div class="rule" id="r-layout.repr.c.adt.tag"><a class="rule-link" href="#r-layout.repr.c.adt.tag" title="layout.repr.c.adt.tag"><span>[layout<wbr>.repr<wbr>.c<wbr>.adt<wbr>.tag]</span></a>
+</div>
+
+<ul>
+<li>نسخهٔ <code>repr(C)</code> برشمردنی که همهٔ فیلدهایش حذف شده‌اند («برچسب»)</li>
+</ul>
+<div class="rule" id="r-layout.repr.c.adt.fields"><a class="rule-link" href="#r-layout.repr.c.adt.fields" title="layout.repr.c.adt.fields"><span>[layout<wbr>.repr<wbr>.c<wbr>.adt<wbr>.fields]</span></a>
+</div>
+
+<ul>
+<li>اجتماع <code>repr(C)</code> از ساختارهای <code>repr(C)</code> مربوط به فیلدهای هر گونه‌ای که فیلد داشته است («بار»)</li>
+</ul>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> به‌سبب نمایش ساختارها و اجتماع‌های <code>repr(C)</code>، اگر گونه‌ای تنها یک فیلد داشته باشد، گذاشتن مستقیم آن فیلد در اجتماع با پیچیدن آن در یک ساختار تفاوتی ندارد؛ بنابراین هر سامانه‌ای که بخواهد نمایش چنین <code>enum</code>ای را دست‌کاری کند، می‌تواند از هر شکلی که مناسب‌تر یا سازگارتر است استفاده کند.</p>
+</blockquote>
+</div>
+
+<pre><code class="language-rust">// This Enum has the same representation as ...
+#[repr(C)]
+enum MyEnum {
+    A(u32),
+    B(f32, u64),
+    C { x: u32, y: u8 },
+    D,
+ }
+
+// ... this struct.
+#[repr(C)]
+struct MyEnumRepr {
+    tag: MyEnumDiscriminant,
+    payload: MyEnumFields,
+}
+
+// This is the discriminant enum.
+#[repr(C)]
+enum MyEnumDiscriminant { A, B, C, D }
+
+// This is the variant union.
+#[repr(C)]
+union MyEnumFields {
+    A: MyAFields,
+    B: MyBFields,
+    C: MyCFields,
+    D: MyDFields,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct MyAFields(u32);
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct MyBFields(f32, u64);
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct MyCFields { x: u32, y: u8 }
+
+// This struct could be omitted (it is a zero-sized type), and it must be in
+// C/C++ headers.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct MyDFields;</code></pre>
+<div class="rule" id="r-layout.repr.primitive"><a class="rule-link" href="#r-layout.repr.primitive" title="layout.repr.primitive"><span>[layout<wbr>.repr<wbr>.primitive]</span></a>
+</div>
+
+<h3 id="primitive-representations"><a class="header" href="#primitive-representations">نمایش‌های ابتدایی</a></h3>
+<div class="rule" id="r-layout.repr.primitive.intro"><a class="rule-link" href="#r-layout.repr.primitive.intro" title="layout.repr.primitive.intro"><span>[layout<wbr>.repr<wbr>.primitive<wbr>.intro]</span></a>
+</div>
+
+<p><em>نمایش‌های ابتدایی</em> نمایش‌هایی هم‌نام با نوع‌های صحیح ابتدایی هستند؛ یعنی <code>u8</code>، <code>u16</code>، <code>u32</code>، <code>u64</code>، <code>u128</code>، <code>usize</code>، <code>i8</code>، <code>i16</code>، <code>i32</code>، <code>i64</code>، <code>i128</code> و <code>isize</code>.</p>
+<div class="rule" id="r-layout.repr.primitive.constraint"><a class="rule-link" href="#r-layout.repr.primitive.constraint" title="layout.repr.primitive.constraint"><span>[layout<wbr>.repr<wbr>.primitive<wbr>.constraint]</span></a>
+</div>
+
+<p>نمایش‌های ابتدایی را تنها می‌توان روی برشمردنی‌ها اعمال کرد و رفتارشان بسته به فیلددار یا بی‌فیلدبودن برشمردنی متفاوت است. داشتن نمایش ابتدایی برای <a href="items/enumerations.html#zero-variant-enums">برشمردنی‌های بدون گونه</a> خطاست. ترکیب دو نمایش ابتدایی با یکدیگر نیز خطاست.</p>
+<div class="rule" id="r-layout.repr.primitive.enum"><a class="rule-link" href="#r-layout.repr.primitive.enum" title="layout.repr.primitive.enum"><span>[layout<wbr>.repr<wbr>.primitive<wbr>.enum]</span></a>
+</div>
+
+<h4 id="primitive-representation-of-field-less-enums"><a class="header" href="#primitive-representation-of-field-less-enums">نمایش ابتدایی برشمردنی‌های بی‌فیلد</a></h4>
+<p>یک <a href="items/enumerations.html#r-items.enum.fieldless">برشمردنی بی‌فیلد</a> با نمایش ابتدایی، اندازه و هم‌ترازی یکسانی با نوع ابتدایی هم‌نام خود دارد.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> مقدارهای ممیز برشمردنی دارای نمایش ابتدایی، از نوع نام‌برده‌شده در نمایش هستند. <a href="items/enumerations.html#r-items.enum.discriminant.type-primitive">items.enum.discriminant.type-primitive</a> را ببینید.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-layout.repr.primitive.adt"><a class="rule-link" href="#r-layout.repr.primitive.adt" title="layout.repr.primitive.adt"><span>[layout<wbr>.repr<wbr>.primitive<wbr>.adt]</span></a>
+</div>
+
+<h4 id="primitive-representation-of-enums-with-fields"><a class="header" href="#primitive-representation-of-enums-with-fields">نمایش ابتدایی برشمردنی‌های فیلددار</a></h4>
+<p>نمایش برشمردنی دارای نمایش ابتدایی، یک اجتماع <code>repr(C)</code> از ساختارهای <code>repr(C)</code> برای هر گونهٔ فیلددار است. نخستین فیلد هر ساختار در اجتماع، نسخهٔ دارای نمایش ابتداییِ برشمردنی با همهٔ فیلدهای حذف‌شده («برچسب») است و فیلدهای باقی‌مانده، فیلدهای همان گونه هستند.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> اگر برای روشن‌ترشدن دست‌کاری، برچسب را به‌عنوان عضوی جداگانه در اجتماع قرار دهید، این نمایش تغییری نمی‌کند؛ هرچند برای پیروی از استاندارد C++ عضو برچسب باید در یک <code>struct</code> پیچیده شود.</p>
+</blockquote>
+</div>
+
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> این نمایش با <code>repr(C)</code> برای برشمردنی‌های فیلددار تفاوت زیادی دارد.</p>
+</blockquote>
+</div>
+
+<pre><code class="language-rust">// This enum has the same representation as ...
+#[repr(u8)]
+enum MyEnum {
+    A(u32),
+    B(f32, u64),
+    C { x: u32, y: u8 },
+    D,
+ }
+
+// ... this union.
+#[repr(C)]
+union MyEnumRepr {
+    A: MyVariantA,
+    B: MyVariantB,
+    C: MyVariantC,
+    D: MyVariantD,
+}
+
+// This is the discriminant enum.
+#[repr(u8)]
+#[derive(Copy, Clone)]
+enum MyEnumDiscriminant { A, B, C, D }
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct MyVariantA(MyEnumDiscriminant, u32);
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct MyVariantB(MyEnumDiscriminant, f32, u64);
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct MyVariantC { tag: MyEnumDiscriminant, x: u32, y: u8 }
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct MyVariantD(MyEnumDiscriminant);</code></pre>
+<div class="rule" id="r-layout.repr.primitive-c"><a class="rule-link" href="#r-layout.repr.primitive-c" title="layout.repr.primitive-c"><span>[layout<wbr>.repr<wbr>.primitive-c]</span></a>
+</div>
+
+<h4 id="combining-primitive-representations-of-enums-with-fields-and-reprc"><a class="header" href="#combining-primitive-representations-of-enums-with-fields-and-reprc">ترکیب نمایش ابتدایی برشمردنی‌های فیلددار با <code>#[repr(C)]</code></a></h4>
+<p>برای برشمردنی‌های فیلددار می‌توان <code>repr(C)</code> را با یک نمایش ابتدایی نیز ترکیب کرد (برای نمونه <code>repr(C, u8)</code>). این کار <code>repr(C)</code> را تغییر می‌دهد و نمایش برشمردنی ممیز را به‌جای آن روی نوع ابتدایی انتخاب‌شده می‌گذارد. پس اگر نمایش <code>u8</code> را برگزینید، برشمردنی ممیز اندازه و هم‌ترازی ۱ بایتی خواهد داشت.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> این یعنی <code>repr(C, u8)</code> با <code>repr(u8)</code> بسیار متفاوت است! اولی ساختاری با دو فیلد (برچسب و اجتماع گونه‌ها) است؛ دومی اجتماعی است که هر فیلد آن با برچسب آغاز می‌شود.</p>
+</blockquote>
+</div>
+
+<p>برشمردنی ممیزِ نمونهٔ پیشین در این صورت چنین می‌شود:</p>
+<pre><code class="language-rust">#[repr(C, u8)] // `u8` was added
+enum MyEnum {
+    A(u32),
+    B(f32, u64),
+    C { x: u32, y: u8 },
+    D,
+ }
+
+// ...
+
+#[repr(u8)] // So `u8` is used here instead of `C`
+enum MyEnumDiscriminant { A, B, C, D }
+
+// ...</code></pre>
+<p>برای نمونه، با یک برشمردنی <code>repr(C, u8)</code> نمی‌توان ۲۵۷ ممیز («برچسب») یکتا داشت؛ در حالی که همان برشمردنی تنها با ویژگی <code>repr(C)</code> بدون مشکل کامپایل می‌شود.</p>
+<p>استفاده از یک نمایش ابتدایی در کنار <code>repr(C)</code> می‌تواند اندازهٔ برشمردنی را نسبت به شکل <code>repr(C)</code> تغییر دهد:</p>
+<pre><code class="language-rust">#[repr(C)]
+enum EnumC {
+    Variant0(u8),
+    Variant1,
+}
+
+#[repr(C, u8)]
+enum Enum8 {
+    Variant0(u8),
+    Variant1,
+}
+
+#[repr(C, u16)]
+enum Enum16 {
+    Variant0(u8),
+    Variant1,
+}
+
+// The size of the C representation is platform dependent
+assert_eq!(std::mem::size_of::&lt;EnumC&gt;(), 8);
+// One byte for the discriminant and one byte for the value in Enum8::Variant0
+assert_eq!(std::mem::size_of::&lt;Enum8&gt;(), 2);
+// Two bytes for the discriminant and one byte for the value in Enum16::Variant0
+// plus one byte of padding.
+assert_eq!(std::mem::size_of::&lt;Enum16&gt;(), 4);</code></pre>
+<div class="rule" id="r-layout.repr.alignment"><a class="rule-link" href="#r-layout.repr.alignment" title="layout.repr.alignment"><span>[layout<wbr>.repr<wbr>.alignment]</span></a>
+</div>
+
+<h3 id="the-alignment-modifiers"><a class="header" href="#the-alignment-modifiers">اصلاح‌گرهای هم‌ترازی</a></h3>
+<div class="rule" id="r-layout.repr.alignment.intro"><a class="rule-link" href="#r-layout.repr.alignment.intro" title="layout.repr.alignment.intro"><span>[layout<wbr>.repr<wbr>.alignment<wbr>.intro]</span></a>
+</div>
+
+<p>اصلاح‌گرهای <code>align</code> و <code>packed</code> را می‌توان به‌ترتیب برای افزایش یا کاهش هم‌ترازی <code>struct</code>ها و <code>union</code>ها به کار برد. <code>packed</code> ممکن است فضای پرکنندهٔ میان فیلدها را نیز تغییر دهد، هرچند فضای پرکنندهٔ درون هیچ فیلدی را تغییر نمی‌دهد. <code>align</code> و <code>packed</code> به‌تنهایی هیچ تضمینی دربارهٔ ترتیب فیلدها در چیدمان ساختار یا چیدمان یک گونهٔ برشمردنی نمی‌دهند، اما می‌توان آن‌ها را با نمایش‌هایی مانند <code>C</code> که چنین تضمینی می‌دهند ترکیب کرد.</p>
+<div class="rule" id="r-layout.repr.alignment.constraint-alignment"><a class="rule-link" href="#r-layout.repr.alignment.constraint-alignment" title="layout.repr.alignment.constraint-alignment"><span>[layout<wbr>.repr<wbr>.alignment<wbr>.constraint-alignment]</span></a>
+</div>
+
+<p>هم‌ترازی به‌شکل پارامتر صحیح در <code>#[repr(align(x))]</code> یا <code>#[repr(packed(x))]</code> مشخص می‌شود. مقدار هم‌ترازی باید توانی از دو، از ۱ تا ۲<sup>۲۹</sup> باشد. برای <code>packed</code>، اگر مانند <code>#[repr(packed)]</code> مقداری داده نشود، مقدار ۱ در نظر گرفته می‌شود.</p>
+<div class="rule" id="r-layout.repr.alignment.align"><a class="rule-link" href="#r-layout.repr.alignment.align" title="layout.repr.alignment.align"><span>[layout<wbr>.repr<wbr>.alignment<wbr>.align]</span></a>
+</div>
+
+<p>برای <code>align</code>، اگر هم‌ترازی مشخص‌شده کمتر از هم‌ترازی نوع بدون اصلاح‌گر <code>align</code> باشد، هم‌ترازی تغییری نمی‌کند.</p>
+<div class="rule" id="r-layout.repr.alignment.packed"><a class="rule-link" href="#r-layout.repr.alignment.packed" title="layout.repr.alignment.packed"><span>[layout<wbr>.repr<wbr>.alignment<wbr>.packed]</span></a>
+</div>
+
+<p>برای <code>packed</code>، اگر هم‌ترازی مشخص‌شده بزرگ‌تر از هم‌ترازی نوع بدون اصلاح‌گر <code>packed</code> باشد، هم‌ترازی و چیدمان تغییری نمی‌کند.</p>
+<div class="rule" id="r-layout.repr.alignment.packed-fields"><a class="rule-link" href="#r-layout.repr.alignment.packed-fields" title="layout.repr.alignment.packed-fields"><span>[layout<wbr>.repr<wbr>.alignment<wbr>.packed-fields]</span></a>
+</div>
+
+<p>برای جانمایی فیلدها، هم‌ترازی هر فیلد برابر مقدار کوچک‌تر میان هم‌ترازی مشخص‌شده و هم‌ترازی نوع آن فیلد است.</p>
+<div class="rule" id="r-layout.repr.alignment.packed-padding"><a class="rule-link" href="#r-layout.repr.alignment.packed-padding" title="layout.repr.alignment.packed-padding"><span>[layout<wbr>.repr<wbr>.alignment<wbr>.packed-padding]</span></a>
+</div>
+
+<p>تضمین می‌شود فضای پرکنندهٔ میان فیلدها کمینهٔ لازم برای برآوردن هم‌ترازی هر فیلد (که شاید تغییر یافته باشد) باشد؛ البته توجه کنید <code>packed</code> به‌تنهایی دربارهٔ ترتیب فیلدها تضمینی نمی‌دهد. پیامد مهم این قواعد آن است که نوعی با <code>#[repr(packed(1))]</code> یا <code>#[repr(packed)]</code> هیچ فضای پرکننده‌ای میان فیلدها نخواهد داشت.</p>
+<div class="rule" id="r-layout.repr.alignment.constraint-exclusive"><a class="rule-link" href="#r-layout.repr.alignment.constraint-exclusive" title="layout.repr.alignment.constraint-exclusive"><span>[layout<wbr>.repr<wbr>.alignment<wbr>.constraint-exclusive]</span></a>
+</div>
+
+<p>اصلاح‌گرهای <code>align</code> و <code>packed</code> را نمی‌توان هم‌زمان روی یک نوع اعمال کرد و یک نوع <code>packed</code> نیز نمی‌تواند به‌صورت تعدی نوع دیگری با <code>align</code> را در خود داشته باشد. <code>align</code> و <code>packed</code> تنها روی نمایش‌های <code>Rust</code> و <code>C</code> قابل اعمال‌اند.</p>
+<div class="rule" id="r-layout.repr.alignment.enum"><a class="rule-link" href="#r-layout.repr.alignment.enum" title="layout.repr.alignment.enum"><span>[layout<wbr>.repr<wbr>.alignment<wbr>.enum]</span></a>
+</div>
+
+<p>اصلاح‌گر <code>align</code> را می‌توان روی یک <code>enum</code> نیز اعمال کرد. در این حالت، اثر آن بر هم‌ترازی <code>enum</code> همان اثری است که اگر <code>enum</code> درون یک <code>struct</code> از نوع newtype با همان اصلاح‌گر <code>align</code> پیچیده شده بود، داشت.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> ارجاع به فیلدهای ناهم‌تراز مجاز نیست، زیرا <a href="behavior-considered-undefined.html">رفتار تعریف‌نشده</a> است. وقتی فیلدها به‌سبب اصلاح‌گر هم‌ترازی ناهم‌ترازند، برای استفاده از ارجاع و ارجاع‌زدایی گزینه‌های زیر را در نظر بگیرید:</p>
+<pre><code class="language-rust">#[repr(packed)]
+struct Packed {
+    f1: u8,
+    f2: u16,
+}
+let mut e = Packed { f1: 1, f2: 2 };
+// Instead of creating a reference to a field, copy the value to a local variable.
+let x = e.f2;
+// Or in situations like `println!` which creates a reference, use braces
+// to change it to a copy of the value.
+println!("{}", {e.f2});
+// Or if you need a pointer, use the unaligned methods for reading and writing
+// instead of dereferencing the pointer directly.
+let ptr: *const u16 = &amp;raw const e.f2;
+let value = unsafe { ptr.read_unaligned() };
+let mut_ptr: *mut u16 = &amp;raw mut e.f2;
+unsafe { mut_ptr.write_unaligned(3) }</code></pre>
+</blockquote>
+</div>
+
+<div class="rule" id="r-layout.repr.transparent"><a class="rule-link" href="#r-layout.repr.transparent" title="layout.repr.transparent"><span>[layout<wbr>.repr<wbr>.transparent]</span></a>
+</div>
+
+<h3 id="the-transparent-representation"><a class="header" href="#the-transparent-representation">نمایش <code>transparent</code></a></h3>
+<div class="rule" id="r-layout.repr.transparent.constraint-field"><a class="rule-link" href="#r-layout.repr.transparent.constraint-field" title="layout.repr.transparent.constraint-field"><span>[layout<wbr>.repr<wbr>.transparent<wbr>.constraint-field]</span></a>
+</div>
+
+<p>نمایش <code>transparent</code> تنها روی یک <a href="items/structs.html"><code>struct</code></a> یا <a href="items/enumerations.html"><code>enum</code></a> تک‌گونه‌ای قابل استفاده است که موارد زیر را داشته باشد:</p>
+<ul>
+<li>هر تعداد فیلد با اندازهٔ ۰ و هم‌ترازی ۱ (برای نمونه <a href="special-types-and-traits.html#phantomdatat"><code>PhantomData&lt;T&gt;</code></a>)، و</li>
+<li>حداکثر یک فیلد دیگر.</li>
+</ul>
+<div class="rule" id="r-layout.repr.transparent.layout-abi"><a class="rule-link" href="#r-layout.repr.transparent.layout-abi" title="layout.repr.transparent.layout-abi"><span>[layout<wbr>.repr<wbr>.transparent<wbr>.layout-abi]</span></a>
+</div>
+
+<p>ساختارها و برشمردنی‌های دارای این نمایش، اگر فیلدی با اندازهٔ غیرصفر یا هم‌ترازی غیر ۱ وجود داشته باشد، همان چیدمان و ABI آن تنها فیلد را دارند؛ و در غیر این صورت چیدمان و ABI نوع واحد را خواهند داشت.</p>
+<p>این با بازنمایی <code>C</code> متفاوت است، زیرا یک struct با بازنمایی <code>C</code> همیشه ABI یک <code>C</code> <code>struct</code> را خواهد داشت، در حالی که برای نمونه یک struct با بازنمایی <code>transparent</code> و یک فیلد ابتدایی (primitive)، ABI همان فیلد ابتدایی را خواهد داشت.</p>
+<div class="rule" id="r-layout.repr.transparent.constraint-exclusive"><a class="rule-link" href="#r-layout.repr.transparent.constraint-exclusive" title="layout.repr.transparent.constraint-exclusive"><span>[layout<wbr>.repr<wbr>.transparent<wbr>.constraint-exclusive]</span></a>
+</div>
+
+<p>چون این نمایش چیدمان نوع را به نوع دیگری واگذار می‌کند، نمی‌توان آن را همراه هیچ نمایش دیگری به کار برد.</p><nav class="page-nav"><a href="dynamically-sized-types.html">→ نوع‌های با اندازهٔ پویا (Dynamically sized types)</a><a href="interior-mutability.html">تغییرپذیری درونی (Interior mutability) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../reference/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,228 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>واریانس — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="variance"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="variance-of-type-and-lifetime-parameters"><a class="header" href="#variance-of-type-and-lifetime-parameters">واریانس پارامترهای نوع و طول عمر</a></h1>
+<p>برای پیش‌زمینهٔ عمومی‌تر دربارهٔ واریانس، پیوست <a href="./appendix/background.html">پیش‌زمینه</a> را ببینید.</p>
+<p>در طول بررسی نوع، باید واریانس پارامترهای نوع و طول عمر را استنتاج کنیم.
+الگوریتم از بخش ۴ مقالهٔ <a href="https://people.cs.umass.edu/~yannis/variance-extended2011.pdf">“Taming the
+Wildcards: Combining Definition- and Use-Site Variance”</a> گرفته شده است که در
+PLDI’11 منتشر شده و نوشتهٔ Altidor و همکاران است، و از این پس «مقاله» (The Paper) نامیده می‌شود.</p>
+<p>این استنتاج صراحتاً طوری طراحی شده که کاربردهای نوع‌ها را درون کد در نظر <em>نگیرد</em>.
+برای تعیین واریانس پارامترهای نوع تعریف‌شده روی نوع <code>X</code>،
+فقط تعریف نوع <code>X</code> و تعریف هر نوعی را که به آن ارجاع می‌دهد در نظر می‌گیریم.</p>
+<p>واریانس را فقط برای پارامترهای نوع موجود روی <em>نوع‌های داده</em> مانند struct و enum استنتاج می‌کنیم.
+در این موارد، توضیحی نسبتاً سرراست برای معنای واریانس وجود دارد.
+واریانس پارامترهای نوع یا طول عمر مشخص می‌کند آیا <code>T&lt;A&gt;</code> زیرنوعی از <code>T&lt;B&gt;</code> است
+(به‌ترتیب <code>T&lt;'a&gt;</code> و <code>T&lt;'b&gt;</code>)
+بر پایهٔ رابطهٔ <code>A</code> و <code>B</code> (به‌ترتیب <code>'a</code> و <code>'b</code>).</p>
+<p>واریانس را برای پارامترهای نوع موجود روی صفت‌ها، توابع یا impl‌ها استنتاج نمی‌کنیم.
+واریانس روی پارامترهای صفت واقعاً می‌تواند معنا داشته باشد
+(و قبلاً آن را محاسبه می‌کردیم) اما در واقع از نظر
+معنا بسیار ظریف است و در عمل چندان مفید نیست، بنابراین حذفش کردیم.
+برای جزئیات <a href="#addendum">ضمیمه</a> را ببینید.
+از سوی دیگر، واریانس روی پارامترهای تابع/impl
+معنا ندارد، زیرا این پارامترها نمونه‌سازی می‌شوند و سپس فراموش می‌شوند؛
+در نوع‌ها یا محصولات جانبی کامپایل‌شده باقی نمی‌مانند.</p>
+<blockquote>
+<p><strong>نمادگذاری</strong></p>
+<p>در سراسر این فصل از نمادگذاری مقاله استفاده می‌کنیم:</p>
+<ul>
+<li><code>+</code> یعنی <em>هم‌وردایی (covariance)</em>.</li>
+<li><code>-</code> یعنی <em>پادوردایی (contravariance)</em>.</li>
+<li><code>*</code> یعنی <em>دووردایی (bivariance)</em>.</li>
+<li><code>o</code> یعنی <em>ناوردایی (invariance)</em>.</li>
+</ul>
+</blockquote>
+<h2 id="the-algorithm"><a class="header" href="#the-algorithm">الگوریتم</a></h2>
+<p>ایدهٔ پایه کاملاً سرراست است.
+روی نوع‌های تعریف‌شده پیمایش می‌کنیم و برای هر کاربرد یک پارامتر نوع <code>X</code>، یک
+قید انباشته می‌کنیم که نشان می‌دهد واریانس <code>X</code> باید برای واریانس آن محل کاربرد معتبر باشد.
+سپس واریانس <code>X</code> را به‌صورت تکراری پالایش می‌کنیم تا همهٔ قیدها برآورده شوند.
+<em>همیشه</em> راه‌حلی وجود دارد، چون در
+حد نهایی می‌توانیم همهٔ پارامترهای نوع را ناوردا (invariant) اعلام کنیم و همهٔ قیدها برآورده می‌شوند.</p>
+<p>به‌عنوان یک مثال ساده، این را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">enum Option&lt;A&gt; { Some(A), None }
+enum OptionalFn&lt;B&gt; { Some(|B|), None }
+enum OptionalMap&lt;C&gt; { Some(|C| -&gt; C), None }</code></pre>
+<p>در اینجا قیدهای زیر را تولید می‌کنیم:</p>
+<pre><code class="language-text">1. V(A) &lt;= +
+2. V(B) &lt;= -
+3. V(C) &lt;= +
+4. V(C) &lt;= -
+</code></pre>
+<p>این‌ها نشان می‌دهند (۱) واریانس A حداکثر باید هم‌وردا باشد؛
+(۲) واریانس B حداکثر باید پادوردا باشد؛ و (۳، ۴)
+واریانس C حداکثر باید هم‌وردا <em>و</em> پادوردا باشد.
+همهٔ این نتایج بر پایهٔ یک شبکهٔ واریانس (variance lattice) تعریف‌شده به‌صورت زیرند:</p>
+<pre><code class="language-text">   *      Top (bivariant)
+-     +
+   o      Bottom (invariant)
+</code></pre>
+<p>بر پایهٔ این شبکه، راه‌حل <code>V(A)=+</code>، <code>V(B)=-</code>، <code>V(C)=o</code> راه‌حل بهینه است.
+توجه کنید که همیشه یک راه‌حل ساده‌لوحانه وجود دارد که صرفاً همهٔ متغیرها را ناوردا اعلام می‌کند.</p>
+<p>شاید بپرسید چرا تکرار نقطهٔ ثابت لازم است.
+دلیلش این است که واریانس یک محل کاربرد ممکن است خود تابعی از
+واریانس پارامترهای نوع دیگر باشد.
+در حالت کاملاً کلی، قیدهای ما به این شکل‌اند:</p>
+<pre><code class="language-text">V(X) &lt;= Term
+Term := + | - | * | o | V(X) | Term x Term
+</code></pre>
+<p>در اینجا نماد <code>V(X)</code> واریانس یک پارامتر نوع/ناحیه
+<code>X</code> را نسبت به کلاس تعریف‌کنندهٔ آن نشان می‌دهد.
+<code>Term x Term</code> «تبدیل واریانس (variance transform)» را نشان می‌دهد، همان‌طور که در مقاله تعریف شده است:</p>
+<blockquote>
+<p>اگر واریانس یک متغیر نوع <code>X</code> در عبارت نوع <code>E</code> برابر <code>V2</code> باشد
+و واریانس محل تعریف پارامتر نوع متناظر
+یک کلاس <code>C</code> برابر <code>V1</code> باشد، آن‌گاه واریانس <code>X</code> در عبارت نوع
+<code>C&lt;E&gt;</code> برابر <code>V3 = V1.xform(V2)</code> است.</p>
+</blockquote>
+<h2 id="constraints"><a class="header" href="#constraints">قیدها</a></h2>
+<p>اگر struct یا enum‌ای با where clauseها داشته باشم:</p>
+<pre><code class="language-rust ignore">struct Foo&lt;T: Bar&gt; { ... }</code></pre>
+<p>شاید بپرسید آیا واریانس <code>T</code> نسبت به <code>Bar</code> بر
+واریانس <code>T</code> نسبت به <code>Foo</code> اثر می‌گذارد.
+ادعا می‌کنم خیر.
+دلیل: فرض کنید <code>T</code> نسبت به <code>Bar</code> ناوردا اما نسبت به <code>Foo</code> هم‌وردا باشد.
+و سپس یک <code>Foo&lt;X&gt;</code> داشته باشیم که به <code>Foo&lt;Y&gt;</code> ارتقا (upcast) داده می‌شود، که <code>X &lt;: Y</code>.
+اما در حالی که <code>X : Bar</code> برقرار است، <code>Y : Bar</code> برقرار نیست.
+در آن صورت upcast غیرمجاز خواهد بود،
+اما نه به‌دلیل شکست واریانس، بلکه چون نوع مقصد
+<code>Foo&lt;Y&gt;</code> خودش well-formed نیست.
+در اصل، پیش از در نظر گرفتن واریانس می‌توانیم well-formed بودن همهٔ نوع‌های درگیر را فرض کنیم.</p>
+<h3 id="dependency-graph-management"><a class="header" href="#dependency-graph-management">مدیریت گراف وابستگی</a></h3>
+<p>چون واریانس یک استنتاج در سطح کل crate است، گراف وابستگی آن
+اگر مراقب نباشیم می‌تواند کاملاً درهم‌ریخته شود.
+برای حل این مشکل، آن را به دو query بازآرایی می‌کنیم:</p>
+<ul>
+<li><code>crate_variances</code> واریانس همهٔ آیتم‌های crate فعلی را محاسبه می‌کند.</li>
+<li><code>variances_of</code> به واریانس برای یک خوانش منفرد دسترسی دارد؛
+با درخواست <code>crate_variances</code> و استخراج داده‌های مربوط کار می‌کند.</li>
+</ul>
+<p>اگر خودتان را به خواندن <code>variances_of</code> محدود کنید، کد شما فقط
+به استنتاج آن آیتم خاص وابسته خواهد بود.</p>
+<p>در نهایت، این ساختار به <a href="./queries/incremental-compilation.html">الگوریتم red-green</a> متکی است.
+به‌ویژه،
+هر query واریانس عملاً به همهٔ تعریف‌های نوع در کل
+crate وابسته است (از طریق <code>crate_variances</code>)، اما چون بیشتر تغییرها به
+تغییر در نتایج واقعی استنتاج واریانس نمی‌انجامند، query ‏<code>variances_of</code>
+پس از ارزیابی مجدد در نهایت سبز (green) تلقی می‌شود.</p>
+<p><a id="addendum"></a></p>
+<h2 id="addendum-variance-on-traits"><a class="header" href="#addendum-variance-on-traits">ضمیمه: واریانس روی صفت‌ها</a></h2>
+<p>همان‌طور که در بالا گفته شد، قبلاً واریانس روی صفت‌ها را مجاز می‌دانستیم.
+این بر پایهٔ ظاهر شدن پارامترهای نوع صفت در
+امضای متدها محاسبه می‌شد و برای نمایش سازگاری
+vtableها در شیء‌های صفت (trait object) به کار می‌رفت (و همچنین vtableهای «مجازی» یا دیکشنری در کران‌های صفت).
+یک پیچیدگی این بود که واریانس برای
+نوع‌های وابسته کمتر بدیهی است، چون می‌توانند به بیرون projection شوند
+و کاربردهای بی‌شماری پیدا کنند، پس روشن نیست چه زمانی ایمن است اجازه دهیم
+<code>X&lt;A&gt;::Bar</code> تغییر کند (یا اصلاً معنایش چیست).
+افزون بر این (همان‌طور که در ادامه می‌آید) همهٔ ورودی‌های هر صفتی که نوع وابسته دارد
+باید ناوردا می‌بودند که کاربردپذیری را محدود می‌کرد.
+سرانجام، حاشیه‌نویسی‌هایی (<code>MarkerTrait</code>، <code>PhantomFn</code>) که لازم بود تضمین کنند همهٔ
+پارامترهای نوع صفت واریانس دارند گیج‌کننده و آزاردهنده بودند و فایدهٔ کمی داشتند.</p>
+<p>صرفاً برای ارجاع تاریخی، قصد دارم متنی را حفظ کنم که نشان می‌دهد
+چگونه می‌توان واریانس و تطبیق صفت را تفسیر کرد.</p>
+<h3 id="variance-and-object-types"><a class="header" href="#variance-and-object-types">واریانس و نوع‌های شیء</a></h3>
+<p>درست مانند struct و enum، می‌توانیم رابطهٔ زیرنوع‌سازی
+میان دو نوع شیء <code>&amp;Trait&lt;A&gt;</code> و <code>&amp;Trait&lt;B&gt;</code> را
+بر پایهٔ رابطهٔ <code>A</code> و <code>B</code> تعیین کنیم.
+توجه کنید که برای نوع‌های شیء پارامتر نوع <code>Self</code> را نادیده می‌گیریم – نامعلوم است و
+ماهیت dispatch پویا تضمین می‌کند همیشه تابعی را فراخوانی کنیم که
+نوع <code>Self</code> مناسب را انتظار دارد.
+اما باید با پارامترهای نوع دیگر مراقب باشیم، وگرنه ممکن است
+به فراخوانی تابعی بینجامیم که نوعی را انتظار دارد اما نوع دیگری به آن داده شده است.</p>
+<p>برای دیدن منظورم، صفتی مانند این را در نظر بگیرید:</p>
+<pre><code class="language-rust">trait ConvertTo&lt;A&gt; {
+    fn convertTo(&amp;self) -&gt; A;
+}</code></pre>
+<p>به‌طور شهودی، اگر یک شیء <code>O=&amp;ConvertTo&lt;Object&gt;</code> و شیء دیگری
+<code>S=&amp;ConvertTo&lt;String&gt;</code> داشته باشیم، آن‌گاه <code>S &lt;: O</code> زیرا <code>String &lt;: Object</code>
+(با فرض نوع‌های «string» و «object» شبیه Java، که مثال‌های همیشگی من برای زیرنوع‌سازی‌اند).
+الگوریتم واقعی این است که پارامترهای نوع (صریح) را
+جفت‌جفت و با رعایت واریانس‌شان مقایسه کنیم: اینجا
+پارامتر نوع A هم‌وردا است (فقط در موقعیت بازگشتی ظاهر می‌شود)، و بنابراین لازم داریم <code>String &lt;: Object</code>.</p>
+<p>البته توجه کنید که مقید شدن پارامتر نوع (ضمنی) <code>Self</code> را در نظر نگرفتیم:
+در واقع نامعلوم است، پس همین خوب است.
+دلیل اینکه می‌توانیم آن پارامتر را نادیده بگیریم دقیقاً این است که
+تا وقتی فراخوانی رخ ندهد لازم نیست مقدارش را بدانیم، و در آن زمان (همان‌طور که
+گفتید) ماهیت پویای dispatch مجازی یعنی کدی که اجرا می‌کنیم
+برای هر مقداری که <code>Self</code> برای
+شیء خاصی که متدش را فراخوانی کردیم به آن مقید شده باشد درست خواهد بود.
+بنابراین <code>Self</code> با <code>A</code> متفاوت است، چون فراخواننده لازم دارد <code>A</code> معلوم باشد تا
+نوع بازگشتی متد <code>convertTo()</code> را بداند.
+(به‌عنوان یک نکتهٔ جانبی، قواعدی داریم که مانع فراخوانی متدهایی از طریق یک شیء می‌شوند که <code>Self</code> در آن‌ها بیرون از
+موقعیت گیرنده (receiver) ظاهر می‌شود.)</p>
+<h3 id="trait-variance-and-vtable-resolution"><a class="header" href="#trait-variance-and-vtable-resolution">واریانس صفت و حل vtable</a></h3>
+<p>اما صفت‌ها فقط با شیء‌ها به کار نمی‌روند.
+هنگام تصمیم‌گیری دربارهٔ اینکه آیا یک impl مفروض یک کران صفت مفروض را برآورده می‌کند هم استفاده می‌شوند.
+برای صحنه‌چینی، تصور کنید تابعی داشتم:</p>
+<pre><code class="language-rust ignore">fn convertAll&lt;A,T:ConvertTo&lt;A&gt;&gt;(v: &amp;[T]) { ... }</code></pre>
+<p>حالا تصور کنید پیاده‌سازی‌ای از <code>ConvertTo</code> برای <code>Object</code> دارم:</p>
+<pre><code class="language-rust ignore">impl ConvertTo&lt;i32&gt; for Object { ... }</code></pre>
+<p>و می‌خواهم <code>convertAll</code> را روی آرایه‌ای از رشته‌ها فراخوانی کنم.
+فرض کنید بیشتر اینکه به هر دلیلی صراحتاً مقدار
+<code>String</code> را برای پارامتر نوع <code>T</code> می‌دهم:</p>
+<pre><code class="language-rust ignore">let mut vector = vec!["string", ...];
+convertAll::&lt;i32, String&gt;(vector);</code></pre>
+<p>آیا این مجاز است؟
+به عبارت دیگر، آیا می‌توانیم <code>impl</code> مربوط به <code>Object</code> را بر نوع <code>String</code> اعمال کنیم؟
+پاسخ مثبت است، اما برای دیدن دلیلش باید آنچه رخ خواهد داد را بسط دهیم:</p>
+<ul>
+<li>
+<p><code>convertAll</code> یک اشاره‌گر به یکی از مدخل‌های
+بردار می‌سازد که نوعش <code>&amp;String</code> خواهد بود</p>
+</li>
+<li>
+<p>سپس impl مربوط به <code>convertTo()</code> را که برای استفاده با شیء‌ها در نظر گرفته شده فراخوانی می‌کند.
+نوع آن <code>fn(self: &amp;Object) -&gt; i32</code> است.</p>
+<p>دادن مقدار <code>self</code> از نوع <code>&amp;String</code> اشکالی ندارد، زیرا <code>&amp;String &lt;: &amp;Object</code>.</p>
+</li>
+</ul>
+<p>خب، به‌طور شهودی می‌خواهیم این مجاز باشد، پس بیایید این را به
+واریانس برگردانیم و ببینیم آیا نتیجهٔ درست را محاسبه می‌کنیم.
+ابتدا باید بفهمیم پرسش «آیا یک impl برای
+<code>Object,i32</code> جایی قابل استفاده است که impl برای <code>String,i32</code> انتظار می‌رود؟» را چگونه صورت‌بندی کنیم.</p>
+<p>شاید فکر کردن به یک پیاده‌سازی dictionary-passing برای type classها مفید باشد.
+در آن صورت، <code>convertAll()</code> یک پارامتر ضمنی می‌گیرد که impl را نشان می‌دهد.
+خلاصه اینکه ما impl‌ای از نوع زیر <em>داریم</em>:</p>
+<pre><code class="language-text">V_O = ConvertTo&lt;i32&gt; for Object
+</code></pre>
+<p>و نمونهٔ اولیهٔ تابع impl‌ای از نوع زیر را انتظار دارد:</p>
+<pre><code class="language-text">V_S = ConvertTo&lt;i32&gt; for String
+</code></pre>
+<p>مانند هر آرگومان دیگر، این مجاز است اگر نوع مقدار داده‌شده
+(<code>V_O</code>) زیرنوعی از نوع مورد انتظار (<code>V_S</code>) باشد.
+پس آیا <code>V_O &lt;: V_S</code>؟
+پاسخ به واریانس پارامترهای مختلف بستگی دارد.
+در این مورد، چون پارامتر <code>Self</code> پادوردا و <code>A</code>
+هم‌وردا است، یعنی:</p>
+<pre><code class="language-text">V_O &lt;: V_S iff
+    i32 &lt;: i32
+    String &lt;: Object
+</code></pre>
+<p>این شرط‌ها برآورده می‌شوند و بنابراین راضی هستیم.</p>
+<h3 id="variance-and-associated-types"><a class="header" href="#variance-and-associated-types">واریانس و نوع‌های وابسته</a></h3>
+<p>صفت‌هایی که نوع وابسته دارند – یا دست‌کم عبارت‌های projection –
+باید نسبت به همهٔ ورودی‌هایشان ناوردا باشند.
+برای دیدن اینکه چرا این منطقی است، ببینید زیرنوع‌سازی برای یک ارجاع صفت چه معنایی دارد:</p>
+<pre><code class="language-text">&lt;T as Trait&gt; &lt;: &lt;U as Trait&gt;
+</code></pre>
+<p>یعنی اگر بدانم <code>T as Trait</code>، می‌دانم <code>U as Trait</code> هم برقرار است.
+افزون بر این، اگر آن را به سبک dictionary passing در نظر بگیرید،
+یعنی استفاده از دیکشنری <code>&lt;T as Trait&gt;</code> جایی که
+دیکشنری <code>&lt;U as Trait&gt;</code> انتظار می‌رود ایمن است.</p>
+<p>مشکل این است که وقتی می‌توانید نوع‌ها را از <code>&lt;T as Trait&gt;</code> بیرون projection کنید، رابطهٔ آن با نوع‌های projectionشده از <code>&lt;U as Trait&gt;</code>
+کاملاً نامعلوم است مگر اینکه <code>T==U</code> (برای جزئیات بیشتر #21726 را ببینید).
+ناوردا کردن <code>Trait</code> تضمین می‌کند این درست باشد.</p>
+<p>دلیل مرتبط دیگر این است که اگر صفت‌هایی را که
+نوع وابسته دارند ناوردا نمی‌کردیم، projection دیگر تابعی با یک نتیجهٔ واحد نبود.
+این را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">trait Identity { type Out; fn foo(&amp;self); }
+impl&lt;T&gt; Identity for T { type Out = T; ... }</code></pre>
+<p>حالا اگر <code>&lt;&amp;'static () as Identity&gt;::Out</code> را داشته باشم، این را می‌توان
+به‌طور معتبر به‌صورت <code>&amp;'a ()</code> برای هر <code>'a</code> استخراج کرد:</p>
+<pre><code class="language-text">&lt;&amp;'a () as Identity&gt; &lt;: &lt;&amp;'static () as Identity&gt;
+if &amp;'static () &lt; : &amp;'a ()   -- Identity is contravariant in Self
+if 'static : 'a             -- Subtyping rules for relations
+</code></pre>
+<p>اما این تغییر یعنی <code>&lt;'static () as Identity&gt;::Out</code>
+همیشه <code>&amp;'static ()</code> است (که ممکن است سپس
+جداگانه به <code>'a ()</code> ارتقا داده شود).
+این در حل #21750 مفید بود.</p><nav class="page-nav"><a href="analysis/well-formed.html">→ خوش‌ساختی</a><a href="coherence.html">بررسی انسجام (Coherence) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

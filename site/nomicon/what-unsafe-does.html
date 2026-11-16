@@ -1,0 +1,52 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Unsafe چه کارهایی می‌تواند بکند — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="what-unsafe-does"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="what-unsafe-rust-can-do"><a class="header" href="#what-unsafe-rust-can-do">کارهایی که Unsafe Rust می‌تواند انجام دهد</a></h1>
+<p>تنها چیزهایی که در Unsafe Rust متفاوت هستند این است که می‌توانید:</p>
+<ul>
+<li>اشاره‌گرهای خام را ارجاع‌زدایی (dereference) کنید</li>
+<li>توابع <code>unsafe</code> را صدا بزنید (از جمله توابع C، intrinsic‌های کامپایلر و تخصیص‌دهندهٔ خام)</li>
+<li>صفت‌های <code>unsafe</code> را پیاده‌سازی کنید</li>
+<li>به static‌های تغییرپذیر دسترسی پیدا کنید یا آن‌ها را تغییر دهید</li>
+<li>به فیلدهای <code>union</code>‌ها دسترسی پیدا کنید</li>
+</ul>
+<p>همین. دلیل اینکه این عملیات به Unsafe واگذار شده‌اند این است که سوءاستفاده از هر یک از این چیزها باعث رفتار تعریف‌نشدهٔ (Undefined Behavior) همیشه هراس‌انگیز می‌شود. فراخوانی رفتار تعریف‌نشده به کامپایلر اجازهٔ کامل می‌دهد که کارهای دلخواه و بدی را با برنامهٔ شما انجام دهد. قطعاً <em>نباید</em> رفتار تعریف‌نشده را فراخوانی کنید.</p>
+<p>برخلاف C، رفتار تعریف‌نشده در Rust دامنهٔ نسبتاً محدودی دارد. تمام چیزی که هستهٔ زبان به آن اهمیت می‌دهد جلوگیری از موارد زیر است:</p>
+<ul>
+<li>ارجاع‌زدایی (استفاده از عملگر <code>*</code> روی) اشاره‌گرهای dangling یا ترازنشده (به ادامه ببینید)</li>
+<li>نقض <a href="references.html">قواعد نام‌های مستعار اشاره‌گر</a></li>
+<li>صدا زدن تابعی با ABI فراخوانی اشتباه یا unwind کردن از تابعی با ABI بازگشایی اشتباه.</li>
+<li>ایجاد یک <a href="races.html">رقابت داده‌ای</a> (data race)</li>
+<li>اجرای کدی که با <a href="../reference/attributes/codegen.html#the-target_feature-attribute">ویژگی‌های هدف</a> کامپایل شده است و نخ اجرای فعلی از آن‌ها پشتیبانی نمی‌کند</li>
+<li>تولید مقدارهای نامعتبر (چه به‌تنهایی و چه به‌عنوان فیلدی از یک نوع مرکب مانند <code>enum</code>/<code>struct</code>/آرایه/تاپل):
+<ul>
+<li>یک <code>bool</code> که ۰ یا ۱ نیست</li>
+<li>یک <code>enum</code> با discriminant نامعتبر</li>
+<li>یک اشاره‌گر <code>fn</code> که null است</li>
+<li>یک <code>char</code> خارج از بازه‌های [0x0, 0xD7FF] و [0xE000, 0x10FFFF]</li>
+<li>یک <code>!</code> (همهٔ مقدارها برای این نوع نامعتبرند)</li>
+<li>یک عدد صحیح (<code>i*</code>/<code>u*</code>)، مقدار ممیز شناور (<code>f*</code>) یا اشاره‌گر خام که از <a href="uninitialized.html">حافظهٔ مقداردهی‌نشده</a> خوانده شده باشد، یا حافظهٔ مقداردهی‌نشده در یک <code>str</code>.</li>
+<li>یک ارجاع/<code>Box</code> که dangling یا ترازنشده است، یا به مقدار نامعتبری اشاره می‌کند.</li>
+<li>یک ارجاع پهن (wide reference)، <code>Box</code> یا اشاره‌گر خام که فراداده (metadata) نامعتبر دارد:
+<ul>
+<li>فراداده‌ی <code>dyn Trait</code> نامعتبر است اگر اشاره‌گری به vtable برای <code>Trait</code> نباشد که با صفت پویای واقعی‌ای که اشاره‌گر یا ارجاع به آن اشاره می‌کند مطابقت دارد</li>
+<li>فرادادهٔ slice نامعتبر است اگر طول یک <code>usize</code> معتبر نباشد (یعنی نباید از حافظهٔ مقداردهی‌نشده خوانده شده باشد)</li>
+</ul>
+</li>
+<li>نوعی با مقدارهای نامعتبر سفارشی که یکی از همان مقدارها باشد، مانند <a href="https://doc.rust-lang.org/std/ptr/struct.NonNull.html"><code>NonNull</code></a> که null است. (درخواست مقدارهای نامعتبر سفارشی یک قابلیت ناپایدار است، اما برخی نوع‌های پایدار libstd، مثل <code>NonNull</code>، از آن استفاده می‌کنند.)</li>
+</ul>
+</li>
+</ul>
+<p>برای توضیح دقیق‌تر دربارهٔ «رفتار تعریف‌نشده» می‌توانید به <a href="../reference/behavior-considered-undefined.html">مرجع زبان</a> مراجعه کنید.</p>
+<p>«تولید» یک مقدار هر زمان رخ می‌دهد که مقداری انتساب داده شود، به یک تابع/عملیات اولیه داده شود، یا از یک تابع/عملیات اولیه بازگردانده شود.</p>
+<p>یک ارجاع/اشاره‌گر «dangling» است اگر null باشد یا همهٔ بایت‌هایی که به آن‌ها اشاره می‌کند بخشی از یک تخصیص یکسان نباشند (پس به‌طور خاص، همگی باید بخشی از <em>یک</em> تخصیص باشند). بازهٔ بایت‌هایی که به آن‌ها اشاره می‌کند با مقدار اشاره‌گر و اندازهٔ نوع مورد اشاره تعیین می‌شود. در نتیجه، اگر بازه خالی باشد، «dangling» همان «null» است. توجه کنید که slice‌ها و رشته‌ها به کل بازهٔ خود اشاره می‌کنند، پس مهم است که فرادادهٔ طول هرگز بیش از حد بزرگ نباشد (به‌طور خاص، تخصیص‌ها و بنابراین slice‌ها و رشته‌ها نمی‌توانند بزرگ‌تر از <code>isize::MAX</code> بایت باشند). اگر به هر دلیلی این کار بیش از حد دست‌وپاگیر است، استفاده از اشاره‌گرهای خام را در نظر بگیرید.</p>
+<p>همین. این همهٔ علت‌های رفتار تعریف‌نشده‌ای است که در Rust گنجانده شده است. البته توابع و صفت‌های unsafe آزادند محدودیت‌های دلخواه دیگری را اعلام کنند که یک برنامه باید برای جلوگیری از رفتار تعریف‌نشده رعایت کند. برای مثال، API‌های تخصیص‌دهنده اعلام می‌کنند که آزاد کردن حافظهٔ تخصیص‌نیافته رفتار تعریف‌نشده است.</p>
+<p>با این حال، نقض این محدودیت‌ها معمولاً صرفاً به‌صورت تعدّی به یکی از مشکلات بالا منجر می‌شود. برخی محدودیت‌های اضافی نیز ممکن است از intrinsic‌های کامپایلر ناشی شوند که دربارهٔ چگونگی بهینه‌سازی کد فرض‌های ویژه‌ای دارند. برای مثال، Vec و Box از intrinsic‌هایی استفاده می‌کنند که الزام می‌کنند اشاره‌گرهایشان همیشه غیر null باشند.</p>
+<p>Rust در غیر این صورت نسبت به سایر عملیات مشکوک کاملاً آسان‌گیر است. Rust این موارد را «ایمن» می‌داند:</p>
+<ul>
+<li>بن‌بست (deadlock)</li>
+<li>داشتن یک <a href="races.html">شرایط رقابتی (race condition)</a></li>
+<li>نشت حافظه</li>
+<li>سرریز اعداد صحیح (با عملگرهای داخلی مانند <code>+</code> و غیره)</li>
+<li>متوقف کردن (abort) برنامه</li>
+<li>حذف پایگاه دادهٔ محیط عملیاتی (production)</li>
+</ul>
+<p>برای اطلاعات دقیق‌تر می‌توانید به <a href="../reference/behavior-not-considered-unsafe.html">مرجع زبان</a> مراجعه کنید.</p>
+<p>با این حال هر برنامه‌ای که واقعاً چنین کاری بکند <em>احتمالاً</em> نادرست است. Rust ابزارهای فراوانی فراهم می‌کند تا این موارد نادر باشند، اما جلوگیری قطعی از این مشکلات غیرعملی در نظر گرفته می‌شود.</p><nav class="page-nav"><a href="safe-unsafe-meaning.html">→ Safe و Unsafe چگونه با هم تعامل دارند</a><a href="working-with-unsafe.html">کار با Unsafe ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

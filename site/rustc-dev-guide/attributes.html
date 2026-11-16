@@ -1,0 +1,46 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Attributeها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="attributes"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="attributes"><a class="header" href="#attributes">Attributeها</a></h1>
+<p>Attributeها دو نوع هستند: <em>inert</em> (یا <em>built-in</em>) و <em>active</em> (<em>non-builtin</em>).</p>
+<h2 id="builtininert-attributes"><a class="header" href="#builtininert-attributes">Builtin/inert attributes</a></h2>
+<p>این attributeها در خود کامپایلر تعریف شده‌اند، در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_feature/builtin_attrs/index.html"><code>compiler/rustc_feature/src/builtin_attrs.rs</code></a> و در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_attr_parsing/index.html">تجزیه‌گرهای attribute</a>.</p>
+<p>نمونه‌ها شامل <code>#[allow]</code> و <code>#[macro_use]</code> هستند.</p>
+<p>این attributeها چند ویژگی مهم دارند:</p>
+<ul>
+<li>همیشه در دامنه (scope) هستند و در تفکیک نام معمول مبتنی بر مسیر شرکت نمی‌کنند.</li>
+<li>نمی‌توان نام آن‌ها را تغییر داد. برای مثال، <code>use allow as foo</code> کامپایل می‌شود، اما نوشتن <code>#[foo]</code> خطا تولید می‌کند.</li>
+<li>«inert» هستند، یعنی کد گسترش ماکرو آن‌ها را همان‌طور که هستند رها می‌کند. در نتیجه، هر رفتاری از این راه حاصل می‌شود که کامپایلر صراحتاً وجود آن‌ها را بررسی می‌کند. برای مثال، کد مربوط به lint صراحتاً <code>#[allow]</code>، ‏<code>#[warn]</code>، ‏<code>#[deny]</code> و <code>#[forbid]</code> را بررسی می‌کند، و رفتار از گسترش خود attributeها نمی‌آید.</li>
+</ul>
+<p>برای اطلاعات بیشتر دربارهٔ این attributeها، فصل <a href="./hir/attribute-parsing.html">تجزیهٔ attribute</a> را ببینید.</p>
+<h3 id="note-on-adding-new-builtin-attributes"><a class="header" href="#note-on-adding-new-builtin-attributes">نکته دربارهٔ افزودن attributeهای builtin جدید</a></h3>
+<div class="warning">
+<p><strong>هشدار: احتمال ابهام در name resolution هنگام افزودن attributeهای داخلی جدید</strong></p>
+<p>لطفاً توجه کنید افزودن <strong>attributeهای داخلی جدید</strong> (که نامشان رزرو نشده، یعنی attribute داخلی جدیدی که نامش با <code>rustc</code> شروع نمی‌شود)، حتی اگر پشت gate ناپایدار باشند، می‌تواند در کد stable به‌دلیل ابهام در name resolution شکستگی ایجاد کند، اگر (۱) کد stable ماکرویی با همان نام دارد که دوباره export می‌شود، یا (۲) attribute کمکی derive در proc-macro با همان نام.</p>
+<p>معمولاً attribute داخلی باید ابتدا به‌صورت <code>#[rustc_foo]</code> به‌جای <code>#[foo]</code> شروع شود تا از تعارض با ماکروهای تعریف‌شده توسط کاربر و attributeهای کمکی proc-macro پرهیز شود.
+سپس، پیش از پایدارسازی،
+تغییر نام به <code>#[foo]</code> باید جداگانه با اجرای crater برای ارزیابی پیامدها انجام شود،
+با پیشنهاد FCP برای شکستگی عمدی که T-lang بررسی کند.</p>
+<p>همچنین به یاد داشته باشید crater <em>جامع نیست</em> و همهٔ کد stable موجود را شامل نمی‌شود.</p>
+<p>See:</p>
+<ul>
+<li><a href="https://github.com/rust-lang/rust/issues/134963">با attributeهای داخلی متفاوت از attributeهای prelude رفتار می‌شود، attributeهای داخلی ناپایدار می‌توانند با ماکروی stable تعارض نام داشته باشند و attributeهای داخلی می‌توانند سازگاری رو‌به‌عقب را بشکنند
+#134963</a> و پیوندهای برگشتی در این issue،
+از جمله بحث‌های طراحی دربارهٔ نحوهٔ رفع این نوع خطر شکستگی.</li>
+<li><a href="https://github.com/rust-lang/rust/issues/121157">ساخت پس از به‌روزرسانی شکست می‌خورد: coverage مبهم است؛ مبهم است به‌دلیل تعارض نام با attribute داخلی
+#121157</a>.</li>
+<li><a href="https://github.com/rust-lang/rust/issues/143834">رگرسیون: align مبهم است #143834</a>.</li>
+</ul>
+</div>
+
+<h2 id="non-builtinactive-attributes"><a class="header" href="#non-builtinactive-attributes">‘Non-builtin’/‘active’ attributes</a></h2>
+<p>این attributeها توسط یک crate تعریف می‌شوند، یا کتابخانهٔ استاندارد یا یک crate از نوع proc-macro.</p>
+<p><strong>مهم</strong>: بسیاری از attributeهای non-builtin، مانند <code>#[derive]</code>، همچنان بخشی از زبان اصلی Rust محسوب می‌شوند. با این حال، آن‌ها «attributeهای builtin» نامیده <strong>نمی‌شوند</strong>، زیرا تعریف متناظری در کتابخانهٔ استاندارد دارند.</p>
+<p>تعریف attributeهای non-builtin دو شکل دارد:</p>
+<ol>
+<li>attributeهای proc-macro، که با تابعی تعریف می‌شوند که با <code>#[proc_macro_attribute]</code> حاشیه‌نویسی شده و در یک crate از نوع proc-macro قرار دارد.</li>
+<li>attributeهای مبتنی بر AST، که در کتابخانهٔ استاندارد تعریف می‌شوند. این attributeها ماکروهای «stub» ویژه‌ای دارند که در جاهایی مانند <a href="https://github.com/rust-lang/rust/blob/HEAD/library/core/src/macros/mod.rs"><code>library/core/src/macros/mod.rs</code></a> تعریف شده‌اند.</li>
+</ol>
+<p>این تعریف‌ها وجود دارند تا ماکروها بتوانند در تفکیک نام معمول مبتنی بر مسیر شرکت کنند - می‌توان آن‌ها را مانند هر تعریف آیتم دیگری import، re-export و تغییر نام داد. با این حال، بدنهٔ تعریف خالی است. در عوض، ماکرو با attribute <code>#[rustc_builtin_macro]</code> حاشیه‌نویسی می‌شود که به کامپایلر می‌گوید تابع متناظری را در <code>rustc_builtin_macros</code> اجرا کند.</p>
+<p>همهٔ attributeهای non-builtin ویژگی‌های زیر را دارند:</p>
+<ul>
+<li>مانند همهٔ تعریف‌های دیگر (مثلاً ساختارها)، باید با import وارد دامنه شوند. بسیاری از attributeهای کتابخانهٔ استاندارد در prelude گنجانده شده‌اند - به همین دلیل نوشتن <code>#[derive]</code> بدون import کار می‌کند.</li>
+<li>در گسترش ماکرو شرکت می‌کنند. پیاده‌سازی ماکرو ممکن است هدف attribute را بدون تغییر رها کند، آن را تغییر دهد، گره‌های AST جدید تولید کند، یا هدف را به‌کلی حذف کند.</li>
+</ul><nav class="page-nav"><a href="name-resolution.html">→ تفکیک نام</a><a href="test-implementation.html">`#[test]` implementation ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

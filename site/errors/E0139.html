@@ -1,0 +1,54 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0139 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0139"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h4 id="note-this-error-code-is-no-longer-emitted-by-the-compiler"><a class="header" href="#note-this-error-code-is-no-longer-emitted-by-the-compiler">توجه: این کد خطا دیگر توسط کامپایلر صادر نمی‌شود.</a></h4>
+<p>در Rust محدودیت‌های مختلفی برای تبدیل (transmute) بین نوع‌ها وجود دارد؛ برای مثال، نوع‌هایی که transmute می‌شوند باید اندازهٔ یکسانی داشته باشند. برای اعمال همهٔ این محدودیت‌ها، کامپایلر باید نوع‌های دقیقی را که ممکن است transmute شوند بداند. وقتی پارامترهای نوع در میان باشند، این کار همیشه شدنی نیست.</p>
+<p>بنابراین، برای مثال، کد زیر مجاز نیست:</p>
+<pre><code>use std::mem::transmute;
+
+struct Foo&lt;T&gt;(Vec&lt;T&gt;);
+
+fn foo&lt;T&gt;(x: Vec&lt;T&gt;) {
+    // we are transmuting between Vec&lt;T&gt; and Foo&lt;F&gt; here
+    let y: Foo&lt;T&gt; = unsafe { transmute(x) };
+    // do something with y
+}
+</code></pre>
+<p>در این مورد خاص، احتمال زیادی وجود دارد که transmute بی‌خطر باشد (اما Rust این را تضمین نمی‌کند). با این حال، وقتی ترازبندی (alignment) و بهینه‌سازی‌های enum به میان می‌آید، بسیار محتمل است که اندازه‌ها بسته به نمونه‌سازی‌های مختلف پارامتر نوع با هم برابر باشند یا نباشند. بررسی این موضوع برای <em>همهٔ</em> نوع‌های ممکن شدنی نیست، بنابراین <code>transmute()</code> فقط نوع‌هایی را می‌پذیرد که هیچ پارامتر نوع نمونه‌سازی‌نشده‌ای ندارند.</p>
+<p>اگر به این کار نیاز دارید، احتمال زیادی وجود دارد که در حال انجام کاری نادرست باشید. به یاد داشته باشید که Rust چندان تضمینی درباره چیدمان (layout) ساختارهای مختلف نمی‌دهد (حتی دو ساختار با اعلان‌های یکسان ممکن است چیدمان‌های متفاوتی داشته باشند). اگر راه‌حلی وجود دارد که اصلاً transmute را کنار بگذارد، آن را امتحان کنید.</p>
+<p>اگر ممکن است، کد را به‌صورت دستی تک‌ریخت (monomorphize) کنید، یعنی تابع را برای هر نمونه‌سازی ممکن از نوع بنویسید. می‌توان با استفاده از صفت‌ها (traits) این کار را به‌صورت تمیز انجام داد، برای مثال:</p>
+<pre><code>use std::mem::transmute;
+
+struct Foo&lt;T&gt;(Vec&lt;T&gt;);
+
+trait MyTransmutableType: Sized {
+    fn transmute(_: Vec&lt;Self&gt;) -&gt; Foo&lt;Self&gt;;
+}
+
+impl MyTransmutableType for u8 {
+    fn transmute(x: Vec&lt;u8&gt;) -&gt; Foo&lt;u8&gt; {
+        unsafe { transmute(x) }
+    }
+}
+
+impl MyTransmutableType for String {
+    fn transmute(x: Vec&lt;String&gt;) -&gt; Foo&lt;String&gt; {
+        unsafe { transmute(x) }
+    }
+}
+
+// ... more impls for the types you intend to transmute
+
+fn foo&lt;T: MyTransmutableType&gt;(x: Vec&lt;T&gt;) {
+    let y: Foo&lt;T&gt; = &lt;T as MyTransmutableType&gt;::transmute(x);
+    // do something with y
+}
+</code></pre>
+<p>اندازهٔ هر impl در transmute مثل همیشه از نظر تطابق بررسی می‌شود و چون هیچ پارامتر نوع آزادی در کار نیست، این کد باید کامپایل شود مگر آنکه در یکی از impl‌ها عدم تطابق اندازه وجود داشته باشد.</p>
+<p>همچنین می‌توان transmute را به‌صورت دستی انجام داد:</p>
+<pre><code># use std::ptr;
+# let v = Some("value");
+# type SomeType = &amp;'static [u8];
+unsafe {
+    ptr::read(&amp;v as *const _ as *const SomeType) // `v` transmuted to `SomeType`
+}
+# ;
+</code></pre>
+<p>توجه کنید که این کار (برخلاف <code>transmute</code>) مقدار <code>v</code> را move نمی‌کند و اگر می‌خواهید از فراخوانی destructorها جلوگیری کنید، ممکن است نیاز به فراخوانی <code>mem::forget(v)</code> داشته باشد.</p><nav class="page-nav"><a href="../errors/E0138.html">→ E0138</a><a href="../errors/E0152.html">E0152 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

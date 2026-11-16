@@ -1,0 +1,475 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>نحو الگو — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch19-03-pattern-syntax"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="pattern-syntax"><a class="header" href="#pattern-syntax">نحو الگوها</a></h2>
+<p>در این بخش همهٔ نحوهای معتبر در الگوها را یک‌جا گردآوری می‌کنیم و توضیح می‌دهیم چرا و چه زمانی ممکن است بخواهید از هرکدام استفاده کنید.</p>
+<h3 id="matching-literals"><a class="header" href="#matching-literals">تطبیق مقادیر لفظی</a></h3>
+<p>همان‌طور که در فصل 6 دیدید، می‌توانید الگوها را مستقیماً با مقادیر ثابت (literals) تطبیق دهید. کد زیر برخی از مثال‌ها را نشان می‌دهد:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let x = 1;
+
+    match x {
+        1 =&gt; println!("one"),
+        2 =&gt; println!("two"),
+        3 =&gt; println!("three"),
+        _ =&gt; println!("anything"),
+    }
+<span class="boring">}</span></code></pre>
+<p>این کد <code>one</code> را چاپ می‌کند، چون مقدار <code>x</code> برابر <code>1</code> است. این نحو زمانی مفید است که بخواهید کدتان در صورت دریافت یک مقدار مشخص و ثابت، کاری انجام دهد.</p>
+<h3 id="matching-named-variables"><a class="header" href="#matching-named-variables">تطبیق متغیرهای نام‌دار</a></h3>
+<p>متغیرهای نام‌گذاری‌شده الگوهای غیرقابل‌رد هستند که با هر مقداری مطابقت دارند، و ما بارها در این کتاب از آن‌ها استفاده کرده‌ایم. با این حال، زمانی که از متغیرهای نام‌گذاری‌شده در عبارات <code>match</code>، <code>if let</code>، یا <code>while let</code> استفاده می‌کنید، یک پیچیدگی وجود دارد. زیرا هر یک از این نوع عبارات یک دامنه جدید را شروع می‌کنند، متغیرهایی که به‌عنوان بخشی از یک الگو در داخل عبارت تعریف می‌شوند، متغیرهایی با همان نام در خارج را پوشش می‌دهند، همان‌طور که برای همه متغیرها صدق می‌کند. در فهرست 19-11، یک متغیر به نام <code>x</code> با مقدار <code>Some(5)</code> و یک متغیر <code>y</code> با مقدار <code>10</code> تعریف می‌کنیم. سپس یک عبارت <code>match</code> روی مقدار <code>x</code> ایجاد می‌کنیم. به الگوها در بازوهای match و دستور <code>println!</code> در انتها نگاه کنید و سعی کنید قبل از اجرای این کد یا خواندن بیشتر، حدس بزنید که کد چه چیزی را چاپ خواهد کرد.</p>
+<figure class="listing" id="listing-19-11">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let x = Some(5);
+    let y = 10;
+
+    match x {
+        Some(50) =&gt; println!("Got 50"),
+        Some(y) =&gt; println!("Matched, y = {y}"),
+        _ =&gt; println!("Default case, x = {x:?}"),
+    }
+
+    println!("at the end: x = {x:?}, y = {y}");
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-19-11">لیست ۱۹-۱۱</a>: یک عبارت &lt;code&gt;&lt;/x-listing&gt;match&lt;/code&gt; با بازویی که یک متغیر جدید معرفی می‌کند که متغیر موجود &lt;code&gt;y&lt;/code&gt; را پوشش می‌دهد</figcaption>
+</figure>
+<p>بیایید بررسی کنیم که وقتی عبارت <code>match</code> اجرا می‌شود چه اتفاقی می‌افتد. الگوی موجود در بازوی اول match با مقدار تعریف‌شده <code>x</code> مطابقت ندارد، بنابراین کد ادامه می‌یابد.</p>
+<p>الگوی بازوی دوم <code>match</code> یک متغیر جدید به نام <code>y</code> معرفی می‌کند که با هر مقداری درون یک مقدار <code>Some</code> مطابقت پیدا می‌کند. چون درون عبارت <code>match</code> در یک دامنهٔ جدید هستیم، این <code>y</code> متغیری جدید است، نه همان <code>y</code> ای که در ابتدا با مقدار <code>10</code> تعریف کردیم. این بایندینگ جدید <code>y</code> با هر مقداری درون یک <code>Some</code> مطابقت می‌کند، که دقیقاً همان چیزی است که در <code>x</code> داریم. بنابراین این <code>y</code> جدید به مقدار درونی <code>Some</code> در <code>x</code> متصل می‌شود. این مقدار <code>5</code> است، پس عبارت مربوط به آن بازو اجرا می‌شود و <code>Matched, y = 5</code> را چاپ می‌کند.</p>
+<p>اگر <code>x</code> به جای <code>Some(5)</code> یک مقدار <code>None</code> بود، الگوهای موجود در دو بازوی اول مطابقت نداشتند، بنابراین مقدار به علامت زیرخط (<code>_</code>) مطابقت داده می‌شد. ما متغیر <code>x</code> را در الگوی بازوی زیرخط معرفی نکردیم، بنابراین <code>x</code> در عبارت همچنان همان <code>x</code> خارجی است که پوشش داده نشده است. در این حالت فرضی، عبارت <code>match</code> پیام <code>Default case, x = None</code> را چاپ می‌کرد.</p>
+<p>وقتی عبارت <code>match</code> تمام می‌شود، دامنه آن نیز پایان می‌یابد، و همین‌طور دامنه <code>y</code> داخلی. دستور <code>println!</code> آخر پیام <code>at the end: x = Some(5), y = 10</code> را تولید می‌کند.</p>
+<p>برای ایجاد یک عبارت <code>match</code> که مقادیر <code>x</code> و <code>y</code> بیرونی را مقایسه کند، به‌جای معرفی یک متغیر جدید که متغیر <code>y</code> موجود را سایه‌بان (shadow) کند، باید از یک شرط نگهبان <code>match</code> (match guard) استفاده کنیم. درباره‌ی نگهبان‌های <code>match</code> بعداً در بخش <a href="#adding-conditionals-with-match-guards">«شرط‌های اضافی با Match Guards»</a><!-- ignore --> صحبت خواهیم کرد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="multiple-patterns"></a></p>
+<h3 id="matching-multiple-patterns"><a class="header" href="#matching-multiple-patterns">چند الگو (Multiple Patterns)</a></h3>
+<p>در عبارات <code>match</code> می‌توانید چندین الگو را با استفاده از سینتکس <code>|</code> که عملگر <em>یا</em> (or) برای الگوها است، با هم مقایسه کنید. برای مثال، در کد زیر مقدار <code>x</code> را با شاخه‌های <code>match</code> مقایسه می‌کنیم که اولین شاخه شامل گزینه‌ی <em>یا</em> است، یعنی اگر مقدار <code>x</code> با هر یک از مقادیر موجود در آن شاخه مطابقت داشته باشد، کد آن شاخه اجرا خواهد شد:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let x = 1;
+
+    match x {
+        1 | 2 =&gt; println!("one or two"),
+        3 =&gt; println!("three"),
+        _ =&gt; println!("anything"),
+    }
+<span class="boring">}</span></code></pre>
+<p>این کد <code>one or two</code> را چاپ می‌کند.</p>
+<h3 id="matching-ranges-of-values-with-"><a class="header" href="#matching-ranges-of-values-with-">تطبیق بازه‌های مقدار با <code>..=</code></a></h3>
+<p>نحو <code>..=</code> به ما اجازه می‌دهد یک بازه شامل مقادیر را مطابقت دهیم. در کد زیر، وقتی یک الگو با هر کدام از مقادیر در بازه داده‌شده مطابقت داشته باشد، آن بازو اجرا خواهد شد:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let x = 5;
+
+    match x {
+        1..=5 =&gt; println!("one through five"),
+        _ =&gt; println!("something else"),
+    }
+<span class="boring">}</span></code></pre>
+<p>اگر مقدار <code>x</code> برابر با <code>1</code>، <code>2</code>، <code>3</code>، <code>4</code> یا <code>5</code> باشد، شاخه‌ی اول در <code>match</code> تطابق خواهد داشت. این نحو برای مقادیر متعدد در <code>match</code> بسیار راحت‌تر از استفاده‌ی مکرر از عملگر <code>|</code> است؛ زیرا اگر از <code>|</code> استفاده کنیم، باید به صورت <code>1 | 2 | 3 | 4 | 5</code> آن‌ها را مشخص کنیم. استفاده از بازه (range) بسیار کوتاه‌تر است، به‌ویژه اگر بخواهیم مثلاً هر عددی بین ۱ تا ۱۰۰۰ را تطبیق دهیم!</p>
+<p>کامپایلر بررسی می‌کند که بازه در زمان کامپایل خالی نیست، و چون تنها نوع‌هایی که راست می‌تواند تشخیص دهد که آیا یک بازه خالی است یا نه <code>char</code> و مقادیر عددی هستند، بازه‌ها فقط برای مقادیر عددی یا <code>char</code> مجاز هستند.</p>
+<p>در اینجا یک مثال با استفاده از بازه‌هایی از مقادیر <code>char</code> آمده است:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let x = 'c';
+
+    match x {
+        'a'..='j' =&gt; println!("early ASCII letter"),
+        'k'..='z' =&gt; println!("late ASCII letter"),
+        _ =&gt; println!("something else"),
+    }
+<span class="boring">}</span></code></pre>
+<p>راست می‌تواند تشخیص دهد که <code>'c'</code> در بازه الگوی اول است و پیام <code>early ASCII letter</code> را چاپ می‌کند.</p>
+<h3 id="destructuring-to-break-apart-values"><a class="header" href="#destructuring-to-break-apart-values">بازساخت‌گشایی برای جداکردن اجزای مقدار</a></h3>
+<p>ما همچنین می‌توانیم از الگوها برای تخریب (destructure) ساختارها (structs)، enums، و tuple‌ها استفاده کنیم تا از بخش‌های مختلف این مقادیر استفاده کنیم. بیایید به هر نوع مقدار نگاهی بیندازیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="destructuring-structs"></a></p>
+<h4 id="structs"><a class="header" href="#structs">ساختارها (Structs)</a></h4>
+<p>فهرست 19-12 یک struct به نام <code>Point</code> را با دو فیلد، <code>x</code> و <code>y</code> نشان می‌دهد که می‌توانیم با استفاده از یک الگو در یک عبارت <code>let</code> آن را تخریب کنیم.</p>
+<figure class="listing" id="listing-19-12">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn main() {
+    let p = Point { x: 0, y: 7 };
+
+    let Point { x: a, y: b } = p;
+    assert_eq!(0, a);
+    assert_eq!(7, b);
+}</code></pre>
+<figcaption><a href="#listing-19-12">لیست ۱۹-۱۲</a>: تخریب فیلدهای یک struct به متغیرهای جداگانه</figcaption>
+</figure>
+<p>این کد متغیرهای <code>a</code> و <code>b</code> را ایجاد می‌کند که با مقادیر فیلدهای <code>x</code> و <code>y</code> از struct <code>p</code> مطابقت دارند. این مثال نشان می‌دهد که نام متغیرها در الگو نیازی به مطابقت با نام فیلدهای struct ندارند. با این حال، معمولاً نام متغیرها با نام فیلدها مطابقت داده می‌شوند تا یادآوری اینکه کدام متغیرها از کدام فیلدها آمده‌اند آسان‌تر شود. به‌دلیل این استفاده معمول و به‌دلیل اینکه نوشتن <code>let Point { x: x, y: y } = p;</code> تکرار زیادی دارد، راست یک نحو کوتاه برای الگوهایی که فیلدهای struct را مطابقت می‌دهند فراهم می‌کند: فقط کافی است نام فیلد struct را لیست کنید و متغیرهایی که از الگو ایجاد می‌شوند همان نام‌ها را خواهند داشت. فهرست 19-13 به همان روشی که کد در فهرست 19-12 عمل می‌کند، اما متغیرهای ایجادشده در الگوی <code>let</code> به‌جای <code>a</code> و <code>b</code>، <code>x</code> و <code>y</code> هستند.</p>
+<figure class="listing" id="listing-19-13">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn main() {
+    let p = Point { x: 0, y: 7 };
+
+    let Point { x, y } = p;
+    assert_eq!(0, x);
+    assert_eq!(7, y);
+}</code></pre>
+<figcaption><a href="#listing-19-13">لیست ۱۹-۱۳</a>: تخریب فیلدهای struct با استفاده از نحو کوتاه فیلد struct</figcaption>
+</figure>
+<p>این کد متغیرهای <code>x</code> و <code>y</code> را ایجاد می‌کند که با فیلدهای <code>x</code> و <code>y</code> از متغیر <code>p</code> مطابقت دارند. نتیجه این است که متغیرهای <code>x</code> و <code>y</code> مقادیر از ساختار <code>p</code> را شامل می‌شوند.</p>
+<p>ما همچنین می‌توانیم با مقادیر ثابت (literals) به‌عنوان بخشی از الگوی struct تخریب کنیم، به‌جای ایجاد متغیرهایی برای همه فیلدها. انجام این کار به ما اجازه می‌دهد برخی از فیلدها را برای مقادیر خاصی تست کنیم، در حالی که متغیرهایی برای تخریب فیلدهای دیگر ایجاد می‌کنیم.</p>
+<p>در فهرست 19-14، یک عبارت <code>match</code> داریم که مقادیر <code>Point</code> را به سه حالت تقسیم می‌کند: نقاطی که مستقیماً روی محور <code>x</code> قرار دارند (که در صورتی درست است که <code>y = 0</code>)، روی محور <code>y</code> (<code>x = 0</code>)، یا هیچ‌کدام.</p>
+<figure class="listing" id="listing-19-14">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">struct Point {
+</span><span class="boring">    x: i32,
+</span><span class="boring">    y: i32,
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn main() {
+    let p = Point { x: 0, y: 7 };
+
+    match p {
+        Point { x, y: 0 } =&gt; println!("On the x axis at {x}"),
+        Point { x: 0, y } =&gt; println!("On the y axis at {y}"),
+        Point { x, y } =&gt; {
+            println!("On neither axis: ({x}, {y})");
+        }
+    }
+}</code></pre>
+<figcaption><a href="#listing-19-14">لیست ۱۹-۱۴</a>: تخریب و تطبیق مقادیر ثابت در یک الگو</figcaption>
+</figure>
+<p>بازوی اول هر نقطه‌ای که روی محور <code>x</code> قرار دارد را با مشخص کردن اینکه فیلد <code>y</code> در صورتی مطابقت دارد که مقدار آن با مقدار ثابت <code>0</code> مطابقت داشته باشد، تطبیق می‌دهد. الگو همچنان یک متغیر <code>x</code> ایجاد می‌کند که می‌توانیم در کد این بازو از آن استفاده کنیم.</p>
+<p>به‌طور مشابه، بازوی دوم هر نقطه روی محور <code>y</code> را با مشخص کردن اینکه فیلد <code>x</code> در صورتی که مقدار آن <code>0</code> باشد مطابقت دارد و یک متغیر <code>y</code> برای مقدار فیلد <code>y</code> ایجاد می‌کند. بازوی سوم هیچ مقدار ثابتی را مشخص نمی‌کند، بنابراین هر <code>Point</code> دیگری را مطابقت می‌دهد و متغیرهایی برای هر دو فیلد <code>x</code> و <code>y</code> ایجاد می‌کند.</p>
+<p>در این مثال، مقدار <code>p</code> به لطف <code>x</code> که مقدار <code>0</code> دارد، با بازوی دوم مطابقت دارد، بنابراین این کد پیام <code>On the y axis at 7</code> را چاپ می‌کند.</p>
+<p>به یاد داشته باشید که یک عبارت <code>match</code> پس از یافتن اولین الگوی مطابقت متوقف می‌شود، بنابراین حتی اگر <code>Point { x: 0, y: 0 }</code> روی محور <code>x</code> و محور <code>y</code> باشد، این کد فقط پیام <code>On the x axis at 0</code> را چاپ خواهد کرد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="destructuring-enums"></a></p>
+<h4 id="enums"><a class="header" href="#enums">شمارش‌ها (Enums)</a></h4>
+<p>ما در این کتاب enums را تخریب کرده‌ایم (برای مثال، فهرست 6-5 در فصل 6)، اما هنوز به‌طور خاص بحث نکرده‌ایم که الگوی تخریب یک enum مطابق با نحوه تعریف داده‌های ذخیره‌شده درون enum است. به‌عنوان مثال، در فهرست 19-15 از enum <code>Message</code> از فهرست 6-2 استفاده می‌کنیم و یک <code>match</code> با الگوهایی می‌نویسیم که هر مقدار داخلی را تخریب می‌کنند.</p>
+<figure class="listing" id="listing-19-15">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">enum Message {
+    Quit,
+    Move { x: i32, y: i32 },
+    Write(String),
+    ChangeColor(i32, i32, i32),
+}
+
+fn main() {
+    let msg = Message::ChangeColor(0, 160, 255);
+
+    match msg {
+        Message::Quit =&gt; {
+            println!("The Quit variant has no data to destructure.");
+        }
+        Message::Move { x, y } =&gt; {
+            println!("Move in the x direction {x} and in the y direction {y}");
+        }
+        Message::Write(text) =&gt; {
+            println!("Text message: {text}");
+        }
+        Message::ChangeColor(r, g, b) =&gt; {
+            println!("Change color to red {r}, green {g}, and blue {b}");
+        }
+    }
+}</code></pre>
+<figcaption><a href="#listing-19-15">لیست ۱۹-۱۵</a>: تخریب متغیرهای enum که مقادیر مختلفی دارند</figcaption>
+</figure>
+<p>این کد <code>Change color to red 0, green 160, and blue 255</code> را چاپ می‌کند. مقدار <code>msg</code> را تغییر دهید تا اجرای کد بازوهای دیگر را ببینید.</p>
+<p>برای متغیرهای enum بدون هیچ داده‌ای، مانند <code>Message::Quit</code>، نمی‌توان مقدار را بیشتر تخریب کرد. فقط می‌توان روی مقدار ثابت <code>Message::Quit</code> مطابقت داد، و هیچ متغیری در آن الگو وجود ندارد.</p>
+<p>برای متغیرهای enum شبیه به struct، مانند <code>Message::Move</code>، می‌توانیم از الگویی مشابه الگوی مشخص‌شده برای تطبیق structs استفاده کنیم. پس از نام متغیر، آکولاد باز می‌کنیم و سپس فیلدها را با متغیرها لیست می‌کنیم تا بخش‌ها را برای استفاده در کد این بازو تجزیه کنیم. در اینجا از فرم کوتاه همان‌طور که در فهرست 19-13 استفاده کردیم استفاده می‌کنیم.</p>
+<p>برای متغیرهای enum شبیه به tuple، مانند <code>Message::Write</code> که یک tuple با یک عنصر دارد و <code>Message::ChangeColor</code> که یک tuple با سه عنصر دارد، الگو مشابه الگویی است که برای تطبیق tuple‌ها مشخص می‌کنیم. تعداد متغیرها در الگو باید با تعداد عناصر در متغیر که تطبیق می‌دهیم مطابقت داشته باشد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="destructuring-nested-structs-and-enums"></a></p>
+<h4 id="nested-structs-and-enums"><a class="header" href="#nested-structs-and-enums">بازساخت‌گشایی ساختارها و enumهای تودرتو</a></h4>
+<p>تاکنون، مثال‌های ما همه تطبیق ساختارها یا enums در یک سطح عمیق بوده‌اند، اما تطبیق می‌تواند روی آیتم‌های تو در تو نیز کار کند! برای مثال، می‌توانیم کد در فهرست 19-15 را بازسازی کنیم تا از رنگ‌های RGB و HSV در پیام <code>ChangeColor</code> پشتیبانی کند، همان‌طور که در فهرست 19-16 نشان داده شده است.</p>
+<figure class="listing" id="listing-19-16">
+<pre><code class="language-rust">enum Color {
+    Rgb(i32, i32, i32),
+    Hsv(i32, i32, i32),
+}
+
+enum Message {
+    Quit,
+    Move { x: i32, y: i32 },
+    Write(String),
+    ChangeColor(Color),
+}
+
+fn main() {
+    let msg = Message::ChangeColor(Color::Hsv(0, 160, 255));
+
+    match msg {
+        Message::ChangeColor(Color::Rgb(r, g, b)) =&gt; {
+            println!("Change color to red {r}, green {g}, and blue {b}");
+        }
+        Message::ChangeColor(Color::Hsv(h, s, v)) =&gt; {
+            println!("Change color to hue {h}, saturation {s}, value {v}");
+        }
+        _ =&gt; (),
+    }
+}</code></pre>
+<figcaption><a href="#listing-19-16">لیست ۱۹-۱۶</a>: تطبیق روی enums تو در تو</figcaption>
+</figure>
+<p>الگوی بازوی اول در عبارت <code>match</code> یک متغیر enum به نام <code>Message::ChangeColor</code> را تطبیق می‌دهد که شامل یک متغیر <code>Color::Rgb</code> است؛ سپس الگو به سه مقدار داخلی <code>i32</code> متصل می‌شود. الگوی بازوی دوم نیز یک متغیر enum به نام <code>Message::ChangeColor</code> را تطبیق می‌دهد، اما enum داخلی به جای آن <code>Color::Hsv</code> را مطابقت می‌دهد. ما می‌توانیم این شرایط پیچیده را در یک عبارت <code>match</code> مشخص کنیم، حتی اگر دو enum درگیر باشند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="destructuring-structs-and-tuples"></a></p>
+<h4 id="structs-and-tuples"><a class="header" href="#structs-and-tuples">بازساخت‌گشایی ساختارها و تاپل‌ها</a></h4>
+<p>ما می‌توانیم الگوهای تخریب را به روش‌های پیچیده‌تر ترکیب، تطبیق و تو در تو کنیم. مثال زیر یک تخریب پیچیده را نشان می‌دهد که در آن ساختارها و tuple‌ها را داخل یک tuple تو در تو می‌کنیم و تمام مقادیر اولیه را تخریب می‌کنیم:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span><span class="boring">    struct Point {
+</span><span class="boring">        x: i32,
+</span><span class="boring">        y: i32,
+</span><span class="boring">    }
+</span><span class="boring">
+</span>    let ((feet, inches), Point { x, y }) = ((3, 10), Point { x: 3, y: -10 });
+<span class="boring">}</span></code></pre>
+<p>این کد به ما اجازه می‌دهد انواع پیچیده را به اجزای سازنده آن‌ها بشکنیم تا بتوانیم مقادیری که به آن‌ها علاقه داریم را جداگانه استفاده کنیم.</p>
+<p>تخریب با الگوها یک روش راحت برای استفاده از بخش‌هایی از مقادیر، مانند مقدار هر فیلد در یک ساختار، به‌صورت جداگانه است.</p>
+<h3 id="ignoring-values-in-a-pattern"><a class="header" href="#ignoring-values-in-a-pattern">نادیده‌گرفتن مقادیر در یک الگو</a></h3>
+<p>گاهی اوقات مفید است که مقادیر را در یک الگو نادیده بگیرید، مانند بازوی آخر یک <code>match</code>، برای دریافت یک catchall که هیچ کاری انجام نمی‌دهد اما تمام مقادیر باقی‌مانده ممکن را در نظر می‌گیرد. چندین روش برای نادیده گرفتن مقادیر کامل یا بخش‌هایی از مقادیر در یک الگو وجود دارد: استفاده از الگوی <code>_</code> (که دیده‌اید)، استفاده از الگوی <code>_</code> درون یک الگوی دیگر، استفاده از نامی که با یک زیرخط شروع می‌شود، یا استفاده از <code>..</code> برای نادیده گرفتن بخش‌های باقی‌مانده یک مقدار. بیایید بررسی کنیم چگونه و چرا از هر یک از این الگوها استفاده کنیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="ignoring-an-entire-value-with-_"></a></p>
+<h4 id="an-entire-value-with-_"><a class="header" href="#an-entire-value-with-_">نادیده‌گرفتن یک مقدار کامل با <code>_</code></a></h4>
+<p>ما از زیرخط به‌عنوان یک الگوی wildcard استفاده کرده‌ایم که با هر مقداری مطابقت دارد اما به مقدار متصل نمی‌شود. این به‌ویژه به‌عنوان بازوی آخر در یک عبارت <code>match</code> مفید است، اما ما همچنین می‌توانیم آن را در هر الگویی استفاده کنیم، از جمله پارامترهای تابع، همان‌طور که در فهرست 19-17 نشان داده شده است.</p>
+<figure class="listing" id="listing-19-17">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn foo(_: i32, y: i32) {
+    println!("This code only uses the y parameter: {y}");
+}
+
+fn main() {
+    foo(3, 4);
+}</code></pre>
+<figcaption><a href="#listing-19-17">لیست ۱۹-۱۷</a>: استفاده از &lt;code&gt;&lt;/x-listing&gt;_&lt;/code&gt; در یک امضای تابع</figcaption>
+</figure>
+<p>این کد مقدار <code>3</code> را که به‌عنوان آرگومان اول ارسال شده است، کاملاً نادیده می‌گیرد و پیام <code>This code only uses the y parameter: 4</code> را چاپ می‌کند.</p>
+<p>در بیشتر موارد، زمانی که دیگر نیازی به یک پارامتر تابع خاص ندارید، امضای تابع را تغییر می‌دهید تا آن پارامتر استفاده‌نشده را شامل نشود. نادیده گرفتن یک پارامتر تابع می‌تواند به‌ویژه در مواردی مفید باشد که، برای مثال، شما در حال پیاده‌سازی یک trait هستید و به یک امضای خاص نیاز دارید، اما بدنه تابع در پیاده‌سازی شما نیازی به یکی از پارامترها ندارد. در این صورت، از دریافت هشدار کامپایلر درباره پارامترهای استفاده‌نشده جلوگیری می‌کنید، همان‌طور که اگر به جای آن از یک نام استفاده می‌کردید، هشدار دریافت می‌کردید.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="ignoring-parts-of-a-value-with-a-nested-_"></a></p>
+<h4 id="parts-of-a-value-with-a-nested-_"><a class="header" href="#parts-of-a-value-with-a-nested-_">بخش‌هایی از مقدار با <code>_</code> تودرتو</a></h4>
+<p>ما همچنین می‌توانیم از <code>_</code> در داخل یک الگوی دیگر استفاده کنیم تا فقط بخشی از یک مقدار را نادیده بگیریم. برای مثال، وقتی می‌خواهیم فقط بخشی از یک مقدار را تست کنیم اما نیازی به استفاده از بخش‌های دیگر در کدی که می‌خواهیم اجرا کنیم نداریم. فهرست 19-18 کدی را نشان می‌دهد که مسئول مدیریت مقدار یک تنظیم است. نیازمندی‌های تجاری این است که کاربر نباید اجازه داشته باشد یک سفارشی‌سازی موجود برای یک تنظیم را بازنویسی کند، اما می‌تواند تنظیم را لغو کند و به آن یک مقدار بدهد اگر در حال حاضر لغو شده باشد.</p>
+<figure class="listing" id="listing-19-18">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let mut setting_value = Some(5);
+    let new_setting_value = Some(10);
+
+    match (setting_value, new_setting_value) {
+        (Some(_), Some(_)) =&gt; {
+            println!("Can't overwrite an existing customized value");
+        }
+        _ =&gt; {
+            setting_value = new_setting_value;
+        }
+    }
+
+    println!("setting is {setting_value:?}");
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-19-18">لیست ۱۹-۱۸</a>: استفاده از یک زیرخط در داخل الگوهایی که با متغیرهای &lt;code&gt;&lt;/x-listing&gt;Some&lt;/code&gt; مطابقت دارند وقتی نیازی به استفاده از مقدار داخل &lt;code&gt;Some&lt;/code&gt; نداریم</figcaption>
+</figure>
+<p>این کد پیام <code>Can't overwrite an existing customized value</code> را چاپ می‌کند و سپس <code>setting is Some(5)</code> را چاپ می‌کند. در بازوی اول match، نیازی به مطابقت یا استفاده از مقادیر داخل هر یک از متغیرهای <code>Some</code> نداریم، اما باید حالت‌هایی را که در آن‌ها <code>setting_value</code> و <code>new_setting_value</code> در حالت <code>Some</code> هستند، تست کنیم. در این صورت، دلیل تغییر ندادن <code>setting_value</code> را چاپ می‌کنیم و این مقدار تغییر نمی‌کند.</p>
+<p>در تمام موارد دیگر (اگر <code>setting_value</code> یا <code>new_setting_value</code> مقدار <code>None</code> داشته باشند) که توسط الگوی <code>_</code> در بازوی دوم بیان شده است، می‌خواهیم اجازه دهیم <code>new_setting_value</code> به <code>setting_value</code> تبدیل شود.</p>
+<p>ما همچنین می‌توانیم از زیرخط‌ها در مکان‌های مختلف در یک الگو برای نادیده گرفتن مقادیر خاص استفاده کنیم. فهرست 19-19 مثالی از نادیده گرفتن مقادیر دوم و چهارم در یک tuple پنج آیتمی را نشان می‌دهد.</p>
+<figure class="listing" id="listing-19-19">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let numbers = (2, 4, 8, 16, 32);
+
+    match numbers {
+        (first, _, third, _, fifth) =&gt; {
+            println!("Some numbers: {first}, {third}, {fifth}");
+        }
+    }
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-19-19">لیست ۱۹-۱۹</a>: نادیده گرفتن بخش‌های مختلف یک tuple</figcaption>
+</figure>
+<p>این کد <code>Some numbers: 2, 8, 32</code> را چاپ می‌کند و مقادیر <code>4</code> و <code>16</code> نادیده گرفته می‌شوند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="ignoring-an-unused-variable-by-starting-its-name-with-_"></a></p>
+<h4 id="an-unused-variable-by-starting-its-name-with-_"><a class="header" href="#an-unused-variable-by-starting-its-name-with-_">متغیر استفاده‌نشده با آغاز نام آن با <code>_</code></a></h4>
+<p>اگر یک متغیر ایجاد کنید اما از آن در هیچ جایی استفاده نکنید، راست معمولاً یک هشدار صادر می‌کند زیرا یک متغیر استفاده‌نشده ممکن است یک باگ باشد. با این حال، گاهی اوقات مفید است که بتوانید متغیری ایجاد کنید که هنوز از آن استفاده نمی‌کنید، مانند زمانی که در حال نمونه‌سازی یا تازه شروع یک پروژه هستید. در این وضعیت، می‌توانید به راست بگویید که درباره متغیر استفاده‌نشده هشدار ندهد، با شروع نام متغیر با یک زیرخط. در فهرست 19-20، دو متغیر استفاده‌نشده ایجاد می‌کنیم، اما وقتی این کد را کامپایل می‌کنیم، باید فقط یک هشدار درباره یکی از آن‌ها دریافت کنیم.</p>
+<figure class="listing" id="listing-19-20">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let _x = 5;
+    let y = 10;
+}</code></pre>
+<figcaption><a href="#listing-19-20">لیست ۱۹-۲۰</a>: شروع نام متغیر با یک زیرخط برای جلوگیری از هشدارهای متغیر استفاده‌نشده</figcaption>
+</figure>
+<p>اینجا درباره استفاده نکردن از متغیر <code>y</code> یک هشدار دریافت می‌کنیم، اما درباره استفاده نکردن از <code>_x</code> هشدار نمی‌گیریم.</p>
+<p>توجه داشته باشید که تفاوت ظریفی بین استفاده از فقط <code>_</code> و استفاده از نامی که با یک زیرخط شروع می‌شود وجود دارد. نحو <code>_x</code> همچنان مقدار را به متغیر متصل می‌کند، در حالی که <code>_</code> اصلاً متصل نمی‌شود. برای نشان دادن موردی که این تفاوت اهمیت دارد، فهرست 19-21 به ما یک خطا ارائه می‌دهد.</p>
+<figure class="listing" id="listing-19-21">
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">fn main() {
+</span>    let s = Some(String::from("Hello!"));
+
+    if let Some(_s) = s {
+        println!("found a string");
+    }
+
+    println!("{s:?}");
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-19-21">لیست ۱۹-۲۱</a>: یک متغیر استفاده‌نشده که با یک زیرخط شروع می‌شود همچنان مقدار را متصل می‌کند، که ممکن است مالکیت مقدار را بگیرد</figcaption>
+</figure>
+<p>ما یک خطا دریافت خواهیم کرد زیرا مقدار <code>s</code> همچنان به <code>_s</code> منتقل می‌شود، که مانع از استفاده دوباره از <code>s</code> می‌شود. با این حال، استفاده از زیرخط به‌تنهایی هرگز به مقدار متصل نمی‌شود. فهرست 19-22 بدون هیچ خطایی کامپایل خواهد شد زیرا <code>s</code> به <code>_</code> منتقل نمی‌شود.</p>
+<figure class="listing" id="listing-19-22">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let s = Some(String::from("Hello!"));
+
+    if let Some(_) = s {
+        println!("found a string");
+    }
+
+    println!("{s:?}");
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-19-22">لیست ۱۹-۲۲</a>: استفاده از یک زیرخط مقدار را متصل نمی‌کند</figcaption>
+</figure>
+<p>این کد به‌خوبی کار می‌کند زیرا ما هرگز <code>s</code> را به چیزی متصل نمی‌کنیم؛ بنابراین انتقال داده نمی‌شود.</p>
+<p><a id="ignoring-remaining-parts-of-a-value-with-"></a></p>
+<h4 id="remaining-parts-of-a-value-with-"><a class="header" href="#remaining-parts-of-a-value-with-">بخش‌های باقی‌ماندهٔ مقدار با <code>..</code></a></h4>
+<p>برای مقادیری که بخش‌های زیادی دارند، می‌توانیم از نحو <code>..</code> برای استفاده از بخش‌های خاص و نادیده گرفتن باقی بخش‌ها استفاده کنیم، و نیازی به لیست کردن زیرخط‌ها برای هر مقدار نادیده گرفته‌شده نخواهیم داشت. الگوی <code>..</code> هر بخشی از یک مقدار را که به‌طور صریح در بقیه الگو مطابقت داده نشده نادیده می‌گیرد. در فهرست 19-23، یک struct به نام <code>Point</code> داریم که یک مختصات در فضای سه‌بعدی نگه می‌دارد. در عبارت <code>match</code>، می‌خواهیم فقط روی مختصات <code>x</code> عمل کنیم و مقادیر موجود در فیلدهای <code>y</code> و <code>z</code> را نادیده بگیریم.</p>
+<figure class="listing" id="listing-19-23">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    struct Point {
+        x: i32,
+        y: i32,
+        z: i32,
+    }
+
+    let origin = Point { x: 0, y: 0, z: 0 };
+
+    match origin {
+        Point { x, .. } =&gt; println!("x is {x}"),
+    }
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-19-23">لیست ۱۹-۲۳</a>: نادیده گرفتن تمام فیلدهای یک &lt;code&gt;&lt;/x-listing&gt;Point&lt;/code&gt; به‌جز &lt;code&gt;x&lt;/code&gt; با استفاده از &lt;code&gt;..&lt;/code&gt;</figcaption>
+</figure>
+<p>ما مقدار <code>x</code> را فهرست می‌کنیم و سپس فقط الگوی <code>..</code> را اضافه می‌کنیم. این سریع‌تر از این است که <code>y: _</code> و <code>z: _</code> را فهرست کنیم، به‌ویژه زمانی که با ساختارهایی کار می‌کنیم که فیلدهای زیادی دارند و فقط یکی یا دو فیلد مهم هستند.</p>
+<p>نحو <code>..</code> به هر تعداد مقداری که نیاز باشد گسترش می‌یابد. فهرست 19-24 نشان می‌دهد که چگونه از <code>..</code> با یک tuple استفاده کنیم.</p>
+<figure class="listing" id="listing-19-24">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let numbers = (2, 4, 8, 16, 32);
+
+    match numbers {
+        (first, .., last) =&gt; {
+            println!("Some numbers: {first}, {last}");
+        }
+    }
+}</code></pre>
+<figcaption><a href="#listing-19-24">لیست ۱۹-۲۴</a>: تطبیق فقط اولین و آخرین مقادیر در یک tuple و نادیده گرفتن تمام مقادیر دیگر</figcaption>
+</figure>
+<p>در این کد، مقدار اول و آخر با <code>first</code> و <code>last</code> مطابقت داده می‌شوند. الگوی <code>..</code> تمام مقادیر میانی را مطابقت داده و نادیده می‌گیرد.</p>
+<p>با این حال، استفاده از <code>..</code> باید بدون ابهام باشد. اگر مشخص نباشد کدام مقادیر برای تطبیق و کدام برای نادیده گرفتن در نظر گرفته شده‌اند، راست به ما خطا می‌دهد. فهرست 19-25 مثالی از استفاده از <code>..</code> به شکلی مبهم را نشان می‌دهد، بنابراین کامپایل نخواهد شد.</p>
+<figure class="listing" id="listing-19-25">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">fn main() {
+    let numbers = (2, 4, 8, 16, 32);
+
+    match numbers {
+        (.., second, ..) =&gt; {
+            println!("Some numbers: {second}")
+        },
+    }
+}</code></pre>
+<figcaption><a href="#listing-19-25">لیست ۱۹-۲۵</a>: تلاشی برای استفاده از &lt;code&gt;&lt;/x-listing&gt;..&lt;/code&gt; به شکلی مبهم</figcaption>
+</figure>
+<p>وقتی این مثال را کامپایل می‌کنیم، این خطا را دریافت می‌کنیم:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling patterns v0.1.0 (file:///projects/patterns)
+error: `..` can only be used once per tuple pattern
+ --&gt; src/main.rs:5:22
+  |
+5 |         (.., second, ..) =&gt; {
+  |          --          ^^ can only be used once per tuple pattern
+  |          |
+  |          previously used here
+
+error: could not compile `patterns` (bin "patterns") due to 1 previous error
+</code></pre>
+<p>برای راست امکان‌پذیر نیست که تعیین کند چند مقدار در tuple باید نادیده گرفته شود قبل از اینکه یک مقدار را با <code>second</code> تطبیق دهد و سپس چند مقدار دیگر را بعد از آن نادیده بگیرد. این کد می‌تواند به این معنا باشد که می‌خواهیم <code>2</code> را نادیده بگیریم، <code>second</code> را به <code>4</code> متصل کنیم، و سپس <code>8</code>، <code>16</code> و <code>32</code> را نادیده بگیریم؛ یا اینکه می‌خواهیم <code>2</code> و <code>4</code> را نادیده بگیریم، <code>second</code> را به <code>8</code> متصل کنیم، و سپس <code>16</code> و <code>32</code> را نادیده بگیریم؛ و غیره. نام متغیر <code>second</code> برای راست معنی خاصی ندارد، بنابراین به دلیل استفاده از <code>..</code> در دو مکان به این شکل مبهم، خطای کامپایل دریافت می‌کنیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="extra-conditionals-with-match-guards"></a></p>
+<h3 id="adding-conditionals-with-match-guards"><a class="header" href="#adding-conditionals-with-match-guards">شرط‌های اضافی با محافظ‌های match</a></h3>
+<p>یک <em>match guard</em> یک شرط اضافی <code>if</code> است که پس از الگو در یک بازوی <code>match</code> مشخص می‌شود و باید برای انتخاب آن بازو نیز مطابقت داشته باشد. Match guardها برای بیان ایده‌های پیچیده‌تر از آنچه که یک الگو به‌تنهایی اجازه می‌دهد، مفید هستند. این قابلیت فقط در عبارات <code>match</code> در دسترس است، نه در عبارات <code>if let</code> یا <code>while let</code>.</p>
+<p>شرط می‌تواند از متغیرهایی که در الگو ساخته شده‌اند استفاده کند. فهرست ۱۹-۲۶ یک <code>match</code> را نشان می‌دهد که بازوی اول آن الگوی <code>Some(x)</code> دارد و همچنین یک match guard به‌صورت <code>if x % 2 == 0</code> دارد (که اگر عدد زوج باشد، <code>true</code> خواهد بود).</p>
+<figure class="listing" id="listing-19-26">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let num = Some(4);
+
+    match num {
+        Some(x) if x % 2 == 0 =&gt; println!("The number {x} is even"),
+        Some(x) =&gt; println!("The number {x} is odd"),
+        None =&gt; (),
+    }
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-19-26">لیست ۱۹-۲۶</a>: افزودن یک match guard به یک الگو</figcaption>
+</figure>
+<p>این مثال پیام <code>The number 4 is even</code> را چاپ می‌کند. وقتی <code>num</code> با الگوی بازوی اول مقایسه می‌شود، مطابقت دارد، زیرا <code>Some(4)</code> با <code>Some(x)</code> مطابقت دارد. سپس match guard بررسی می‌کند که آیا باقی‌مانده تقسیم <code>x</code> بر 2 برابر با 0 است یا نه، و چون این شرط برقرار است، بازوی اول انتخاب می‌شود.</p>
+<p>اگر به‌جای آن <code>num</code> برابر <code>Some(5)</code> بود، match guard در بازوی اول <code>false</code> می‌شد، زیرا باقی‌ماندهٔ تقسیم ۵ بر ۲ برابر ۱ است که با ۰ برابر نیست. آنگاه Rust به بازوی دوم می‌رفت که مطابقت پیدا می‌کرد، چون بازوی دوم match guard ندارد و بنابراین با هر واریانت <code>Some</code> مطابقت می‌کند.</p>
+<p>هیچ راهی برای بیان شرط <code>if x % 2 == 0</code> در داخل یک الگو وجود ندارد، بنابراین match guard به ما امکان بیان این منطق را می‌دهد. نقطه ضعف این قابلیت اضافی این است که کامپایلر سعی نمی‌کند بررسی کند که آیا تمام موارد پوشش داده شده‌اند یا نه وقتی که match guardها درگیر هستند.</p>
+<p>در فهرست 19-11 اشاره کردیم که می‌توانیم از match guardها برای حل مشکل shadowing الگو استفاده کنیم. به یاد بیاورید که ما یک متغیر جدید در داخل الگو در عبارت <code>match</code> ایجاد کردیم به جای استفاده از متغیر بیرون از <code>match</code>. آن متغیر جدید به این معنا بود که نمی‌توانستیم مقدار متغیر بیرونی را تست کنیم. فهرست 19-27 نشان می‌دهد که چگونه می‌توانیم از یک match guard برای رفع این مشکل استفاده کنیم.</p>
+<figure class="listing" id="listing-19-27">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let x = Some(5);
+    let y = 10;
+
+    match x {
+        Some(50) =&gt; println!("Got 50"),
+        Some(n) if n == y =&gt; println!("Matched, n = {n}"),
+        _ =&gt; println!("Default case, x = {x:?}"),
+    }
+
+    println!("at the end: x = {x:?}, y = {y}");
+}</code></pre>
+<figcaption><a href="#listing-19-27">لیست ۱۹-۲۷</a>: استفاده از یک match guard برای آزمایش برابری با یک متغیر بیرونی</figcaption>
+</figure>
+<p>این کد اکنون پیام <code>Default case, x = Some(5)</code> را چاپ می‌کند. الگوی بازوی دوم match یک متغیر جدید <code>y</code> که متغیر بیرونی <code>y</code> را shadow کند معرفی نمی‌کند، به این معنا که می‌توانیم از متغیر بیرونی <code>y</code> در match guard استفاده کنیم. به جای مشخص کردن الگو به‌عنوان <code>Some(y)</code> که متغیر بیرونی <code>y</code> را shadow می‌کرد، ما <code>Some(n)</code> را مشخص می‌کنیم. این یک متغیر جدید <code>n</code> ایجاد می‌کند که هیچ چیزی را shadow نمی‌کند زیرا هیچ متغیر <code>n</code> در خارج از <code>match</code> وجود ندارد.</p>
+<p>match guard با عبارت <code>if n == y</code> یک الگو نیست و بنابراین متغیر جدیدی معرفی نمی‌کند. این <code>y</code> همان <code>y</code> بیرونی <em>است</em>، نه یک <code>y</code> جدید که آن را سایه بزند (shadow)، و می‌توانیم با مقایسهٔ <code>n</code> با <code>y</code> به دنبال مقداری بگردیم که با <code>y</code> بیرونی برابر باشد.</p>
+<p>همچنین می‌توانید از عملگر <em>یا</em> <code>|</code> در یک match guard استفاده کنید تا چندین الگو مشخص کنید؛ شرط match guard برای تمام الگوها اعمال خواهد شد. فهرست 19-28 تقدم هنگام ترکیب یک الگو که از <code>|</code> استفاده می‌کند با یک match guard را نشان می‌دهد. بخش مهم این مثال این است که match guard <code>if y</code> برای <code>4</code>، <code>5</code>، <em>و</em> <code>6</code> اعمال می‌شود، حتی اگر ممکن است به نظر برسد که <code>if y</code> فقط برای <code>6</code> اعمال می‌شود.</p>
+<figure class="listing" id="listing-19-28">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let x = 4;
+    let y = false;
+
+    match x {
+        4 | 5 | 6 if y =&gt; println!("yes"),
+        _ =&gt; println!("no"),
+    }
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-19-28">لیست ۱۹-۲۸</a>: ترکیب چندین الگو با یک match guard</figcaption>
+</figure>
+<p>شرط match بیان می‌کند که بازو فقط وقتی مطابقت دارد که مقدار <code>x</code> برابر <code>4</code>، <code>5</code> یا <code>6</code> باشد <em>و</em> <code>y</code> برابر <code>true</code> باشد. وقتی این کد اجرا می‌شود، الگوی بازوی اول مطابقت دارد چون <code>x</code> برابر <code>4</code> است، اما match guard با عبارت <code>if y</code> مقدار <code>false</code> دارد، بنابراین بازوی اول انتخاب نمی‌شود. کد به سراغ بازوی دوم می‌رود که مطابقت دارد، و این برنامه <code>no</code> را چاپ می‌کند. دلیلش این است که شرط <code>if</code> بر کل الگوی <code>4 | 5 | 6</code> اعمال می‌شود، نه فقط بر آخرین مقدار یعنی <code>6</code>. به عبارت دیگر، تقدم یک match guard نسبت به یک الگو به این شکل عمل می‌کند:</p>
+<pre><code class="language-text">(4 | 5 | 6) if y =&gt; ...
+</code></pre>
+<p>و نه به این شکل:</p>
+<pre><code class="language-text">4 | 5 | (6 if y) =&gt; ...
+</code></pre>
+<p>بعد از اجرای کد، رفتار تقدم آشکار می‌شود: اگر match guard فقط برای مقدار نهایی در لیست مقادیر مشخص‌شده با استفاده از عملگر <code>|</code> اعمال می‌شد، بازو مطابقت می‌داشت و برنامه پیام <code>yes</code> را چاپ می‌کرد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="-bindings"></a></p>
+<h3 id="using--bindings"><a class="header" href="#using--bindings">اتصال‌ها با <code>@</code></a></h3>
+<p>عملگر <em>at</em> (<code>@</code>) به ما امکان می‌دهد یک متغیر ایجاد کنیم که یک مقدار را نگه می‌دارد و همزمان آن مقدار را برای تطبیق با الگو آزمایش می‌کند. در فهرست 19-29، ما می‌خواهیم بررسی کنیم که آیا فیلد <code>id</code> در <code>Message::Hello</code> در بازه <code>3..=7</code> قرار دارد یا نه. همچنین می‌خواهیم مقدار را به متغیر <code>id_variable</code> متصل کنیم تا بتوانیم در کد مرتبط با بازو از آن استفاده کنیم. می‌توانستیم این متغیر را <code>id</code> بنامیم، مشابه فیلد، اما برای این مثال از نام متفاوتی استفاده خواهیم کرد.</p>
+<figure class="listing" id="listing-19-29">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    enum Message {
+        Hello { id: i32 },
+    }
+
+    let msg = Message::Hello { id: 5 };
+
+    match msg {
+        Message::Hello { id: id @ 3..=7 } =&gt; {
+            println!("Found an id in range: {id}")
+        }
+        Message::Hello { id: 10..=12 } =&gt; {
+            println!("Found an id in another range")
+        }
+        Message::Hello { id } =&gt; println!("Found some other id: {id}"),
+    }
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-19-29">لیست ۱۹-۲۹</a>: استفاده از &lt;code&gt;&lt;/x-listing&gt;@&lt;/code&gt; برای اتصال به یک مقدار در یک الگو و همزمان آزمایش آن</figcaption>
+</figure>
+<p>این مثال <code>Found an id in range: 5</code> را چاپ می‌کند. با نوشتن <code>id @</code> پیش از بازهٔ <code>3..=7</code>، هر مقداری را که با بازه مطابقت پیدا کند در متغیری به نام <code>id</code> ذخیره می‌کنیم و در همان حال بررسی می‌کنیم که مقدار با الگوی بازه مطابقت دارد.</p>
+<p>در بازوی دوم، جایی که فقط یک بازه در الگو مشخص شده است، کدی که با بازو مرتبط است متغیری ندارد که مقدار واقعی فیلد <code>id</code> را شامل شود. مقدار فیلد <code>id</code> می‌توانست 10، 11، یا 12 باشد، اما کدی که با آن الگو مرتبط است نمی‌داند مقدار چیست. کد بازو نمی‌تواند از مقدار فیلد <code>id</code> استفاده کند، زیرا ما مقدار <code>id</code> را در یک متغیر ذخیره نکرده‌ایم.</p>
+<p>در بازوی آخر، جایی که یک متغیر بدون بازه مشخص کرده‌ایم، مقدار برای استفاده در کد بازو در متغیری به نام <code>id</code> در دسترس است. دلیل این است که ما از نحو کوتاه فیلدهای struct استفاده کرده‌ایم. اما در این بازو هیچ آزمایشی برای مقدار در فیلد <code>id</code> اعمال نکرده‌ایم، همان‌طور که در دو بازوی اول انجام دادیم: هر مقداری با این الگو مطابقت خواهد داشت.</p>
+<p>استفاده از <code>@</code> به ما امکان می‌دهد یک مقدار را آزمایش کنیم و همزمان آن را در یک متغیر ذخیره کنیم، همه در یک الگو.</p>
+<h2 id="summary"><a class="header" href="#summary">جمع‌بندی</a></h2>
+<p>الگوهای راست در تشخیص بین انواع مختلف داده بسیار مفید هستند. وقتی در عبارات <code>match</code> استفاده می‌شوند، راست اطمینان حاصل می‌کند که الگوهای شما تمام مقادیر ممکن را پوشش می‌دهند، وگرنه برنامه شما کامپایل نخواهد شد. الگوها در عبارات <code>let</code> و پارامترهای تابع این ساختارها را مفیدتر می‌کنند و تخریب مقادیر به بخش‌های کوچک‌تر را همزمان با تخصیص به متغیرها ممکن می‌سازند. ما می‌توانیم الگوهای ساده یا پیچیده‌ای ایجاد کنیم که نیازهای ما را برآورده کنند.</p>
+<p>در فصل ماقبل آخر این کتاب، به برخی از جنبه‌های پیشرفته از ویژگی‌های مختلف راست خواهیم پرداخت.</p><nav class="page-nav"><a href="ch19-02-refutability.html">→ ردپذیری: آیا یک الگو ممکن است تطبیق نکند</a><a href="ch20-00-advanced-features.html">ویژگی‌های پیشرفته ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

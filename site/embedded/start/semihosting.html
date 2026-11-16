@@ -1,0 +1,91 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>Semihosting — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="start/semihosting"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="semihosting"><a class="header" href="#semihosting">نیمه‌میزبانی (Semihosting)</a></h1>
+<p>Semihosting سازوکاری است که به دستگاه‌های توکار اجازه می‌دهد روی میزبان ورودی/خروجی انجام دهند و عمدتاً برای ثبت پیام‌ها در کنسول میزبان به کار می‌رود. Semihosting به یک نشست اشکال‌زدایی نیاز دارد و تقریباً هیچ چیز دیگر (بدون سیم اضافی!)، پس استفاده از آن فوق‌العاده راحت است. اشکالش این است که فوق‌العاده کند است: بسته به اشکال‌زدای سخت‌افزاری (مثلاً ST-Link) که به کار می‌برید، هر عملیات نوشتن می‌تواند چند میلی‌ثانیه طول بکشد.</p>
+<p>crate با نام <a href="https://crates.io/crates/cortex-m-semihosting"><code>cortex-m-semihosting</code></a> یک API برای انجام عملیات semihosting روی دستگاه‌های Cortex-M فراهم می‌کند. برنامهٔ زیر نسخهٔ semihosting برنامهٔ «Hello, world!» است:</p>
+<pre><code class="language-rust ignore">#![no_main]
+#![no_std]
+
+use panic_halt as _;
+
+use cortex_m_rt::entry;
+use cortex_m_semihosting::hprintln;
+
+#[entry]
+fn main() -&gt; ! {
+    hprintln!("Hello, world!").unwrap();
+
+    loop {}
+}</code></pre>
+<p>اگر این برنامه را روی سخت‌افزار اجرا کنید، پیام “Hello, world!” را در گزارش‌های OpenOCD می‌بینید.</p>
+<pre><code class="language-text">$ openocd
+(..)
+Hello, world!
+(..)
+</code></pre>
+<p>ابتدا باید semihosting را در OpenOCD از طریق GDB فعال کنید:</p>
+<pre><code class="language-console">(gdb) monitor arm semihosting enable
+semihosting is enabled
+</code></pre>
+<p>QEMU عملیات semihosting را می‌فهمد، بنابراین برنامهٔ بالا بدون نیاز به شروع یک نشست اشکال‌زدایی با <code>qemu-system-arm</code> هم کار می‌کند. توجه کنید که برای فعال کردن پشتیبانی از semihosting باید پرچم <code>-semihosting-config</code> را به QEMU بدهید؛ این پرچم‌ها از قبل در فایل <code>.cargo/config.toml</code> قالب گنجانده شده‌اند.</p>
+<pre><code class="language-text">$ # this program will block the terminal
+$ cargo run
+     Running `qemu-system-arm (..)
+Hello, world!
+</code></pre>
+<p>یک عملیات semihosting به نام <code>exit</code> هم هست که می‌توان با آن فرایند QEMU را خاتمه داد. مهم: روی سخت‌افزار از <code>debug::exit</code> استفاده <strong>نکنید</strong>؛ این تابع می‌تواند نشست OpenOCD شما را خراب کند و تا زمانی که آن را دوباره راه‌اندازی نکنید نمی‌توانید برنامهٔ دیگری را اشکال‌زدایی کنید.</p>
+<pre><code class="language-rust ignore">#![no_main]
+#![no_std]
+
+use panic_halt as _;
+
+use cortex_m_rt::entry;
+use cortex_m_semihosting::debug;
+
+#[entry]
+fn main() -&gt; ! {
+    let roses = "blue";
+
+    if roses == "red" {
+        debug::exit(debug::EXIT_SUCCESS);
+    } else {
+        debug::exit(debug::EXIT_FAILURE);
+    }
+
+    loop {}
+}</code></pre>
+<pre><code class="language-text">$ cargo run
+     Running `qemu-system-arm (..)
+
+$ echo $?
+1
+</code></pre>
+<p>یک نکتهٔ آخر: می‌توانید رفتار panic را روی <code>exit(EXIT_FAILURE)</code> تنظیم کنید. این به شما اجازه می‌دهد آزمون‌های run-pass از نوع <code>no_std</code> بنویسید که بتوانید روی QEMU اجرا کنید.</p>
+<p>برای راحتی، crate با نام <code>panic-semihosting</code> یک feature به نام “exit” دارد که وقتی فعال شود، پس از ثبت پیام panic در stderr میزبان، <code>exit(EXIT_FAILURE)</code> را فراخوانی می‌کند.</p>
+<pre><code class="language-rust ignore">#![no_main]
+#![no_std]
+
+use panic_semihosting as _; // features = ["exit"]
+
+use cortex_m_rt::entry;
+use cortex_m_semihosting::debug;
+
+#[entry]
+fn main() -&gt; ! {
+    let roses = "blue";
+
+    assert_eq!(roses, "red");
+
+    loop {}
+}</code></pre>
+<pre><code class="language-text">$ cargo run
+     Running `qemu-system-arm (..)
+panicked at 'assertion failed: `(left == right)`
+  left: `"blue"`,
+ right: `"red"`', examples/hello.rs:15:5
+
+$ echo $?
+1
+</code></pre>
+<p><strong>توجه</strong>: برای فعال کردن این feature روی <code>panic-semihosting</code>، بخش وابستگی‌های <code>Cargo.toml</code> خود را، همان‌جا که <code>panic-semihosting</code> مشخص شده است، این‌گونه ویرایش کنید:</p>
+<pre><code class="language-toml">panic-semihosting = { version = "VERSION", features = ["exit"] }
+</code></pre>
+<p>که در آن <code>VERSION</code> نسخهٔ موردنظر است. برای اطلاعات بیشتر دربارهٔ featureهای وابستگی‌ها، بخش <a href="../../cargo/reference/specifying-dependencies.html"><code>specifying dependencies</code></a> کتاب Cargo را ببینید.</p><nav class="page-nav"><a href="../../embedded/start/registers.html">→ ثبات‌های نگاشت‌شده به حافظه</a><a href="../../embedded/start/panicking.html">Panicking ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

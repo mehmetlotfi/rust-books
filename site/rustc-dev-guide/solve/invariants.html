@@ -1,0 +1,146 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>ناورداهای سامانهٔ نوع — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="solve/invariants"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="invariants-of-the-type-system"><a class="header" href="#invariants-of-the-type-system">ناورداهای (Invariants) سامانهٔ نوع</a></h1>
+<p>FIXME: این فایل دربارهٔ ناورداهای کل سامانهٔ نوع صحبت می‌کند، نه فقط حل‌کننده</p>
+<p>ناورداهای (invariant) زیادی وجود دارند – چیزهایی که سامانهٔ نوع تضمین می‌کند همیشه درست‌اند –
+که مطلوب‌اند یا از زبان‌ها و سامانه‌های نوع دیگر انتظار می‌رود.
+متأسفانه تعداد قابل‌توجهی از آن‌ها اکنون در Rust برقرار نیستند.
+این یا ذاتی طراحی آن است یا ناشی از باگ‌ها،
+و چیزی است که ممکن است در آینده تغییر کند.</p>
+<p>مهم است بدانید هنگام کار روی سامانهٔ نوع و با آن چه چیزهایی را می‌توانید فرض کنید،
+پس این فهرستی ناقص و غیررسمی از ناورداهای سامانهٔ نوع هسته است:</p>
+<ul>
+<li>✅: این ناوردا بیشتر برقرار است، با چند استثنای عجیب یا باگ‌های فعلی</li>
+<li>❌: این ناوردا برقرار نیست و بعید است در آینده برقرار شود؛ برای سلامت (soundness) به آن تکیه نکنید یا هنگام این کار فوق‌العاده مراقب باشید</li>
+</ul>
+<h3 id="wfx-implies-wfnormalizex-"><a class="header" href="#wfx-implies-wfnormalizex-"><code>wf(X)</code> implies <code>wf(normalize(X))</code> ✅</a></h3>
+<p>اگر نوعی که alias دارد well-formed باشد،
+باید پس از نرمال‌سازی آن aliasها هم well-formed باشد.
+به این تکیه می‌کنیم، وگرنه باید well-formed بودن این نوع‌ها را دوباره بررسی می‌کردیم.</p>
+<p>این در حال حاضر به‌دلیل یک ناسالمی سامانهٔ نوع برقرار نیست: <a href="https://github.com/rust-lang/rust/issues/84533">#84533</a>.</p>
+<h3 id="structural-equality-modulo-regions-implies-semantic-equality-"><a class="header" href="#structural-equality-modulo-regions-implies-semantic-equality-">برابری ساختاری به‌پیمانهٔ نواحی مستلزم برابری معنایی است ✅</a></h3>
+<p>اگر نوعی داشته باشید و پس از جایگزین کردن هر ناحیه با متغیرهای استنتاج یکتا
+در هر دو سمت چپ و راست آن را با خودش برابر کنید،
+نوع‌هایی که اکنون ممکن است از نظر ساختاری متفاوت باشند باید همچنان با یکدیگر برابر باشند.</p>
+<p>این لازم است تا از موفق شدن goalها در HIR typeck و سپس شکست خوردن در MIR borrowck جلوگیری شود.
+اگر این ناوردا نقض شود، MIR typeck با یک ICE شکست می‌خورد.</p>
+<h3 id="applying-inference-results-from-a-goal-does-not-change-its-result-"><a class="header" href="#applying-inference-results-from-a-goal-does-not-change-its-result-">اعمال نتایج استنتاج یک goal نتیجهٔ آن را تغییر نمی‌دهد ❌</a></h3>
+<p>TODO: این ناوردا به شکلی عجیب صورت‌بندی شده و باید تفصیل داده شود.
+تقریباً: می‌خواهم این بررسی فقط در صورت وجود باگ در حل‌کننده شکست بخورد:
+<a href="https://github.com/rust-lang/rust/blob/2ffeb4636b4ae376f716dc4378a7efb37632dc2d/compiler/rustc_trait_selection/src/solve/eval_ctxt.rs#L391-L407">https://github.com/rust-lang/rust/blob/2ffeb4636b4ae376f716dc4378a7efb37632dc2d/compiler/rustc_trait_selection/src/solve/eval_ctxt.rs#L391-L407</a>.
+باید این بررسی را دوباره اضافه کنیم و ببینیم کجا خراب می‌شود :3</p>
+<p>اگر یک goal را اثبات کنیم/نوع‌ها را برابر کنیم/هر کار دیگری، قیدهای استنتاج حاصل را اعمال کنیم،
+و سپس عمل اصلی را دوباره انجام دهیم، نتیجه باید یکسان باشد.</p>
+<p>این متأسفانه – دست‌کم در حل‌کنندهٔ جدید – به چند دلیل آزاردهنده برقرار نیست.</p>
+<h3 id="the-trait-solver-has-to-be-locally-sound-"><a class="header" href="#the-trait-solver-has-to-be-locally-sound-">حل‌کنندهٔ صفت باید <em>به‌صورت موضعی سالم (locally sound)</em> باشد ✅</a></h3>
+<p>این یعنی هرگز نباید برای goalهایی که هیچ <code>impl</code>ای برایشان وجود ندارد <em>موفقیت</em> برگردانیم.
+این یعنی فرض کنیم صفتی پیاده‌سازی شده با اینکه نشده است،
+که به‌احتمال زیاد به ناسالمی واقعی می‌انجامد.
+هنگام استفاده از <code>where</code>-boundها برای اثبات یک goal، <code>impl</code> را کاربر آیتم فراهم می‌کند.</p>
+<p>این ناوردا فقط در صورتی برقرار است که قیدهای ناحیه را بررسی کنیم.
+چون در بررسی هم‌پوشانی منفی ضمنی در coherence قیدهای ناحیه را بررسی نمی‌کنیم،
+این ناوردا در آنجا نقض می‌شود.
+چون این بررسی به <em>کامل بودن (completeness)</em> حل‌کنندهٔ صفت متکی است،
+نمی‌تواند از بررسی فعلی قیدهای ناحیه
+– <code>InferCtxt::resolve_regions</code> – استفاده کند، چون مدیریت آن از goalهای outlives نوع ناقص است.</p>
+<h3 id="normalization-of-semantically-equal-aliases-in-empty-environments-results-in-a-unique-type-"><a class="header" href="#normalization-of-semantically-equal-aliases-in-empty-environments-results-in-a-unique-type-">نرمال‌سازی aliasهای معناداً برابر در محیط‌های خالی به یک نوع یکتا می‌انجامد ✅</a></h3>
+<p>نرمال‌سازی نوع‌های alias/ثابت‌ها باید نتیجهٔ یکتا داشته باشد.
+وگرنه می‌توانیم به‌راحتی transmute را در کد ایمن پیاده کنیم.
+با توجه به تابع زیر، باید مطمئن شویم
+نوع‌های ورودی و خروجی همیشه به همان نوع مشخص نرمال می‌شوند.</p>
+<pre><code class="language-rust">fn foo&lt;T: Trait&gt;(
+    x: &lt;T as Trait&gt;::Assoc
+) -&gt; &lt;T as Trait&gt;::Assoc {
+    x
+}</code></pre>
+<p>بسیاری از مسائل ناسالمی که اکنون شناخته شده‌اند در نهایت به نقض این ناوردا متکی‌اند.
+با این حال تصور یک سامانهٔ نوع سالم بدون این ناوردا بسیار دشوار است، پس
+مشکل این است که ناوردا نقض شده، نه اینکه ما به‌اشتباه به آن تکیه می‌کنیم.</p>
+<h4 id="successful-normalization-must-not-result-in-unconstrained-inference-variables-"><a class="header" href="#successful-normalization-must-not-result-in-unconstrained-inference-variables-">نرمال‌سازی موفق نباید به متغیرهای استنتاج مقیدنشده بینجامد ✅</a></h4>
+<p>اگر یک goal نرمال‌سازی موفق شود، نباید به متغیرهای استنتاج نوع یا ثابت مقیدنشده بینجامد.
+اگر چنین نباشد، برابری نوع‌ها متعدی (transitive) نخواهد بود.</p>
+<p>این الزام باید برای کد نامعتبر هم برقرار باشد تا از ICE کامپایلر جلوگیری شود:</p>
+<ul>
+<li>این با حل‌کنندهٔ قدیمی به‌طور ظریفی نقض می‌شود: https://github.com/rust-lang/rust/issues/135122</li>
+<li>و با هر دو حل‌کننده برای نوع‌های وابستهٔ ذاتی (inherent associated types): https://github.com/rust-lang/rust/issues/163812</li>
+</ul>
+<p>همچنین برای ناسالمی‌ای که در آن این با impl‌های توکار و طول عمرها خراب می‌شود، https://github.com/rust-lang/rust/issues/141713 را ببینید.</p>
+<h3 id="the-type-system-is-complete-"><a class="header" href="#the-type-system-is-complete-">سامانهٔ نوع کامل (complete) است ❌</a></h3>
+<p>سامانهٔ نوع کامل نیست.
+اغلب قیدهای استنتاج غیرضروری اضافه می‌کند و خطا می‌دهد با اینکه goal می‌توانست برقرار باشد.</p>
+<ul>
+<li>انتخاب متد</li>
+<li>استنتاج نوع مات (opaque)</li>
+<li>مدیریت قیدهای outlives نوع</li>
+<li>ترجیح کاندیداهای <code>ParamEnv</code> بر کاندیداهای <code>Impl</code> هنگام انتخاب کاندیدا
+در حل‌کنندهٔ صفت</li>
+</ul>
+<h3 id="goals-keep-their-result-from-hir-typeck-afterwards-"><a class="header" href="#goals-keep-their-result-from-hir-typeck-afterwards-">goalها پس از HIR typeck نتیجهٔ خود را حفظ می‌کنند ✅</a></h3>
+<p>داشتن goalای که در HIR typeck موفق می‌شود اما هنگام ارزیابی مجدد در MIR borrowck شکست می‌خورد باعث ICE می‌شود، مثلاً <a href="https://github.com/rust-lang/rust/issues/140211">#140211</a>.</p>
+<p>داشتن goalای که در HIR typeck موفق می‌شود اما پس از نمونه‌سازی شکست می‌خورد ناسالم است، مثلاً <a href="https://github.com/rust-lang/rust/issues/140212">#140212</a>.</p>
+<p>جالب است که مقداری ناکامل بودن را در حل‌کنندهٔ صفت مجاز می‌دانیم و در عین حال این محدودیت را حفظ می‌کنیم.
+خوب می‌شد راه روشنی برای جدا کردن «ناکامل بودن مجاز» از رفتاری که این ناوردا را نقض می‌کند وجود داشت.</p>
+<h4 id="normalization-must-not-change-results"><a class="header" href="#normalization-must-not-change-results">نرمال‌سازی نباید نتایج را تغییر دهد</a></h4>
+<p>برای اجازهٔ نرمال‌سازی aliasهای جنریک به این ناوردا تکیه می‌شود.
+نقض
+آن به‌راحتی می‌تواند به ناسالمی بینجامد، مثلاً <a href="https://github.com/rust-lang/rust/issues/57893">#57893</a>.</p>
+<h4 id="goals-may-still-overflow-after-instantiation"><a class="header" href="#goals-may-still-overflow-after-instantiation">goalها پس از نمونه‌سازی هنوز ممکن است سرریز کنند</a></h4>
+<p>این وقتی رخ می‌دهد که به حد بازگشت (recursion limit) برسند.
+aliasهای واگرا هم داریم که خراب‌اند.
+روشن نیست چگونه باید مدیریت شوند :3</p>
+<h3 id="trait-goals-in-empty-environments-are-proven-by-a-unique-impl-"><a class="header" href="#trait-goals-in-empty-environments-are-proven-by-a-unique-impl-">goalهای صفت در محیط‌های خالی با یک impl یکتا اثبات می‌شوند ✅</a></h3>
+<p>اگر یک goal صفت با محیط خالی برقرار باشد، باید یک <code>impl</code> یکتا،
+چه تعریف‌شده توسط کاربر و چه توکار، وجود داشته باشد که برای اثبات آن goal به کار می‌رود.
+این برای انتخاب متدها و آیتم‌های وابستهٔ یکتا لازم است.</p>
+<p>با این حال این ناوردا را در چند مورد نقض می‌کنیم که برخی به‌دلیل باگ‌اند و برخی عمدی:</p>
+<ul>
+<li><em>صفت‌های نشانگر (marker traits)</em> مجاز به هم‌پوشانی‌اند چون آیتم وابسته ندارند</li>
+<li><em>تخصصی‌سازی (specialization)</em> اجازه می‌دهد impl‌های تخصصی با والد خود هم‌پوشانی داشته باشند</li>
+<li>پیاده‌سازی توکار صفت برای شیء صفت می‌تواند با impl تعریف‌شده توسط کاربر هم‌پوشانی داشته باشد:
+<a href="https://github.com/rust-lang/rust/issues/57893">#57893</a></li>
+</ul>
+<h3 id="goals-with-can-be-proven-in-a-non-empty-environment-also-hold-during-monomorphization-"><a class="header" href="#goals-with-can-be-proven-in-a-non-empty-environment-also-hold-during-monomorphization-">goalهایی که در محیط ناتهی قابل اثبات‌اند در حین monomorphization هم برقرارند ✅</a></h3>
+<p>اگر یک goal در محیط جنریک قابل اثبات باشد، باید پس از نمونه‌سازی آن
+با نوع‌های کاملاً مشخص و بدون where-clause در دامنه همچنان برقرار باشد.</p>
+<p>codegen این را فرض می‌کند و هنگام مواجهه با ابهام غیرسرریز ICE می‌دهد.
+این ناوردا در حال حاضر توسط specialization (<a href="https://github.com/rust-lang/rust/issues/147507">#147507</a>) و صفت‌های نشانگر (<a href="https://github.com/rust-lang/rust/issues/149502">#149502</a>) نقض می‌شود.</p>
+<h4 id="the-type-system-is-complete-during-the-implicit-negative-overlap-check-in-coherence-"><a class="header" href="#the-type-system-is-complete-during-the-implicit-negative-overlap-check-in-coherence-">سامانهٔ نوع در بررسی هم‌پوشانی منفی ضمنی در coherence کامل است ✅</a></h4>
+<p>برای اطلاعات بیشتر دربارهٔ بررسی هم‌پوشانی، <a href="../coherence.html">فصل Coherence</a> را ببینید.</p>
+<p>در بررسی هم‌پوشانی منفی ضمنی در coherence،
+هرگز نباید برای goalهایی که قابل اثبات‌اند <em>خطا</em> برگردانیم.
+این اجازهٔ impl‌های هم‌پوشان با آیتم‌های وابستهٔ احتمالاً متفاوت را می‌دهد
+و تعدادی ناوردای دیگر را نقض می‌کند.</p>
+<p>این ناوردا در حال حاضر به شیوه‌های گوناگون نقض شده در حالی که در واقع چیزی است که به آن تکیه می‌کنیم.
+باید مراقب باشیم، چون نقضش بسیار آسان است:</p>
+<ul>
+<li>تعمیم (generalization) aliasها</li>
+<li>تعمیم در حین زیرنوع‌سازی binderها (خوشبختانه در coherence قابل سوءاستفاده نیست)</li>
+</ul>
+<h3 id="trait-solving-must-not-depend-on-lifetimes-being-different-"><a class="header" href="#trait-solving-must-not-depend-on-lifetimes-being-different-">حل صفت نباید به متفاوت بودن طول عمرها وابسته باشد ✅</a></h3>
+<p>اگر یک goal با متفاوت بودن طول عمرها برقرار باشد، باید با یکسان بودن این طول عمرها هم برقرار باشد.
+وگرنه در حین codegen به خطاهای پس از monomorphization یا ناسالمی به‌دلیل vtableهای نامعتبر می‌رسیم.</p>
+<p>همچنین ممکن است رفتار ناهمگونی بگیریم وقتی ابتدا goalی را با طول عمرهای متفاوت اثبات می‌کنیم که بعداً مقید می‌شوند برابر باشند.</p>
+<h3 id="trait-solving-in-bodies-must-not-depend-on-lifetimes-being-equal-"><a class="header" href="#trait-solving-in-bodies-must-not-depend-on-lifetimes-being-equal-">حل صفت در بدنه‌ها نباید به برابر بودن طول عمرها وابسته باشد ✅</a></h3>
+<p>همچنین باید در تکیه بر برابری نواحی در حل‌کنندهٔ صفت مراقب باشیم.
+این برای codegen اشکالی ندارد، چون همهٔ نواحی پاک‌شده را برابر می‌دانیم.
+اما می‌توانیم اطلاعات برابری را از HIR به MIR typeck از دست بدهیم.</p>
+<p>این در حال حاضر با حل‌کنندهٔ جدید برقرار نیست: <a href="https://github.com/rust-lang/trait-system-refactor-initiative/issues/27">trait-system-refactor-initiative#27</a>.</p>
+<h3 id="removing-ambiguity-makes-strictly-more-things-compile-"><a class="header" href="#removing-ambiguity-makes-strictly-more-things-compile-">برداشتن ابهام به‌طور اکید چیزهای بیشتری را کامپایل‌پذیر می‌کند ❌</a></h3>
+<p>در حالت ایده‌آل <em>نباید</em> برای کامپایل شدن چیزها به ابهام تکیه کنیم.
+نکردن این کار باعث می‌شود بهبودهای آینده تغییرهای شکننده (breaking) باشند.</p>
+<p>به‌دلیل <em>ناکامل بودن</em> این‌طور نیست،
+و بهبود استنتاج می‌تواند به تغییرات استنتاج بینجامد و پروژه‌های موجود را بشکند.</p>
+<h3 id="semantic-equality-implies-structural-equality-"><a class="header" href="#semantic-equality-implies-structural-equality-">برابری معنایی مستلزم برابری ساختاری است ✅</a></h3>
+<p>برابر بودن دو نوع در سامانهٔ نوع باید به این معنا باشد که پس از نمونه‌سازی پارامترهای جنریکشان با آرگومان‌های مشخص
+<code>TypeId</code> یکسان دارند.
+وگرنه می‌توانیم از <code>TypeId</code>های متفاوتشان برای اثرگذاری بر انتخاب صفت استفاده کنیم.</p>
+<p>در حین codegen نوع‌ها را با برابری ساختاری جستجو می‌کنیم، اما این لزوماً نباید ناسالم باشد</p>
+<ul>
+<li>ممکن است به codegen زائد متد یا خطاهای بررسی نوع در بک‌اند بینجامد؟</li>
+<li>در assertionهای CTFE هم به آن تکیه می‌کنیم</li>
+</ul>
+<h3 id="semantically-different-types-have-different-typeids-"><a class="header" href="#semantically-different-types-have-different-typeids-">نوع‌های معناداً متفاوت <code>TypeId</code> متفاوت دارند ✅</a></h3>
+<p>نوع‌های <code>'static</code> معناداً متفاوت برای پرهیز از transmute به <code>TypeId</code>های متفاوت نیاز دارند،
+برای مثال <code>for&lt;'a&gt; fn(&amp;'a str)</code> در برابر <code>fn(&amp;'static str)</code> باید <code>TypeId</code> متفاوت داشته باشند.</p>
+<h2 id="evaluation-of-const-items-is-deterministic-"><a class="header" href="#evaluation-of-const-items-is-deterministic-">ارزیابی آیتم‌های const قطعی (deterministic) است ✅</a></h2>
+<p>چون مقدار آیتم‌های const می‌تواند وارد سامانهٔ نوع شود، مهم است که مقدار یک آیتم const در هر crate همیشه یکسان باشد.
+اگر چنین نباشد، ممکن است به نوع‌های وابسته‌ای برسیم که آرگومان‌های const «برابر» دارند و بنابراین نوع‌های وابستهٔ «برابرند»، و با این حال هنگام نرمال‌سازی در حین codegen در crateهای مختلف در واقع به نوع‌های متفاوتی ختم می‌شوند.</p>
+<p>به‌ویژه این به توابع <em>const</em> تعمیم <em>نمی‌یابد</em>؛ چون سامانهٔ نوع فقط با نتایج <em>آیتم‌های</em> const کار می‌کند، در واقع اشکالی ندارد توابع const غیرقطعی باشند تا زمانی که این بر مقدار نهایی یک آیتم const اثر نگذارد.</p><nav class="page-nav"><a href="trait-solving.html">→ حل صفت نسل بعد</a><a href="the-solver.html">حل‌کننده ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

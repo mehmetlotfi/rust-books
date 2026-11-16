@@ -1,0 +1,175 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>Placeholderها و universeها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="borrow-check/region-inference/placeholders-and-universes"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="placeholders-and-universes"><a class="header" href="#placeholders-and-universes">جانگهدارها و جهان‌ها</a></h1>
+<p>گاهی لازم می‌شود درباره‌ی ناحیه‌هایی استدلال کنیم که نمی‌توانیم به‌طور مشخص بدانیم چه هستند. برای مثال، این برنامه را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">// A function that needs a static reference
+fn foo(x: &amp;'static u32) { }
+
+fn bar(f: for&lt;'a&gt; fn(&amp;'a u32)) {
+       // ^^^^^^^^^^^^^^^^^^^ a function that can accept **any** reference
+    let x = 22;
+    f(&amp;x);
+}
+
+fn main() {
+    bar(foo);
+}</code></pre>
+<p>این برنامه نباید از بررسی نوع بگذرد: <code>foo</code> برای آرگومانش به یک ارجاع static نیاز دارد و <code>bar</code> می‌خواهد تابعی به او داده شود که <strong>هر</strong> ارجاعی را بپذیرد (تا مثلاً بتواند آن را با چیزی از پشته‌ی خودش فراخوانی کند). اما <em>چگونه</em> و <em>چرا</em> آن را رد می‌کنیم؟</p>
+<h2 id="subtyping-and-placeholders"><a class="header" href="#subtyping-and-placeholders">زیرنوع‌سازی و جانگهدارها</a></h2>
+<p>وقتی <code>main</code> و به‌ویژه فراخوانی <code>bar(foo)</code> را بررسی نوع می‌کنیم، به یک رابطه‌ی زیرنوع‌سازی مانند این می‌رسیم:</p>
+<pre><code class="language-text">fn(&amp;'static u32) &lt;: for&lt;'a&gt; fn(&amp;'a u32)
+----------------    -------------------
+the type of `foo`   the type `bar` expects
+</code></pre>
+<p>این نوع زیرنوع‌سازی را چنین مدیریت می‌کنیم که متغیرهایی را که در ابرنوع مقید (bound) هستند برمی‌داریم و با نمایندگان <a href="../../appendix/background.html#quantified">سورشده‌ی عمومی</a> جایگزین می‌کنیم که اینجا به شکل <code>!1</code> نشان داده می‌شوند. این ناحیه‌ها را «ناحیه‌های جانگهدار» (placeholder) می‌نامیم – آن‌ها در اصل نماینده‌ی «یک ناحیه‌ی نامعلوم» هستند.</p>
+<p>پس از این جایگزینی، رابطه‌ی زیر را داریم:</p>
+<pre><code class="language-text">fn(&amp;'static u32) &lt;: fn(&amp;'!1 u32)
+</code></pre>
+<p>ایده‌ی کلیدی اینجا این است که این ناحیه‌ی نامعلوم <code>'!1</code> با هیچ ناحیه‌ی دیگری ارتباط ندارد. بنابراین اگر بتوانیم ثابت کنیم رابطه‌ی زیرنوع‌سازی برای <code>'!1</code> برقرار است، باید برای هر ناحیه‌ای برقرار باشد، و این دقیقاً همان چیزی است که می‌خواستیم.</p>
+<p>پس بیایید ببینیم در ادامه چه اتفاقی می‌افتد. برای بررسی اینکه دو تابع زیرنوع یکدیگرند، بررسی می‌کنیم که آرگومان‌هایشان رابطه‌ی مطلوب را داشته باشند (آرگومان‌های fn <a href="../../appendix/background.html#variance">پادوردا</a> هستند، پس اینجا چپ و راست را جابه‌جا می‌کنیم):</p>
+<pre><code class="language-text">&amp;'!1 u32 &lt;: &amp;'static u32
+</code></pre>
+<p>طبق قواعد پایه‌ی زیرنوع‌سازی برای ارجاع، این رابطه در صورتی برقرار است که <code>'!1: 'static</code>. یعنی اگر «ناحیه‌ی نامعلوم <code>!1</code>» از <code>'static</code> بیشتر عمر کند. حالا، این <em>ممکن است</em> درست باشد – بالاخره <code>'!1</code> می‌تواند همان <code>'static</code> باشد – اما ما <em>نمی‌دانیم</em> که درست است. بنابراین این باید (در نهایت) به یک خطا بینجامد.</p>
+<h2 id="what-is-a-universe"><a class="header" href="#what-is-a-universe">جهان (universe) چیست؟</a></h2>
+<p>در بخش قبل، ایده‌ی ناحیه‌ی جانگهدار را معرفی کردیم و آن را <code>!1</code> نامیدیم. این عدد <code>1</code> را <strong>شاخص جهان</strong> (universe index) می‌نامیم. ایده‌ی «جهان» این است که مجموعه‌ای از نام‌هاست که درون یک نوع یا در یک نقطه در دامنه‌اند. جهان‌ها به شکل یک درخت سازمان می‌یابند که در آن هر فرزند نام‌های والدش را با چند نام جدید گسترش می‌دهد. بنابراین <strong>جهان ریشه</strong> از نظر مفهومی شامل نام‌های سراسری است، مانند طول عمر <code>'static</code> یا نوع <code>i32</code>. در کامپایلر، پارامترهای نوع جنریک را هم در این جهان ریشه قرار می‌دهیم (از این نظر، فقط یک جهان ریشه وجود ندارد، بلکه به‌ازای هر آیتم یکی وجود دارد). پس این تابع <code>bar</code> را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">struct Foo { }
+
+fn bar&lt;'a, T&gt;(t: &amp;'a T) {
+    ...
+}</code></pre>
+<p>در اینجا جهان ریشه شامل طول عمرهای <code>'static</code> و <code>'a</code> خواهد بود. در واقع، هرچند اینجا روی طول عمرها تمرکز کرده‌ایم، می‌توانیم همین مفهوم را به نوع‌ها هم اعمال کنیم؛ در آن صورت نوع‌های <code>Foo</code> و <code>T</code> (به‌همراه سایر نوع‌های سراسری مانند <code>i32</code>) در جهان ریشه خواهند بود. در اصل، جهان ریشه شامل همه‌ی نام‌هایی است که <a href="../../appendix/background.html#free-vs-bound">آزادانه ظاهر می‌شوند</a> در بدنه‌ی <code>bar</code>.</p>
+<p>حالا بیایید <code>bar</code> را با افزودن یک متغیر <code>x</code> کمی گسترش دهیم:</p>
+<pre><code class="language-rust ignore">fn bar&lt;'a, T&gt;(t: &amp;'a T) {
+    let x: for&lt;'b&gt; fn(&amp;'b u32) = ...;
+}</code></pre>
+<p>در اینجا نام <code>'b</code> بخشی از جهان ریشه نیست. در عوض، وقتی وارد این <code>for&lt;'b&gt;</code> می‌شویم (مثلاً با جایگزین کردن آن با یک جانگهدار)، یک جهان فرزند از ریشه می‌سازیم که آن را U1 می‌نامیم:</p>
+<pre><code class="language-text">U0 (root universe)
+│
+└─ U1 (child universe)
+</code></pre>
+<p>ایده این است که این جهان فرزند U1، جهان ریشه U0 را با یک نام جدید گسترش می‌دهد که آن را با شماره‌ی جهانش مشخص می‌کنیم: <code>!1</code>.</p>
+<p>حالا بیایید <code>bar</code> را با افزودن یک متغیر دیگر، <code>y</code>، کمی بیشتر گسترش دهیم:</p>
+<pre><code class="language-rust ignore">fn bar&lt;'a, T&gt;(t: &amp;'a T) {
+    let x: for&lt;'b&gt; fn(&amp;'b u32) = ...;
+    let y: for&lt;'c&gt; fn(&amp;'c u32) = ...;
+}</code></pre>
+<p>وقتی وارد <em>این</em> نوع می‌شویم، دوباره یک جهان جدید می‌سازیم که آن را <code>U2</code> می‌نامیم. والد آن جهان ریشه است و U1 همزاد (sibling) آن خواهد بود:</p>
+<pre><code class="language-text">U0 (root universe)
+│
+├─ U1 (child universe)
+│
+└─ U2 (child universe)
+</code></pre>
+<p>این یعنی در U2 می‌توانیم چیزهایی را از U0 یا U2 نام ببریم، اما از U1 نه.</p>
+<p><strong>دادن جهان به متغیرهای وجودی.</strong> حالا که این مفهوم جهان‌ها را داریم، می‌توانیم از آن برای گسترش بررسی‌گر نوع و سایر بخش‌ها استفاده کنیم تا از نشت نام‌های غیرمجاز جلوگیری شود. ایده این است که به هر متغیر استنتاج (وجودی) – چه نوع باشد و چه طول عمر – یک جهان بدهیم. آن‌گاه مقدار آن متغیر فقط می‌تواند به نام‌هایی ارجاع دهد که از آن جهان قابل مشاهده‌اند. برای مثال، اگر یک متغیر طول عمر در U0 ساخته شود، نمی‌توان مقدار <code>!1</code> یا <code>!2</code> را به آن داد، چون این نام‌ها از جهان U0 قابل مشاهده نیستند.</p>
+<p><strong>نمایش جهان‌ها فقط با یک شمارنده.</strong> ممکن است تعجب کنید که کامپایلر یک درخت کامل از جهان‌ها را نگه نمی‌دارد. در عوض، فقط یک شمارنده نگه می‌دارد – و برای تشخیص اینکه آیا یک جهان می‌تواند جهان دیگری را ببیند، فقط بررسی می‌کند که آیا شاخص بزرگ‌تر است یا نه. برای مثال، U2 می‌تواند U0 را ببیند چون 2 &gt;= 0. اما U0 نمی‌تواند U2 را ببیند، چون 0 &gt;= 2 نادرست است.</p>
+<p>چطور می‌توانیم از این ساده‌سازی بگذریم؟ آیا این یعنی به U2 اجازه می‌دهیم U1 را هم ببیند؟ پاسخ این است که بله، اجازه می‌دهیم، <strong>اگر چنین پرسشی هرگز مطرح شود</strong>. اما به‌دلیل ساختار بررسی‌گر نوع و بقیه‌ی بخش‌ها، راهی برای رخ دادن آن وجود ندارد. برای اینکه چیزی که در جهان U1 رخ می‌دهد با چیزی که در U2 رخ می‌دهد «ارتباط» برقرار کند، باید یک متغیر استنتاج مشترک X داشته باشند. و چون همه‌چیز در U1 فقط به U1 و فرزندانش محدود است، آن متغیر استنتاج X باید در U0 باشد. و چون X در U0 است، نمی‌تواند چیزی از U1 (یا U2) را نام ببرد. شاید بهتر باشد این را با نوعی مثال «منطقی» عمومی ببینیم:</p>
+<pre><code class="language-text">exists&lt;X&gt; {
+   forall&lt;Y&gt; { ... /* Y is in U1 ... */ }
+   forall&lt;Z&gt; { ... /* Z is in U2 ... */ }
+}
+</code></pre>
+<p>در اینجا تنها راه تعامل دو forall از طریق X است، اما وقتی X اعلام می‌شود نه Y در دامنه است و نه Z، پس مقدارش نمی‌تواند به هیچ‌کدام از آن‌ها ارجاع دهد.</p>
+<h2 id="universes-and-placeholder-region-elements"><a class="header" href="#universes-and-placeholder-region-elements">جهان‌ها و عناصر ناحیه‌ی جانگهدار</a></h2>
+<p>اما آن خطا از کجا می‌آید؟ ماجرا به این شکل است. وقتی زمینه‌ی استنتاج ناحیه را می‌سازیم، از روی زمینه‌ی استنتاج نوع می‌توانیم بفهمیم چند متغیر جانگهدار وجود دارد (<code>InferCtxt</code> یک شمارنده‌ی داخلی دارد). برای هر یک از آن‌ها، یک متغیر ناحیه‌ی عمومی (universal) متناظر <code>!n</code> و یک «عنصر ناحیه» به نام <code>placeholder(n)</code> می‌سازیم. این متناظر است با «یک مجموعه‌ی نامعلوم از عناصر دیگر». مقدار <code>!n</code> برابر <code>{placeholder(n)}</code> است.</p>
+<p>هم‌زمان، به هر متغیر وجودی هم یک <strong>جهان</strong> می‌دهیم (که آن هم از <code>InferCtxt</code> گرفته می‌شود). این جهان تعیین می‌کند کدام عناصر جانگهدار می‌توانند در مقدار آن ظاهر شوند: برای مثال، متغیری در جهان U3 می‌تواند <code>placeholder(1)</code>، <code>placeholder(2)</code> و <code>placeholder(3)</code> را نام ببرد، اما <code>placeholder(4)</code> را نه. توجه کنید که جهان یک متغیر استنتاج مشخص می‌کند چه عناصر ناحیه‌ای <strong>می‌توانند</strong> در مقدارش ظاهر شوند؛ نمی‌گوید چه عناصری <strong>حتماً</strong> ظاهر خواهند شد.</p>
+<h2 id="placeholders-and-outlives-constraints"><a class="header" href="#placeholders-and-outlives-constraints">جانگهدارها و محدودیت‌های outlives</a></h2>
+<p>در موتور استنتاج ناحیه، محدودیت‌های outlives شکل زیر را دارند:</p>
+<pre><code class="language-text">V1: V2 @ P
+</code></pre>
+<p>که در آن <code>V1</code> و <code>V2</code> شاخص‌های ناحیه‌اند و بنابراین به یک متغیر ناحیه نگاشت می‌شوند (که ممکن است سور عمومی یا وجودی داشته باشد). <code>P</code> در اینجا یک «نقطه» در گراف جریان کنترل است؛ برای این بخش مهم نیست. این متغیر یک جهان خواهد داشت، پس بیایید این جهان‌ها را به‌ترتیب <code>U(V1)</code> و <code>U(V2)</code> بنامیم. (در واقع، تنها چیزی که به آن اهمیت می‌دهیم <code>U(V1)</code> است.)</p>
+<p>وقتی به این محدودیت برمی‌خوریم، روال معمول این است که یک DFS از <code>P</code> آغاز کنیم. تا زمانی که گره‌هایی که از آن‌ها می‌گذریم در <code>value(V2)</code> حاضر باشند به حرکت ادامه می‌دهیم و آن گره‌ها را به <code>value(V1)</code> اضافه می‌کنیم. اگر به یک نقطه‌ی بازگشت برسیم، هر عنصر <code>end(X)</code> را اضافه می‌کنیم. این بخش بدون تغییر می‌ماند.</p>
+<p>اما <em>پس از آن</em> می‌خواهیم روی عناصر جانگهدار <code>placeholder(x)</code> در V2 پیمایش کنیم (هر یک از آن‌ها باید برای <code>U(V2)</code> قابل مشاهده باشد، اما می‌توانیم صرفاً فرض کنیم که چنین است و لازم نیست بررسی‌اش کنیم). باید اطمینان یابیم که <code>value(V1)</code> از هر یک از آن عناصر جانگهدار بیشتر عمر می‌کند.</p>
+<p>دو راه برای این کار وجود دارد. اول، اگر <code>U(V1)</code> بتواند جهان <code>x</code> را ببیند (یعنی <code>x &lt;= U(V1)</code>)، می‌توانیم <code>placeholder(x)</code> را به <code>value(V1)</code> اضافه کنیم و کار تمام است. اما اگر نتواند، باید تقریب بزنیم: شاید ندانیم <code>placeholder(x)</code> نماینده‌ی چه مجموعه‌ای از عناصر است، اما باید بتوانیم نوعی <strong>کران بالا</strong> B برایش محاسبه کنیم – ناحیه‌ای B که از <code>placeholder(x)</code> بیشتر عمر می‌کند. فعلاً برای این کار فقط از <code>'static</code> استفاده می‌کنیم (چون از همه چیز بیشتر عمر می‌کند) – در آینده گاهی می‌توانیم اینجا هوشمندتر عمل کنیم (و در واقع کدی برای انجام این کار در زمینه‌های دیگر داریم). علاوه بر این، چون <code>'static</code> در جهان ریشه U0 است، می‌دانیم همه‌ی متغیرها آن را می‌بینند – پس در اصل اگر دریابیم <code>value(V2)</code> شامل <code>placeholder(x)</code> برای جهانی مانند <code>x</code> است که <code>V1</code> نمی‌تواند ببیند، آن‌گاه <code>V1</code> را مجبور به <code>'static</code> شدن می‌کنیم.</p>
+<h2 id="extending-the-universal-regions-check"><a class="header" href="#extending-the-universal-regions-check">گسترش بررسی «ناحیه‌های عمومی»</a></h2>
+<p>پس از انتشار همه‌ی محدودیت‌ها، استنتاج ناحیه‌ی NLL یک بررسی نهایی دارد که در آن مقادیری را که برای هر ناحیه‌ی عمومی محاسبه شده‌اند مرور می‌کند و بررسی می‌کند که بیش از حد «بزرگ» نشده باشند. در مورد ما، از میان هر ناحیه‌ی جانگهدار می‌گذریم و بررسی می‌کنیم که <em>فقط</em> شامل عنصر <code>placeholder(u)</code> باشد که می‌دانیم از آن بیشتر عمر می‌کند. (بعداً شاید بتوانیم بدانیم که میان دو ناحیه‌ی جانگهدار روابطی وجود دارد و آن‌ها را هم در نظر بگیریم، همان‌طور که برای ناحیه‌های عمومی حاصل از امضای fn انجام می‌دهیم.)</p>
+<p>به بیان دیگر، می‌توان گفت بررسی «ناحیه‌های عمومی» محدودیت‌هایی از این دست را وارسی می‌کند:</p>
+<pre><code class="language-text">{placeholder(1)}: V1
+</code></pre>
+<p>که در آن <code>{placeholder(1)}</code> مانند یک مجموعه‌ی ثابت است و V1 متغیری است که برای نمایش ناحیه‌ی <code>!1</code> ساخته‌ایم.</p>
+<h2 id="back-to-our-example"><a class="header" href="#back-to-our-example">بازگشت به مثال خودمان</a></h2>
+<p>خب، تا اینجا خوب بود. حالا بیایید ببینیم در مثال اول ما چه اتفاقی می‌افتد:</p>
+<pre><code class="language-text">fn(&amp;'static u32) &lt;: fn(&amp;'!1 u32) @ P  // this point P is not imp't here
+</code></pre>
+<p>موتور استنتاج ناحیه یک دامنه‌ی عناصر ناحیه مانند این می‌سازد:</p>
+<pre><code class="language-text">{ CFG; end('static); placeholder(1) }
+  ---  ------------  ------- from the universe `!1`
+  |    'static is always in scope
+  all points in the CFG; not especially relevant here
+</code></pre>
+<p>این موتور همیشه دو متغیر عمومی می‌سازد، یکی نماینده‌ی <code>'static</code> و دیگری نماینده‌ی <code>'!1</code>. بیایید آن‌ها را Vs و V1 بنامیم. آن‌ها مقادیر اولیه‌ای مانند این خواهند داشت:</p>
+<pre><code class="language-text">Vs = { CFG; end('static) } // it is in U0, so can't name anything else
+V1 = { placeholder(1) }
+</code></pre>
+<p>از محدودیت زیرنوع‌سازی بالا، یک محدودیت outlives مانند زیر خواهیم داشت</p>
+<pre><code class="language-text">'!1: 'static @ P
+</code></pre>
+<p>برای پردازش این، مقدار V1 را بزرگ می‌کنیم تا همه‌ی Vs را در بر بگیرد:</p>
+<pre><code class="language-text">Vs = { CFG; end('static) }
+V1 = { CFG; end('static), placeholder(1) }
+</code></pre>
+<p>در این نقطه، انتشار محدودیت‌ها کامل است، چون همه‌ی روابط outlives برقرارند. سپس به بخش «بررسی ناحیه‌های عمومی» از کد می‌رسیم که آزمون می‌کند هیچ ناحیه‌ی عمومی بیش از حد بزرگ نشده باشد.</p>
+<p>در این مورد، <code>V1</code> <em>بیش از حد بزرگ شده است</em> – معلوم نیست از <code>end('static)</code> یا هیچ‌یک از CFG بیشتر عمر کند – پس خطا گزارش می‌دهیم.</p>
+<h2 id="another-example"><a class="header" href="#another-example">مثالی دیگر</a></h2>
+<p>درباره‌ی این رابطه‌ی زیرنوع‌سازی چه می‌گویید؟</p>
+<pre><code class="language-text">for&lt;'a&gt; fn(&amp;'a u32, &amp;'a u32)
+    &lt;:
+for&lt;'b, 'c&gt; fn(&amp;'b u32, &amp;'c u32)
+</code></pre>
+<p>اینجا ناحیه‌ی مقید در ابرنوع را مانند قبل با یک جانگهدار جایگزین می‌کنیم و نتیجه می‌شود:</p>
+<pre><code class="language-text">for&lt;'a&gt; fn(&amp;'a u32, &amp;'a u32)
+    &lt;:
+fn(&amp;'!1 u32, &amp;'!2 u32)
+</code></pre>
+<p>سپس متغیر سمت چپ را با یک متغیر وجودی در جهان U2 نمونه‌سازی می‌کنیم و نتیجه‌ی زیر به دست می‌آید (<code>?n</code> نمادی برای یک متغیر وجودی است):</p>
+<pre><code class="language-text">fn(&amp;'?3 u32, &amp;'?3 u32)
+    &lt;:
+fn(&amp;'!1 u32, &amp;'!2 u32)
+</code></pre>
+<p>سپس این را بیشتر تجزیه می‌کنیم:</p>
+<pre><code class="language-text">&amp;'!1 u32 &lt;: &amp;'?3 u32
+&amp;'!2 u32 &lt;: &amp;'?3 u32
+</code></pre>
+<p>و حتی بیشتر، که محدودیت‌های ناحیه‌ی ما را به دست می‌دهد:</p>
+<pre><code class="language-text">'!1: '?3
+'!2: '?3
+</code></pre>
+<p>توجه کنید که در این مورد، هر دوی <code>'!1</code> و <code>'!2</code> باید از متغیر <code>'?3</code> بیشتر عمر کنند، اما <code>'?3</code> مجبور نیست از چیز دیگری بیشتر عمر کند. بنابراین، به‌سادگی با مجموعه‌ی تهی از عناصر شروع می‌شود و با همان پایان می‌یابد و در نتیجه بررسی نوع اینجا موفق می‌شود.</p>
+<p>(این باید کمی شما را غافلگیر کند. وقتی برای اولین بار متوجه‌اش شدم من را غافلگیر کرد. ما می‌گوییم اگر تابعی باشیم که <strong>هر دو آرگومانش باید ناحیه‌ی یکسانی داشته باشند</strong>، می‌توانیم بپذیریم که با <strong>آرگومان‌هایی با دو ناحیه‌ی متمایز</strong> فراخوانی شویم. این به‌طور شهودی ناایمن به نظر می‌رسد. اما در واقع مشکلی ندارد، همان‌طور که مدتی پیش سعی کردم در <a href="https://github.com/rust-lang/rust/issues/32330#issuecomment-202536977">این issue</a> در ردیاب issueهای Rust توضیح دهم. دلیلش این است که حتی اگر با آرگومان‌هایی از دو طول عمر متمایز فراخوانی شویم، آن دو طول عمر اشتراکی دارند (خود فراخوانی)، و آن اشتراک می‌تواند مقدار <code>'a</code> ما باشد که به‌عنوان طول عمر مشترک آرگومان‌هایمان از آن استفاده می‌کنیم. -nmatsakis)</p>
+<h2 id="final-example"><a class="header" href="#final-example">مثال پایانی</a></h2>
+<p>بیایید به یک مثال آخر نگاه کنیم. مثال قبلی را گسترش می‌دهیم تا یک نوع بازگشتی داشته باشد:</p>
+<pre><code class="language-text">for&lt;'a&gt; fn(&amp;'a u32, &amp;'a u32) -&gt; &amp;'a u32
+    &lt;:
+for&lt;'b, 'c&gt; fn(&amp;'b u32, &amp;'c u32) -&gt; &amp;'b u32
+</code></pre>
+<p>با اینکه این مثال بسیار شبیه مثال قبلی به نظر می‌رسد، به یک خطا می‌انجامد. این خوب است: مشکل این است که از تابعی که وعده می‌دهد یکی از دو آرگومانش را برگرداند، به تابعی رسیده‌ایم که وعده می‌دهد اولی را برگرداند. این ناایمن است. ببینیم چگونه پیش می‌رود.</p>
+<p>اول، ناحیه‌ی مقید در ابرنوع را با یک جانگهدار جایگزین می‌کنیم:</p>
+<pre><code class="language-text">for&lt;'a&gt; fn(&amp;'a u32, &amp;'a u32) -&gt; &amp;'a u32
+    &lt;:
+fn(&amp;'!1 u32, &amp;'!2 u32) -&gt; &amp;'!1 u32
+</code></pre>
+<p>سپس زیرنوع را با متغیرهای وجودی (در U2) نمونه‌سازی می‌کنیم:</p>
+<pre><code class="language-text">fn(&amp;'?3 u32, &amp;'?3 u32) -&gt; &amp;'?3 u32
+    &lt;:
+fn(&amp;'!1 u32, &amp;'!2 u32) -&gt; &amp;'!1 u32
+</code></pre>
+<p>و حالا روابط زیرنوع‌سازی را می‌سازیم:</p>
+<pre><code class="language-text">&amp;'!1 u32 &lt;: &amp;'?3 u32 // arg 1
+&amp;'!2 u32 &lt;: &amp;'?3 u32 // arg 2
+&amp;'?3 u32 &lt;: &amp;'!1 u32 // return type
+</code></pre>
+<p>و سرانجام روابط outlives. در اینجا فرض کنید V1، V2 و V3 متغیرهایی هستند که به‌ترتیب به <code>!1</code>، <code>!2</code> و <code>?3</code> اختصاص می‌دهیم:</p>
+<pre><code class="language-text">V1: V3
+V2: V3
+V3: V1
+</code></pre>
+<p>این متغیرها مقادیر اولیه‌ی زیر را خواهند داشت:</p>
+<pre><code class="language-text">V1 in U1 = {placeholder(1)}
+V2 in U2 = {placeholder(2)}
+V3 in U2 = {}
+</code></pre>
+<p>حالا به‌دلیل محدودیت <code>V3: V1</code>، باید <code>placeholder(1)</code> را به <code>V3</code> اضافه کنیم (و در واقع از <code>V3</code> قابل مشاهده است)، پس به این می‌رسیم:</p>
+<pre><code class="language-text">V3 in U2 = {placeholder(1)}
+</code></pre>
+<p>سپس این محدودیت <code>V2: V3</code> را داریم، پس مجبور می‌شویم <code>V2</code> را بزرگ کنیم تا <code>placeholder(1)</code> را هم شامل شود (که آن را هم می‌تواند ببیند):</p>
+<pre><code class="language-text">V2 in U2 = {placeholder(1), placeholder(2)}
+</code></pre>
+<p>اکنون انتشار محدودیت‌ها تمام شده است، اما وقتی روابط outlives را بررسی می‌کنیم، می‌بینیم <code>V2</code> این عنصر جدید <code>placeholder(1)</code> را شامل می‌شود، پس خطا گزارش می‌کنیم.</p><nav class="page-nav"><a href="member-constraints.html">→ قیدهای عضویت</a><a href="closure-constraints.html">قیدهای Closure ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../rustc-dev-guide/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

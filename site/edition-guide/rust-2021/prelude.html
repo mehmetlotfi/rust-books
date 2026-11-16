@@ -1,0 +1,111 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>افزوده‌ها به prelude — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2021/prelude"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="additions-to-the-prelude"><a class="header" href="#additions-to-the-prelude">افزوده‌ها به prelude</a></h1>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<ul>
+<li>صفت‌های <code>TryInto</code>، <code>TryFrom</code> و <code>FromIterator</code> اکنون بخشی از prelude هستند.</li>
+<li>این ممکن است فراخوانی متدهای صفت را مبهم کند و باعث شود برخی کدها کامپایل نشوند.</li>
+</ul>
+<h2 id="details"><a class="header" href="#details">جزئیات</a></h2>
+<p><a href="https://doc.rust-lang.org/stable/std/prelude/index.html">prelude کتابخانهٔ استاندارد</a> ماژولی است که شامل هر چیزی است که به‌طور خودکار در هر ماژول وارد می‌شود. این ماژول آیتم‌های پرکاربردی مانند <code>Option</code>، <code>Vec</code>، <code>drop</code> و <code>Clone</code> را در خود دارد.</p>
+<p>کامپایلر Rust به آیتم‌هایی که به‌صورت دستی وارد شده‌اند نسبت به آیتم‌های prelude اولویت می‌دهد، تا اطمینان یابد افزودن چیزی به prelude هیچ کد موجودی را خراب نخواهد کرد. برای مثال، اگر crate یا ماژولی به نام <code>example</code> داشته باشید که شامل <code>pub struct Option;</code> است، آنگاه <code>use example::*;</code> باعث می‌شود <code>Option</code> بدون ابهام به آنی که در <code>example</code> است اشاره کند و نه به آنی که در کتابخانهٔ استاندارد است.</p>
+<p>با این حال، افزودن یک <em>صفت</em> به prelude می‌تواند کد موجود را به شکلی ظریف خراب کند. برای مثال، فراخوانی <code>x.try_into()</code> که از یک صفت <code>MyTryInto</code> می‌آید ممکن است در صورتی که <code>TryInto</code> از <code>std</code> نیز وارد شده باشد کامپایل نشود، زیرا فراخوانی <code>try_into</code> اکنون مبهم است و می‌تواند از هر یک از دو صفت باشد. به همین دلیل است که <code>TryInto</code> را تاکنون به prelude اضافه نکرده‌ایم، چون کدهای زیادی به این شکل خراب می‌شدند.</p>
+<p>به‌عنوان راه‌حل، Rust 2021 از یک prelude جدید استفاده خواهد کرد. این prelude با prelude فعلی یکسان است، به‌جز سه افزودهٔ جدید:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/stable/std/convert/trait.TryInto.html"><code>std::convert::TryInto</code></a></li>
+<li><a href="https://doc.rust-lang.org/stable/std/convert/trait.TryFrom.html"><code>std::convert::TryFrom</code></a></li>
+<li><a href="https://doc.rust-lang.org/stable/std/iter/trait.FromIterator.html"><code>std::iter::FromIterator</code></a></li>
+</ul>
+<p><a href="https://github.com/rust-lang/rust/issues/85684">مسئلهٔ پیگیری را می‌توانید اینجا ببینید</a>.</p>
+<h2 id="migration"><a class="header" href="#migration">مهاجرت</a></h2>
+<p>به‌عنوان بخشی از ویرایش 2021، یک lint مهاجرت با نام <code>rust_2021_prelude_collisions</code> اضافه شده است تا به مهاجرت خودکار کدهای Rust 2018 به Rust 2021 کمک کند.</p>
+<p>برای مهاجرت کد خود به سازگاری با ویرایش Rust 2021، این دستور را اجرا کنید:</p>
+<pre><code class="language-sh">cargo fix --edition
+</code></pre>
+<p>این lint مواردی را شناسایی می‌کند که در آن‌ها تابع‌ها یا متدهایی فراخوانی می‌شوند که نامی یکسان با متدهای تعریف‌شده در یکی از صفت‌های جدید prelude دارند. در برخی موارد، ممکن است فراخوانی‌های شما را به شیوه‌های گوناگون بازنویسی کند تا اطمینان یابد همچنان همان تابعی را فراخوانی می‌کنید که قبلاً فراخوانی می‌کردید.</p>
+<p>اگر می‌خواهید کد خود را به‌صورت دستی مهاجرت دهید یا بهتر بفهمید <code>cargo fix</code> چه می‌کند، در ادامه موقعیت‌هایی را که مهاجرت لازم است همراه با یک نمونهٔ مخالف از زمانی که لازم نیست، شرح داده‌ایم.</p>
+<h3 id="migration-needed"><a class="header" href="#migration-needed">مهاجرت لازم است</a></h3>
+<h4 id="conflicting-trait-methods"><a class="header" href="#conflicting-trait-methods">متدهای صفت متعارض</a></h4>
+<p>وقتی دو صفت که در دامنه هستند نام متد یکسانی داشته باشند، مشخص نیست کدام متد صفت باید استفاده شود. برای مثال:</p>
+<pre><code class="language-rust">trait MyTrait&lt;A&gt; {
+  // This name is the same as the `from_iter` method on the `FromIterator` trait from `std`.  
+  fn from_iter(x: Option&lt;A&gt;);
+}
+
+impl&lt;T&gt; MyTrait&lt;()&gt; for Vec&lt;T&gt; {
+  fn from_iter(_: Option&lt;()&gt;) {}
+}
+
+fn main() {
+  // Vec&lt;T&gt; implements both `std::iter::FromIterator` and `MyTrait` 
+  // If both traits are in scope (as would be the case in Rust 2021),
+  // then it becomes ambiguous which `from_iter` method to call
+  &lt;Vec&lt;i32&gt;&gt;::from_iter(None);
+}</code></pre>
+<p>می‌توانیم این را با استفاده از سینتکس کاملاً مشخص‌شده (fully qualified) رفع کنیم:</p>
+<pre><code class="language-rust ignore">fn main() {
+  // Now it is clear which trait method we're referring to
+  &lt;Vec&lt;i32&gt; as MyTrait&lt;()&gt;&gt;::from_iter(None);
+}</code></pre>
+<h4 id="inherent-methods-on-dyn-trait-objects"><a class="header" href="#inherent-methods-on-dyn-trait-objects">متدهای ذاتی روی شیءهای <code>dyn Trait</code></a></h4>
+<p>برخی کاربران متدهایی را روی یک مقدار <code>dyn Trait</code> فراخوانی می‌کنند که نام متد با یکی از صفت‌های جدید prelude همپوشانی دارد:</p>
+<pre><code class="language-rust">mod submodule {
+  pub trait MyTrait {
+    // This has the same name as `TryInto::try_into`
+    fn try_into(&amp;self) -&gt; Result&lt;u32, ()&gt;;
+  }
+}
+
+// `MyTrait` isn't in scope here and can only be referred to through the path `submodule::MyTrait`
+fn bar(f: Box&lt;dyn submodule::MyTrait&gt;) {
+  // If `std::convert::TryInto` is in scope (as would be the case in Rust 2021),
+  // then it becomes ambiguous which `try_into` method to call
+  f.try_into();
+}</code></pre>
+<p>برخلاف متدهای ارسال ایستا، فراخوانی یک متد صفت روی یک شیء صفت لازم نمی‌کند که صفت در دامنه باشد. کد بالا تا زمانی که هیچ صفتی با نام متد متعارض در دامنه نباشد، کار می‌کند. وقتی صفت <code>TryInto</code> در دامنه باشد (که در Rust 2021 چنین است)، این موضوع ابهام ایجاد می‌کند. آیا فراخوانی باید به <code>MyTrait::try_into</code> باشد یا <code>std::convert::TryInto::try_into</code>؟</p>
+<p>در این موارد، می‌توانیم با افزودن dereferenceهای اضافی یا روشن کردن نوع گیرندهٔ متد به شکل دیگری، این مشکل را رفع کنیم. این کار تضمین می‌کند که متد <code>dyn Trait</code> انتخاب می‌شود و نه متدهای صفت prelude. برای مثال، تبدیل <code>f.try_into()</code> بالا به <code>(&amp;*f).try_into()</code> تضمین می‌کند که <code>try_into</code> را روی <code>dyn MyTrait</code> فراخوانی می‌کنیم، که فقط می‌تواند به متد <code>MyTrait::try_into</code> اشاره کند.</p>
+<h3 id="no-migration-needed"><a class="header" href="#no-migration-needed">مهاجرت لازم نیست</a></h3>
+<h4 id="inherent-methods"><a class="header" href="#inherent-methods">متدهای ذاتی</a></h4>
+<p>بسیاری از نوع‌ها متدهای ذاتی (inherent) خود را با نامی یکسان با یک متد صفت تعریف می‌کنند. برای نمونه، در ادامه ساختار <code>MyStruct</code> متد <code>from_iter</code> را پیاده‌سازی می‌کند که نامش با متد صفت <code>FromIterator</code> در کتابخانهٔ استاندارد یکسان است:</p>
+<pre><code class="language-rust">use std::iter::IntoIterator;
+
+struct MyStruct {
+  data: Vec&lt;u32&gt;
+}
+
+impl MyStruct {
+  // This has the same name as `std::iter::FromIterator::from_iter`
+  fn from_iter(iter: impl IntoIterator&lt;Item = u32&gt;) -&gt; Self {
+    Self {
+      data: iter.into_iter().collect()
+    }
+  }
+}
+
+impl std::iter::FromIterator&lt;u32&gt; for MyStruct {
+    fn from_iter&lt;I: IntoIterator&lt;Item = u32&gt;&gt;(iter: I) -&gt; Self {
+      Self {
+        data: iter.into_iter().collect()
+      }
+    }
+}</code></pre>
+<p>متدهای ذاتی همیشه بر متدهای صفت اولویت دارند، بنابراین نیازی به هیچ مهاجرتی نیست.</p>
+<h3 id="implementation-reference"><a class="header" href="#implementation-reference">مرجع پیاده‌سازی</a></h3>
+<p>این lint هنگام تعیین اینکه آیا معرفی ویرایش 2021 به یک پایگاه کد باعث تعارض در تفکیک نام می‌شود (و در نتیجه کد را پس از تغییر ویرایش خراب می‌کند) باید چند عامل را در نظر بگیرد. این عوامل عبارت‌اند از:</p>
+<ul>
+<li>آیا فراخوانی یک <a href="../../reference/expressions/call-expr.html#disambiguating-function-calls">فراخوانی کاملاً مشخص‌شده (fully-qualified)</a> است یا از <a href="../../reference/expressions/method-call-expr.html">نحو فراخوانی متد با نقطه</a> استفاده می‌کند؟
+<ul>
+<li>این موضوع بر نحوهٔ تفکیک نام به‌دلیل ارجاع خودکار و غیرارجاع‌دهی خودکار در سینتکس فراخوانی متد تأثیر می‌گذارد. ارجاع/غیرارجاع‌دهی دستی امکان تعیین اولویت را در مورد سینتکس فراخوانی متد با نقطه فراهم می‌کند، در حالی که فراخوانی کاملاً مشخص‌شده نیازمند تعیین نوع و نام صفت در مسیر متد است (مثلاً <code>&lt;Type as Trait&gt;::method</code>)</li>
+</ul>
+</li>
+<li>آیا این یک <a href="../../reference/items/implementations.html#inherent-implementations">متد ذاتی</a> است یا <a href="../../reference/items/implementations.html#trait-implementations">یک متد trait</a>؟
+<ul>
+<li>متدهای ذاتی که <code>self</code> می‌گیرند بر <code>TryInto::try_into</code> اولویت خواهند داشت، چون متدهای ذاتی بر متدهای صفت اولویت دارند، اما متدهای ذاتی که <code>&amp;self</code> یا <code>&amp;mut self</code> می‌گیرند اولویت نخواهند داشت، زیرا نیازمند ارجاع خودکار هستند (در حالی که <code>TryInto::try_into</code> چنین نیازی ندارد، چون <code>self</code> می‌گیرد)</li>
+</ul>
+</li>
+<li>آیا منشأ این متد <code>core</code>/<code>std</code> است؟ (چون صفت‌ها نمی‌توانند با خودشان تعارض داشته باشند)</li>
+<li>آیا نوع داده‌شده صفتی را که ممکن است با آن تعارض داشته باشد پیاده‌سازی کرده است؟</li>
+<li>آیا متد از طریق ارسال پویا فراخوانی می‌شود؟ (یعنی آیا نوع <code>self</code> برابر <code>dyn Trait</code> است)
+<ul>
+<li>اگر چنین باشد، واردسازی صفت‌ها بر تفکیک نام تأثیری ندارد و نیازی به اجرای lint مهاجرت نیست</li>
+</ul>
+</li>
+</ul><nav class="page-nav"><a href="index.html">→ Rust 2021</a><a href="default-cargo-resolver.html">حل‌کنندهٔ پیش‌فرض feature در Cargo ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

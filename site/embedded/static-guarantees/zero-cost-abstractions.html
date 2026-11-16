@@ -1,0 +1,25 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>انتزاع‌های بدون هزینه — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="static-guarantees/zero-cost-abstractions"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="zero-cost-abstractions"><a class="header" href="#zero-cost-abstractions">انتزاع‌های بدون هزینه</a></h1>
+<p>حالت‌های نوع همچنین نمونهٔ عالی‌ای از انتزاع‌های بدون هزینه (Zero Cost Abstractions) هستند؛ یعنی توانایی انتقال برخی رفتارها به اجرا یا تحلیل در زمان کامپایل. این حالت‌های نوع هیچ داده‌ای واقعی در بر ندارند و در عوض به‌عنوان نشانگر به کار می‌روند. چون هیچ داده‌ای ندارند، در زمان اجرا نمایش واقعی‌ای در حافظه ندارند:</p>
+<pre><code class="language-rust ignore">use core::mem::size_of;
+
+let _ = size_of::&lt;Enabled&gt;();    // == 0
+let _ = size_of::&lt;Input&gt;();      // == 0
+let _ = size_of::&lt;PulledHigh&gt;(); // == 0
+let _ = size_of::&lt;GpioConfig&lt;Enabled, Input, PulledHigh&gt;&gt;(); // == 0</code></pre>
+<h2 id="zero-sized-types"><a class="header" href="#zero-sized-types">نوع‌های بدون اندازه</a></h2>
+<pre><code class="language-rust ignore">struct Enabled;</code></pre>
+<p>ساختارهایی که این‌طور تعریف می‌شوند نوع‌های بدون اندازه (Zero Sized Types) نامیده می‌شوند، چون هیچ داده‌ای واقعی در بر ندارند. هرچند این نوع‌ها در زمان کامپایل «واقعی» رفتار می‌کنند ـ می‌توانید آن‌ها را کپی کنید، جابه‌جا کنید، به آن‌ها ارجاع بگیرید و غیره ـ بهینه‌ساز آن‌ها را کاملاً حذف خواهد کرد.</p>
+<p>در این قطعه کد:</p>
+<pre><code class="language-rust ignore">pub fn into_input_high_z(self) -&gt; GpioConfig&lt;Enabled, Input, HighZ&gt; {
+    self.periph.modify(|_r, w| w.input_mode().high_z());
+    GpioConfig {
+        periph: self.periph,
+        enabled: Enabled,
+        direction: Input,
+        mode: HighZ,
+    }
+}</code></pre>
+<p>مقدار <code>GpioConfig</code>ای که برمی‌گردانیم هرگز در زمان اجرا وجود ندارد. فراخوانی این تابع معمولاً به یک دستور اسمبلی ختم می‌شود ـ ذخیرهٔ یک مقدار ثابت رجیستر در یک مکان رجیستر. این یعنی رابط حالت‌های نوعی که توسعه داده‌ایم یک انتزاع بدون هزینه است ـ برای ردیابی وضعیت <code>GpioConfig</code> نه CPU بیشتری مصرف می‌کند، نه RAM بیشتری و نه فضای کد بیشتری، و به همان کد ماشینی تبدیل می‌شود که یک دسترسی مستقیم به رجیستر تولید می‌کند.</p>
+<h2 id="nesting"><a class="header" href="#nesting">تودرتو کردن</a></h2>
+<p>به‌طور کلی، این انتزاع‌ها را می‌توان تا هر عمقی که بخواهید تودرتو کرد. تا زمانی که همهٔ مؤلفه‌های استفاده‌شده نوع‌های بدون اندازه باشند، کل ساختار در زمان اجرا وجود نخواهد داشت.</p>
+<p>برای ساختارهای پیچیده یا عمیقاً تودرتو، ممکن است تعریف همهٔ ترکیب‌های ممکن حالت خسته‌کننده باشد. در این موارد می‌توان از ماکروها برای تولید همهٔ پیاده‌سازی‌ها استفاده کرد.</p><nav class="page-nav"><a href="../../embedded/static-guarantees/design-contracts.html">→ قراردادهای طراحی</a><a href="../../embedded/portability/index.html">قابلیت حمل ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

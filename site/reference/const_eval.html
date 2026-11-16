@@ -1,0 +1,355 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>ارزیابی ثابت (Constant evaluation) — مرجع زبان Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="const_eval"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="introduction.html" style="color:inherit;text-decoration:none">مرجع زبان Rust</a><small class="en-title" dir="ltr">The Rust Reference</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><div class="rule" id="r-const-eval"><a class="rule-link" href="#r-const-eval" title="const-eval"><span>[const-eval]</span></a>
+</div>
+
+<h1 id="constant-evaluation"><a class="header" href="#constant-evaluation">ارزیابی ثابت</a></h1>
+<div class="rule" id="r-const-eval.intro"><a class="rule-link" href="#r-const-eval.intro" title="const-eval.intro"><span>[const-eval<wbr>.intro]</span></a>
+</div>
+
+<p>ارزیابی ثابت فرایند محاسبهٔ نتیجهٔ <a href="expressions.html">عبارت‌ها</a> هنگام کامپایل است. فقط زیرمجموعه‌ای از عبارت‌ها در زمان کامپایل قابل ارزیابی‌اند.</p>
+<div class="rule" id="r-const-eval.const-expr"><a class="rule-link" href="#r-const-eval.const-expr" title="const-eval.const-expr"><span>[const-eval<wbr>.const-expr]</span></a>
+</div>
+
+<h2 id="constant-expressions"><a class="header" href="#constant-expressions">عبارت‌های ثابت</a></h2>
+<div class="rule" id="r-const-eval.const-expr.intro"><a class="rule-link" href="#r-const-eval.const-expr.intro" title="const-eval.const-expr.intro"><span>[const-eval<wbr>.const-expr<wbr>.intro]</span></a>
+</div>
+
+<p>شکل‌های مشخصی از عبارت که عبارت ثابت نام دارند، در زمان کامپایل قابل ارزیابی‌اند.</p>
+<div class="rule" id="r-const-eval.const-expr.const-context"><a class="rule-link" href="#r-const-eval.const-expr.const-context" title="const-eval.const-expr.const-context"><span>[const-eval<wbr>.const-expr<wbr>.const-context]</span></a>
+</div>
+
+<p>عبارت‌های درون <a href="#const-context">بافت const</a> باید عبارت ثابت باشند.</p>
+<div class="rule" id="r-const-eval.const-expr.evaluation"><a class="rule-link" href="#r-const-eval.const-expr.evaluation" title="const-eval.const-expr.evaluation"><span>[const-eval<wbr>.const-expr<wbr>.evaluation]</span></a>
+</div>
+
+<p>عبارت‌های بافت const همیشه هنگام کامپایل ارزیابی می‌شوند.</p>
+<div class="rule" id="r-const-eval.const-expr.runtime-context"><a class="rule-link" href="#r-const-eval.const-expr.runtime-context" title="const-eval.const-expr.runtime-context"><span>[const-eval<wbr>.const-expr<wbr>.runtime-context]</span></a>
+</div>
+
+<p>بیرون بافت const، عبارت‌های ثابت <em>ممکن است</em> هنگام کامپایل ارزیابی شوند، اما تضمینی نیست.</p>
+<div class="rule" id="r-const-eval.const-expr.error"><a class="rule-link" href="#r-const-eval.const-expr.error" title="const-eval.const-expr.error"><span>[const-eval<wbr>.const-expr<wbr>.error]</span></a>
+</div>
+
+<p>رفتارهایی مانند <a href="expressions/array-expr.html#array-and-slice-indexing-expressions">نمایه‌گذاری آرایه</a> خارج از محدوده یا <a href="expressions/operator-expr.html#overflow">سرریز</a>، اگر مقدار مجبور باشد هنگام کامپایل ارزیابی شود—یعنی در بافت const—خطای کامپایلر هستند. در غیر این صورت هشدارند، اما احتمالاً هنگام اجرا panic می‌کنند.</p>
+<div class="rule" id="r-const-eval.const-expr.list"><a class="rule-link" href="#r-const-eval.const-expr.list" title="const-eval.const-expr.list"><span>[const-eval<wbr>.const-expr<wbr>.list]</span></a>
+</div>
+
+<p>عبارت‌های زیر به‌شرط ثابت‌بودن همهٔ عملوندها و اجرا نشدن فراخوانی <a href="destructors.html"><code>Drop::drop</code></a>، عبارت ثابت هستند.</p>
+<div class="rule" id="r-const-eval.const-expr.literal"><a class="rule-link" href="#r-const-eval.const-expr.literal" title="const-eval.const-expr.literal"><span>[const-eval<wbr>.const-expr<wbr>.literal]</span></a>
+</div>
+
+<ul>
+<li><a href="expressions/literal-expr.html">لیترال‌ها</a>.</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.parameter"><a class="rule-link" href="#r-const-eval.const-expr.parameter" title="const-eval.const-expr.parameter"><span>[const-eval<wbr>.const-expr<wbr>.parameter]</span></a>
+</div>
+
+<ul>
+<li><a href="items/generics.html">پارامترهای const</a>.</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.path-item"><a class="rule-link" href="#r-const-eval.const-expr.path-item" title="const-eval.const-expr.path-item"><span>[const-eval<wbr>.const-expr<wbr>.path-item]</span></a>
+</div>
+
+<ul>
+<li><a href="expressions/path-expr.html">مسیرهای</a> منتهی به <a href="items/functions.html">تابع‌ها</a> و <a href="items/constant-items.html">ثابت‌ها</a>. تعریف بازگشتی ثابت مجاز نیست.</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.path-static"><a class="rule-link" href="#r-const-eval.const-expr.path-static" title="const-eval.const-expr.path-static"><span>[const-eval<wbr>.const-expr<wbr>.path-static]</span></a>
+</div>
+
+<ul>
+<li>
+<p>مسیرهای منتهی به <a href="items/static-items.html">staticها</a> با محدودیت‌های زیر:</p>
+<ul>
+<li>نوشتن در آیتم <code>static</code> در هیچ بافت ارزیابی ثابت مجاز نیست.</li>
+<li>خواندن از staticهای <code>extern</code> در هیچ بافت ارزیابی ثابت مجاز نیست.</li>
+<li>اگر ارزیابی در مقداردهندهٔ اولیهٔ یک آیتم <code>static</code> انجام نشود، خواندن از هر <code>static</code> تغییرپذیر مجاز نیست. یک <code>static</code> تغییرپذیر، آیتم <code>static mut</code> یا آیتم <code>static</code> با نوعی دارای تغییرپذیری درونی (interior mutability) است.</li>
+</ul>
+<p>این الزامات فقط هنگام ارزیابی ثابت بررسی می‌شوند. یعنی وجود نحوی چنین دسترسی‌هایی در بافت const تا زمانی که هرگز اجرا نشوند مجاز است.</p>
+</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.tuple"><a class="rule-link" href="#r-const-eval.const-expr.tuple" title="const-eval.const-expr.tuple"><span>[const-eval<wbr>.const-expr<wbr>.tuple]</span></a>
+</div>
+
+<ul>
+<li><a href="expressions/tuple-expr.html">عبارت‌های تاپل</a>.</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.array"><a class="rule-link" href="#r-const-eval.const-expr.array" title="const-eval.const-expr.array"><span>[const-eval<wbr>.const-expr<wbr>.array]</span></a>
+</div>
+
+<ul>
+<li><a href="expressions/array-expr.html">عبارت‌های آرایه</a>.</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.constructor"><a class="rule-link" href="#r-const-eval.const-expr.constructor" title="const-eval.const-expr.constructor"><span>[const-eval<wbr>.const-expr<wbr>.constructor]</span></a>
+</div>
+
+<ul>
+<li><a href="expressions/struct-expr.html">عبارت‌های struct</a>.</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.block"><a class="rule-link" href="#r-const-eval.const-expr.block" title="const-eval.const-expr.block"><span>[const-eval<wbr>.const-expr<wbr>.block]</span></a>
+</div>
+
+<ul>
+<li><a href="expressions/block-expr.html">عبارت‌های بلوکی</a>، شامل بلوک‌های <code>unsafe</code> و <code>const</code>:
+<ul>
+<li><a href="expressions/operator-expr.html#assignment-expressions">عبارت‌های انتساب</a>؛</li>
+<li><a href="expressions/operator-expr.html#assignment-expressions">عبارت‌های انتساب</a></li>
+<li><a href="expressions/operator-expr.html#compound-assignment-expressions">دستورهای عبارت</a>.</li>
+<li><a href="statements.html#expression-statements">دستورهای عبارتی</a></li>
+</ul>
+</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.field"><a class="rule-link" href="#r-const-eval.const-expr.field" title="const-eval.const-expr.field"><span>[const-eval<wbr>.const-expr<wbr>.field]</span></a>
+</div>
+
+<ul>
+<li><a href="expressions/field-expr.html">عبارت‌های فیلد</a>.</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.index"><a class="rule-link" href="#r-const-eval.const-expr.index" title="const-eval.const-expr.index"><span>[const-eval<wbr>.const-expr<wbr>.index]</span></a>
+</div>
+
+<ul>
+<li><a href="expressions/array-expr.html#array-and-slice-indexing-expressions">عبارت‌های نمایه‌گذاری آرایه و برش</a> با نمایهٔ <code>usize</code>.</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.range"><a class="rule-link" href="#r-const-eval.const-expr.range" title="const-eval.const-expr.range"><span>[const-eval<wbr>.const-expr<wbr>.range]</span></a>
+</div>
+
+<ul>
+<li><a href="expressions/range-expr.html">عبارت‌های بازه</a>.</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.closure"><a class="rule-link" href="#r-const-eval.const-expr.closure" title="const-eval.const-expr.closure"><span>[const-eval<wbr>.const-expr<wbr>.closure]</span></a>
+</div>
+
+<ul>
+<li><a href="expressions/closure-expr.html">عبارت‌های بستار</a> که متغیری از محیط تسخیر نمی‌کنند.</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.builtin-arith-logic"><a class="rule-link" href="#r-const-eval.const-expr.builtin-arith-logic" title="const-eval.const-expr.builtin-arith-logic"><span>[const-eval<wbr>.const-expr<wbr>.builtin-arith-logic]</span></a>
+</div>
+
+<ul>
+<li>عملگرهای داخلی <a href="expressions/operator-expr.html#negation-operators">نقیض</a>، <a href="expressions/operator-expr.html#arithmetic-and-logical-binary-operators">حسابی</a>، <a href="expressions/operator-expr.html#arithmetic-and-logical-binary-operators">منطقی</a>، <a href="expressions/operator-expr.html#comparison-operators">مقایسه</a> یا <a href="expressions/operator-expr.html#lazy-boolean-operators">بولی تنبل</a> که روی نوع‌های صحیح و ممیز شناور، <code>bool</code> و <code>char</code> به کار می‌روند.</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.borrows"><a class="rule-link" href="#r-const-eval.const-expr.borrows" title="const-eval.const-expr.borrows"><span>[const-eval<wbr>.const-expr<wbr>.borrows]</span></a>
+</div>
+
+<ul>
+<li>
+<p>همهٔ شکل‌های <a href="expressions/operator-expr.html#borrow-operators">قرض</a>، شامل قرض خام، به‌جز قرض عبارت‌هایی که حوزهٔ موقتشان تا پایان برنامه <a href="destructors.html#r-destructors.scope.lifetime-extension">گسترش طول‌عمر موقت</a> می‌یابد و یکی از موارد زیرند:</p>
+<ul>
+<li>قرض تغییرپذیر؛</li>
+<li>قرض اشتراکی عبارتی که مقداری با <a href="interior-mutability.html">تغییرپذیری درونی</a> تولید می‌کند.</li>
+</ul>
+<pre><code class="language-rust compile_fail E0764">// Due to being in tail position, this borrow extends the scope of the
+// temporary to the end of the program. Since the borrow is mutable,
+// this is not allowed in a const expression.
+const C: &amp;u8 = &amp;mut 0; // ERROR not allowed</code></pre>
+<pre><code class="language-rust compile_fail E0764">// Const blocks are similar to initializers of `const` items.
+let _: &amp;u8 = const { &amp;mut 0 }; // ERROR not allowed</code></pre>
+<pre><code class="language-rust compile_fail E0492"><span class="boring">use core::sync::atomic::AtomicU8;
+</span>// This is not allowed as 1) the temporary scope is extended to the
+// end of the program and 2) the temporary has interior mutability.
+const C: &amp;AtomicU8 = &amp;AtomicU8::new(0); // ERROR not allowed</code></pre>
+<pre><code class="language-rust compile_fail E0492"><span class="boring">use core::sync::atomic::AtomicU8;
+</span>// As above.
+let _: &amp;_ = const { &amp;AtomicU8::new(0) }; // ERROR not allowed</code></pre>
+<pre><code class="language-rust"><span class="boring">#![allow(static_mut_refs)]
+</span>// Even though this borrow is mutable, it's not of a temporary, so
+// this is allowed.
+const C: &amp;u8 = unsafe { static mut S: u8 = 0; &amp;mut S }; // OK</code></pre>
+<pre><code class="language-rust"><span class="boring">use core::sync::atomic::AtomicU8;
+</span>// Even though this borrow is of a value with interior mutability,
+// it's not of a temporary, so this is allowed.
+const C: &amp;AtomicU8 = {
+    static S: AtomicU8 = AtomicU8::new(0); &amp;S // OK
+};</code></pre>
+<pre><code class="language-rust"><span class="boring">use core::sync::atomic::AtomicU8;
+</span>// This shared borrow of an interior mutable temporary is allowed
+// because its scope is not extended.
+const C: () = { _ = &amp;AtomicU8::new(0); }; // OK</code></pre>
+<pre><code class="language-rust">// Even though the borrow is mutable and the temporary lives to the
+// end of the program due to promotion, this is allowed because the
+// borrow is not in tail position and so the scope of the temporary
+// is not extended via temporary lifetime extension.
+const C: () = { let _: &amp;'static mut [u8] = &amp;mut []; }; // OK
+//                                              ~~
+//                                     Promoted temporary.</code></pre>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> به‌عبارت دیگر و با تمرکز بر موارد مجاز، قرض اشتراکی دادهٔ دارای تغییرپذیری درونی و قرض تغییرپذیر فقط زمانی در <a href="#const-context">بافت const</a> مجازند که <a href="expressions.html#r-expr.place-value.place-memory-location">عبارت مکان</a> قرض‌گرفته‌شده <em>گذرا</em>، <em>غیرمستقیم</em> یا <em>ایستا</em> باشد.</p>
+<p>عبارت مکان زمانی <em>گذرا</em> است که متغیری محلی در بافت const جاری یا عبارتی باشد که حوزهٔ موقتش در همان بافت قرار دارد.</p>
+<pre><code class="language-rust">// The borrow is of a variable local to the initializer, therefore
+// this place expression is transient.
+const C: () = { let mut x = 0; _ = &amp;mut x; };</code></pre>
+<pre><code class="language-rust">// The borrow is of a temporary whose scope has not been extended,
+// therefore this place expression is transient.
+const C: () = { _ = &amp;mut 0u8; };</code></pre>
+<pre><code class="language-rust">// When a temporary is promoted but not lifetime extended, its
+// place expression is still treated as transient.
+const C: () = { let _: &amp;'static mut [u8] = &amp;mut []; };</code></pre>
+<p>عبارت مکان زمانی <em>غیرمستقیم</em> است که <a href="expressions/operator-expr.html#r-expr.deref">عبارت ارجاع‌زدایی</a> باشد.</p>
+<pre><code class="language-rust">const C: () = { _ = &amp;mut *(&amp;mut 0); };</code></pre>
+<p>عبارت مکان زمانی <em>ایستا</em> است که آیتم <code>static</code> باشد.</p>
+<pre><code class="language-rust"><span class="boring">#![allow(static_mut_refs)]
+</span>const C: &amp;u8 = unsafe { static mut S: u8 = 0; &amp;mut S };</code></pre>
+</blockquote>
+</div>
+
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> پیامد شگفت‌آور این قواعد آن است که کد زیر مجاز است:</p>
+<pre><code class="language-rust">const C: &amp;[u8] = { let x: &amp;mut [u8] = &amp;mut []; x }; // OK
+//                                    ~~~~~~~
+// Empty arrays are promoted even behind mutable borrows.</code></pre>
+<p>اما کد مشابه زیر مجاز نیست:</p>
+<pre><code class="language-rust compile_fail E0764">const C: &amp;[u8] = &amp;mut []; // ERROR
+//               ~~~~~~~
+//           Tail expression.</code></pre>
+<p>تفاوت این است که در اولی آرایهٔ خالی <a href="destructors.html#constant-promotion">ارتقا می‌یابد</a> اما حوزه‌اش مشمول <a href="destructors.html#r-destructors.scope.lifetime-extension">گسترش طول‌عمر موقت</a> نمی‌شود؛ بنابراین <a href="expressions.html#r-expr.place-value.place-memory-location">عبارت مکان</a> گذرا در نظر گرفته می‌شود، هرچند پس از ارتقا تا پایان برنامه زنده است. در دومی حوزهٔ آرایهٔ موقت گسترش می‌یابد و چون قرض تغییرپذیر از مقدار موقت با طول‌عمر گسترش‌یافته و در نتیجه مکان غیرگذراست، رد می‌شود.</p>
+<p>نتیجه شگفت‌آور است، زیرا گسترش طول‌عمر موقت در این مورد باعث می‌شود کد کمتری کامپایل شود.</p>
+<p>برای جزئیات <a href="https://github.com/rust-lang/rust/issues/143129">issue #143129</a> را ببینید.</p>
+</blockquote>
+</div>
+
+</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.deref"><a class="rule-link" href="#r-const-eval.const-expr.deref" title="const-eval.const-expr.deref"><span>[const-eval<wbr>.const-expr<wbr>.deref]</span></a>
+</div>
+
+<ul>
+<li>
+<p><a href="expressions/operator-expr.html#r-expr.deref">عبارت‌های ارجاع‌زدایی</a>.</p>
+<pre><code class="language-rust no_run"><span class="boring">use core::cell::UnsafeCell;
+</span>const _: u8 = unsafe {
+    let x: *mut u8 = &amp;raw mut *&amp;mut 0;
+    //                        ^^^^^^^
+    //             Dereference of mutable reference.
+    *x = 1; // Dereference of mutable pointer.
+    *(x as *const u8) // Dereference of constant pointer.
+};
+const _: u8 = unsafe {
+    let x = &amp;UnsafeCell::new(0);
+    *x.get() = 1; // Mutation of interior mutable value.
+    *x.get()
+};</code></pre>
+</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.group"><a class="rule-link" href="#r-const-eval.const-expr.group" title="const-eval.const-expr.group"><span>[const-eval<wbr>.const-expr<wbr>.group]</span></a>
+</div>
+
+<ul>
+<li>تبدیل اشاره‌گر به نشانی؛</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.cast"><a class="rule-link" href="#r-const-eval.const-expr.cast" title="const-eval.const-expr.cast"><span>[const-eval<wbr>.const-expr<wbr>.cast]</span></a>
+</div>
+
+<ul>
+<li>تبدیل اشاره‌گر تابع به نشانی.
+<ul>
+<li><em>بافت const</em> یکی از موارد زیر است:</li>
+<li><a href="types/array.html">عبارت طول نوع آرایه</a></li>
+</ul>
+</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.const-fn"><a class="rule-link" href="#r-const-eval.const-expr.const-fn" title="const-eval.const-expr.const-fn"><span>[const-eval<wbr>.const-expr<wbr>.const-fn]</span></a>
+</div>
+
+<ul>
+<li><a href="items/functions.html#const-functions">عبارت طول تکرار آرایه</a></li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.loop"><a class="rule-link" href="#r-const-eval.const-expr.loop" title="const-eval.const-expr.loop"><span>[const-eval<wbr>.const-expr<wbr>.loop]</span></a>
+</div>
+
+<ul>
+<li>مقداردهندهٔ اولیهٔ:</li>
+</ul>
+<div class="rule" id="r-const-eval.const-expr.if-match"><a class="rule-link" href="#r-const-eval.const-expr.if-match" title="const-eval.const-expr.if-match"><span>[const-eval<wbr>.const-expr<wbr>.if-match]</span></a>
+</div>
+
+<ul>
+<li><a href="items/constant-items.html">ثابت‌ها</a>؛</li>
+</ul>
+<div class="rule" id="r-const-eval.const-context"><a class="rule-link" href="#r-const-eval.const-context" title="const-eval.const-context"><span>[const-eval<wbr>.const-context]</span></a>
+</div>
+
+<h2 id="const-context"><a class="header" href="#const-context">بافت const</a></h2>
+<div class="rule" id="r-const-eval.const-context.def"><a class="rule-link" href="#r-const-eval.const-context.def" title="const-eval.const-context.def"><span>[const-eval<wbr>.const-context<wbr>.def]</span></a>
+</div>
+
+<p>یک <em>بافت const</em> یکی از موارد زیر است:</p>
+<div class="rule" id="r-const-eval.const-context.array-length"><a class="rule-link" href="#r-const-eval.const-context.array-length" title="const-eval.const-context.array-length"><span>[const-eval<wbr>.const-context<wbr>.array-length]</span></a>
+</div>
+
+<ul>
+<li><a href="types/array.html">ممیزهای enum</a>.</li>
+</ul>
+<div class="rule" id="r-const-eval.const-context.repeat-length"><a class="rule-link" href="#r-const-eval.const-context.repeat-length" title="const-eval.const-context.repeat-length"><span>[const-eval<wbr>.const-context<wbr>.repeat-length]</span></a>
+</div>
+
+<ul>
+<li>یک <a href="expressions/array-expr.html">آرگومان عمومی const</a></li>
+</ul>
+<div class="rule" id="r-const-eval.const-context.init"><a class="rule-link" href="#r-const-eval.const-context.init" title="const-eval.const-context.init"><span>[const-eval<wbr>.const-context<wbr>.init]</span></a>
+</div>
+
+<ul>
+<li>مقداردهندهٔ اولیهٔ
+<ul>
+<li><a href="items/constant-items.html">ثابت‌ها</a></li>
+<li><a href="items/static-items.html">staticها</a></li>
+<li><a href="items/enumerations.html#discriminants">discriminantهای enum</a></li>
+</ul>
+</li>
+</ul>
+<div class="rule" id="r-const-eval.const-context.generic"><a class="rule-link" href="#r-const-eval.const-context.generic" title="const-eval.const-context.generic"><span>[const-eval<wbr>.const-context<wbr>.generic]</span></a>
+</div>
+
+<ul>
+<li>یک <a href="items/generics.html#const-generics">آرگومان const generic</a></li>
+</ul>
+<div class="rule" id="r-const-eval.const-context.block"><a class="rule-link" href="#r-const-eval.const-context.block" title="const-eval.const-context.block"><span>[const-eval<wbr>.const-context<wbr>.block]</span></a>
+</div>
+
+<ul>
+<li>یک <a href="expressions/block-expr.html#const-blocks">بلوک const</a></li>
+</ul>
+<div class="rule" id="r-const-eval.const-context.outer-generics"><a class="rule-link" href="#r-const-eval.const-context.outer-generics" title="const-eval.const-context.outer-generics"><span>[const-eval<wbr>.const-context<wbr>.outer-generics]</span></a>
+</div>
+
+<p>عبارت‌های طول نوع آرایه، طول تکرار آرایه و آرگومان عمومی const در استفاده از پارامترهای عمومی بیرونی محدودند: چنین عبارتی باید یا یک پارامتر عمومی const منفرد باشد یا عبارتی که به هیچ پارامتر عمومی ارجاع نمی‌دهد.</p>
+<div class="rule" id="r-const-eval.const-fn"><a class="rule-link" href="#r-const-eval.const-fn" title="const-eval.const-fn"><span>[const-eval<wbr>.const-fn]</span></a>
+</div>
+
+<h2 id="const-functions"><a class="header" href="#const-functions">تابع‌های Const</a></h2>
+<div class="rule" id="r-const-eval.const-fn.intro"><a class="rule-link" href="#r-const-eval.const-fn.intro" title="const-eval.const-fn.intro"><span>[const-eval<wbr>.const-fn<wbr>.intro]</span></a>
+</div>
+
+<p><em>تابع const</em> تابعی است که در بافت const قابل فراخوانی است. با مشخص‌کنندهٔ <code>const</code> تعریف می‌شود و سازنده‌های <a href="items/structs.html">ساختار تاپل</a> و <a href="items/enumerations.html">گونهٔ تاپل enum</a> را نیز شامل می‌شود.</p>
+<blockquote>
+<p><strong>مثال</strong></p>
+<pre><code class="language-rust">const fn square(x: i32) -&gt; i32 { x * x }
+
+const VALUE: i32 = square(12);</code></pre>
+</blockquote>
+<div class="rule" id="r-const-eval.const-fn.const-context"><a class="rule-link" href="#r-const-eval.const-fn.const-context" title="const-eval.const-fn.const-context"><span>[const-eval<wbr>.const-fn<wbr>.const-context]</span></a>
+</div>
+
+<p>هنگامی که یک تابع const از یک بافت const فراخوانی شود، کامپایلر آن را در زمان کامپایل تفسیر می‌کند. این تفسیر در محیط هدف کامپایل انجام می‌شود، نه میزبان. بنابراین اگر برای یک سیستم <code>32</code> بیتی کامپایل کنید، <code>usize</code> برابر <code>32</code> بیت است، صرف‌نظر از اینکه ساخت را روی یک سیستم <code>64</code> بیتی انجام دهید یا <code>32</code> بیتی.</p>
+<div class="rule" id="r-const-eval.const-fn.outside-context"><a class="rule-link" href="#r-const-eval.const-fn.outside-context" title="const-eval.const-fn.outside-context"><span>[const-eval<wbr>.const-fn<wbr>.outside-context]</span></a>
+</div>
+
+<p>فراخوانی تابع const بیرون بافت const درست مانند حالتی رفتار می‌کند که مشخص‌کنندهٔ <code>const</code> نداشته باشد.</p>
+<div class="rule" id="r-const-eval.const-fn.body-restriction"><a class="rule-link" href="#r-const-eval.const-fn.body-restriction" title="const-eval.const-fn.body-restriction"><span>[const-eval<wbr>.const-fn<wbr>.body-restriction]</span></a>
+</div>
+
+<p>بدنهٔ تابع const فقط می‌تواند از <a href="#constant-expressions">عبارت‌های ثابت</a> استفاده کند.</p>
+<div class="rule" id="r-const-eval.const-fn.async"><a class="rule-link" href="#r-const-eval.const-fn.async" title="const-eval.const-fn.async"><span>[const-eval<wbr>.const-fn<wbr>.async]</span></a>
+</div>
+
+<p>تابع const نمی‌تواند <a href="items/functions.html#async-functions">async</a> باشد.</p>
+<div class="rule" id="r-const-eval.const-fn.type-restrictions"><a class="rule-link" href="#r-const-eval.const-fn.type-restrictions" title="const-eval.const-fn.type-restrictions"><span>[const-eval<wbr>.const-fn<wbr>.type-restrictions]</span></a>
+</div>
+
+<p>نوع پارامترها و نوع بازگشت تابع const به نوع‌های سازگار با بافت const محدود است.</p>
+<!-- TODO: Define the type restrictions. --><nav class="page-nav"><a href="behavior-not-considered-unsafe.html">→ رفتاری که ناامن شمرده نمی‌شود (Behavior not considered unsafe)</a><a href="abi.html">رابط دودویی برنامه (Application binary interface) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../reference/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

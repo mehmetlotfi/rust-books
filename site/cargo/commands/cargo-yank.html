@@ -1,0 +1,202 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>cargo yank — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="commands/cargo-yank"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="cargo-yank1"><a class="header" href="#cargo-yank1">cargo-yank(1)</a></h1>
+<h2 id="name"><a class="header" href="#name">نام</a></h2>
+<p>cargo-yank — حذف یک crate منتشرشده از index</p>
+<h2 id="synopsis"><a class="header" href="#synopsis">خلاصه</a></h2>
+<p><code>cargo yank</code> [<em>options</em>] <em>crate</em>@<em>version</em><br><code>cargo yank</code> [<em>options</em>] <code>--version</code> <em>version</em> [<em>crate</em>]</p>
+<h2 id="description"><a class="header" href="#description">توضیحات</a></h2>
+<p>فرمان yank نسخهٔ یک crate را که پیش‌تر منتشر شده است از index سرور حذف می‌کند. این فرمان هیچ داده‌ای را حذف نمی‌کند و crate همچنان از طریق پیوند دانلود registry برای دانلود در دسترس خواهد بود.</p>
+<p>Cargo نسخهٔ yank‌شده را برای هیچ پروژهٔ جدید یا checkout‌ای که فایل lock از پیش موجود ندارد استفاده نمی‌کند، و اگر دیگر هیچ نسخهٔ سازگاری برای crate شما باقی نمانده باشد، خطا تولید می‌کند.</p>
+<p>این فرمان نیاز دارد که یا با گزینهٔ <code>--token</code> یا با <a href="cargo-login.html">cargo-login(1)</a> احراز هویت شده باشید.</p>
+<p>اگر نام crate مشخص نشود، از نام بستهٔ دایرکتوری فعلی استفاده می‌شود.</p>
+<h3 id="how-yank-works"><a class="header" href="#how-yank-works">yank چگونه کار می‌کند</a></h3>
+<p>برای مثال، crate با نام <code>foo</code> نسخهٔ <code>1.5.0</code> را منتشر کرده و crate دیگری به نام <code>bar</code> یک وابستگی به نسخهٔ <code>foo = "1.5"</code> تعریف کرده است. اکنون <code>foo</code> نسخهٔ جدید <code>2.0.0</code> را که با semver سازگار نیست منتشر می‌کند و مشکلی بحرانی در <code>1.5.0</code> می‌یابد. اگر <code>1.5.0</code> yank شود، هیچ پروژه یا checkout جدیدی که فایل lock موجود ندارد نمی‌تواند از crate <code>bar</code> استفاده کند، زیرا <code>bar</code> به <code>1.5</code> وابسته است.</p>
+<p>در این حالت، نگه‌دارندگان <code>foo</code> باید پیش از yank کردن <code>1.5.0</code>، ابتدا یک نسخهٔ سازگار با semver مانند <code>1.5.1</code> منتشر کنند تا <code>bar</code> و همهٔ پروژه‌هایی که به <code>bar</code> وابسته‌اند همچنان کار کنند.</p>
+<p>به‌عنوان مثالی دیگر، crate‌ای به نام <code>bar</code> را در نظر بگیرید که نسخه‌های منتشرشدهٔ آن <code>1.5.0</code>، <code>1.5.1</code>، <code>1.5.2</code>، <code>2.0.0</code> و <code>3.0.0</code> است. جدول زیر مشخص می‌کند که پس از yank شدن یک نسخهٔ معین، cargo در نبود فایل lock برای نیازمندی‌های مختلف SemVer می‌تواند از کدام نسخه‌ها استفاده کند:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>نسخهٔ yank‌شده / نیازمندی SemVer</th><th><code>bar = "1.5.0"</code></th><th><code>bar = "=1.5.0"</code></th><th><code>bar = "2.0.0"</code></th></tr>
+</thead>
+<tbody>
+<tr><td><code>1.5.0</code></td><td>از <code>1.5.1</code> یا <code>1.5.2</code> استفاده می‌کند</td><td><strong>خطا برمی‌گرداند</strong></td><td>از <code>2.0.0</code> استفاده می‌کند</td></tr>
+<tr><td><code>1.5.1</code></td><td>از <code>1.5.0</code> یا <code>1.5.2</code> استفاده می‌کند</td><td>از <code>1.5.0</code> استفاده می‌کند</td><td>از <code>2.0.0</code> استفاده می‌کند</td></tr>
+<tr><td><code>2.0.0</code></td><td>از <code>1.5.0</code>، <code>1.5.1</code> یا <code>1.5.2</code> استفاده می‌کند</td><td>از <code>1.5.0</code> استفاده می‌کند</td><td><strong>خطا برمی‌گرداند</strong></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="when-to-yank"><a class="header" href="#when-to-yank">چه زمانی yank کنیم</a></h3>
+<p>crateها باید فقط در شرایط استثنایی yank شوند؛ برای مثال انتشار تصادفی، شکستن ناخواستهٔ SemVer، یا crate‌ای که به‌شدت خراب و غیرقابل استفاده است. در مورد آسیب‌پذیری‌های امنیتی، <a href="https://rustsec.org/">RustSec</a> معمولاً سازوکاری کم‌اختلال‌تر برای آگاه کردن کاربران و تشویق آن‌ها به ارتقا است و از احتمال اختلال گستردهٔ پایین‌دستی، صرف‌نظر از حساس بودن به آسیب‌پذیری مورد نظر، جلوگیری می‌کند.</p>
+<p>یک روند کاری رایج این است که crate را پس از انتشار یک نسخهٔ سازگار با semver yank کنند، تا احتمال جلوگیری از کامپایل شدن crateهای وابسته کاهش یابد.</p>
+<p>هنگام رسیدگی به مسائل مربوط به حق نشر، مجوز یا داده‌های شخصی در یک crate منتشرشده، صرفاً yank کردن آن ممکن است کافی نباشد. در چنین مواردی با نگه‌دارندگان registry‌ای که استفاده کرده‌اید تماس بگیرید. برای crates.io، <a href="https://crates.io/policies">سیاست‌های آن‌ها</a> را ببینید و از طریق <a href="mailto:help@crates.io">help@crates.io</a> با آن‌ها تماس بگیرید.</p>
+<p>اگر اعتبارنامه‌ها (credentials) افشا شده باشند، اقدام توصیه‌شده این است که فوراً آن‌ها را باطل کنید. پس از انتشار یک crate، نمی‌توان تشخیص داد که آیا اعتبارنامه‌های افشاشده کپی شده‌اند یا نه. yank کردن فقط Cargo را از انتخاب این نسخه هنگام حل‌وفصل وابستگی‌ها به‌صورت پیش‌فرض بازمی‌دارد. فایل‌های lock موجود یا دانلودهای مستقیم تحت‌تأثیر قرار نمی‌گیرند، بنابراین yank کردن نمی‌تواند از انتشار بیشتر اعتبارنامه‌های افشاشده جلوگیری کند.</p>
+<h2 id="options"><a class="header" href="#options">گزینه‌ها</a></h2>
+<h3 id="yank-options"><a class="header" href="#yank-options">گزینه‌های yank</a></h3>
+<dl>
+<dt class="option-term" id="option-cargo-yank---vers"><a class="option-anchor" href="#option-cargo-yank---vers"><code>--vers</code> <em>version</em></a></dt>
+
+<dt class="option-term" id="option-cargo-yank---version"><a class="option-anchor" href="#option-cargo-yank---version"><code>--version</code> <em>version</em></a></dt>
+
+<dd class="option-desc">
+<p>نسخه‌ای که باید yank یا un-yank شود.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-yank---undo"><a class="option-anchor" href="#option-cargo-yank---undo"><code>--undo</code></a></dt>
+
+<dd class="option-desc">
+<p>yank را لغو می‌کند و نسخه را به index برمی‌گرداند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-yank---token"><a class="option-anchor" href="#option-cargo-yank---token"><code>--token</code> <em>token</em></a></dt>
+
+<dd class="option-desc">
+<p>توکن API که هنگام احراز هویت استفاده می‌شود. این گزینه توکن ذخیره‌شده در
+فایل credentials (که توسط <a href="cargo-login.html">cargo-login(1)</a> ساخته می‌شود) را بازنویسی می‌کند.</p>
+
+<p>متغیرهای محیطی <a href="../reference/config.html">پیکربندی Cargo</a> را می‌توان برای
+بازنویسی توکن‌های ذخیره‌شده در فایل credentials به کار برد. توکن
+crates.io را می‌توان با متغیر محیطی <code>CARGO_REGISTRY_TOKEN</code> مشخص کرد. توکن‌های
+registryهای دیگر را می‌توان با متغیرهای محیطی به شکل <code>CARGO_REGISTRIES_NAME_TOKEN</code> مشخص کرد
+که در آن <code>NAME</code> نام registry با حروف بزرگ است.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-yank---index"><a class="option-anchor" href="#option-cargo-yank---index"><code>--index</code> <em>index</em></a></dt>
+
+<dd class="option-desc">
+<p>نشانی URL مربوط به index رجیستری که باید استفاده شود.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-yank---registry"><a class="option-anchor" href="#option-cargo-yank---registry"><code>--registry</code> <em>registry</em></a></dt>
+
+<dd class="option-desc">
+<p>نام registry‌ای که باید استفاده شود. نام registryها در <a href="../reference/config.html">فایل‌های پیکربندی
+Cargo</a> تعریف می‌شوند. اگر مشخص نشود، از registry پیش‌فرض استفاده می‌شود
+که با کلید پیکربندی <code>registry.default</code> تعریف می‌شود و مقدار پیش‌فرض آن
+<code>crates-io</code> است.</p>
+
+</dd>
+
+</dl>
+
+<h3 id="display-options"><a class="header" href="#display-options">گزینه‌های نمایش</a></h3>
+<dl>
+<dt class="option-term" id="option-cargo-yank--v"><a class="option-anchor" href="#option-cargo-yank--v"><code>-v</code></a></dt>
+
+<dt class="option-term" id="option-cargo-yank---verbose"><a class="option-anchor" href="#option-cargo-yank---verbose"><code>--verbose</code></a></dt>
+
+<dd class="option-desc">
+<p>از خروجی مفصل استفاده می‌کند. برای خروجی «بسیار مفصل» که شامل خروجی اضافی مانند هشدارهای
+وابستگی‌ها و خروجی build script است، می‌توان آن را دو بار مشخص کرد.
+همچنین می‌توان آن را با
+<a href="../reference/config.html">مقدار پیکربندی</a> <code>term.verbose</code> مشخص کرد.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-yank--q"><a class="option-anchor" href="#option-cargo-yank--q"><code>-q</code></a></dt>
+
+<dt class="option-term" id="option-cargo-yank---quiet"><a class="option-anchor" href="#option-cargo-yank---quiet"><code>--quiet</code></a></dt>
+
+<dd class="option-desc">
+<p>پیام‌های log مربوط به cargo را چاپ نمی‌کند.
+همچنین می‌توان آن را با
+<a href="../reference/config.html">مقدار پیکربندی</a> <code>term.quiet</code> مشخص کرد.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-yank---color"><a class="option-anchor" href="#option-cargo-yank---color"><code>--color</code> <em>when</em></a></dt>
+
+<dd class="option-desc">
+<p>تعیین می‌کند خروجی رنگی چه زمانی استفاده شود. مقادیر معتبر:</p>
+
+<ul>
+<li><code>auto</code> (پیش‌فرض): به‌طور خودکار تشخیص می‌دهد که آیا ترمینال از رنگ پشتیبانی می‌کند.</li>
+
+<li><code>always</code>: همیشه رنگ‌ها را نمایش می‌دهد.</li>
+
+<li><code>never</code>: هرگز رنگ‌ها را نمایش نمی‌دهد.</li>
+
+</ul>
+
+<p>همچنین می‌توان آن را با
+<a href="../reference/config.html">مقدار پیکربندی</a> <code>term.color</code> مشخص کرد.</p>
+
+</dd>
+
+</dl>
+
+<h3 id="common-options"><a class="header" href="#common-options">گزینه‌های رایج</a></h3>
+<dl>
+<dt class="option-term" id="option-cargo-yank-+toolchain"><a class="option-anchor" href="#option-cargo-yank-+toolchain"><code>+</code><em>toolchain</em></a></dt>
+
+<dd class="option-desc">
+<p>اگر Cargo با rustup نصب شده باشد و اولین آرگومان <code>cargo</code>
+با <code>+</code> شروع شود، به‌عنوان نام یک toolchain در rustup تفسیر می‌شود (مانند
+<code>+stable</code> یا <code>+nightly</code>).
+برای اطلاعات بیشتر دربارهٔ نحوهٔ کار override کردن toolchain، به
+<a href="https://rust-lang.github.io/rustup/overrides.html">مستندات rustup</a>
+مراجعه کنید.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-yank---config"><a class="option-anchor" href="#option-cargo-yank---config"><code>--config</code> <em>KEY=VALUE</em> یا <em>PATH</em></a></dt>
+
+<dd class="option-desc">
+<p>یک مقدار پیکربندی Cargo را بازنویسی می‌کند. آرگومان باید به نحو TOML و به شکل <code>KEY=VALUE</code> باشد،
+یا مسیر یک فایل پیکربندی اضافی داده شود. این پرچم را می‌توان چندین بار مشخص کرد.
+برای اطلاعات بیشتر <a href="../reference/config.html#command-line-overrides">بخش بازنویسی از خط فرمان</a> را ببینید.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-yank--C"><a class="option-anchor" href="#option-cargo-yank--C"><code>-C</code> <em>PATH</em></a></dt>
+
+<dd class="option-desc">
+<p>پیش از اجرای هر عملیات مشخص‌شده، دایرکتوری کاری فعلی را تغییر می‌دهد. این بر مواردی مانند
+محل پیش‌فرض جست‌وجوی manifest پروژه (<code>Cargo.toml</code>) توسط cargo و نیز
+دایرکتوری‌هایی که برای یافتن <code>.cargo/config.toml</code> جست‌وجو می‌شوند اثر می‌گذارد. این گزینه باید
+پیش از نام فرمان بیاید، برای مثال <code>cargo -C path/to/my-project build</code>.</p>
+
+<p>این گزینه فقط در <a href="../../book/appendix-07-nightly-rust.html">کانال
+nightly</a> در دسترس است و
+برای فعال شدن به پرچم <code>-Z unstable-options</code> نیاز دارد (به
+<a href="https://github.com/rust-lang/cargo/issues/10098">#10098</a> مراجعه کنید).</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-yank--h"><a class="option-anchor" href="#option-cargo-yank--h"><code>-h</code></a></dt>
+
+<dt class="option-term" id="option-cargo-yank---help"><a class="option-anchor" href="#option-cargo-yank---help"><code>--help</code></a></dt>
+
+<dd class="option-desc">
+<p>اطلاعات راهنما را چاپ می‌کند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-yank--Z"><a class="option-anchor" href="#option-cargo-yank--Z"><code>-Z</code> <em>flag</em></a></dt>
+
+<dd class="option-desc">
+<p>پرچم‌های ناپایدار (فقط nightly) برای Cargo. برای جزئیات <code>cargo -Z help</code> را اجرا کنید.</p>
+
+</dd>
+
+</dl>
+
+<h2 id="environment"><a class="header" href="#environment">متغیرهای محیطی</a></h2>
+<p>برای جزئیات متغیرهای محیطی که Cargo می‌خواند، <a href="../reference/environment-variables.html">مرجع</a> را ببینید.</p>
+<h2 id="exit-status"><a class="header" href="#exit-status">وضعیت خروج</a></h2>
+<ul>
+<li><code>0</code>: Cargo موفق بود.</li>
+<li><code>101</code>: Cargo نتوانست کار را به پایان برساند.</li>
+</ul>
+<h2 id="examples"><a class="header" href="#examples">مثال‌ها</a></h2>
+<ol>
+<li>
+<p>یک crate را از index yank کنید:</p>
+<pre><code>cargo yank foo@1.0.7
+</code></pre>
+</li>
+</ol>
+<h2 id="see-also"><a class="header" href="#see-also">همچنین ببینید</a></h2>
+<p><a href="cargo.html">cargo(1)</a>, <a href="cargo-login.html">cargo-login(1)</a>, <a href="cargo-publish.html">cargo-publish(1)</a></p><nav class="page-nav"><a href="cargo-publish.html">→ cargo publish</a><a href="report-commands.html">دستورهای گزارش ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

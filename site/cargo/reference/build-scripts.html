@@ -1,0 +1,205 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>اسکریپت‌های ساخت — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/build-scripts"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="build-scripts"><a class="header" href="#build-scripts">اسکریپت‌های ساخت</a></h1>
+<p>برخی بسته‌ها باید کدی غیر از Rust و متعلق به اشخاص ثالث را کامپایل کنند، برای مثال کتابخانه‌های C. بسته‌های دیگر باید به کتابخانه‌های C پیوند بخورند که یا روی سیستم موجودند یا شاید لازم باشد از سورس ساخته شوند. بعضی دیگر هم پیش از ساخت به امکاناتی مانند تولید کد نیاز دارند (مثلاً مولدهای تجزیه‌گر).</p>
+<p>Cargo قصد جایگزینی ابزارهایی را ندارد که برای این کارها به‌خوبی بهینه شده‌اند، اما از طریق اسکریپت‌های ساخت سفارشی با آن‌ها یکپارچه می‌شود. قرار دادن فایلی با نام <code>build.rs</code> در ریشهٔ یک بسته باعث می‌شود Cargo آن اسکریپت را کامپایل کند و درست پیش از ساخت بسته اجرایش کند.</p>
+<pre><code class="language-rust ignore">// Example custom build script.
+fn main() {
+    // Tell Cargo that if the given file changes, to rerun this build script.
+    println!("cargo::rerun-if-changed=src/hello.c");
+    // Use the `cc` crate to build a C file and statically link it.
+    cc::Build::new()
+        .file("src/hello.c")
+        .compile("hello");
+}</code></pre>
+<p>چند نمونه از کاربردهای اسکریپت‌های ساخت:</p>
+<ul>
+<li>ساخت یک کتابخانهٔ C همراه بسته.</li>
+<li>پیدا کردن یک کتابخانهٔ C روی سیستم میزبان.</li>
+<li>تولید یک ماژول Rust از روی یک مشخصات (specification).</li>
+<li>انجام هر پیکربندی خاص پلتفرم که crate به آن نیاز دارد.</li>
+</ul>
+<p>بخش‌های زیر نحوهٔ کار اسکریپت‌های ساخت را شرح می‌دهند و <a href="build-script-examples.html">فصل مثال‌ها</a> نمونه‌های متنوعی از نوشتن اسکریپت را نشان می‌دهد.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><a href="manifest.html#the-build-field">کلید <code>package.build</code> در manifest</a> را می‌توان برای تغییر نام اسکریپت ساخت یا غیرفعال کردن کامل آن به کار برد.</p>
+</blockquote>
+<h2 id="life-cycle-of-a-build-script"><a class="header" href="#life-cycle-of-a-build-script">چرخهٔ حیات یک اسکریپت ساخت</a></h2>
+<p>درست پیش از ساخت یک بسته، Cargo اسکریپت ساخت را به یک فایل اجرایی کامپایل می‌کند (اگر از قبل ساخته نشده باشد). سپس اسکریپت را اجرا می‌کند، که می‌تواند هر تعداد کاری انجام دهد. اسکریپت می‌تواند با چاپ دستورهای قالب‌بندی‌شدهٔ خاصی که با <code>cargo::</code> شروع می‌شوند در stdout با Cargo ارتباط برقرار کند.</p>
+<p>اگر هر یک از فایل‌های سورس اسکریپت یا وابستگی‌هایش تغییر کند، اسکریپت ساخت دوباره ساخته می‌شود.</p>
+<p>به‌طور پیش‌فرض، Cargo در صورت تغییر هر یک از فایل‌های بسته، اسکریپت ساخت را دوباره اجرا می‌کند. معمولاً بهتر است از دستورهای <code>rerun-if</code> که در بخش <a href="#change-detection">تشخیص تغییر</a> در ادامه توضیح داده شده‌اند استفاده کنید تا دامنهٔ آنچه باعث اجرای مجدد اسکریپت ساخت می‌شود محدود گردد.</p>
+<p>پس از آنکه اسکریپت ساخت با موفقیت اجرا شد، بقیهٔ بسته کامپایل می‌شود. اگر خطایی رخ دهد، اسکریپت‌ها باید با کد خروج غیرصفر خارج شوند تا ساخت متوقف شود؛ در این حالت خروجی اسکریپت ساخت در ترمینال نمایش داده می‌شود.</p>
+<h2 id="inputs-to-the-build-script"><a class="header" href="#inputs-to-the-build-script">ورودی‌های اسکریپت ساخت</a></h2>
+<p>هنگامی که اسکریپت ساخت اجرا می‌شود، تعدادی ورودی دارد که همگی به شکل <a href="environment-variables.html#environment-variables-cargo-sets-for-build-scripts">متغیرهای محیطی</a> به آن داده می‌شوند.</p>
+<p>علاوه بر متغیرهای محیطی، دایرکتوری جاری اسکریپت ساخت همان دایرکتوری ریشهٔ بستهٔ اسکریپت ساخت است.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>هنگام بررسی <a href="../../reference/conditional-compilation.html">گزینه‌های پیکربندی</a> مانند <code>target_os</code> یا <code>target_arch</code> در یک اسکریپت ساخت، از ماکروی <code>cfg!</code> یا attribute <code>#[cfg]</code> استفاده نکنید؛ این‌ها ماشین <strong>میزبان</strong> (جایی که اسکریپت ساخت اجرا می‌شود) را بررسی می‌کنند، نه پلتفرم <strong>هدفی</strong> که برایش کامپایل می‌کنید. این تفاوت در کامپایل متقابل (cross-compiling) اهمیت دارد.</p>
+<p>در عوض، متغیرهای محیطی متناظر <a href="environment-variables.html#environment-variables-cargo-sets-for-build-scripts"><code>CARGO_CFG_*</code></a> را بخوانید که پیکربندی هدف را درست منعکس می‌کنند. برای یک API نوع‌دار، استفاده از crate با نام <a href="https://crates.io/crates/build-rs"><code>build-rs</code></a> را در نظر بگیرید. برای جزئیات بیشتر <a href="build-script-examples.html#conditional-compilation">مثال‌های اسکریپت ساخت</a> را ببینید.</p>
+</blockquote>
+<h2 id="outputs-of-the-build-script"><a class="header" href="#outputs-of-the-build-script">خروجی‌های اسکریپت ساخت</a></h2>
+<p>اسکریپت‌های ساخت می‌توانند هر فایل خروجی یا مصنوع (artifact) میانی را در دایرکتوری مشخص‌شده در <a href="environment-variables.html#environment-variables-cargo-sets-for-build-scripts">متغیر محیطی <code>OUT_DIR</code></a> ذخیره کنند. اسکریپت‌ها نباید هیچ فایلی را خارج از آن دایرکتوری تغییر دهند.</p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>Cargo بین ساخت‌ها <code>OUT_DIR</code> را پاک یا بازنشانی نمی‌کند. محتوای این دایرکتوری ممکن است حتی با اجرای مجدد اسکریپت ساخت، بین ساخت‌های مجدد باقی بماند. این رفتار عمدی است تا از ساخت‌های افزایشی (incremental)، مانند کامپایل کد بومی، پشتیبانی شود.</p>
+<p>اسکریپت‌های ساخت نباید فرض کنند <code>OUT_DIR</code> خالی است، زیرا محتوای آن ممکن است بین ساخت‌های مجدد باقی بماند. اگر اسکریپتی به دایرکتوری تمیز نیاز دارد، در حال حاضر خودش مسئول مدیریت یا پاک‌سازی فایل‌ها و زیردایرکتوری‌هایی است که ایجاد می‌کند. دربارهٔ بهبودهای آینده در این زمینه بحث می‌شود (به <a href="https://github.com/rust-lang/cargo/issues/16427">#16427</a> و <a href="https://github.com/rust-lang/cargo/issues/9661">#9661</a> مراجعه کنید).</p>
+</blockquote>
+<p>اسکریپت‌های ساخت با چاپ در stdout با Cargo ارتباط برقرار می‌کنند. Cargo هر خطی را که با <code>cargo::</code> شروع شود به‌عنوان دستوری تفسیر می‌کند که بر کامپایل بسته اثر می‌گذارد. همهٔ خطوط دیگر نادیده گرفته می‌شوند.</p>
+<blockquote>
+<p>ترتیب دستورهای <code>cargo::</code> که اسکریپت ساخت چاپ می‌کند <em>ممکن است</em> بر ترتیب آرگومان‌هایی که <code>cargo</code> به <code>rustc</code> می‌دهد اثر بگذارد. این ترتیبِ آرگومان‌های <code>rustc</code> نیز به نوبهٔ خود ممکن است بر ترتیب آرگومان‌های داده‌شده به لینکر اثر بگذارد. بنابراین باید به ترتیب دستورهای اسکریپت ساخت توجه کنید. برای مثال، اگر شیء <code>foo</code> باید با کتابخانهٔ <code>bar</code> پیوند بخورد، باید مطمئن شوید دستور <a href="#rustc-link-lib"><code>cargo::rustc-link-lib</code></a> برای کتابخانهٔ <code>bar</code> <em>پس از</em> دستورهای پیوند دادن شیء <code>foo</code> ظاهر می‌شود.</p>
+</blockquote>
+<p>خروجی اسکریپت در طول کامپایل عادی از ترمینال پنهان است. اگر می‌خواهید خروجی را مستقیماً در ترمینال ببینید، Cargo را با پرچم <code>-vv</code> به‌صورت «بسیار پرجزئیات» (very verbose) اجرا کنید. این فقط زمانی رخ می‌دهد که اسکریپت ساخت اجرا شود. اگر Cargo تشخیص دهد چیزی تغییر نکرده، اسکریپت را دوباره اجرا نمی‌کند؛ برای اطلاعات بیشتر <a href="#change-detection">تشخیص تغییر</a> را در ادامه ببینید.</p>
+<p>همهٔ خطوطی که اسکریپت ساخت در stdout چاپ می‌کند در فایلی مانند <code>target/debug/build/&lt;pkg&gt;/output</code> نوشته می‌شود (مکان دقیق ممکن است به پیکربندی شما بستگی داشته باشد). خروجی stderr نیز در همان دایرکتوری ذخیره می‌شود.</p>
+<p>در ادامه خلاصه‌ای از دستورهایی آمده که Cargo می‌شناسد؛ هر یک در پایین به‌تفصیل شرح داده شده است.</p>
+<ul>
+<li><a href="#rerun-if-changed"><code>cargo::rerun-if-changed=PATH</code></a> — به Cargo می‌گوید چه زمانی اسکریپت را دوباره اجرا کند.</li>
+<li><a href="#rerun-if-env-changed"><code>cargo::rerun-if-env-changed=VAR</code></a> — به Cargo می‌گوید چه زمانی اسکریپت را دوباره اجرا کند.</li>
+<li><a href="#rustc-link-arg"><code>cargo::rustc-link-arg=FLAG</code></a> — پرچم‌های سفارشی را برای لینکر به بنچمارک‌ها، فایل‌های اجرایی، crateهای <code>cdylib</code>، مثال‌ها و آزمون‌ها می‌دهد.</li>
+<li><a href="#rustc-cdylib-link-arg"><code>cargo::rustc-link-arg-cdylib=FLAG</code></a> — پرچم‌های سفارشی را برای لینکر به crateهای cdylib می‌دهد.</li>
+<li><a href="#rustc-link-arg-bin"><code>cargo::rustc-link-arg-bin=BIN=FLAG</code></a> — پرچم‌های سفارشی را برای لینکر به فایل اجرایی <code>BIN</code> می‌دهد.</li>
+<li><a href="#rustc-link-arg-bins"><code>cargo::rustc-link-arg-bins=FLAG</code></a> — پرچم‌های سفارشی را برای لینکر به فایل‌های اجرایی می‌دهد.</li>
+<li><a href="#rustc-link-arg-tests"><code>cargo::rustc-link-arg-tests=FLAG</code></a> — پرچم‌های سفارشی را برای لینکر به آزمون‌ها می‌دهد.</li>
+<li><a href="#rustc-link-arg-examples"><code>cargo::rustc-link-arg-examples=FLAG</code></a> — پرچم‌های سفارشی را برای لینکر به مثال‌ها می‌دهد.</li>
+<li><a href="#rustc-link-arg-benches"><code>cargo::rustc-link-arg-benches=FLAG</code></a> — پرچم‌های سفارشی را برای لینکر به بنچمارک‌ها می‌دهد.</li>
+<li><a href="#rustc-link-lib"><code>cargo::rustc-link-lib=LIB</code></a> — یک کتابخانه برای پیوند دادن اضافه می‌کند.</li>
+<li><a href="#rustc-link-search"><code>cargo::rustc-link-search=[KIND=]PATH</code></a> — به مسیر جست‌وجوی کتابخانه اضافه می‌کند.</li>
+<li><a href="#rustc-flags"><code>cargo::rustc-flags=FLAGS</code></a> — برخی پرچم‌ها را به کامپایلر می‌دهد.</li>
+<li><a href="#rustc-cfg"><code>cargo::rustc-cfg=KEY[="VALUE"]</code></a> — تنظیمات <code>cfg</code> زمان کامپایل را فعال می‌کند.</li>
+<li><a href="#rustc-check-cfg"><code>cargo::rustc-check-cfg=CHECK_CFG</code></a> – <code>cfg</code>های سفارشی را برای بررسی زمان کامپایلِ پیکربندی‌ها به‌عنوان مورد انتظار ثبت می‌کند.</li>
+<li><a href="#rustc-env"><code>cargo::rustc-env=VAR=VALUE</code></a> — یک متغیر محیطی تنظیم می‌کند.</li>
+</ul>
+<ul>
+<li><a href="#cargo-error"><code>cargo::error=MESSAGE</code></a> — یک خطا را در ترمینال نمایش می‌دهد.</li>
+</ul>
+<ul>
+<li><a href="#cargo-warning"><code>cargo::warning=MESSAGE</code></a> — یک هشدار را در ترمینال نمایش می‌دهد.</li>
+<li><a href="#the-links-manifest-key"><code>cargo::metadata=KEY=VALUE</code></a> — فراداده، که اسکریپت‌های <code>links</code> از آن استفاده می‌کنند.</li>
+</ul>
+<blockquote>
+<p><strong>MSRV:</strong> برای نحو <code>cargo::KEY=VALUE</code> نسخهٔ 1.77 لازم است. برای پشتیبانی از نسخه‌های قدیمی‌تر، از نحو <code>cargo:KEY=VALUE</code> استفاده کنید.</p>
+</blockquote>
+<h3 id="rustc-link-arg"><a class="header" href="#rustc-link-arg"><code>cargo::rustc-link-arg=FLAG</code></a></h3>
+<p>دستور <code>rustc-link-arg</code> به Cargo می‌گوید <a href="../../rustc/codegen-options/index.html#link-arg">گزینهٔ <code>-C link-arg=FLAG</code></a> را به کامپایلر بدهد، اما فقط هنگام ساخت هدف‌های پشتیبانی‌شده (بنچمارک‌ها، فایل‌های اجرایی، crateهای <code>cdylib</code>، مثال‌ها و آزمون‌ها). استفاده از آن به‌شدت به پلتفرم وابسته است. برای تنظیم نسخهٔ کتابخانهٔ اشتراکی یا اسکریپت لینکر مفید است.</p>
+<h3 id="rustc-cdylib-link-arg"><a class="header" href="#rustc-cdylib-link-arg"><code>cargo::rustc-link-arg-cdylib=FLAG</code></a></h3>
+<p>دستور <code>rustc-link-arg-cdylib</code> به Cargo می‌گوید <a href="../../rustc/codegen-options/index.html#link-arg">گزینهٔ <code>-C link-arg=FLAG</code></a> را به کامپایلر بدهد، اما فقط هنگام ساخت هدف کتابخانهٔ <code>cdylib</code>. استفاده از آن به‌شدت به پلتفرم وابسته است. برای تنظیم نسخهٔ کتابخانهٔ اشتراکی یا مسیر زمان اجرا (runtime-path) مفید است.</p>
+<p>به دلایل تاریخی، شکل <code>cargo::rustc-cdylib-link-arg</code> نام مستعار <code>cargo::rustc-link-arg-cdylib</code> است و معنای یکسانی دارد.</p>
+<h3 id="rustc-link-arg-bin"><a class="header" href="#rustc-link-arg-bin"><code>cargo::rustc-link-arg-bin=BIN=FLAG</code></a></h3>
+<p>دستور <code>rustc-link-arg-bin</code> به Cargo می‌گوید <a href="../../rustc/codegen-options/index.html#link-arg">گزینهٔ <code>-C link-arg=FLAG</code></a> را به کامپایلر بدهد، اما فقط هنگام ساخت هدف فایل اجرایی با نام <code>BIN</code>. استفاده از آن به‌شدت به پلتفرم وابسته است. برای تنظیم اسکریپت لینکر یا سایر گزینه‌های لینکر مفید است.</p>
+<h3 id="rustc-link-arg-bins"><a class="header" href="#rustc-link-arg-bins"><code>cargo::rustc-link-arg-bins=FLAG</code></a></h3>
+<p>دستور <code>rustc-link-arg-bins</code> به Cargo می‌گوید <a href="../../rustc/codegen-options/index.html#link-arg">گزینهٔ <code>-C link-arg=FLAG</code></a> را به کامپایلر بدهد، اما فقط هنگام ساخت یک هدف فایل اجرایی. استفاده از آن به‌شدت به پلتفرم وابسته است. برای تنظیم اسکریپت لینکر یا سایر گزینه‌های لینکر مفید است.</p>
+<h3 id="rustc-link-arg-tests"><a class="header" href="#rustc-link-arg-tests"><code>cargo::rustc-link-arg-tests=FLAG</code></a></h3>
+<p>دستور <code>rustc-link-arg-tests</code> به Cargo می‌گوید <a href="../../rustc/codegen-options/index.html#link-arg">گزینهٔ <code>-C link-arg=FLAG</code></a> را به کامپایلر بدهد، اما فقط هنگام ساخت یک هدف آزمون.</p>
+<h3 id="rustc-link-arg-examples"><a class="header" href="#rustc-link-arg-examples"><code>cargo::rustc-link-arg-examples=FLAG</code></a></h3>
+<p>دستور <code>rustc-link-arg-examples</code> به Cargo می‌گوید <a href="../../rustc/codegen-options/index.html#link-arg">گزینهٔ <code>-C link-arg=FLAG</code></a> را به کامپایلر بدهد، اما فقط هنگام ساخت یک هدف مثال.</p>
+<h3 id="rustc-link-arg-benches"><a class="header" href="#rustc-link-arg-benches"><code>cargo::rustc-link-arg-benches=FLAG</code></a></h3>
+<p>دستور <code>rustc-link-arg-benches</code> به Cargo می‌گوید <a href="../../rustc/codegen-options/index.html#link-arg">گزینهٔ <code>-C link-arg=FLAG</code></a> را به کامپایلر بدهد، اما فقط هنگام ساخت یک هدف بنچمارک.</p>
+<h3 id="rustc-link-lib"><a class="header" href="#rustc-link-lib"><code>cargo::rustc-link-lib=LIB</code></a></h3>
+<p>دستور <code>rustc-link-lib</code> به Cargo می‌گوید کتابخانهٔ داده‌شده را با <a href="../../rustc/command-line-arguments.html#option-l-link-lib">پرچم <code>-l</code></a> کامپایلر پیوند دهد. این معمولاً برای پیوند دادن یک کتابخانهٔ بومی با استفاده از <a href="../../nomicon/ffi.html">FFI</a> به کار می‌رود.</p>
+<p>رشتهٔ <code>LIB</code> مستقیماً به rustc داده می‌شود، بنابراین هر نحوی را که <code>-l</code> پشتیبانی می‌کند پشتیبانی می‌کند. \ در حال حاضر نحو کاملاً پشتیبانی‌شده برای <code>LIB</code> به شکل <code>[KIND[:MODIFIERS]=]NAME[:RENAME]</code> است.</p>
+<p>پرچم <code>-l</code> فقط به هدف کتابخانهٔ بسته داده می‌شود، مگر اینکه هدف کتابخانه‌ای وجود نداشته باشد؛ در آن صورت به همهٔ هدف‌ها داده می‌شود. دلیلش این است که همهٔ هدف‌های دیگر وابستگی ضمنی به هدف کتابخانه دارند و کتابخانهٔ مورد نظر برای پیوند فقط باید یک بار گنجانده شود. این یعنی اگر بسته‌ای هم هدف کتابخانه و هم هدف فایل اجرایی داشته باشد، <em>کتابخانه</em> به نمادهای کتابخانهٔ داده‌شده دسترسی دارد و فایل اجرایی باید از طریق API عمومی هدف کتابخانه به آن‌ها دسترسی پیدا کند.</p>
+<p><code>KIND</code> اختیاری می‌تواند یکی از <code>dylib</code>، <code>static</code> یا <code>framework</code> باشد. برای جزئیات بیشتر <a href="../../rustc/command-line-arguments.html#option-l-link-lib">کتاب rustc</a> را ببینید.</p>
+<h3 id="rustc-link-search"><a class="header" href="#rustc-link-search"><code>cargo::rustc-link-search=[KIND=]PATH</code></a></h3>
+<p>دستور <code>rustc-link-search</code> به Cargo می‌گوید <a href="../../rustc/command-line-arguments.html#option-l-search-path">پرچم <code>-L</code></a> را به کامپایلر بدهد تا یک دایرکتوری به مسیر جست‌وجوی کتابخانه اضافه شود.</p>
+<p><code>KIND</code> اختیاری می‌تواند یکی از <code>dependency</code>، <code>crate</code>، <code>native</code>، <code>framework</code> یا <code>all</code> باشد. برای جزئیات بیشتر <a href="../../rustc/command-line-arguments.html#option-l-search-path">کتاب rustc</a> را ببینید.</p>
+<p>اگر این مسیرها درون <code>OUT_DIR</code> باشند، به <a href="environment-variables.html#dynamic-library-paths">متغیر محیطی مسیر جست‌وجوی کتابخانه‌های پویا</a> نیز اضافه می‌شوند. اتکا به این رفتار توصیه نمی‌شود، زیرا استفاده از فایل اجرایی حاصل را دشوار می‌کند. به‌طور کلی بهتر است از ساخت کتابخانه‌های پویا در اسکریپت ساخت پرهیز شود (استفاده از کتابخانه‌های موجود سیستم اشکالی ندارد).</p>
+<h3 id="rustc-flags"><a class="header" href="#rustc-flags"><code>cargo::rustc-flags=FLAGS</code></a></h3>
+<p>دستور <code>rustc-flags</code> به Cargo می‌گوید پرچم‌های داده‌شده را که با فاصله جدا شده‌اند به کامپایلر بدهد. این فقط پرچم‌های <code>-l</code> و <code>-L</code> را مجاز می‌داند و معادل استفاده از <a href="#rustc-link-lib"><code>rustc-link-lib</code></a> و <a href="#rustc-link-search"><code>rustc-link-search</code></a> است.</p>
+<h3 id="rustc-cfg"><a class="header" href="#rustc-cfg"><code>cargo::rustc-cfg=KEY[="VALUE"]</code></a></h3>
+<p>دستور <code>rustc-cfg</code> به Cargo می‌گوید مقدار داده‌شده را به <a href="../../rustc/command-line-arguments.html#option-cfg">پرچم <code>--cfg</code></a> کامپایلر بدهد. این می‌تواند برای تشخیص زمان کامپایلِ featureها به‌منظور فعال کردن <a href="../../reference/conditional-compilation.html">کامپایل شرطی</a> به کار رود. cfgهای سفارشی باید یا با دستور <a href="#rustc-check-cfg"><code>cargo::rustc-check-cfg</code></a> به‌عنوان مورد انتظار ثبت شوند، یا استفاده از آن‌ها باید lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#unexpected-cfgs"><code>unexpected_cfgs</code></a> را مجاز کند تا هشدارهای مربوط به cfgهای غیرمنتظره پیش نیاید.</p>
+<p>توجه کنید که این بر حل وابستگی‌های Cargo اثری <em>ندارد</em>. نمی‌توان از آن برای فعال کردن یک وابستگی اختیاری یا فعال کردن featureهای دیگر Cargo استفاده کرد.</p>
+<p>آگاه باشید که <a href="features.html">featureهای Cargo</a> از قالب <code>feature="foo"</code> استفاده می‌کنند. مقدارهای <code>cfg</code> که با این پرچم داده می‌شوند به آن قالب محدود نیستند و می‌توانند فقط یک شناسهٔ تکی یا هر جفت کلید/مقدار دلخواه باشند. برای مثال، صادر کردن <code>cargo::rustc-cfg=abc</code> به کد اجازه می‌دهد از <code>#[cfg(abc)]</code> استفاده کند (توجه کنید <code>feature=</code> وجود ندارد). یا می‌توان یک جفت کلید/مقدار دلخواه را با نماد <code>=</code> به کار برد، مانند <code>cargo::rustc-cfg=my_component="foo"</code>. کلید باید یک شناسهٔ Rust باشد و مقدار باید یک رشته.</p>
+<h3 id="rustc-check-cfg"><a class="header" href="#rustc-check-cfg"><code>cargo::rustc-check-cfg=CHECK_CFG</code></a></h3>
+<p>به فهرست نام‌ها و مقدارهای پیکربندیِ مورد انتظار که هنگام بررسی عبارت‌های cfgِ <em>دست‌یافتنی</em> با lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#unexpected-cfgs"><code>unexpected_cfgs</code></a> به کار می‌رود، می‌افزاید.</p>
+<p>نحو <code>CHECK_CFG</code> مشابه <a href="../../rustc/command-line-arguments.html#option-check-cfg">پرچم <code>--check-cfg</code></a> در <code>rustc</code> است؛ برای جزئیات بیشتر <a href="../../rustc/check-cfg.html">بررسی پیکربندی‌های شرطی</a> را ببینید.</p>
+<p>این دستور را می‌توان این‌گونه به کار برد:</p>
+<pre><code class="language-rust no_run">// build.rs
+println!("cargo::rustc-check-cfg=cfg(foo, values(\"bar\"))");
+if foo_bar_condition {
+    println!("cargo::rustc-cfg=foo=\"bar\"");
+}</code></pre>
+<p>توجه کنید که همهٔ cfgهای ممکن باید تعریف شوند، صرف‌نظر از اینکه در حال حاضر کدام cfgها فعال‌اند. این شامل همهٔ مقدارهای ممکنِ یک نام cfg می‌شود.</p>
+<p>توصیه می‌شود دستورهای <code>cargo::rustc-check-cfg</code> و <a href="../../rustc/command-line-arguments.html#option-cfg"><code>cargo::rustc-cfg</code></a> تا حد ممکن کنار هم گروه‌بندی شوند تا از اشتباه تایپی، check-cfg جاافتاده، cfgهای کهنه و… جلوگیری شود.</p>
+<p>همچنین مثال <a href="build-script-examples.html#conditional-compilation">کامپایل شرطی</a> را ببینید.</p>
+<blockquote>
+<p><strong>MSRV:</strong> از نسخهٔ 1.80 رعایت می‌شود</p>
+</blockquote>
+<h3 id="rustc-env"><a class="header" href="#rustc-env"><code>cargo::rustc-env=VAR=VALUE</code></a></h3>
+<p>دستور <code>rustc-env</code> به Cargo می‌گوید هنگام کامپایل بسته، متغیر محیطی داده‌شده را تنظیم کند. سپس مقدار را می‌توان با <a href="https://doc.rust-lang.org/std/macro.env.html">ماکروی <code>env!</code></a> در crate کامپایل‌شده بازیابی کرد. این برای جاسازی فراداده‌های اضافی در کد crate مفید است، مانند هش HEAD در git یا شناسهٔ یکتای یک سرور یکپارچه‌سازی مداوم (continuous integration).</p>
+<p>همچنین <a href="environment-variables.html#environment-variables-cargo-sets-for-crates">متغیرهای محیطی‌ای که Cargo به‌طور خودکار می‌گنجاند</a> را ببینید.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>این متغیرهای محیطی هنگام اجرای یک فایل اجرایی با <code>cargo run</code> یا <code>cargo test</code> نیز تنظیم می‌شوند. با این حال این استفاده توصیه نمی‌شود، زیرا فایل اجرایی را به محیط اجرای Cargo وابسته می‌کند. معمولاً این متغیرهای محیطی باید فقط در زمان کامپایل با ماکروی <code>env!</code> بررسی شوند.</p>
+</blockquote>
+<h3 id="cargo-error"><a class="header" href="#cargo-error"><code>cargo::error=MESSAGE</code></a></h3>
+<p>دستور <code>error</code> به Cargo می‌گوید پس از پایان اجرای اسکریپت ساخت یک خطا نمایش دهد و سپس ساخت را ناموفق کند.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>کتابخانه‌های اسکریپت ساخت باید با دقت بررسی کنند که می‌خواهند از <code>cargo::error</code> استفاده کنند یا یک <code>Result</code> برگردانند. ممکن است بهتر باشد یک <code>Result</code> برگردانده شود و به فراخواننده اجازه داده شود تصمیم بگیرد خطا کشنده است یا نه. سپس فراخواننده می‌تواند تصمیم بگیرد که آیا واریانت <code>Err</code> را با <code>cargo::error</code> نمایش دهد یا نه.</p>
+</blockquote>
+<blockquote>
+<p><strong>MSRV:</strong> از نسخهٔ 1.84 رعایت می‌شود</p>
+</blockquote>
+<h3 id="cargo-warning"><a class="header" href="#cargo-warning"><code>cargo::warning=MESSAGE</code></a></h3>
+<p>دستور <code>warning</code> به Cargo می‌گوید پس از پایان اجرای اسکریپت ساخت یک هشدار نمایش دهد. هشدارها فقط برای وابستگی‌های <code>path</code> (یعنی آن‌هایی که به‌صورت محلی روی آن‌ها کار می‌کنید) نمایش داده می‌شوند، بنابراین برای مثال هشدارهای چاپ‌شده در crateهای <a href="https://crates.io/">crates.io</a> به‌طور پیش‌فرض منتشر نمی‌شوند، مگر اینکه ساخت ناموفق شود. می‌توان از پرچم «بسیار پرجزئیات» <code>-vv</code> استفاده کرد تا Cargo هشدارها را برای همهٔ crateها نمایش دهد.</p>
+<h2 id="build-dependencies"><a class="header" href="#build-dependencies">وابستگی‌های ساخت</a></h2>
+<p>اسکریپت‌های ساخت می‌توانند به crateهای دیگر مبتنی بر Cargo هم وابسته باشند. وابستگی‌ها از طریق بخش <code>build-dependencies</code> در manifest تعریف می‌شوند.</p>
+<pre><code class="language-toml">[build-dependencies]
+cc = "1.0.46"
+</code></pre>
+<p>اسکریپت ساخت به وابستگی‌های فهرست‌شده در بخش <code>dependencies</code> یا <code>dev-dependencies</code> <strong>دسترسی ندارد</strong> (آن‌ها هنوز ساخته نشده‌اند!). همچنین وابستگی‌های ساخت در دسترس خود بسته نیستند، مگر اینکه صراحتاً در جدول <code>[dependencies]</code> هم اضافه شوند.</p>
+<p>توصیه می‌شود هر وابستگی‌ای را که اضافه می‌کنید با دقت بررسی کنید و تأثیر آن بر زمان کامپایل، مجوزدهی، نگهداری و غیره را بسنجید. Cargo تلاش می‌کند اگر یک وابستگی بین وابستگی‌های ساخت و وابستگی‌های عادی مشترک باشد از آن دوباره استفاده کند. با این حال این همیشه ممکن نیست، مثلاً هنگام کامپایل متقابل، پس تأثیر آن بر زمان کامپایل را در نظر داشته باشید.</p>
+<h2 id="change-detection"><a class="header" href="#change-detection">تشخیص تغییر</a></h2>
+<p>هنگام ساخت مجدد یک بسته، Cargo لزوماً نمی‌داند که آیا اسکریپت ساخت باید دوباره اجرا شود یا نه. به‌طور پیش‌فرض رویکردی محافظه‌کارانه دارد: اگر هر فایلی در بسته تغییر کند (یا فهرست فایل‌هایی که <a href="manifest.html#the-exclude-and-include-fields">فیلدهای <code>exclude</code> و <code>include</code></a> کنترل می‌کنند)، اسکریپت ساخت را همیشه دوباره اجرا می‌کند. در بیشتر موارد این انتخاب خوبی نیست، پس توصیه می‌شود هر اسکریپت ساخت دست‌کم یکی از دستورهای <code>rerun-if</code> را (که در ادامه شرح داده شده‌اند) صادر کند. اگر این‌ها صادر شوند، Cargo فقط در صورتی اسکریپت را دوباره اجرا می‌کند که مقدار داده‌شده تغییر کرده باشد. اگر Cargo اسکریپت‌های ساخت crate خودتان یا یک وابستگی را دوباره اجرا می‌کند و دلیلش را نمی‌دانید، <a href="../faq.html#why-is-cargo-rebuilding-my-code">«چرا Cargo کد من را دوباره می‌سازد؟» در پرسش‌های متداول</a> را ببینید.</p>
+<h3 id="rerun-if-changed"><a class="header" href="#rerun-if-changed"><code>cargo::rerun-if-changed=PATH</code></a></h3>
+<p>دستور <code>rerun-if-changed</code> به Cargo می‌گوید اگر فایل موجود در مسیر داده‌شده تغییر کرده باشد، اسکریپت ساخت را دوباره اجرا کند. در حال حاضر Cargo فقط از مهر زمانیِ آخرین ویرایش در سیستم فایل (mtime) استفاده می‌کند تا تشخیص دهد فایل تغییر کرده است یا نه. این مهر زمانی را با یک مهر زمانی کش‌شدهٔ داخلی از آخرین اجرای اسکریپت ساخت مقایسه می‌کند.</p>
+<p>اگر مسیر به یک دایرکتوری اشاره کند، کل دایرکتوری را برای هر تغییری پویش می‌کند.</p>
+<p>اگر اسکریپت ساخت ذاتاً در هیچ شرایطی نیازی به اجرای مجدد ندارد، صادر کردن <code>cargo::rerun-if-changed=build.rs</code> راه ساده‌ای برای جلوگیری از اجرای مجدد آن است (در غیر این صورت، اگر هیچ دستور <code>rerun-if</code> صادر نشود، پیش‌فرض این است که کل دایرکتوری بسته برای یافتن تغییرات پویش شود). Cargo به‌طور خودکار مدیریت می‌کند که آیا خود اسکریپت باید دوباره کامپایل شود یا نه، و البته اسکریپت پس از کامپایل مجدد دوباره اجرا می‌شود. در غیر این صورت، مشخص کردن <code>build.rs</code> زائد و غیرضروری است.</p>
+<h3 id="rerun-if-env-changed"><a class="header" href="#rerun-if-env-changed"><code>cargo::rerun-if-env-changed=NAME</code></a></h3>
+<p>دستور <code>rerun-if-env-changed</code> به Cargo می‌گوید اگر مقدار متغیر محیطی با نام داده‌شده تغییر کرده باشد، اسکریپت ساخت را دوباره اجرا کند.</p>
+<p>توجه کنید که متغیرهای محیطی در اینجا برای متغیرهای محیطی سراسری مانند <code>CC</code> و مشابه آن در نظر گرفته شده‌اند؛ نمی‌توان از این برای متغیرهای محیطی‌ای مانند <code>TARGET</code> که <a href="environment-variables.html#environment-variables-cargo-sets-for-build-scripts">Cargo برای اسکریپت‌های ساخت تنظیم می‌کند</a> استفاده کرد. متغیرهای محیطی مورد استفاده، همان‌هایی هستند که فراخوانی‌های <code>cargo</code> دریافت می‌کنند، نه آن‌هایی که فایل اجرایی اسکریپت ساخت دریافت می‌کند.</p>
+<p>از نسخهٔ 1.46، استفاده از <a href="https://doc.rust-lang.org/std/macro.env.html"><code>env!</code></a> و <a href="https://doc.rust-lang.org/std/macro.option_env.html"><code>option_env!</code></a> در کد سورس به‌طور خودکار تغییرات را تشخیص می‌دهد و ساخت مجدد را راه می‌اندازد. <code>rerun-if-env-changed</code> دیگر برای متغیرهایی که از قبل توسط این ماکروها ارجاع داده شده‌اند لازم نیست.</p>
+<h2 id="the-links-manifest-key"><a class="header" href="#the-links-manifest-key">کلید <code>links</code> در Manifest</a></h2>
+<p>کلید <code>package.links</code> را می‌توان در manifest با نام <code>Cargo.toml</code> تنظیم کرد تا اعلام شود که بسته با کتابخانهٔ بومی داده‌شده پیوند می‌خورد. هدف این کلید manifest آن است که به Cargo درکی از مجموعهٔ وابستگی‌های بومی یک بسته بدهد و نیز سامانه‌ای اصولی برای انتقال فراداده بین اسکریپت‌های ساخت بسته‌ها فراهم کند.</p>
+<pre><code class="language-toml">[package]
+# ...
+links = "foo"
+</code></pre>
+<p>این manifest بیان می‌کند که بسته به کتابخانهٔ بومی <code>libfoo</code> پیوند می‌خورد. هنگام استفاده از کلید <code>links</code>، بسته باید یک اسکریپت ساخت داشته باشد و اسکریپت ساخت باید از <a href="#rustc-link-lib">دستور <code>rustc-link-lib</code></a> برای پیوند دادن کتابخانه استفاده کند.</p>
+<p>در درجهٔ اول، Cargo الزام می‌کند که برای هر مقدار <code>links</code> حداکثر یک بسته وجود داشته باشد. به عبارت دیگر، پیوند خوردن دو بسته به یک کتابخانهٔ بومی ممنوع است. این کار از نمادهای تکراری بین crateها جلوگیری می‌کند. با این حال توجه کنید که <a href="#-sys-packages">قراردادهایی وجود دارند</a> که این محدودیت را کاهش می‌دهند.</p>
+<p>اسکریپت‌های ساخت می‌توانند مجموعه‌ای دلخواه از فراداده را به شکل جفت‌های کلید-مقدار تولید کنند. این فراداده با دستور <code>cargo::metadata=KEY=VALUE</code> تنظیم می‌شود.</p>
+<p>فراداده به اسکریپت‌های ساخت بسته‌های <strong>وابسته</strong> داده می‌شود. برای مثال، اگر بستهٔ <code>foo</code> به <code>bar</code> وابسته باشد و <code>bar</code> به <code>baz</code> پیوند بخورد، آنگاه اگر <code>bar</code> در فراداده‌های اسکریپت ساخت خود <code>key=value</code> را تولید کند، اسکریپت ساخت <code>foo</code> متغیرهای محیطی <code>DEP_BAZ_KEY=value</code> را خواهد داشت (توجه کنید که مقدار کلید <code>links</code> به کار می‌رود و حروف <code>key</code> تغییر می‌کند). برای مثالی از کاربرد این، <a href="build-script-examples.html#using-another-sys-crate">«استفاده از crate <code>sys</code> دیگر»</a> را ببینید.</p>
+<p>توجه کنید که فراداده فقط به وابسته‌های مستقیم داده می‌شود، نه به وابسته‌های انتقالی (transitive).</p>
+<blockquote>
+<p><strong>MSRV:</strong> برای <code>cargo::metadata=KEY=VALUE</code> نسخهٔ 1.77 لازم است. برای پشتیبانی از نسخه‌های قدیمی‌تر، از <code>cargo:KEY=VALUE</code> استفاده کنید (دستورهای پشتیبانی‌نشده به‌عنوان کلید فراداده فرض می‌شوند).</p>
+</blockquote>
+<h2 id="-sys-packages"><a class="header" href="#-sys-packages">بسته‌های <code>*-sys</code></a></h2>
+<p>برخی بسته‌های Cargo که به کتابخانه‌های سیستمی پیوند می‌خورند، قراردادی نام‌گذاری دارند و پسوند <code>-sys</code> می‌گیرند. هر بسته‌ای با نام <code>foo-sys</code> باید دو قابلیت اصلی ارائه دهد:</p>
+<ul>
+<li>crate کتابخانه باید به کتابخانهٔ بومی <code>libfoo</code> پیوند بخورد. این اغلب پیش از روی آوردن به ساخت از سورس، سیستم جاری را برای یافتن <code>libfoo</code> بررسی می‌کند.</li>
+<li>crate کتابخانه باید <strong>اعلان‌هایی</strong> برای نوع‌ها و توابع در <code>libfoo</code> فراهم کند، اما <strong>نه</strong> انتزاع‌های سطح بالاتر.</li>
+</ul>
+<p>مجموعهٔ بسته‌های <code>*-sys</code> مجموعه‌ای مشترک از وابستگی‌ها برای پیوند به کتابخانه‌های بومی فراهم می‌کند. داشتن این قرارداد برای بسته‌های مرتبط با کتابخانهٔ بومی مزایای متعددی دارد:</p>
+<ul>
+<li>وابستگی‌های مشترک به <code>foo-sys</code> قاعدهٔ «یک بسته به ازای هر مقدار <code>links</code>» را کاهش می‌دهد.</li>
+<li>بسته‌های <code>-sys</code> دیگر می‌توانند از متغیرهای محیطی <code>DEP_LINKS_KEY=value</code> بهره ببرند تا بهتر با بسته‌های دیگر یکپارچه شوند. مثال <a href="build-script-examples.html#using-another-sys-crate">«استفاده از crate <code>sys</code> دیگر»</a> را ببینید.</li>
+<li>یک وابستگی مشترک اجازه می‌دهد منطق کشف خود <code>libfoo</code> (یا ساخت آن از سورس) متمرکز شود.</li>
+<li>این وابستگی‌ها به‌سادگی <a href="#overriding-build-scripts">قابل بازنویسی</a> هستند.</li>
+</ul>
+<p>معمول است که یک بستهٔ همراه بدون پسوند <code>-sys</code> وجود داشته باشد که انتزاع‌های امن و سطح بالا را روی بستهٔ sys فراهم می‌کند. برای مثال، <a href="https://crates.io/crates/git2">crate <code>git2</code></a> یک واسط سطح بالا برای <a href="https://crates.io/crates/libgit2-sys">crate <code>libgit2-sys</code></a> فراهم می‌کند.</p>
+<h2 id="overriding-build-scripts"><a class="header" href="#overriding-build-scripts">بازنویسی اسکریپت‌های ساخت</a></h2>
+<p>اگر یک manifest کلید <code>links</code> داشته باشد، Cargo از بازنویسی اسکریپت ساخت مشخص‌شده با یک کتابخانهٔ سفارشی پشتیبانی می‌کند. هدف این قابلیت آن است که از اجرای کلِ اسکریپت ساخت مورد نظر جلوگیری شود و در عوض فراداده از پیش فراهم گردد.</p>
+<p>برای بازنویسی یک اسکریپت ساخت، پیکربندی زیر را در هر فایل <a href="config.html"><code>config.toml</code></a> قابل‌قبول قرار دهید.</p>
+<pre><code class="language-toml">[target.x86_64-unknown-linux-gnu.foo]
+rustc-link-lib = ["foo"]
+rustc-link-search = ["/path/to/foo"]
+rustc-flags = "-L /some/path"
+rustc-cfg = ['key="value"']
+rustc-env = {key = "value"}
+rustc-cdylib-link-arg = ["…"]
+metadata_key1 = "value"
+metadata_key2 = "value"
+</code></pre>
+<p>با این پیکربندی، اگر بسته‌ای اعلام کند که به <code>foo</code> پیوند می‌خورد، اسکریپت ساخت کامپایل یا اجرا <strong>نخواهد</strong> شد و به‌جای آن فرادادهٔ مشخص‌شده به کار می‌رود.</p>
+<p>کلیدهای <code>warning</code>، <code>rerun-if-changed</code> و <code>rerun-if-env-changed</code> نباید استفاده شوند و نادیده گرفته می‌شوند.</p>
+<h2 id="jobserver"><a class="header" href="#jobserver">Jobserver</a></h2>
+<p>Cargo و <code>rustc</code> از <a href="http://make.mad-scientist.net/papers/jobserver-implementation/">پروتکل jobserver</a> که برای GNU make توسعه یافته استفاده می‌کنند تا هم‌روندی (concurrency) را بین فرایندها هماهنگ کنند. این در اصل یک سمافور است که تعداد کارهایی را که هم‌زمان اجرا می‌شوند کنترل می‌کند. هم‌روندی را می‌توان با پرچم <code>--jobs</code> تنظیم کرد، که پیش‌فرضش تعداد CPUهای منطقی است.</p>
+<p>هر اسکریپت ساخت یک اسلات کار از Cargo به ارث می‌برد و باید بکوشد هنگام اجرا فقط از یک CPU استفاده کند. اگر اسکریپت بخواهد به‌طور موازی از CPUهای بیشتری استفاده کند، باید از <a href="https://crates.io/crates/jobserver">crate <code>jobserver</code></a> برای هماهنگی با Cargo بهره ببرد.</p>
+<p>برای مثال، <a href="https://crates.io/crates/cc">crate <code>cc</code></a> می‌تواند feature اختیاری <code>parallel</code> را فعال کند که از پروتکل jobserver استفاده می‌کند تا چند فایل C را هم‌زمان بسازد.</p><nav class="page-nav"><a href="environment-variables.html">→ متغیرهای محیطی</a><a href="build-script-examples.html">مثال‌هایی از اسکریپت‌های ساخت ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

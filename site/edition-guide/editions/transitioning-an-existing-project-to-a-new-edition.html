@@ -1,0 +1,65 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>انتقال یک پروژهٔ موجود به یک ویرایش جدید — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="editions/transitioning-an-existing-project-to-a-new-edition"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="transitioning-an-existing-project-to-a-new-edition"><a class="header" href="#transitioning-an-existing-project-to-a-new-edition">انتقال یک پروژهٔ موجود به یک ویرایش جدید</a></h1>
+<p>Rust ابزارهایی دارد که یک پروژه را به‌طور خودکار از یک ویرایش به ویرایش بعدی منتقل می‌کنند. این ابزار کد منبع شما را به‌روزرسانی می‌کند تا با ویرایش بعدی سازگار شود. به‌طور خلاصه، مراحل به‌روزرسانی به ویرایش بعدی عبارت‌اند از:</p>
+<ol>
+<li>برای به‌روزرسانی وابستگی‌هایتان به آخرین نسخه‌ها، <code>cargo update</code> را اجرا کنید.</li>
+<li><code>cargo fix --edition</code> را اجرا کنید.</li>
+<li>فایل <code>Cargo.toml</code> را ویرایش کنید و فیلد <code>edition</code> را روی ویرایش بعدی تنظیم کنید، برای مثال <code>edition = "2024"</code></li>
+<li>برای اطمینان از درستی اصلاحات، <code>cargo build</code> یا <code>cargo test</code> را اجرا کنید.</li>
+<li>برای قالب‌بندی مجدد پروژه، <code>cargo fmt</code> را اجرا کنید.</li>
+</ol>
+<p>بخش‌های بعدی به جزئیات این مراحل و برخی مشکلاتی که ممکن است در طول مسیر با آن‌ها روبه‌رو شوید می‌پردازند.</p>
+<blockquote>
+<p>هدف ما این است که مهاجرت به ویرایش‌های جدید تا حد ممکن تجربه‌ای روان باشد. اگر ارتقا به آخرین ویرایش برای شما دشوار است، آن را یک باگ می‌دانیم. اگر در این فرایند با مشکلی روبه‌رو شدید، لطفاً <a href="https://github.com/rust-lang/rust/issues/new/choose">یک گزارش باگ ثبت کنید</a>. سپاسگزاریم!</p>
+</blockquote>
+<h2 id="starting-the-migration"><a class="header" href="#starting-the-migration">شروع مهاجرت</a></h2>
+<p>به‌عنوان مثال، بیایید انتقال از ویرایش 2015 به ویرایش 2018 را بررسی کنیم. مراحل هنگام انتقال به ویرایش‌های دیگر مانند 2021 نیز اساساً یکسان است.</p>
+<p>فرض کنید crate‌ای داریم که این کد را در <code>src/lib.rs</code> دارد:</p>
+<pre><code class="language-rust">trait Foo {
+    fn foo(&amp;self, i32);
+}</code></pre>
+<p>این کد از یک پارامتر بی‌نام استفاده می‌کند، یعنی همان <code>i32</code>. این کار در Rust 2018 پشتیبانی نمی‌شود، و بنابراین این کد کامپایل نمی‌شود. بیایید این کد را به‌روز کنیم!</p>
+<h2 id="updating-your-dependencies"><a class="header" href="#updating-your-dependencies">به‌روزرسانی وابستگی‌هایتان</a></h2>
+<p>پیش از شروع، توصیه می‌شود وابستگی‌هایتان را به‌روزرسانی کنید. برخی وابستگی‌ها، به‌ویژه برخی proc-macroها یا وابستگی‌هایی که در زمان ساخت تولید کد انجام می‌دهند، ممکن است با ویرایش‌های جدیدتر مشکل سازگاری داشته باشند. ممکن است از آخرین باری که به‌روزرسانی کرده‌اید نسخه‌های جدیدی منتشر شده باشند که این مشکلات را رفع می‌کنند. دستور زیر را اجرا کنید:</p>
+<pre><code class="language-console">cargo update
+</code></pre>
+<p>پس از به‌روزرسانی، ممکن است بخواهید آزمون‌های خود را اجرا کنید تا مطمئن شوید همه‌چیز درست کار می‌کند. اگر از ابزار مدیریت کد منبع مانند <code>git</code> استفاده می‌کنید، شاید بخواهید این تغییرات را جداگانه commit کنید تا commitها از هم تفکیک منطقی داشته باشند.</p>
+<h2 id="updating-your-code-to-be-compatible-with-the-new-edition"><a class="header" href="#updating-your-code-to-be-compatible-with-the-new-edition">به‌روزرسانی کد برای سازگاری با ویرایش جدید</a></h2>
+<p>ممکن است کد شما از قابلیت‌هایی استفاده کند که با ویرایش جدید ناسازگارند، یا استفاده نکند. برای کمک به انتقال به ویرایش بعدی، Cargo زیردستور <a href="../../cargo/commands/cargo-fix.html"><code>cargo fix</code></a> را دارد که کد منبع شما را به‌طور خودکار به‌روزرسانی می‌کند. برای شروع، بیایید آن را اجرا کنیم:</p>
+<pre><code class="language-console">cargo fix --edition
+</code></pre>
+<p>این دستور کد شما را بررسی می‌کند و هر مشکلی را که بتواند به‌طور خودکار رفع می‌کند. بیایید دوباره به <code>src/lib.rs</code> نگاه کنیم:</p>
+<pre><code class="language-rust">trait Foo {
+    fn foo(&amp;self, _: i32);
+}</code></pre>
+<p>کد ما بازنویسی شده است تا برای آن مقدار <code>i32</code> یک نام پارامتر معرفی کند. در این مورد، چون نامی نداشت، <code>cargo fix</code> آن را با <code>_</code> جایگزین می‌کند، که برای متغیرهای استفاده‌نشده یک قرارداد رایج است.</p>
+<p><code>cargo fix</code> همیشه نمی‌تواند کد شما را به‌طور خودکار اصلاح کند. اگر <code>cargo fix</code> نتواند چیزی را اصلاح کند، هشداری را که نمی‌تواند رفع کند در کنسول چاپ می‌کند. اگر یکی از این هشدارها را دیدید، باید کد خود را به‌صورت دستی به‌روزرسانی کنید. برای اطلاعات بیشتر دربارهٔ کار با فرایند مهاجرت، فصل <a href="advanced-migrations.html">راهبردهای پیشرفتهٔ مهاجرت</a> را ببینید و فصل‌های این راهنما را بخوانید که توضیح می‌دهند چه تغییراتی لازم است. اگر مشکلی دارید، لطفاً از <a href="https://users.rust-lang.org/">انجمن کاربران</a> کمک بگیرید.</p>
+<h2 id="enabling-the-new-edition-to-use-new-features"><a class="header" href="#enabling-the-new-edition-to-use-new-features">فعال‌سازی ویرایش جدید برای استفاده از قابلیت‌های جدید</a></h2>
+<p>برای استفاده از برخی قابلیت‌های جدید، باید صراحتاً ویرایش جدید را فعال کنید. وقتی آماده ادامه بودید، فایل <code>Cargo.toml</code> خود را تغییر دهید و جفت کلید/مقدار <code>edition</code> جدید را اضافه کنید. برای مثال:</p>
+<pre><code class="language-toml">[package]
+name = "foo"
+version = "0.1.0"
+edition = "2018"
+</code></pre>
+<p>اگر کلید <code>edition</code> وجود نداشته باشد، Cargo به‌طور پیش‌فرض Rust 2015 را در نظر می‌گیرد. اما در این مورد، ما <code>2018</code> را انتخاب کرده‌ایم و بنابراین کد ما با Rust 2018 کامپایل خواهد شد!</p>
+<h2 id="testing-your-code-in-the-new-edition"><a class="header" href="#testing-your-code-in-the-new-edition">آزمایش کد در ویرایش جدید</a></h2>
+<p>گام بعدی آزمایش پروژهٔ شما روی ویرایش جدید است. آزمون‌های پروژه را اجرا کنید تا مطمئن شوید همه‌چیز هنوز کار می‌کند، مثلاً با اجرای <a href="../../cargo/commands/cargo-test.html"><code>cargo test</code></a>. اگر هشدارهای جدیدی صادر شد، شاید بخواهید دوباره <code>cargo fix</code> را (بدون پرچم <code>--edition</code>) اجرا کنید تا پیشنهادهای کامپایلر اعمال شوند.</p>
+<p>در این مرحله، ممکن است هنوز لازم باشد برخی تغییرات را به‌صورت دستی انجام دهید. برای مثال، مهاجرت خودکار doctestها را به‌روزرسانی نمی‌کند، و تولید کد در زمان ساخت یا ماکروها ممکن است به به‌روزرسانی دستی نیاز داشته باشند. برای اطلاعات بیشتر <a href="advanced-migrations.html">فصل مهاجرت‌های پیشرفته</a> را ببینید.</p>
+<p>تبریک! کد شما اکنون هم در Rust 2015 و هم در Rust 2018 معتبر است!</p>
+<h2 id="reformatting-with-rustfmt"><a class="header" href="#reformatting-with-rustfmt">قالب‌بندی مجدد با rustfmt</a></h2>
+<p>اگر از <a href="https://github.com/rust-lang/rustfmt">rustfmt</a> برای نگهداری خودکار قالب‌بندی پروژه استفاده می‌کنید، باید قالب‌بندی مجدد با قوانین قالب‌بندی جدید ویرایش جدید را در نظر بگیرید.</p>
+<p>پیش از قالب‌بندی مجدد، اگر از ابزار مدیریت کد منبع مانند <code>git</code> استفاده می‌کنید، شاید بخواهید همهٔ تغییراتی را که تا این لحظه انجام داده‌اید قبل از این گام commit کنید. گذاشتن تغییرات قالب‌بندی در یک commit جداگانه می‌تواند مفید باشد، چون می‌توانید ببینید کدام تغییرات صرفاً قالب‌بندی هستند و کدام تغییرات کد دیگرند، و همچنین احتمالاً می‌توانید تغییرات قالب‌بندی را در <code>git blame</code> نادیده بگیرید.</p>
+<pre><code class="language-console">cargo fmt
+</code></pre>
+<p>برای اطلاعات بیشتر، <a href="../rust-2024/rustfmt-style-edition.html">فصل ویرایش‌های سبک</a> را ببینید.</p>
+<h2 id="migrating-to-an-unstable-edition"><a class="header" href="#migrating-to-an-unstable-edition">مهاجرت به یک ویرایش ناپایدار</a></h2>
+<p>پس از انتشار یک ویرایش، تقریباً یک بازهٔ سه‌ساله تا ویرایش بعدی وجود دارد. در این بازه، ممکن است قابلیت‌های جدیدی به ویرایش بعدی اضافه شوند که فقط روی <a href="../../book/appendix-07-nightly-rust.html">کانال nightly</a> در دسترس خواهند بود. اگر می‌خواهید پیش از stable شدن این قابلیت‌ها در آزمایش آن‌ها کمک کنید، می‌توانید از کانال nightly برای امتحان کردنشان استفاده کنید.</p>
+<p>مراحل تقریباً شبیه کانال stable است:</p>
+<ol>
+<li>جدیدترین نسخهٔ nightly را نصب کنید: <code>rustup update nightly</code>.</li>
+<li><code>cargo +nightly fix --edition</code> را اجرا کنید.</li>
+<li>فایل <code>Cargo.toml</code> را ویرایش کنید و <code>cargo-features = ["edition20xx"]</code> را در بالای آن (بالاتر از <code>[package]</code>) قرار دهید، و فیلد edition را طوری تغییر دهید که <code>edition = "20xx"</code> باشد، که در آن <code>20xx</code> ویرایشی است که به آن ارتقا می‌دهید.</li>
+<li><code>cargo +nightly check</code> را اجرا کنید تا مطمئن شوید اکنون در ویرایش جدید کار می‌کند.</li>
+</ol>
+<blockquote>
+<p><strong>⚠ احتیاط</strong>: ممکن است برای قابلیت‌هایی که در ویرایش بعدی پیاده‌سازی شده‌اند، مهاجرت خودکار با <code>cargo fix</code> پیاده‌سازی نشده باشد، و خود قابلیت‌ها نیز ممکن است کامل نشده باشند. در صورت امکان، این راهنما باید اطلاعاتی دربارهٔ اینکه کدام قابلیت‌ها روی nightly پیاده‌سازی شده‌اند، همراه با اطلاعات بیشتر دربارهٔ وضعیت آن‌ها داشته باشد. چند ماه پیش از stable شدن ویرایش، همهٔ قابلیت‌های جدید باید کاملاً پیاده‌سازی شده باشند و <a href="https://blog.rust-lang.org/">وبلاگ Rust</a> فراخوانی برای آزمایش اعلام خواهد کرد.</p>
+</blockquote><nav class="page-nav"><a href="creating-a-new-project.html">→ ایجاد یک پروژهٔ جدید</a><a href="advanced-migrations.html">مهاجرت‌های پیشرفته ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

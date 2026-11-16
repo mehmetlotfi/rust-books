@@ -1,0 +1,104 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>مثال: دریافت تشخیص‌ها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rustc-driver/getting-diagnostics"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="example-getting-diagnostic-through-rustc_interface"><a class="header" href="#example-getting-diagnostic-through-rustc_interface">مثال: گرفتن diagnostic از طریق <code>rustc_interface</code></a></h1>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_interface/index.html"><code>rustc_interface</code></a> اجازه می‌دهد diagnosticهایی را که در غیر این صورت روی stderr چاپ می‌شدند رهگیری کنید.</p>
+<h2 id="getting-diagnostics"><a class="header" href="#getting-diagnostics">Getting diagnostics</a></h2>
+<p>برای گرفتن diagnosticها از کامپایلر، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_interface/interface/struct.Config.html"><code>rustc_interface::Config</code></a> را طوری پیکربندی کنید که diagnostic را در بافر خروجی دهد و برای هر آیتم <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/query/struct.TyCtxtEnsureOk.html#method.typeck"><code>TyCtxtEnsureOk::typeck</code></a> را اجرا کنید.</p>
+<pre><code class="language-rust">// Tested with nightly-2025-03-28
+
+#![feature(rustc_private)]
+
+extern crate rustc_data_structures;
+extern crate rustc_driver;
+extern crate rustc_error_codes;
+extern crate rustc_errors;
+extern crate rustc_hash;
+extern crate rustc_hir;
+extern crate rustc_interface;
+extern crate rustc_session;
+extern crate rustc_span;
+
+use std::sync::{Arc, Mutex};
+
+use rustc_errors::emitter::Emitter;
+use rustc_errors::registry::Registry;
+use rustc_errors::translation::Translate;
+use rustc_errors::{DiagInner, FluentBundle};
+use rustc_session::config;
+use rustc_span::source_map::SourceMap;
+
+struct DebugEmitter {
+    source_map: Arc&lt;SourceMap&gt;,
+    diagnostics: Arc&lt;Mutex&lt;Vec&lt;DiagInner&gt;&gt;&gt;,
+}
+
+impl Translate for DebugEmitter {
+    fn fluent_bundle(&amp;self) -&gt; Option&lt;&amp;FluentBundle&gt; {
+        None
+    }
+
+    fn fallback_fluent_bundle(&amp;self) -&gt; &amp;FluentBundle {
+        panic!("this emitter should not translate message")
+    }
+}
+
+impl Emitter for DebugEmitter {
+    fn emit_diagnostic(&amp;mut self, diag: DiagInner, _: &amp;Registry) {
+        self.diagnostics.lock().unwrap().push(diag);
+    }
+
+    fn source_map(&amp;self) -&gt; Option&lt;&amp;SourceMap&gt; {
+        Some(&amp;self.source_map)
+    }
+}
+
+fn main() {
+    let buffer: Arc&lt;Mutex&lt;Vec&lt;DiagInner&gt;&gt;&gt; = Arc::default();
+    let diagnostics = buffer.clone();
+    let config = rustc_interface::Config {
+        opts: config::Options::default(),
+        // This program contains a type error.
+        input: config::Input::Str {
+            name: rustc_span::FileName::Custom("main.rs".into()),
+            input: "
+fn main() {
+    let x: &amp;str = 1;
+}
+"
+                .into(),
+        },
+        crate_cfg: Vec::new(),
+        crate_check_cfg: Vec::new(),
+        output_dir: None,
+        output_file: None,
+        file_loader: None,
+        lint_caps: rustc_hash::FxHashMap::default(),
+        psess_created: Some(Box::new(|parse_sess| {
+            parse_sess.dcx().set_emitter(Box::new(DebugEmitter {
+                source_map: parse_sess.clone_source_map(),
+                diagnostics,
+            }));
+        })),
+        register_lints: None,
+        override_queries: None,
+        make_codegen_backend: None,
+        expanded_args: Vec::new(),
+        ice_file: None,
+        track_state: None,
+        using_internal_features: &amp;rustc_driver::USING_INTERNAL_FEATURES,
+    };
+    rustc_interface::run_compiler(config, |compiler| {
+        let krate = rustc_interface::passes::parse(&amp;compiler.sess);
+        rustc_interface::create_and_enter_global_ctxt(&amp;compiler, krate, |tcx| {
+            // Iterate all the items defined and perform type checking.
+            tcx.par_hir_body_owners(|item_def_id| {
+                tcx.ensure_ok().typeck(item_def_id);
+            });
+        });
+        // If the compiler has encountered errors when this closure returns, it will abort (!) the program.
+        // We avoid this by resetting the error count before returning
+        compiler.sess.dcx().reset_err_count();
+    });
+    // Read buffered diagnostics.
+    buffer.lock().unwrap().iter().for_each(|diagnostic| {
+        println!("{diagnostic:#?}");
+    });
+}</code></pre><nav class="page-nav"><a href="interacting-with-the-ast.html">→ مثال: بررسی نوع</a><a href="../diagnostics.html">خطاها و lintها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

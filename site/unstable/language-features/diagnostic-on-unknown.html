@@ -1,0 +1,156 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>diagnostic-on-unknown — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/diagnostic-on-unknown"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="diagnostic_on_unknown"><a class="header" href="#diagnostic_on_unknown"><code>diagnostic_on_unknown</code></a></h1>
+<p>مسئلهٔ پیگیری (tracking issue) این ویژگی: <a href="https://github.com/rust-lang/rust/issues/152900">#152900</a></p>
+<hr>
+<p>ویژگی <code>diagnostic_on_unknown</code> استفاده از attribute به نام <code>#[diagnostic::on_unknown]</code> را ممکن می‌کند. این attribute باید روی تعریف‌های use و ماژول و نیز روی ریشهٔ crate قرار بگیرد، هرچند قرار دادن آن در جاهای دیگر خطا محسوب نمی‌شود. این attribute یک راهنمایی برای کامپایلر است تا هرگاه تعریف حاشیه‌نویسی‌شده در یک خطای تعیین نام (name resolution) دخیل باشد، پیام خطا را تکمیل کند.</p>
+<p>پارامترهای قالب‌بندی که نام مشخصی دارند با متن زیر جایگزین می‌شوند:</p>
+<ul>
+<li><code>{Unresolved}</code> — همان <code>SimplePathSegment</code> مسیر import که قابل تعیین نبوده است.</li>
+<li><code>{this}</code> — نام آیتم حاشیه‌نویسی‌شده. روی دستورهای <code>use</code> این مقدار با <code>{unresolved}</code> یکسان است.</li>
+</ul>
+<p>پیام خطای اصلی حذف نمی‌شود، بلکه به‌جای آن به‌صورت یک note نمایش داده می‌شود.</p>
+<h3 id="on-use-declarations"><a class="header" href="#on-use-declarations">روی تعریف‌های use</a></h3>
+<pre><code class="language-rust edition2018 compile_fail E0432">#![feature(diagnostic_on_unknown)]
+
+#[diagnostic::on_unknown(
+    message = "`{Unresolved}` doesn't exist",
+    label = "you did something silly here"
+)]
+use doesnt_exist;</code></pre>
+<p>این کد به خطای زیر منجر می‌شود:</p>
+<pre><code class="language-text">error[E0432]: `doesnt_exist` doesn't exist
+ --&gt; src/lib.rs:7:5
+  |
+7 | use doesnt_exist;
+  |     ^^^^^^^^^^^^ you did something silly here
+  |
+  = note: unresolved import `doesnt_exist`
+
+For more information about this error, try `rustc --explain E0432`.
+</code></pre>
+<h3 id="on-module-declarations"><a class="header" href="#on-module-declarations">روی تعریف‌های ماژول</a></h3>
+<pre><code class="language-rust edition2018 compile_fail E0432">#![feature(diagnostic_on_unknown)]
+
+#[diagnostic::on_unknown(
+    message = "module `{this}` is empty, there is no `{unresolved}` here",
+    label = "can't import something from an empty module"
+)]
+mod empty {}
+
+use empty::what;</code></pre>
+<p>این کد به خطای زیر منجر می‌شود:</p>
+<pre><code class="language-text">error[E0432]: module `empty` is empty, there is no `what` here
+ --&gt; src/lib.rs:9:5
+  |
+9 | use empty::what;
+  |     ^^^^^^^----
+  |            |
+  |            can't import something from an empty module
+  |
+  = note: unresolved import `empty::what`
+</code></pre>
+<h3 id="on-the-crate-root"><a class="header" href="#on-the-crate-root">روی ریشهٔ crate</a></h3>
+<p>این حالت علاوه بر آن به ویژگی <code>#![feature(custom_inner_attributes)]</code> نیز نیاز دارد:</p>
+<pre><code class="language-rust edition2018 compile_fail E0432">#![feature(diagnostic_on_unknown)]
+#![feature(custom_inner_attributes)]
+#![diagnostic::on_unknown(message = "Say `{Unresolved}` again!")]
+
+use self::what;</code></pre>
+<h3 id="example"><a class="header" href="#example">مثال</a></h3>
+<p>این جفت ماکرو را در نظر بگیرید: یکی ماژولی پنهان با یک ثابت می‌سازد و دیگری آن را می‌خواند.</p>
+<pre><code class="language-rust">#![feature(macro_metavar_expr, macro_attr)]
+
+macro_rules! instrument {
+    attr() { $vis:vis fn $fn_name:ident ($($arg_name:ident : $arg_ty:ty),*) $(-&gt; $ret:ty)? $body:block } =&gt; {
+        $vis fn $fn_name ($($arg_name:$arg_ty),*) $(-&gt; $ret)? $body
+        #[doc(hidden)]
+        $vis mod $fn_name {
+            pub const LEN: usize = ${ count($arg_name) };
+        }
+    }
+}
+
+macro_rules! count_args {
+    ($name:ident) =&gt; {{
+        $name::LEN
+    }}
+}
+
+#[instrument]
+fn add(a: u8, b: u8) -&gt; u8 {
+    a + b
+}
+
+fn main() {
+    let n = count_args!(add);
+    println!("`add` has {n} arguments");
+}</code></pre>
+<p>اگر ماکروی <code>#[instrument]</code> حذف شود، این خطای گیج‌کننده نمایش داده می‌شود:</p>
+<pre><code class="language-text">error[E0433]: cannot find module or crate `add` in this scope
+  --&gt; src/main.rs:25:25
+   |
+25 |     let n = count_args!(add);
+   |                         ^^^ function `add` is not a crate or module
+</code></pre>
+<p>می‌توان از <code>#[diagnostic::on_unknown]</code> برای شخصی‌سازی این پیام خطا استفاده کرد:</p>
+<pre><code class="language-rust edition2018 compile_fail E0432">#![feature(diagnostic_on_unknown)]
+<span class="boring">#![feature(macro_metavar_expr, macro_attr)]
+</span><span class="boring">
+</span><span class="boring">#[allow(unused_macros)]
+</span><span class="boring">macro_rules! instrument {
+</span><span class="boring">    attr() { $vis:vis fn $fn_name:ident ($($arg_name:ident : $arg_ty:ty),*) $(-&gt; $ret:ty)? $body:block } =&gt; {
+</span><span class="boring">        $vis fn $fn_name ($($arg_name:$arg_ty),*) $(-&gt; $ret)? $body
+</span><span class="boring">        #[doc(hidden)]
+</span><span class="boring">        $vis  mod $fn_name {
+</span><span class="boring">            pub const LEN: usize = ${ count($arg_name) };
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>
+macro_rules! count_args {
+    ($name:ident) =&gt; {{
+        #[diagnostic::on_unknown(
+            message = "cannot count arguments of `{Unresolved}`",
+            label = "`{Unresolved}` is not a function decorated \
+                    with the `#[instrument]` macro"
+        )]
+        use $name::LEN as length;
+        length
+    }}
+}
+
+// #[instrument]
+fn add(a: u8, b: u8) -&gt; u8 {
+  a + b
+}
+
+fn main() {
+    let n = count_args!(add);
+    println!("`add` has {n} arguments");
+}</code></pre>
+<p>این کد خروجی زیر را تولید می‌کند:</p>
+<pre><code class="language-text">error[E0432]: cannot count arguments of `add`
+  --&gt; src/main.rs:33:25
+   |
+33 |     let n = count_args!(add);
+   |                         ^^^ `add` is not a function decorated with
+   |                              the `#[instrument]` macro
+   |
+   = note: unresolved import `add`
+</code></pre>
+<h3 id="edition-differences"><a class="header" href="#edition-differences">تفاوت‌های edition</a></h3>
+<p>در edition 2015، مسیرهای use نسبت به ریشهٔ crate سنجیده می‌شوند. برای مثال، <code>use empty</code> نسبت به ریشهٔ crate تعیین می‌شود و در این فرایند به تعریف <code>mod empty {}</code> برخورد نخواهد کرد.</p>
+<pre><code class="language-rust edition2015 compile_fail E0432">#![feature(diagnostic_on_unknown)]
+
+mod foo {
+   #[diagnostic::on_unknown(message = "oh oh")]
+   mod empty {}
+
+   use empty::what;
+}</code></pre>
+<pre><code class="language-text">error[E0432]: unresolved import `empty`
+ --&gt; src/main.rs:9:8
+  |
+9 |    use empty::what;
+  |        ^^^^^
+  |
+</code></pre><nav class="page-nav"><a href="../../unstable/language-features/diagnostic-on-move.html">→ diagnostic-on-move</a><a href="../../unstable/language-features/diagnostic-on-unmatched-args.html">diagnostic-on-unmatched-args ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

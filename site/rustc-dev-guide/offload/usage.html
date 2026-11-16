@@ -1,0 +1,94 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>نحوهٔ استفاده — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="offload/usage"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="usage"><a class="header" href="#usage">Usage</a></h1>
+<p>این قابلیت در حال توسعه است و آمادهٔ استفاده نیست.
+دستورالعمل‌های اینجا برای مشارکت‌کنندگان یا افراد علاقه‌مند به دنبال‌کردن آخرین پیشرفت است.
+فعلاً روی اجرای kernel زیر در Rust روی GPU کار می‌کنیم.
+برای دنبال‌کردن، آن را در فایل <code>src/lib.rs</code> کپی کنید.</p>
+<pre><code class="language-rust">#![allow(internal_features)]
+#![feature(gpu_offload)]
+#![cfg_attr(target_os = "linux", feature(core_intrinsics))]
+#![cfg_attr(target_arch = "amdgpu", feature(stdarch_amdgpu, abi_gpu_kernel))]
+#![cfg_attr(target_arch = "nvptx64", feature(stdarch_nvptx, abi_gpu_kernel))]
+#![no_std]
+
+#[cfg(target_os = "linux")]
+extern crate libc;
+
+use core::offload::offload_kernel;
+
+#[panic_handler]
+fn panic(_: &amp;core::panic::PanicInfo) -&gt; ! {
+    loop {}
+}
+
+#[cfg(target_arch = "amdgpu")]
+use core::arch::amdgpu::{workgroup_id_x as block_idx_x, workitem_id_x as thread_idx_x};
+#[cfg(target_arch = "nvptx64")]
+use core::arch::nvptx::{
+    _block_dim_x as block_dim_x, _block_idx_x as block_idx_x, _thread_idx_x as thread_idx_x,
+};
+
+// Kernels can be generic, like any other Rust function.
+// The concrete instantiations required by the host code are collected in a
+// manifest, which the device compilation then reads (see below).
+#[offload_kernel]
+fn kernel&lt;T: Copy&gt;(x: *mut [T; 256], value: T) {
+    unsafe {
+        let n = (*x).len();
+        let i = (thread_idx_x() + block_idx_x() * block_dim_x()) as usize;
+        if i &lt; n {
+            (*x)[i] = value;
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[unsafe(no_mangle)]
+fn main() {
+    let mut x = [0.0f64; 256];
+    core::offload::offload! {
+        kernel = kernel::&lt;f64&gt;,
+        workgroup_dim = [256, 1, 1],
+        args = (&amp;mut x as *mut [f64; 256], 2.5),
+    }
+    for i in 0..x.len() {
+        assert_eq!(x[i], 2.5);
+    }
+    unsafe { libc::printf(c"all checks passed".as_ptr()); }
+}</code></pre>
+<h2 id="compile-instructions"><a class="header" href="#compile-instructions">Compile instructions</a></h2>
+<p>مهم است از clangی استفاده کنید که روی همان LLVM مربوط به rustc ساخته شده است.
+فراخوانی clang بدون مسیر کامل احتمالاً از clang سیستمی شما استفاده می‌کند که احتمالاً ناسازگار خواهد بود.
+پس یا فراخوانی‌های clang/lld زیر را با مسیر مطلق جایگزین کنید، یا <code>PATH</code> خود را متناسب تنظیم کنید.</p>
+<p>کامپایل سه گذر اجرا می‌کند:</p>
+<ol>
+<li><code>HostMetadata</code>: کد میزبان را کامپایل می‌کند و مانیفستی می‌نویسد که نمونه‌سازی‌های kernel (از جمله جنریک‌ها) مورد نیاز کد میزبان را فهرست می‌کند.</li>
+<li><code>Device</code>: kernelها را برای GPU کامپایل می‌کند و مانیفست را می‌خواند تا نمونه‌سازی‌های جنریک ثبت‌شده codegen شوند.</li>
+<li><code>Host</code>: کد نهایی میزبان را تولید می‌کند و آرتیفکت device را در آن جاسازی می‌کند.</li>
+</ol>
+<div class="warning">
+<p><code>target-cpu</code> (gfx90a) را با کد درست برای GPU خود جایگزین کنید.
+این‌ها اغلب «نام‌های هدف LLVM» نامیده می‌شوند<sup class="footnote-reference" id="fr-list-1"><a href="#footnote-list">1</a></sup>.</p>
+</div>
+
+<p>ابتدا مانیفست را از کد میزبان تولید می‌کنیم:</p>
+<pre><code>RUSTFLAGS="--emit=llvm-bc,llvm-ir -Csave-temps -Zoffload=HostMetadata=/absolute/path/to/offload.manifest -Zunstable-options" cargo +offload build -r
+</code></pre>
+<p>این گذر فقط مانیفست را می‌نویسد.</p>
+<p>حالا کد device (GPU) را با دادن مانیفست تولید می‌کنیم:</p>
+<pre><code>RUSTFLAGS="-Ctarget-cpu=gfx90a --emit=llvm-bc,llvm-ir -Zoffload=Device=/absolute/path/to/offload.manifest -Csave-temps -Zunstable-options" cargo +offload build -Zunstable-options -r -v --target amdgcn-amd-amdhsa -Zbuild-std=core
+</code></pre>
+<p>سپس کد میزبان (CPU) را تولید می‌کنیم.</p>
+<pre><code>RUSTFLAGS="--emit=llvm-bc,llvm-ir -Csave-temps -Zoffload=Host=$PWD/target/amdgcn-amd-amdhsa/release/deps/device.bin -Zunstable-options" cargo +offload build -r
+</code></pre>
+<p>در گام نهایی، اکنون می‌توانید فایل دودویی خود را اجرا کنید</p>
+<pre><code>./target/x86_64-unknown-linux-gnu/release/binary-name
+all checks passed!
+</code></pre>
+<p>این سه گام به‌زودی در یک دستور واحد جمع می‌شوند، وقتی زمان بیشتری برای تست همهٔ گام‌ها داشته باشیم.</p>
+<p>برای دریافت اطلاعات بیشتر دربارهٔ انتقال حافظه، می‌توانید با افزودن <code>LIBOMPTARGET_INFO=-1</code> پیش از فراخوانی فایل دودویی چاپ اطلاعات را فعال کنید.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-list">
+<p>https://rocm.docs.amd.com/en/latest/reference/gpu-arch-specs.html یا https://developer.nvidia.com/cuda/gpus. یا می‌توانید <code>rustc --print target-cpus</code> را بررسی کنید. <a href="#fr-list-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="installation.html">→ نصب</a><a href="contributing.html">مشارکت ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

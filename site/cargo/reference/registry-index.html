@@ -1,0 +1,229 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>فهرست رجیستری — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/registry-index"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="index-format"><a class="header" href="#index-format">قالب ایندکس</a></h1>
+<p>مطالب زیر قالب ایندکس را تعریف می‌کنند. گهگاه قابلیت‌های جدیدی اضافه می‌شود که فقط از نسخه‌ای از Cargo که آن‌ها را معرفی کرده به بعد فهمیده می‌شوند. نسخه‌های قدیمی‌تر Cargo ممکن است نتوانند از بسته‌هایی که از قابلیت‌های جدید استفاده می‌کنند بهره ببرند. با این حال، قالب بسته‌های قدیمی‌تر نباید تغییر کند، بنابراین نسخه‌های قدیمی‌تر Cargo باید بتوانند از آن‌ها استفاده کنند.</p>
+<h2 id="index-configuration"><a class="header" href="#index-configuration">پیکربندی ایندکس</a></h2>
+<p>ریشهٔ ایندکس شامل فایلی با نام <code>config.json</code> است که اطلاعات JSON مورد استفادهٔ Cargo برای دسترسی به رجیستری را در خود دارد. این نمونه‌ای از ظاهر فایل پیکربندی <a href="https://crates.io/">crates.io</a> است:</p>
+<pre><code class="language-javascript">{
+    "dl": "https://crates.io/api/v1/crates",
+    "api": "https://crates.io"
+}
+</code></pre>
+<p>کلیدها عبارت‌اند از:</p>
+<ul>
+<li>
+<p><code>dl</code>: این URL مربوط به دانلود crateهای فهرست‌شده در ایندکس است. مقدار آن می‌تواند شامل نشانگرهای زیر باشد که با مقدار متناظرشان جایگزین می‌شوند:</p>
+<ul>
+<li><code>{crate}</code>: نام crate.</li>
+<li><code>{version}</code>: نسخهٔ crate.</li>
+<li><code>{prefix}</code>: یک پیشوند پوشه که از نام crate محاسبه می‌شود. برای مثال، crateای به نام <code>cargo</code> پیشوند <code>ca/rg</code> دارد. جزئیات را در ادامه ببینید.</li>
+<li><code>{lowerprefix}</code>: نوع حروف کوچک <code>{prefix}</code>.</li>
+<li><code>{sha256-checksum}</code>: چک‌سام sha256 مربوط به crate.</li>
+</ul>
+<p>اگر هیچ‌یک از نشانگرها وجود نداشته باشد، مقدار <code>/{crate}/{version}/download</code> به انتها اضافه می‌شود.</p>
+</li>
+<li>
+<p><code>api</code>: این URL پایهٔ API وب است. این کلید اختیاری است، اما اگر مشخص نشود، دستورهایی مانند <a href="../commands/cargo-publish.html"><code>cargo publish</code></a> کار نخواهند کرد. API وب در ادامه شرح داده شده است. این URL نباید اسلش پایانی داشته باشد.</p>
+</li>
+<li>
+<p><code>auth-required</code>: نشان می‌دهد که آیا این یک رجیستری خصوصی است که نیاز دارد همهٔ عملیات، از جمله درخواست‌های API، دانلود crateها و به‌روزرسانی‌های ایندکس sparse، احراز هویت شوند.</p>
+</li>
+</ul>
+<h2 id="download-endpoint"><a class="header" href="#download-endpoint">نقطهٔ پایانی دانلود</a></h2>
+<p>نقطهٔ پایانی دانلود (download endpoint) باید فایل <code>.crate</code> بستهٔ درخواستی را ارسال کند. Cargo از URLهای https، http و file، تغییر مسیرهای HTTP، و HTTP1 و HTTP2 پشتیبانی می‌کند. جزئیات دقیق پشتیبانی از TLS به پلتفرمی که Cargo روی آن اجرا می‌شود، نسخهٔ Cargo و نحوهٔ کامپایل آن بستگی دارد.</p>
+<p>اگر <code>auth-required: true</code> در <code>config.json</code> تنظیم شده باشد، هدر <code>Authorization</code> همراه درخواست‌های دانلود http(s) ارسال خواهد شد.</p>
+<h2 id="index-files"><a class="header" href="#index-files">فایل‌های ایندکس</a></h2>
+<p>بقیهٔ مخزن ایندکس برای هر بسته یک فایل دارد که نام فایل همان نام بسته با حروف کوچک است. هر نسخه از بسته در فایل یک خط جداگانه دارد. فایل‌ها در یک ساختار لایه‌ای از پوشه‌ها سازمان‌دهی می‌شوند:</p>
+<ul>
+<li>بسته‌هایی که نامشان 1 نویسه است در پوشه‌ای به نام <code>1</code> قرار می‌گیرند.</li>
+<li>بسته‌هایی که نامشان 2 نویسه است در پوشه‌ای به نام <code>2</code> قرار می‌گیرند.</li>
+<li>بسته‌هایی که نامشان 3 نویسه است در پوشهٔ <code>3/{first-character}</code> قرار می‌گیرند که در آن <code>{first-character}</code> نخستین نویسهٔ نام بسته است.</li>
+<li>همهٔ بسته‌های دیگر در پوشه‌هایی به نام <code>{first-two}/{second-two}</code> ذخیره می‌شوند که پوشهٔ بالایی دو نویسهٔ نخست نام بسته است و زیرپوشهٔ بعدی نویسهٔ سوم و چهارم نام بسته. برای مثال، <code>cargo</code> در فایلی به نام <code>ca/rg/cargo</code> ذخیره می‌شود.</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>اگرچه نام فایل‌های ایندکس با حروف کوچک است، فیلدهایی که در <code>Cargo.toml</code> و داده‌های JSON ایندکس شامل نام بسته‌اند به بزرگی و کوچکی حروف حساس‌اند و ممکن است حروف بزرگ و کوچک داشته باشند.</p>
+</blockquote>
+<p>نام پوشهٔ بالا بر اساس نام بسته‌ای که به حروف کوچک تبدیل شده محاسبه می‌شود؛ این نام با نشانگر <code>{lowerprefix}</code> نمایش داده می‌شود. وقتی نام اصلی بسته بدون تبدیل حروف به کار می‌رود، نام پوشهٔ حاصل با نشانگر <code>{prefix}</code> نمایش داده می‌شود. برای مثال، بستهٔ <code>MyCrate</code> مقدار <code>{prefix}</code> برابر <code>My/Cr</code> و مقدار <code>{lowerprefix}</code> برابر <code>my/cr</code> خواهد داشت. به‌طور کلی استفاده از <code>{prefix}</code> بر <code>{lowerprefix}</code> ترجیح داده می‌شود، اما هر انتخاب مزایا و معایبی دارد. استفاده از <code>{prefix}</code> در سیستم‌فایل‌های نسبت‌به‌حروف‌بزرگ‌وکوچک بی‌تفاوت به نتیجه‌ای می‌انجامد که در آن پوشه‌ها هم‌نام‌سازی (aliasing) می‌شوند (بی‌ضرر اما ناظریف). برای مثال، <code>crate</code> و <code>CrateTwo</code> مقادیر <code>{prefix}</code> برابر <code>cr/at</code> و <code>Cr/at</code> دارند؛ این‌ها در ماشین‌های Unix متمایزند اما در Windows به یک پوشه نگاشت می‌شوند. استفاده از پوشه‌هایی با حروف نرمال‌شده از aliasing جلوگیری می‌کند، اما در سیستم‌فایل‌های حساس به بزرگی و کوچکی حروف، پشتیبانی از نسخه‌های قدیمی‌تر Cargo که <code>{prefix}</code>/<code>{lowerprefix}</code> را ندارند دشوارتر است. برای مثال، قواعد بازنویسی nginx به‌راحتی می‌توانند <code>{prefix}</code> را بسازند اما نمی‌توانند برای ساخت <code>{lowerprefix}</code> تبدیل حروف انجام دهند.</p>
+<h2 id="name-restrictions"><a class="header" href="#name-restrictions">محدودیت‌های نام</a></h2>
+<p>رجیستری‌ها باید اعمال محدودیت‌هایی بر نام بسته‌هایی که به ایندکس خود اضافه می‌شوند را در نظر بگیرند. خود Cargo نام‌هایی با هر <a href="https://doc.rust-lang.org/std/primitive.char.html#method.is_alphanumeric">نویسهٔ الفبایی-عددی</a>، <code>-</code> یا <code>_</code> را مجاز می‌داند. <a href="https://crates.io/">crates.io</a> محدودیت‌های خود را اعمال می‌کند، از جمله موارد زیر:</p>
+<ul>
+<li>فقط نویسه‌های ASCII را مجاز می‌داند.</li>
+<li>فقط نویسه‌های الفبایی-عددی، <code>-</code> و <code>_</code> را مجاز می‌داند.</li>
+<li>نویسهٔ اول باید الفبایی باشد.</li>
+<li>تشخیص برخورد نام بدون حساسیت به بزرگی و کوچکی حروف.</li>
+<li>جلوگیری از تفاوت‌هایی که فقط در <code>-</code> در برابر <code>_</code> باشند.</li>
+<li>کمتر از یک طول مشخص (حداکثر 64).</li>
+<li>نام‌های رزروشده، مانند نام‌های خاص فایل در Windows مانند “nul”، را رد می‌کند.</li>
+</ul>
+<p>رجیستری‌ها باید گنجاندن محدودیت‌های مشابه را در نظر بگیرند و پیامدهای امنیتی مانند <a href="https://en.wikipedia.org/wiki/IDN_homograph_attack">حملات هم‌شکلی IDN</a> و دغدغه‌های دیگر در <a href="https://www.unicode.org/reports/tr36/">UTR36</a> و <a href="https://www.unicode.org/reports/tr39/">UTS39</a> را نیز بسنجند.</p>
+<h2 id="version-uniqueness"><a class="header" href="#version-uniqueness">یکتایی نسخه</a></h2>
+<p>ایندکس‌ها <em>باید</em> تضمین کنند که هر نسخه برای هر بسته فقط یک بار ظاهر می‌شود. این شامل نادیده گرفتن فرادادهٔ ساخت (build metadata) در SemVer نیز می‌شود. برای مثال، ایندکس نباید دو مدخل با نسخه‌های <code>1.0.7</code> و <code>1.0.7+extra</code> داشته باشد.</p>
+<h2 id="json-schema"><a class="header" href="#json-schema">طرح‌واره JSON</a></h2>
+<p>هر خط در فایل یک بسته شامل یک شیء JSON است که یک نسخهٔ منتشرشده از بسته را توصیف می‌کند. در ادامه یک نمونهٔ قالب‌بندی‌شده همراه با توضیحاتی آمده که قالب مدخل را شرح می‌دهند.</p>
+<pre><code class="language-javascript">{
+    // The name of the package.
+    // This must only contain alphanumeric, `-`, or `_` characters.
+    "name": "foo",
+    // The version of the package this row is describing.
+    // This must be a valid version number according to the Semantic
+    // Versioning 2.0.0 spec at https://semver.org/.
+    "vers": "0.1.0",
+    // Array of direct dependencies of the package.
+    "deps": [
+        {
+            // Name of the dependency.
+            // If the dependency is renamed from the original package name,
+            // this is the new name. The original package name is stored in
+            // the `package` field.
+            "name": "rand",
+            // The SemVer requirement for this dependency.
+            // This must be a valid version requirement defined at
+            // https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html.
+            "req": "^0.6",
+            // Array of features (as strings) enabled for this dependency.
+            // Since Cargo 1.84, defaults to `[]` if not specified.
+            "features": ["i128_support"],
+            // Boolean of whether or not this is an optional dependency.
+            // Since Cargo 1.84, defaults to `false` if not specified.
+            "optional": false,
+            // Boolean of whether or not default features are enabled.
+            // Since Cargo 1.84, defaults to `true` if not specified.
+            "default_features": true,
+            // The target platform for the dependency.
+            // If not specified or `null`, it is not a target dependency.
+            // Otherwise, a string such as "cfg(windows)".
+            "target": null,
+            // The dependency kind.
+            // "dev", "build", or "normal".
+            // If not specified or `null`, it defaults to "normal".
+            "kind": "normal",
+            // The URL of the index of the registry where this dependency is
+            // from as a string. If not specified or `null`, it is assumed the
+            // dependency is in the current registry.
+            "registry": null,
+            // If the dependency is renamed, this is a string of the actual
+            // package name. If not specified or `null`, this dependency is not
+            // renamed.
+            "package": null,
+        }
+    ],
+    // A SHA256 checksum of the `.crate` file.
+    "cksum": "d867001db0e2b6e0496f9fac96930e2d42233ecd3ca0413e0753d4c7695d289c",
+    // Set of features defined for the package.
+    // Each feature maps to an array of features or dependencies it enables.
+    // Since Cargo 1.84, defaults to `{}` if not specified.
+    "features": {
+        "extras": ["rand/simd_support"]
+    },
+    // Boolean of whether or not this version has been yanked.
+    "yanked": false,
+    // The `links` string value from the package's manifest, or null if not
+    // specified. This field is optional and defaults to null.
+    "links": null,
+    // An unsigned 32-bit integer value indicating the schema version of this
+    // entry.
+    //
+    // If this is not specified, it should be interpreted as the default of 1.
+    //
+    // Cargo (starting with version 1.51) will ignore versions it does not
+    // recognize. This provides a method to safely introduce changes to index
+    // entries and allow older versions of cargo to ignore newer entries it
+    // doesn't understand. Versions older than 1.51 ignore this field, and
+    // thus may misinterpret the meaning of the index entry.
+    //
+    // The current values are:
+    //
+    // * 1: The schema as documented here, not including newer additions.
+    //      This is honored in Rust version 1.51 and newer.
+    // * 2: The addition of the `features2` field.
+    //      This is honored in Rust version 1.60 and newer.
+    "v": 2,
+    // This optional field contains features with new, extended syntax.
+    // Specifically, namespaced features (`dep:`) and weak dependencies
+    // (`pkg?/feat`).
+    //
+    // This is separated from `features` because versions older than 1.19
+    // will fail to load due to not being able to parse the new syntax, even
+    // with a `Cargo.lock` file.
+    //
+    // Cargo will merge any values listed here with the "features" field.
+    //
+    // If this field is included, the "v" field should be set to at least 2.
+    //
+    // Registries are not required to use this field for extended feature
+    // syntax, they are allowed to include those in the "features" field.
+    // Using this is only necessary if the registry wants to support cargo
+    // versions older than 1.19, which in practice is only crates.io since
+    // those older versions do not support other registries.
+    "features2": {
+        "serde": ["dep:serde", "chrono?/serde"]
+    }
+    // The minimal supported Rust version (optional)
+    // This must be a valid version requirement without an operator (e.g. no `=`)
+    "rust_version": "1.60",
+    // The publish time of this package version (optional).
+    //
+    // The format is a subset of ISO8601:
+    // - `yyyy-mm-ddThh:mm:ssZ`
+    // - no fractional seconds
+    // - always `Z` for UTC timezone, no timezone offsets supported
+    // - fields are 0-padded
+    //
+    // Example: 2025-11-12T19:30:12Z
+    //
+    // This should be the original publish time and not changed on any status changes,
+    // like `yanked`.
+    "pubtime": "2025-11-12T19:30:12Z"
+}
+</code></pre>
+<p>شیءهای JSON پس از افزوده شدن نباید تغییر کنند، به‌جز فیلد <code>yanked</code> که مقدار آن ممکن است در هر زمان تغییر کند.</p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>قالب JSON ایندکس تفاوت‌های ظریفی با قالب JSON در <a href="registry-web-api.html#publish">Publish API</a> و <a href="../commands/cargo-metadata.html"><code>cargo metadata</code></a> دارد. اگر از یکی از آن‌ها به‌عنوان منبعی برای تولید مدخل‌های ایندکس استفاده می‌کنید، توصیه می‌شود تفاوت‌های مستندات آن‌ها را با دقت بررسی کنید.</p>
+<p>برای <a href="registry-web-api.html#publish">Publish API</a>، تفاوت‌ها عبارت‌اند از:</p>
+<ul>
+<li><code>deps</code>
+<ul>
+<li><code>name</code> — وقتی وابستگی در <code>Cargo.toml</code> <a href="specifying-dependencies.html#renaming-dependencies-in-cargotoml">تغییر نام داده شده</a> باشد، publish API نام اصلی بسته را در فیلد <code>name</code> و نام مستعار را در فیلد <code>explicit_name_in_toml</code> قرار می‌دهد. ایندکس نام مستعار را در فیلد <code>name</code> و نام اصلی بسته را در فیلد <code>package</code> قرار می‌دهد.</li>
+<li><code>req</code> — فیلد Publish API با نام <code>version_req</code> شناخته می‌شود.</li>
+</ul>
+</li>
+<li><code>cksum</code> — publish API چک‌سام را مشخص نمی‌کند و رجیستری باید پیش از افزودن به ایندکس آن را محاسبه کند.</li>
+<li><code>features</code> — ممکن است برخی از featureها در فیلد <code>features2</code> قرار بگیرند. توجه: این فقط یک الزام قدیمی برای <a href="https://crates.io/">crates.io</a> است؛ رجیستری‌های دیگر نیازی به زحمت تغییر نقشهٔ featureها ندارند. فیلد <code>v</code> حضور فیلد <code>features2</code> را نشان می‌دهد.</li>
+<li>publish API چند فیلد دیگر مانند <code>description</code> و <code>readme</code> را نیز شامل می‌شود که در ایندکس ظاهر نمی‌شوند. این‌ها برای آسان‌تر کردن دریافت فراداده دربارهٔ crate توسط رجیستری در نظر گرفته شده‌اند تا بتواند آن را در یک وب‌سایت نمایش دهد، بدون نیاز به استخراج و تجزیهٔ فایل <code>.crate</code>. این اطلاعات اضافی معمولاً به یک پایگاه داده در سرور رجیستری افزوده می‌شود.</li>
+<li>اگرچه <code>rust_version</code> در اینجا گنجانده شده است، <a href="https://crates.io/">crates.io</a> این فیلد را نادیده می‌گیرد و در عوض آن را از <code>Cargo.toml</code> موجود در فایل <code>.crate</code> می‌خواند.</li>
+</ul>
+<p>برای <a href="../commands/cargo-metadata.html"><code>cargo metadata</code></a>، تفاوت‌ها عبارت‌اند از:</p>
+<ul>
+<li><code>vers</code> — فیلد <code>cargo metadata</code> با نام <code>version</code> شناخته می‌شود.</li>
+<li><code>deps</code>
+<ul>
+<li><code>name</code> — وقتی وابستگی در <code>Cargo.toml</code> <a href="specifying-dependencies.html#renaming-dependencies-in-cargotoml">تغییر نام داده شده</a> باشد، <code>cargo metadata</code> نام اصلی بسته را در فیلد <code>name</code> و نام مستعار را در فیلد <code>rename</code> قرار می‌دهد. ایندکس نام مستعار را در فیلد <code>name</code> و نام اصلی بسته را در فیلد <code>package</code> قرار می‌دهد.</li>
+<li><code>default_features</code> — فیلد <code>cargo metadata</code> با نام <code>uses_default_features</code> شناخته می‌شود.</li>
+<li><code>registry</code> — <code>cargo metadata</code> از مقدار <code>null</code> استفاده می‌کند تا نشان دهد وابستگی از <a href="https://crates.io/">crates.io</a> می‌آید. ایندکس از مقدار <code>null</code> استفاده می‌کند تا نشان دهد وابستگی از همان رجیستری ایندکس می‌آید. هنگام ساخت یک مدخل ایندکس، رجیستری‌ای غیر از <a href="https://crates.io/">crates.io</a> باید مقدار <code>null</code> را به <code>https://github.com/rust-lang/crates.io-index</code> ترجمه کند و URLی را که با ایندکس جاری مطابقت دارد به <code>null</code> ترجمه کند.</li>
+<li><code>cargo metadata</code> چند فیلد اضافی مانند <code>source</code> و <code>path</code> را شامل می‌شود.</li>
+</ul>
+</li>
+<li>ایندکس فیلدهای اضافی‌ای مانند <code>yanked</code>، <code>cksum</code> و <code>v</code> را شامل می‌شود.</li>
+</ul>
+</blockquote>
+<h2 id="index-protocols"><a class="header" href="#index-protocols">پروتکل‌های ایندکس</a></h2>
+<p>Cargo از دو پروتکل رجیستری راه‌دور پشتیبانی می‌کند: <code>git</code> و <code>sparse</code>. پروتکل <code>git</code> فایل‌های ایندکس را در یک مخزن git ذخیره می‌کند و پروتکل <code>sparse</code> فایل‌ها را یک‌به‌یک از طریق HTTP دریافت می‌کند.</p>
+<h3 id="git-protocol"><a class="header" href="#git-protocol">پروتکل Git</a></h3>
+<p>پروتکل git در URL ایندکس پیشوند پروتکل ندارد. برای مثال، URL ایندکس git برای <a href="https://crates.io/">crates.io</a> برابر <code>https://github.com/rust-lang/crates.io-index</code> است.</p>
+<p>Cargo مخزن git را روی دیسک کش می‌کند تا بتواند به‌روزرسانی‌ها را به‌صورت افزایشی و کارآمد دریافت کند.</p>
+<h3 id="sparse-protocol"><a class="header" href="#sparse-protocol">پروتکل Sparse</a></h3>
+<p>پروتکل sparse از پیشوند پروتکل <code>sparse+</code> در URL رجیستری استفاده می‌کند. برای مثال، URL ایندکس sparse برای <a href="https://crates.io/">crates.io</a> برابر <code>sparse+https://index.crates.io/</code> است.</p>
+<p>پروتکل sparse هر فایل ایندکس را با یک درخواست HTTP جداگانه دانلود می‌کند. از آنجا که این کار به تعداد زیادی درخواست HTTP کوچک می‌انجامد، کارایی با سروری که از pipelining و HTTP/2 پشتیبانی کند به‌طور قابل‌توجهی بهبود می‌یابد.</p>
+<h4 id="sparse-authentication"><a class="header" href="#sparse-authentication">احراز هویت Sparse</a></h4>
+<p>Cargo پیش از دریافت هر فایل دیگری تلاش می‌کند فایل <code>config.json</code> را دریافت کند. اگر سرور با HTTP 401 پاسخ دهد، Cargo فرض می‌کند که رجیستری به احراز هویت نیاز دارد و درخواست <code>config.json</code> را دوباره با توکن احراز هویت انجام می‌دهد.</p>
+<p>در صورت شکست احراز هویت (یا نبود توکن احراز هویت)، سرور می‌تواند یک هدر <code>www-authenticate</code> با چالش <code>Cargo login_url="&lt;URL&gt;"</code> بگنجاند تا نشان دهد کاربر کجا می‌تواند توکن بگیرد.</p>
+<p>رجیستری‌هایی که به احراز هویت نیاز دارند باید <code>auth-required: true</code> را در <code>config.json</code> تنظیم کنند.</p>
+<h4 id="caching"><a class="header" href="#caching">کش کردن</a></h4>
+<p>Cargo فایل‌های فراداده crate را کش می‌کند و هدر HTTP با نام <code>ETag</code> یا <code>Last-Modified</code> را برای هر مدخل از سرور ثبت می‌کند. هنگام تازه‌سازی فراداده crate، Cargo هدر <code>If-None-Match</code> یا <code>If-Modified-Since</code> را ارسال می‌کند تا سرور بتواند در صورت معتبر بودن کش محلی با HTTP 304 «Not Modified» پاسخ دهد و در زمان و پهنای باند صرفه‌جویی شود. اگر هر دو هدر <code>ETag</code> و <code>Last-Modified</code> وجود داشته باشند، Cargo فقط از <code>ETag</code> استفاده می‌کند.</p>
+<h4 id="cache-invalidation"><a class="header" href="#cache-invalidation">باطل‌سازی کش</a></h4>
+<p>اگر رجیستری از نوعی CDN یا پروکسی استفاده می‌کند که دسترسی به فایل‌های ایندکس را کش می‌کند، توصیه می‌شود رجیستری‌ها هنگام به‌روزرسانی فایل‌ها نوعی باطل‌سازی کش پیاده‌سازی کنند. اگر این کش‌ها به‌روز نشوند، ممکن است کاربران تا پاک شدن کش نتوانند به crateهای جدید دسترسی پیدا کنند.</p>
+<h4 id="nonexistent-crates"><a class="header" href="#nonexistent-crates">crateهای ناموجود</a></h4>
+<p>برای crateهایی که وجود ندارند، رجیستری باید با کد 404 «Not Found»، 410 «Gone» یا 451 «Unavailable For Legal Reasons» پاسخ دهد.</p>
+<h4 id="sparse-limitations"><a class="header" href="#sparse-limitations">محدودیت‌های Sparse</a></h4>
+<p>از آنجا که URL رجیستری در lockfile ذخیره می‌شود، توصیه نمی‌شود رجیستری‌ای با هر دو پروتکل ارائه شود. بحث دربارهٔ یک برنامهٔ گذار در issue <a href="https://github.com/rust-lang/cargo/issues/10964">#10964</a> ادامه دارد. رجیستری <a href="https://crates.io/">crates.io</a> استثنا است، زیرا Cargo هنگام استفاده از پروتکل sparse در داخل، URL معادل git را جایگزین می‌کند.</p>
+<p>اگر رجیستری هر دو پروتکل را ارائه می‌دهد، در حال حاضر توصیه می‌شود یکی از پروتکل‌ها به‌عنوان پروتکل اصلی انتخاب شود و برای پروتکل دیگر از <a href="../reference/source-replacement.html">جایگزینی منبع</a> استفاده شود.</p><nav class="page-nav"><a href="running-a-registry.html">→ راه‌اندازی یک رجیستری</a><a href="registry-web-api.html">API وب رجیستری ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

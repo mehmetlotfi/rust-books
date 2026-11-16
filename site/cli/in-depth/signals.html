@@ -1,0 +1,84 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>مدیریت سیگنال — کتاب برنامه‌های خط فرمان</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="in-depth/signals"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../cli/index.html" style="color:inherit;text-decoration:none">کتاب برنامه‌های خط فرمان</a><small class="en-title" dir="ltr">Command Line Applications in Rust</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="signal-handling"><a class="header" href="#signal-handling">مدیریت سیگنال</a></h1>
+<p>فرایندها، مانند برنامه‌های خط فرمان، باید به سیگنال‌هایی که سیستم‌عامل ارسال می‌کند واکنش نشان دهند. شاید رایج‌ترین مثال <kbd>Ctrl</kbd>+<kbd>C</kbd> باشد، سیگنالی که معمولاً به فرایند می‌گوید پایان یابد. برای مدیریت سیگنال‌ها در برنامه‌های Rust باید در نظر بگیرید که چگونه می‌توانید این سیگنال‌ها را دریافت کنید و نیز چگونه می‌توانید به آن‌ها واکنش نشان دهید.</p>
+<aside>
+<p><strong>توجه:</strong> اگر برنامهٔ شما نیازی به خاموش شدن تدریجی (graceful) ندارد، همان مدیریت پیش‌فرض کافی است (یعنی فوراً خارج شود و اجازه دهد سیستم‌عامل منابعی مانند دستگیره‌های فایل بازشده را پاک‌سازی کند). در آن صورت: نیازی نیست آنچه این فصل می‌گوید انجام دهید!</p>
+<p>**توجه:** اگر برنامهٔ شما نیازی ندارد به‌صورت مرتب و منظم خاموش شود، مدیریت پیش‌فرض کافی است (یعنی فوراً خارج شود و بگذارد سیستم‌عامل منابعی مانند فایل‌های باز را پاک‌سازی کند). در آن صورت: نیازی نیست آنچه این فصل می‌گوید انجام دهید! با این حال، برای برنامه‌هایی که باید پس از خود پاک‌سازی کنند، این فصل بسیار مرتبط است! برای مثال، اگر برنامهٔ شما باید اتصال‌های شبکه را به‌درستی ببندد (و به فرایندهای سمت دیگر «خداحافظ» بگوید)، فایل‌های موقت را حذف کند، یا تنظیمات سیستم را بازنشانی کند، به خواندن ادامه دهید.</p>
+</aside>
+<h2 id="differences-between-operating-systems"><a class="header" href="#differences-between-operating-systems">تفاوت‌ها میان سیستم‌عامل‌ها</a></h2>
+<p>در سیستم‌های یونیکس (مانند Linux، macOS و FreeBSD) یک فرایند می‌تواند <a href="https://manpages.ubuntu.com/manpages/bionic/en/man7/signal.7.html">سیگنال‌هایی</a> دریافت کند. فرایند می‌تواند یا به شیوهٔ پیش‌فرض (ارائه‌شده توسط سیستم‌عامل) به آن‌ها واکنش نشان دهد، یا سیگنال را بگیرد و به شیوه‌ای که برنامه تعریف می‌کند مدیریتش کند، یا سیگنال را کاملاً نادیده بگیرد.</p>
+<p>ویندوز سیگنال ندارد. می‌توانید از <a href="https://docs.microsoft.com/en-us/windows/console/console-control-handlers">Console Handlers</a> برای تعریف callbackهایی استفاده کنید که هنگام رخ دادن یک رویداد اجرا می‌شوند. همچنین <a href="https://docs.microsoft.com/en-us/windows/desktop/debug/structured-exception-handling">مدیریت استثنای ساخت‌یافته</a> وجود دارد که همهٔ انواع گوناگون استثناهای سیستمی مانند تقسیم بر صفر، استثناهای دسترسی نامعتبر، سرریز پشته و غیره را مدیریت می‌کند</p>
+<h2 id="first-off-handling-ctrlc"><a class="header" href="#first-off-handling-ctrlc">نخست: مدیریت Ctrl+C</a></h2>
+<p>crate با نام <a href="https://crates.io/crates/ctrlc">ctrlc</a> دقیقاً همان کاری را می‌کند که نامش می‌گوید: به شما اجازه می‌دهد به فشردن <kbd>Ctrl</kbd>+<kbd>C</kbd> توسط کاربر به‌صورت چندسکویی واکنش نشان دهید. روش اصلی استفاده از این crate چنین است:</p>
+<pre><code class="language-rust ignore">use std::{thread, time::Duration};
+
+fn main() {
+    ctrlc::set_handler(move || {
+        println!("received Ctrl+C!");
+    })
+    .expect("Error setting Ctrl-C handler");
+
+    // Following code does the actual work, and can be interrupted by pressing
+    // Ctrl-C. As an example: Let's wait a few seconds.
+    thread::sleep(Duration::from_secs(2));
+}</code></pre>
+<p>البته این چندان مفید نیست: فقط یک پیام چاپ می‌کند و در غیر این صورت برنامه را متوقف نمی‌کند.</p>
+<p>در یک برنامهٔ واقعی، ایدهٔ خوبی است که در عوض در مدیریت‌کنندهٔ سیگنال یک متغیر تنظیم کنید و سپس آن را در جاهای مختلف برنامه بررسی کنید. برای مثال، می‌توانید در مدیریت‌کنندهٔ سیگنال یک <code>Arc&lt;AtomicBool&gt;</code> (یک مقدار بولی که میان نخ‌ها قابل اشتراک است) را تنظیم کنید، و در حلقه‌های پرتکرار، یا هنگام منتظر ماندن برای یک نخ، مقدار آن را به‌طور دوره‌ای بررسی کنید و هنگامی که true شد، حلقه را بشکنید.</p>
+<h2 id="handling-other-types-of-signals"><a class="header" href="#handling-other-types-of-signals">مدیریت انواع دیگر سیگنال‌ها</a></h2>
+<p>crate با نام <a href="https://crates.io/crates/ctrlc">ctrlc</a> فقط <kbd>Ctrl</kbd>+<kbd>C</kbd> را مدیریت می‌کند، یا آنچه در سیستم‌های یونیکس <code>SIGINT</code> («سیگنال وقفه») نامیده می‌شود. برای واکنش به سیگنال‌های بیشتر یونیکس، باید نگاهی به <a href="https://crates.io/crates/signal-hook">signal-hook</a> بیندازید. طراحی آن در <a href="https://vorner.github.io/2018/06/28/signal-hook.html">این نوشتهٔ وبلاگ</a> توضیح داده شده است و در حال حاضر کتابخانه‌ای است که بیشترین پشتیبانی جامعه را دارد.</p>
+<p>این یک مثال ساده است:</p>
+<pre><code class="language-rust ignore">use signal_hook::{consts::SIGINT, iterator::Signals};
+use std::{error::Error, thread, time::Duration};
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+    let mut signals = Signals::new([SIGINT])?;
+
+    thread::spawn(move || {
+        for sig in signals.forever() {
+            println!("Received signal {:?}", sig);
+        }
+    });
+
+    // Following code does the actual work, and can be interrupted by pressing
+    // Ctrl-C. As an example: Let's wait a few seconds.
+    thread::sleep(Duration::from_secs(2));
+
+    Ok(())
+}</code></pre>
+<h2 id="using-channels"><a class="header" href="#using-channels">استفاده از کانال‌ها</a></h2>
+<p>به‌جای تنظیم یک متغیر و بررسی آن توسط بخش‌های دیگر برنامه، می‌توانید از کانال‌ها استفاده کنید: کانالی می‌سازید که مدیریت‌کنندهٔ سیگنال هر بار که سیگنال دریافت شود مقداری را در آن منتشر می‌کند. در کد برنامه‌تان از این کانال و کانال‌های دیگر به‌عنوان نقاط همگام‌سازی میان نخ‌ها (thread) استفاده می‌کنید. با استفاده از <a href="https://crates.io/crates/crossbeam-channel">crossbeam-channel</a> چیزی شبیه این خواهد بود:</p>
+<pre><code class="language-rust ignore">use anyhow::Result;
+use crossbeam_channel::{Receiver, bounded, select, tick};
+use std::time::Duration;
+
+fn ctrl_channel() -&gt; Result&lt;Receiver&lt;()&gt;, ctrlc::Error&gt; {
+    let (sender, receiver) = bounded(100);
+    ctrlc::set_handler(move || {
+        let _ = sender.send(());
+    })?;
+
+    Ok(receiver)
+}
+
+fn main() -&gt; Result&lt;()&gt; {
+    let ctrl_c_events = ctrl_channel()?;
+    let ticks = tick(Duration::from_secs(1));
+
+    loop {
+        select! {
+            recv(ticks) -&gt; _ =&gt; {
+                println!("working!");
+            }
+            recv(ctrl_c_events) -&gt; _ =&gt; {
+                println!();
+                println!("Goodbye!");
+                break;
+            }
+        }
+    }
+
+    Ok(())
+}</code></pre>
+<h2 id="using-futures-and-streams"><a class="header" href="#using-futures-and-streams">استفاده از futureها و streamها</a></h2>
+<p>اگر از <a href="https://tokio.rs/">tokio</a> استفاده می‌کنید، به احتمال زیاد برنامهٔ خود را از قبل با الگوهای ناهمگام و طراحی رویدادمحور می‌نویسید. به‌جای استفاده مستقیم از کانال‌های crossbeam، می‌توانید ویژگی <code>tokio-support</code> در signal-hook را فعال کنید. این کار به شما اجازه می‌دهد <a href="https://docs.rs/signal-hook/0.1.6/signal_hook/iterator/struct.Signals.html#method.into_async"><code>.into_async()</code></a> را روی نوع‌های <code>Signals</code> در signal-hook فراخوانی کنید تا نوعی جدید بگیرید که <code>futures::Stream</code> را پیاده‌سازی می‌کند.</p>
+<h2 id="what-to-do-when-you-receive-another-ctrlc-while-youre-handling-the-first-ctrlc"><a class="header" href="#what-to-do-when-you-receive-another-ctrlc-while-youre-handling-the-first-ctrlc">وقتی هنگام مدیریت نخستین Ctrl+C، Ctrl+C دیگری دریافت می‌کنید چه باید کرد</a></h2>
+<p>بیشتر کاربران <kbd>Ctrl</kbd>+<kbd>C</kbd> را می‌زنند و سپس چند ثانیه به برنامهٔ شما فرصت می‌دهند تا خارج شود یا به آن‌ها بگوید چه خبر است. اگر این اتفاق نیفتد، دوباره <kbd>Ctrl</kbd>+<kbd>C</kbd> را می‌زنند. رفتار معمول این است که برنامه فوراً خارج شود.</p><nav class="page-nav"><a href="../../cli/in-depth/index.html">→ مباحث عمیق‌تر</a><a href="../../cli/in-depth/config-files.html">استفاده از فایل‌های پیکربندی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cli/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

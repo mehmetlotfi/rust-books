@@ -1,0 +1,76 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>پذیرش آرگومان‌های خط فرمان — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch12-01-accepting-command-line-arguments"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="accepting-command-line-arguments"><a class="header" href="#accepting-command-line-arguments">پذیرش آرگومان‌های خط فرمان</a></h2>
+<p>بیایید با استفاده از <code>cargo new</code> یک پروژه جدید ایجاد کنیم. پروژه خود را <code>minigrep</code> می‌نامیم تا آن را از ابزار <code>grep</code> که ممکن است در سیستم شما وجود داشته باشد متمایز کنیم.</p>
+<pre><code class="language-console">$ cargo new minigrep
+     Created binary (application) `minigrep` project
+$ cd minigrep
+</code></pre>
+<p>اولین کار این است که <code>minigrep</code> آرگومان‌های خط فرمان خود، شامل مسیر فایل و رشته‌ای برای جستجو، را بپذیرد. به عبارت دیگر، می‌خواهیم بتوانیم برنامه خود را با <code>cargo run</code>، دو خط تیره برای نشان دادن اینکه آرگومان‌های بعدی برای برنامه ما هستند و نه برای <code>cargo</code>، یک رشته برای جستجو و یک مسیر فایل برای جستجو اجرا کنیم، مانند زیر:</p>
+<pre><code class="language-console">$ cargo run -- searchstring example-filename.txt
+</code></pre>
+<p>در حال حاضر، برنامه‌ای که توسط <code>cargo new</code> تولید شده است نمی‌تواند آرگومان‌هایی که به آن می‌دهیم را پردازش کند. برخی کتابخانه‌های موجود در <a href="https://crates.io/">crates.io</a> می‌توانند برای نوشتن برنامه‌ای که آرگومان‌های خط فرمان را بپذیرد کمک کنند، اما چون شما تازه با این مفهوم آشنا می‌شوید، بیایید این قابلیت را خودمان پیاده‌سازی کنیم.</p>
+<h3 id="reading-the-argument-values"><a class="header" href="#reading-the-argument-values">خواندن مقادیر آرگومان‌ها</a></h3>
+<p>برای اینکه <code>minigrep</code> بتواند مقادیر آرگومان‌های خط فرمان را که به آن می‌دهیم بخواند، به تابع <code>std::env::args</code> که در کتابخانه استاندارد Rust ارائه شده است نیاز خواهیم داشت. این تابع یک iterator از آرگومان‌های خط فرمانی که به <code>minigrep</code> داده شده است بازمی‌گرداند. ما در <a href="ch13-00-functional-features.html">فصل ۱۳</a><!-- ignore --> به طور کامل iteratorها را پوشش خواهیم داد. در حال حاضر، فقط باید دو نکته درباره iteratorها بدانید: iteratorها یک سری مقادیر تولید می‌کنند و ما می‌توانیم تابع <code>collect</code> را روی یک iterator فراخوانی کنیم تا آن را به یک collection، مانند یک بردار، که شامل تمام عناصر تولیدشده توسط iterator است، تبدیل کنیم.</p>
+<p>کد موجود در لیست ۱۲-۱ به برنامه <code>minigrep</code> شما اجازه می‌دهد تا هر آرگومان خط فرمانی که به آن داده شده را بخواند و سپس مقادیر را به یک بردار جمع‌آوری کند.</p>
+<figure class="listing" id="listing-12-1">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::env;
+
+fn main() {
+    let args: Vec&lt;String&gt; = env::args().collect();
+    dbg!(args);
+}</code></pre>
+<figcaption><a href="#listing-12-1">لیست ۱۲-۱</a>: جمع‌آوری آرگومان‌های خط فرمان به یک بردار و چاپ آن‌ها</figcaption>
+</figure>
+<p>ابتدا ماژول <code>std::env</code> را با یک دستور <code>use</code> به دامنه وارد می‌کنیم تا بتوانیم از تابع <code>args</code> آن استفاده کنیم. توجه کنید که تابع <code>std::env::args</code> در دو سطح ماژول تو در تو قرار دارد. همانطور که در <a href="ch07-04-bringing-paths-into-scope-with-the-use-keyword.html#creating-idiomatic-use-paths">فصل ۷</a><!-- ignore --> بحث کردیم، در مواردی که تابع موردنظر در بیش از یک ماژول تو در تو قرار دارد، ترجیح می‌دهیم ماژول والد را به دامنه وارد کنیم نه تابع. با این کار، می‌توانیم به راحتی از توابع دیگر <code>std::env</code> استفاده کنیم. همچنین این روش کمتر مبهم است نسبت به اضافه کردن <code>use std::env::args</code> و سپس فراخوانی تابع با فقط <code>args</code>، چون <code>args</code> ممکن است به راحتی با یک تابع تعریف‌شده در ماژول جاری اشتباه گرفته شود.</p>
+<section class="note" aria-role="note">
+<h3 id="the-args-function-and-invalid-unicode"><a class="header" href="#the-args-function-and-invalid-unicode">تابع <code>args</code> و یونیکد نامعتبر</a></h3>
+<p>توجه داشته باشید که <code>std::env::args</code> اگر هر آرگومانی شامل یونیکد نامعتبر باشد، پانیک خواهد کرد. اگر برنامه شما نیاز به پذیرش آرگومان‌هایی با یونیکد نامعتبر دارد، به جای آن از <code>std::env::args_os</code> استفاده کنید. این تابع یک iterator بازمی‌گرداند که مقادیر <code>OsString</code> به جای <code>String</code> تولید می‌کند. ما برای سادگی <code>std::env::args</code> را اینجا انتخاب کرده‌ایم زیرا مقادیر <code>OsString</code> بسته به پلتفرم متفاوت هستند و کار با آن‌ها پیچیده‌تر از مقادیر <code>String</code> است.</p>
+</section>
+<p>در اولین خط از تابع <code>main</code>، ما تابع <code>env::args</code> را فراخوانی می‌کنیم و بلافاصله از تابع <code>collect</code> استفاده می‌کنیم تا iterator را به یک بردار که شامل تمام مقادیر تولید‌شده توسط iterator است، تبدیل کنیم. می‌توانیم از تابع <code>collect</code> برای ایجاد انواع مختلفی از collectionها استفاده کنیم، بنابراین نوع <code>args</code> را به طور صریح با ذکر می‌کنیم که می‌خواهیم یک بردار از رشته‌ها داشته باشیم. با اینکه به ندرت نیاز به ذکر نوع‌ها در Rust دارید، تابع <code>collect</code> یکی از تابع‌هایی است که اغلب باید نوع آن را ذکر کنید، زیرا Rust نمی‌تواند نوع collection مورد نظر شما را استنباط کند.</p>
+<p>در نهایت، بردار را با استفاده از ماکروی debug چاپ می‌کنیم. بیایید ابتدا کد را بدون آرگومان اجرا کنیم و سپس با دو آرگومان:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling minigrep v0.1.0 (file:///projects/minigrep)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.61s
+     Running `target/debug/minigrep`
+[src/main.rs:5:5] args = [
+    "target/debug/minigrep",
+]
+</code></pre>
+<pre><code class="language-console">$ cargo run -- needle haystack
+   Compiling minigrep v0.1.0 (file:///projects/minigrep)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.57s
+     Running `target/debug/minigrep needle haystack`
+[src/main.rs:5:5] args = [
+    "target/debug/minigrep",
+    "needle",
+    "haystack",
+]
+</code></pre>
+<p>توجه کنید که اولین مقدار در بردار <code>"target/debug/minigrep"</code> است، که نام باینری ما است. این رفتار با لیست آرگومان‌ها در زبان C مطابقت دارد و به برنامه‌ها اجازه می‌دهد از نامی که با آن اجرا شده‌اند، در اجرای خود استفاده کنند. دسترسی به نام برنامه اغلب مفید است، مثلاً برای چاپ آن در پیام‌ها یا تغییر رفتار برنامه بر اساس نام مستعار خط فرمانی که برای اجرای برنامه استفاده شده است. اما برای اهداف این فصل، آن را نادیده می‌گیریم و فقط دو آرگومان مورد نیاز را ذخیره می‌کنیم.</p>
+<h3 id="saving-the-argument-values-in-variables"><a class="header" href="#saving-the-argument-values-in-variables">ذخیره مقادیر آرگومان‌ها در متغیرها</a></h3>
+<p>در حال حاضر، برنامه قادر به دسترسی به مقادیر مشخص‌شده به عنوان آرگومان‌های خط فرمان است. اکنون نیاز داریم مقادیر دو آرگومان را در متغیرهایی ذخیره کنیم تا بتوانیم از آن‌ها در بقیه برنامه استفاده کنیم. این کار را در لیست ۱۲-۲ انجام می‌دهیم.</p>
+<figure class="listing" id="listing-12-2">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust should_panic noplayground">use std::env;
+
+fn main() {
+    let args: Vec&lt;String&gt; = env::args().collect();
+
+    let query = &amp;args[1];
+    let file_path = &amp;args[2];
+
+    println!("Searching for {query}");
+    println!("In file {file_path}");
+}</code></pre>
+<figcaption><a href="#listing-12-2">لیست ۱۲-۲</a>: ایجاد متغیرها برای نگه‌داری آرگومان جستجو و مسیر فایل</figcaption>
+</figure>
+<p>همانطور که هنگام چاپ بردار مشاهده کردیم، نام برنامه اولین مقدار در بردار را در <code>args[0]</code> اشغال می‌کند، بنابراین آرگومان‌ها را از اندیس (index)۱ شروع می‌کنیم. اولین آرگومان که <code>minigrep</code> دریافت می‌کند، رشته‌ای است که می‌خواهیم جستجو کنیم، بنابراین یک مرجع به اولین آرگومان را در متغیر <code>query</code> قرار می‌دهیم. آرگومان دوم مسیر فایل خواهد بود، بنابراین یک مرجع به آرگومان دوم را در متغیر <code>file_path</code> قرار می‌دهیم.</p>
+<p>ما به طور موقت مقادیر این متغیرها را چاپ می‌کنیم تا اثبات کنیم که کد همانطور که می‌خواهیم کار می‌کند. بیایید دوباره این برنامه را با آرگومان‌های <code>test</code> و <code>sample.txt</code> اجرا کنیم:</p>
+<pre><code class="language-console">$ cargo run -- test sample.txt
+   Compiling minigrep v0.1.0 (file:///projects/minigrep)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.0s
+     Running `target/debug/minigrep test sample.txt`
+Searching for test
+In file sample.txt
+</code></pre>
+<p>عالی است، برنامه کار می‌کند! مقادیر آرگومان‌های مورد نیاز ما در متغیرهای درست ذخیره می‌شوند. بعداً برخی از خطاها را مدیریت خواهیم کرد، مثل وقتی که کاربر هیچ آرگومانی ارائه نمی‌دهد؛ فعلاً، آن شرایط را نادیده می‌گیریم و روی افزودن قابلیت خواندن فایل تمرکز می‌کنیم.</p><nav class="page-nav"><a href="ch12-00-an-io-project.html">→ یک پروژهٔ ورودی/خروجی: ساخت یک برنامهٔ خط فرمان</a><a href="ch12-02-reading-a-file.html">خواندن یک فایل ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

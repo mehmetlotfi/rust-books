@@ -1,0 +1,77 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>aarch64-unknown-teeos — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="platform-support/aarch64-unknown-teeos"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="aarch64-unknown-teeos"><a class="header" href="#aarch64-unknown-teeos"><code>aarch64-unknown-teeos</code></a></h1>
+<p><strong>سطح: 3</strong></p>
+<p>هدفی برای سیستم‌عامل TEEOS.</p>
+<p>TEEOS یک سیستم‌عامل کوچک است که در TrustZone برای برنامه‌های مورد اعتماد/امنیتی اجرا می‌شود. هستهٔ TEEOS ریزهستهٔ HongMeng/ChCore است. libc برای TEEOS بخشی از musl است. این سیستم بسیار کوچک است، به‌طوری که برای برنامه‌ها در TEEOS شبکه، stdin و سیستم فایل وجود ندارد.</p>
+<p>برخی اختصارات:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>اختصار</th><th>عبارت کامل</th><th>توضیح</th></tr>
+</thead>
+<tbody>
+<tr><td>TEE</td><td>محیط اجرای مورداعتماد (Trusted Execution Environment)</td><td>ARM TrustZone سیستم را به دو دنیا/حالت تقسیم می‌کند – دنیا/حالت امن و دنیا/حالت عادی. TEE در دنیا/حالت امن قرار دارد.</td></tr>
+<tr><td>REE</td><td>محیط اجرای غنی (Rich Execution Environment)</td><td>دنیای عادی. برای مثال، Linux در تلفن‌های Android در سمت REE قرار دارد.</td></tr>
+<tr><td>TA</td><td>برنامهٔ مورداعتماد (Trusted Application)</td><td>برنامه‌ای که روی سیستم سمت TEE اجرا می‌شود.</td></tr>
+<tr><td>CA</td><td>برنامهٔ کلاینت (Client Application)</td><td>فرایندی که روی سیستم سمت REE اجرا می‌شود.</td></tr>
+</tbody>
+</table>
+</div>
+<p>TEEOS در حال تبدیل‌شدن به متن‌باز است. <a href="https://gitee.com/opentrustee-group">اطلاعات بیشتر</a></p>
+<h2 id="target-maintainers"><a class="header" href="#target-maintainers">نگهدارندگان هدف</a></h2>
+<p><a href="https://github.com/petrochenkov">@petrochenkov</a> <a href="https://github.com/Sword-Destiny">@Sword-Destiny</a></p>
+<h2 id="setup"><a class="header" href="#setup">راه‌اندازی</a></h2>
+<p>ما از OpenHarmony SDK برای TEEOS استفاده می‌کنیم.</p>
+<p>OpenHarmony SDK در حال حاضر مستقیماً از کامپایل Rust پشتیبانی نمی‌کند، بنابراین مقداری راه‌اندازی لازم است.</p>
+<p>ابتدا باید OpenHarmony SDK را از <a href="https://gitee.com/openharmony/docs/tree/master/en/release-notes">این صفحه</a> دریافت کنید. نسخهٔ OpenHarmony مورد نظر خود را انتخاب کنید و «Public SDK package for the standard system» را دانلود کنید.</p>
+<p>اسکریپت‌های shell زیر را که Clang موجود در OpenHarmony SDK را wrap می‌کنند ایجاد کنید:</p>
+<p><code>aarch64-unknown-teeos-clang.sh</code></p>
+<pre><code class="language-sh">#!/bin/sh
+exec /path/to/ohos-sdk/linux/native/llvm/bin/clang \
+  -target aarch64-linux-gnu \
+  "$@"
+</code></pre>
+<p><code>aarch64-unknown-teeos-clang++.sh</code></p>
+<pre><code class="language-sh">#!/bin/sh
+exec /path/to/ohos-sdk/linux/native/llvm/bin/clang++ \
+  -target aarch64-linux-gnu \
+  "$@"
+</code></pre>
+<h2 id="building-the-target"><a class="header" href="#building-the-target">ساخت هدف</a></h2>
+<p>برای ساخت یک toolchain مربوط به Rust، یک فایل <code>bootstrap.toml</code> با محتوای زیر ایجاد کنید:</p>
+<pre><code class="language-toml">profile = "compiler"
+change-id = 115898
+
+[build]
+sanitizers = true
+profiler = true
+target = ["x86_64-unknown-linux-gnu", "aarch64-unknown-teeos"]
+submodules = false
+compiler-docs = false
+extended = true
+
+[install]
+bindir = "bin"
+libdir = "lib"
+
+[target.aarch64-unknown-teeos]
+cc = "/path/to/scripts/aarch64-unknown-teeos-clang.sh"
+cxx = "/path/to/scripts/aarch64-unknown-teeos-clang.sh"
+linker = "/path/to/scripts/aarch64-unknown-teeos-clang.sh"
+ar = "/path/to/ohos-sdk/linux/native/llvm/bin/llvm-ar"
+ranlib = "/path/to/ohos-sdk/linux/native/llvm/bin/llvm-ranlib"
+llvm-config = "/path/to/ohos-sdk/linux/native/llvm/bin/llvm-config"
+</code></pre>
+<pre><code class="language-text">note: You need to insert "/usr/include/x86_64-linux-gnu/" into environment variable: $C_INCLUDE_PATH
+ if some header files like bits/xxx.h not found.
+note: You can install gcc-aarch64-linux-gnu,g++-aarch64-linux-gnu if some files like crti.o not found.
+note: You may need to install libc6-dev-i386 libc6-dev if "gnu/stubs-32.h" not found.
+</code></pre>
+<h2 id="building-rust-programs"><a class="header" href="#building-rust-programs">ساخت برنامه‌های Rust</a></h2>
+<p>Rust هنوز مصنوعات از پیش کامپایل‌شده‌ای برای این هدف ارائه نمی‌کند. برای کامپایل برای این هدف، یا باید Rust را با فعال‌بودن هدف بسازید (بخش «ساخت هدف» در بالا را ببینید)، یا با استفاده از <code>build-std</code> یا روشی مشابه، نسخهٔ خودتان از <code>core</code> را بسازید.</p>
+<p>باید پیوندگر مورد استفاده را در <code>~/.cargo/config</code> پیکربندی کنید:</p>
+<pre><code class="language-toml">[target.aarch64-unknown-teeos]
+linker = "/path/to/aarch64-unknown-teeos-clang.sh" # or aarch64-linux-gnu-ld
+</code></pre>
+<h2 id="testing"><a class="header" href="#testing">آزمون</a></h2>
+<p>اجرای مجموعه‌آزمون Rust در حال حاضر ممکن نیست.</p>
+<p>اطلاعات بیشتر دربارهٔ نحوهٔ آزمون CA/TA. <a href="https://gitee.com/openharmony-sig/tee_tee_dev_kit/tree/master/docs">اینجا را ببینید</a></p><nav class="page-nav"><a href="hurd.html">→ *-hurd-gnu</a><a href="aarch64-unknown-qtee.html">aarch64-unknown-qtee ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

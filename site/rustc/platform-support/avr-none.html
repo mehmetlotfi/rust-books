@@ -1,0 +1,49 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>avr-none — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="platform-support/avr-none"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="avr-none"><a class="header" href="#avr-none"><code>avr-none</code></a></h1>
+<p>مجموعه‌ای از ریزکنترلرهای Atmel: ATmega8، ATmega328p و غیره.</p>
+<p><strong>سطح: 3</strong></p>
+<h2 id="target-maintainers"><a class="header" href="#target-maintainers">نگهدارندگان هدف</a></h2>
+<p><a href="https://github.com/Patryk27">@Patryk27</a></p>
+<h2 id="requirements"><a class="header" href="#requirements">الزامات</a></h2>
+<p>این هدف فقط به‌صورت متقاطع کامپایل می‌شود؛ میزبان‌های x86-64 Linux، x86-64 macOS و aarch64 macOS تأیید شده‌اند که کار می‌کنند، اما در اصل هر ماشینی که بتواند rustc و avr-gcc را اجرا کند باید مناسب باشد.</p>
+<p>کامپایل برای این هدف مستلزم نصب بودن <code>avr-gcc</code> است، زیرا چند intrinsic (مانند ضرب ۳۲ بیتی) به <a href="https://github.com/gcc-mirror/gcc/blob/3269a722b7a03613e9c4e2862bc5088c4a17cc11/libgcc/config/avr/lib1funcs.S"><code>libgcc</code></a> وابسته‌اند و هنوز نمی‌توان آن‌ها را از طریق <code>compiler-builtins</code> فراهم کرد. این محدودیتی است که <a href="https://github.com/rust-lang/compiler-builtins/issues/711">امیدواریم در آینده برطرف کنیم</a>.</p>
+<p>همچنین باید فایل <code>.cargo/config</code> را تنظیم کنید - برای جزئیات پایین‌تر را ببینید.</p>
+<h2 id="building-the-target"><a class="header" href="#building-the-target">ساخت هدف</a></h2>
+<p>Rust با پشتیبانی فعال‌شده از AVR ارائه می‌شود؛ لازم نیست کامپایلر را دوباره بسازید.</p>
+<h2 id="building-rust-programs"><a class="header" href="#building-rust-programs">ساخت برنامه‌های Rust</a></h2>
+<p><code>avr-gcc</code> را نصب کنید:</p>
+<pre><code class="language-console"># Ubuntu:
+$ sudo apt-get install gcc-avr
+
+# Mac:
+$ brew tap osx-cross/avr &amp;&amp; brew install avr-gcc
+
+# NixOS (takes a couple of minutes, since it's not provided through Hydra):
+$ nix shell nixpkgs#pkgsCross.avr.buildPackages.gcc11
+</code></pre>
+<p>… فایل <code>.cargo/config</code> را برای پروژهٔ خود تنظیم کنید:</p>
+<pre><code class="language-toml">[build]
+target = "avr-none"
+rustflags = ["-C", "target-cpu=atmega328p"]
+
+[unstable]
+build-std = ["core"]
+</code></pre>
+<p>… و سپس به‌سادگی اجرا کنید:</p>
+<pre><code class="language-console">$ cargo build --release
+</code></pre>
+<p>فایل دودویی نهایی در <code>./target/avr-none/release/your-project.elf</code> قرار می‌گیرد.</p>
+<p>توجه کنید که چون AVRها تعداد ثبات، ROM و RAM نسبتاً اندکی دارند، توصیه می‌شود همیشه از <code>--release</code> استفاده کنید تا فضا تمام نشود.</p>
+<p>همچنین توجه کنید که تعیین <code>-C target-cpu</code><sup class="footnote-reference" id="fr-1-1"><a href="#footnote-1">1</a></sup> الزامی است - در اینجا فهرستی از گونه‌های ممکن آمده است:</p>
+<p><a href="https://github.com/llvm/llvm-project/blob/d5a6124259b55789bc49489632efa7c168a4f6cb/clang/lib/Basic/Targets/AVR.cpp#L48">https://github.com/llvm/llvm-project/blob/d5a6124259b55789bc49489632efa7c168a4f6cb/clang/lib/Basic/Targets/AVR.cpp#L48</a></p>
+<p>توجه کنید که دستگاه‌های بدون SRAM پشتیبانی نمی‌شوند، درست مانند کامپایل برنامه‌های C/C++ با avr-gcc یا Clang.</p>
+<h2 id="testing"><a class="header" href="#testing">آزمون</a></h2>
+<p>می‌توانید از <a href="https://github.com/buserror/simavr"><code>simavr</code></a> برای شبیه‌سازی firmware حاصل روی ماشین خود استفاده کنید:</p>
+<pre><code class="language-console">$ simavr -m atmega328p ./target/avr-none/release/your-project.elf
+</code></pre>
+<p>از طرف دیگر، اگر می‌خواهید چند <code>#[test]</code> واقعی بنویسید، می‌توانید از <a href="https://crates.io/crates/avr-tester"><code>avr-tester</code></a> استفاده کنید.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-1">
+<p>برای این هدف، crateهایی که مقدار <code>-C target-cpu</code> متفاوتی دارند با یکدیگر سازگار برای پیوند نیستند. به همین دلیل، کامپایلر اطمینان می‌دهد که همهٔ crateهایی که با هم پیوند می‌شوند با <code>target-cpu</code> یکسانی کامپایل شده باشند. هنگام استفاده از دستورهای <code>rustc</code> برای ساخت باید این موضوع را در نظر گرفت. این موضوع برای Cargo اهمیت کمتری دارد، زیرا Cargo معمولاً برای همهٔ crateهای یک ساخت از <code>target-cpu</code> یکسانی استفاده می‌کند. <a href="#fr-1-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="aarch64-unknown-qtee.html">→ aarch64-unknown-qtee</a><a href="esp-idf.html">*-espidf ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

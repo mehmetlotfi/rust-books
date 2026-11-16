@@ -1,0 +1,149 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>مجموعه آزمون rustdoc-html — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rustdoc-internals/rustdoc-html-test-suite"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="the-rustdoc-html-test-suite"><a class="header" href="#the-rustdoc-html-test-suite">مجموعهٔ تست <code>rustdoc-html</code></a></h1>
+<p>این صفحه دربارهٔ مجموعهٔ تست <code>rustdoc-html</code> است که برای تست خروجی HTML در <code>rustdoc</code> به‌کار می‌رود.
+برای مجموعه‌های تست مخصوص rustdoc دیگر، <a href="../tests/compiletest.html#rustdoc-test-suites">مجموعه‌های تست Rustdoc</a> را ببینید.</p>
+<p>هر فایل تست در این مجموعه صرفاً یک فایل منبع Rust با نام <code>file.rs</code> است که با
+اصطلاحاً <em>directive</em>هایی درون کامنت‌های عادی کد Rust پر شده است.
+این‌ها دو نوع‌اند: <em>Compiletest</em> و <em>HtmlDocCk</em>.</p>
+<p>برای آشنایی بیشتر با اولی، <a href="../tests/directives.html">directiveهای Compiletest</a> را بخوانید.
+برای دومی، ادامه دهید.</p>
+<p>در داخل، <a href="../tests/compiletest.html"><code>compiletest</code></a> اسکریپت کمکی بررسی <a href="https://github.com/rust-lang/rust/blob/HEAD/src/etc/htmldocck.py"><code>htmldocck.py</code></a> را فراخوانی می‌کند.</p>
+<h2 id="htmldocck-directives"><a class="header" href="#htmldocck-directives">HtmlDocCk Directives</a></h2>
+<p>directiveهای HtmlDocCk گزاره‌هایی (assertion) هستند که روی HTML تولیدشده قید می‌گذارند.
+شبیه directiveهای <code>compiletest</code> هستند چون به شکل کامنت <code>//@</code> می‌آیند
+اما در نهایت کاملاً متمایزند و توسط برنامه‌های متفاوتی پردازش می‌شوند.</p>
+<p><a href="https://en.wikipedia.org/wiki/XPath">XPath</a> برای کوئری‌گرفتن از بخش‌های درخت سند HTML به‌کار می‌رود.</p>
+<p><strong>Introductory example</strong>:</p>
+<pre><code class="language-rust ignore (illustrative)">//@ has file/type.Alias.html
+//@ has - '//*[@class="rust item-decl"]//code' 'type Alias = Option&lt;i32&gt;;'
+pub type Alias = Option&lt;i32&gt;;</code></pre>
+<p>اینجا بررسی می‌کنیم مستندات تولیدشده برای crate با نام <code>file</code> صفحه‌ای برای
+نوع alias عمومی <code>Alias</code> دارد که بلوک کدِ بالای آن شامل رندر مورد انتظار آیتم است.
+<code>//*[@class="rust item-decl"]//code</code> یک عبارت XPath است.</p>
+<p>طبق قرارداد، این directiveها را درست بالای چیزی که قرار است تست کنند می‌گذارید.
+از نظر فنی لازم نیست چنین باشند چون HtmlDocCk فقط به دنبال directiveهاست.</p>
+<p>همهٔ directiveها آرگومان <code>PATH</code> می‌گیرند.
+برای پرهیز از تکرار، می‌توان <code>-</code> را به آن داد تا آرگومان <code>PATH</code> قبلی دوباره استفاده شود.
+چون مسیر شامل نام crate است، طبق قرارداد attribute با نام
+<code>#![crate_name = "foo"]</code> به ریشهٔ crate افزوده می‌شود تا مسیر حاصل کوتاه شود.</p>
+<p>همهٔ آرگومان‌ها شکل رشته‌های نقل‌قول‌دار به سبک shell (تک یا دوتایی) دارند،
+به‌جز <code>COUNT</code> و شکل ویژهٔ <code>-</code> برای <code>PATH</code>.</p>
+<p>همهٔ directiveها (به‌جز <code>files</code>) را می‌توان با گذاشتن <code>!</code> جلوی نامشان <em>نفی</em> کرد.
+پیش از افزودن directiveهای نفی‌شده، لطفاً <a href="#caveats">نکات احتیاطی آن‌ها</a> را بخوانید.</p>
+<p>مشابه دستورهای shell،
+directiveها می‌توانند چند خط ادامه یابند اگر آخرین نویسه‌شان <code>\</code> باشد.
+در این حالت، ابتدای خط بعد باید <code>//</code> باشد، بدون <code>@</code>.</p>
+<p>مشابه directiveهای compiletest، علاوه بر فاصله می‌توانید از دونقطه <code>:</code> هم برای جداکردن
+نام directive و آرگومان‌ها استفاده کنید، اما برای directiveهای HtmlDocCk فاصله ترجیح داده می‌شود.</p>
+<p>از رشتهٔ ویژهٔ <code>{{channel}}</code> در XPathها، آرگومان‌های <code>PATTERN</code> و <a href="#snapshot">فایل‌های snapshot</a> استفاده کنید
+اگر می‌خواهید به نشانی <code>https://doc.rust-lang.org/CHANNEL</code> ارجاع دهید که <code>CHANNEL</code> کانال انتشار
+فعلی است (مثلاً <code>stable</code> یا <code>nightly</code>).</p>
+<p>در ادامه همهٔ directiveهای ممکن فهرست شده‌اند:</p>
+<h3 id="has"><a class="header" href="#has"><code>has</code></a></h3>
+<blockquote>
+<p>Usage 1: <code>//@ has PATH</code></p>
+</blockquote>
+<p>بررسی می‌کند فایل داده‌شده با <code>PATH</code> وجود دارد.</p>
+<blockquote>
+<p>Usage 2: <code>//@ has PATH XPATH PATTERN</code></p>
+</blockquote>
+<p>بررسی می‌کند متن هر عنصر / attribute / متنی که با <code>XPATH</code> در
+فایل نرمال‌سازی‌شدهٔ فاصله<sup class="footnote-reference" id="fr-1-1"><a href="#footnote-1">1</a></sup> داده‌شده با <code>PATH</code> انتخاب می‌شود با رشتهٔ <code>PATTERN</code>
+(که آن هم فاصله‌نرمال‌سازی‌شده است) مطابقت دارد.</p>
+<p><strong>نکته</strong>: اگر می‌خواهید از نرمال‌سازی فاصله پرهیز کنید و/یا با regex تطبیق دهید،
+به‌جای آن از <code>matches</code> استفاده کنید.</p>
+<h3 id="hasraw"><a class="header" href="#hasraw"><code>hasraw</code></a></h3>
+<blockquote>
+<p>Usage: <code>//@ hasraw PATH PATTERN</code></p>
+</blockquote>
+<p>بررسی می‌کند محتوای فایل نرمال‌سازی‌شدهٔ فاصله<sup class="footnote-reference" id="fr-1-2"><a href="#footnote-1">1</a></sup> داده‌شده با <code>PATH</code>
+با رشتهٔ <code>PATTERN</code> (که آن هم فاصله‌نرمال‌سازی‌شده است) مطابقت دارد.</p>
+<p><strong>نکته</strong>: اگر می‌خواهید از نرمال‌سازی فاصله پرهیز کنید و/یا با
+regex تطبیق دهید، به‌جای آن از <code>matchesraw</code> استفاده کنید.</p>
+<h3 id="matches"><a class="header" href="#matches"><code>matches</code></a></h3>
+<blockquote>
+<p>Usage: <code>//@ matches PATH XPATH PATTERN</code></p>
+</blockquote>
+<p>بررسی می‌کند متن هر عنصر / attribute / متنی که با <code>XPATH</code> در
+فایل داده‌شده با <code>PATH</code> انتخاب می‌شود با regex به سبک Python<sup class="footnote-reference" id="fr-2-1"><a href="#footnote-2">2</a></sup> یعنی <code>PATTERN</code> مطابقت دارد.</p>
+<h3 id="matchesraw"><a class="header" href="#matchesraw"><code>matchesraw</code></a></h3>
+<blockquote>
+<p>Usage: <code>//@ matchesraw PATH PATTERN</code></p>
+</blockquote>
+<p>بررسی می‌کند محتوای فایل داده‌شده با <code>PATH</code> با
+regex به سبک Python<sup class="footnote-reference" id="fr-2-2"><a href="#footnote-2">2</a></sup> یعنی <code>PATTERN</code> مطابقت دارد.</p>
+<h3 id="count"><a class="header" href="#count"><code>count</code></a></h3>
+<blockquote>
+<p>Usage: <code>//@ count PATH XPATH COUNT</code></p>
+</blockquote>
+<p>بررسی می‌کند دقیقاً <code>COUNT</code> تطابق برای <code>XPATH</code> درون فایل داده‌شده با <code>PATH</code> وجود دارد.</p>
+<h3 id="snapshot"><a class="header" href="#snapshot"><code>snapshot</code></a></h3>
+<blockquote>
+<p>Usage: <code>//@ snapshot NAME PATH XPATH</code></p>
+</blockquote>
+<p>بررسی می‌کند عنصر / متنی که با <code>XPATH</code> در فایل داده‌شده با <code>PATH</code> انتخاب می‌شود با
+زیردرخت یا متن از پیش ضبط‌شده («snapshot») در فایل <code>FILE_STEM.NAME.html</code> مطابقت دارد که <code>FILE_STEM</code>
+نام پایهٔ فایل تست است.</p>
+<p>گزینهٔ <code>--bless</code> را به <code>compiletest</code> بدهید تا زیردرخت/متن فعلی به‌عنوان مورد انتظار پذیرفته شود.
+این فایل یادشده را بازنویسی می‌کند (یا اگر وجود نداشته باشد می‌سازد).
+نشانی وابسته به کانال <code>https://doc.rust-lang.org/CHANNEL</code> را به‌طور خودکار به
+رشتهٔ ویژهٔ <code>{{channel}}</code> نرمال‌سازی می‌کند.</p>
+<h3 id="has-dir"><a class="header" href="#has-dir"><code>has-dir</code></a></h3>
+<blockquote>
+<p>Usage: <code>//@ has-dir PATH</code></p>
+</blockquote>
+<p>وجود پوشهٔ داده‌شده با <code>PATH</code> را بررسی می‌کند.</p>
+<h3 id="files"><a class="header" href="#files"><code>files</code></a></h3>
+<blockquote>
+<p>Usage: <code>//@ files PATH ENTRIES</code></p>
+</blockquote>
+<p>بررسی می‌کند پوشهٔ داده‌شده با <code>PATH</code> دقیقاً شامل <code>ENTRIES</code> است.
+<code>ENTRIES</code> فهرستی شبیه Python از رشته‌ها درون یک رشتهٔ نقل‌قول‌دار است.</p>
+<p><strong>Example</strong>: <code>//@ files "foo/bar" '["index.html", "sidebar-items.js"]'</code></p>
+<h2 id="compiletest-directives-brief"><a class="header" href="#compiletest-directives-brief">Compiletest Directives (Brief)</a></h2>
+<p>همان‌طور که در مقدمه گفته شد، به <a href="../tests/directives.html">directiveهای compiletest</a> هم دسترسی دارید.
+مهم‌تر از همه، به شما اجازه می‌دهند crateهای کمکی ثبت کنید
+و پرچم‌هایی به فایل دودویی <code>rustdoc</code> در حال تست بدهید.
+اگر هنوز چیزی دربارهٔ آن‌ها نمی‌دانید <em>قویاً توصیه می‌شود</em> آن فصل را بخوانید.</p>
+<p>در ادامه چند جزئیات آمده که به‌طور مشخص به این مجموعهٔ تست مربوط‌اند:</p>
+<ul>
+<li>هرچند می‌توانید برای دادن پرچم به <code>rustdoc</code> هم از <code>//@ compile-flags</code> و هم از <code>//@ doc-flags</code> استفاده کنید،
+برای نشان‌دادن قصد، دومی را ترجیح دهید.
+اولی برای <code>rustc</code> است.</li>
+<li><code>//@ build-aux-docs</code> را به فایل تستی که crateهای کمکی دارد اضافه کنید تا علاوه بر کامپایل کمکی‌ها با <code>rustc</code>،
+آن‌ها را با <code>rustdoc</code> هم مستند کند.</li>
+</ul>
+<h2 id="caveats"><a class="header" href="#caveats">Caveats</a></h2>
+<p>تست‌کردن نبود یک عنصر یا تکه‌ای از متن بسیار شکننده است و برای آینده چندان مناسب نیست.</p>
+<p>غیرمعمول نیست که <em>شکل</em> درخت سند HTML تولیدشده گاه‌به‌گاه تغییر کند.
+این مثلاً شامل تغییر نام کلاس‌های CSS است.</p>
+<p>هر وقت این رخ دهد، بررسی‌های <em>مثبت</em> یا همچنان با عنصر / attribute / متن مورد نظر مطابقت می‌کنند
+(اگر عبارت XPathشان به‌اندازهٔ کافی عمومی / آزاد باشد) و
+در نتیجه همچنان چیز درست را تست می‌کنند یا مطابقت نمی‌کنند که در آن صورت شکست می‌خورند و
+نویسندهٔ تغییر را مجبور به نگاه‌کردن به آن‌ها می‌کنند.</p>
+<p>این را با بررسی‌های <em>منفی</em> (مثلاً <code>//@ !has PATH XPATH PATTERN</code>) مقایسه کنید که
+اگر عبارت XPathشان «دیگر» مطابقت نکند شکست نمی‌خورند.
+نویسنده‌ای که «شکل» را تغییر داده بنابراین مطلع نمی‌شود و
+در نتیجه شخص دیگری می‌تواند ناخواسته <code>PATTERN</code> را دوباره به مستندات تولیدشده وارد کند بدون اینکه
+بررسی منفی اصلی شکست بخورد.</p>
+<p><strong>نکته</strong>: لطفاً از بررسی‌های <em>نفی‌شده</em> پرهیز کنید!</p>
+<p><strong>نکته</strong>: اگر نمی‌توانید از آن پرهیز کنید، لطفاً <strong>همیشه</strong> آن را با بررسی مثبت مشابهی در
+مجاورت نزدیک جفت کنید، تا افرادی که «شکل» را تغییر می‌دهند فرصت داشته باشند متوجه شوند و
+بررسی نفی‌شده را به‌روز کنند!</p>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<p>HtmlDocCk از پیاده‌سازی XPath در کتابخانهٔ استاندارد Python استفاده می‌کند.
+این چند محدودیت ایجاد می‌کند:</p>
+<ul>
+<li>همهٔ آرگومان‌های <code>XPATH</code> به‌دلیل نقص پیاده‌سازی باید با <code>//</code> شروع شوند.</li>
+<li>بسیاری از قابلیت‌های XPath (توابع، محورها (axis) و غیره) پشتیبانی نمی‌شوند.</li>
+<li>فقط HTML درست‌ساختار (well-formed) قابل‌تجزیه است (امیدواریم rustdoc تگ‌های ناهمخوان خروجی ندهد).</li>
+</ul>
+<p>علاوه بر این، <a href="../tests/compiletest.html#revisions">revisionهای</a> compiletest پشتیبانی نمی‌شوند.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-1">
+<p>نرمال‌سازی فاصله یعنی همهٔ بازه‌های فاصلهٔ متوالی با یک فاصلهٔ واحد جایگزین می‌شوند. <a href="#fr-1-1">↩</a> <a href="#fr-1-2">↩2</a></p>
+</li>
+<li id="footnote-2">
+<p>آن‌ها یونیکد‌آگاه‌اند (پرچم <code>UNICODE</code> تنظیم است)، حساس به حروف بزرگ و کوچک و در حالت تک‌خطی تطبیق می‌دهند. <a href="#fr-2-1">↩</a> <a href="#fr-2-2">↩2</a></p>
+</li>
+</ol><nav class="page-nav"><a href="search.html">→ جست‌وجو</a><a href="rustdoc-gui-test-suite.html">مجموعه آزمون rustdoc-gui (ناقص) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

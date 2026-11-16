@@ -1,0 +1,103 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>استفاده از مخازن خارجی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="external-repos"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="using-external-repositories"><a class="header" href="#using-external-repositories">استفاده از مخزن‌های خارجی</a></h1>
+<p>مخزن git با نام <code>rust-lang/rust</code> به چند مخزن دیگر در سازمان <code>rust-lang</code> وابسته است. سه روش اصلی برای استفاده از وابستگی‌ها وجود دارد:</p>
+<ol>
+<li>به‌عنوان وابستگی Cargo از طریق crates.io (برای مثال <code>rustc-rayon</code>)</li>
+<li>به‌عنوان subtree در git (برای مثال <code>clippy</code>) یا <a href="https://josh-project.github.io/josh/intro.html">josh</a> (برای مثال <code>miri</code>)</li>
+<li>به‌عنوان زیرماژول git (برای مثال <code>cargo</code>)</li>
+</ol>
+<p>به‌طور کلی:</p>
+<ul>
+<li>از crates.io برای کتابخانه‌هایی استفاده کنید که می‌توانند برای دیگران در اکوسیستم مفید باشند</li>
+<li>از subtreeها برای ابزارهایی استفاده کنید که به درونیات کامپایلر وابسته‌اند و در صورت تغییرهای ناسازگار باید به‌روزرسانی شوند</li>
+<li>از زیرماژول‌ها برای ابزارهایی استفاده کنید که از کامپایلر مستقل هستند</li>
+</ul>
+<h2 id="external-dependencies-subtrees"><a class="header" href="#external-dependencies-subtrees">وابستگی‌های خارجی (subtreeها)</a></h2>
+<p>پروژه‌های خارجی زیر با نوعی از <code>subtree</code> مدیریت می‌شوند:</p>
+<ul>
+<li><a href="https://github.com/rust-lang/rust-clippy">clippy</a></li>
+<li><a href="https://github.com/rust-lang/miri">miri</a></li>
+<li><a href="https://github.com/rust-lang/portable-simd">portable-simd</a></li>
+<li><a href="https://github.com/rust-lang/rustfmt">rustfmt</a></li>
+<li><a href="https://github.com/rust-lang/rust-analyzer">rust-analyzer</a></li>
+<li><a href="https://github.com/rust-lang/rustc_codegen_cranelift">rustc_codegen_cranelift</a></li>
+<li><a href="https://github.com/rust-lang/rustc_codegen_gcc">rustc_codegen_gcc</a></li>
+<li><a href="https://github.com/rust-lang/rustc-dev-guide">rustc-dev-guide</a></li>
+<li><a href="https://github.com/rust-lang/compiler-builtins">compiler-builtins</a></li>
+<li><a href="https://github.com/rust-lang/stdarch">stdarch</a></li>
+</ul>
+<p>برخلاف وابستگی‌های <code>submodule</code> (بعداً درباره‌ی آن‌ها توضیح داده می‌شود)، وابستگی‌های <code>subtree</code> فقط فایل‌ها و پوشه‌های معمولی هستند که می‌توان آن‌ها را درون همین مخزن به‌روزرسانی کرد. با این حال، در صورت امکان، بهبودها، رفع باگ‌ها و موارد مشابه که مخصوص این ابزارها هستند باید مستقیماً در مخزن‌های بالادستی خودشان ثبت شوند. استثنا این است که وقتی برای پیاده‌سازی یک قابلیت یا آزمون جدید در ابزار به تغییرهایی در rustc نیاز باشد، این کار باید در قالب یک PR جامع در rustc انجام شود.</p>
+<p>به همین ترتیب، اگر تغییرهای rustc شما ساخت یکی از وابستگی‌های subtree را خراب کند، باید اصلاح‌های مربوط به آن را هم در همان PR مربوط به rustc بگنجانید.</p>
+<p>وابستگی‌های <code>subtree</code> در حال حاضر با دو رویکرد متفاوت مدیریت می‌شوند:</p>
+<ul>
+<li>با استفاده از <code>git subtree</code>
+<ul>
+<li><code>clippy</code> (<a href="../clippy/development/infrastructure/sync.html#performing-the-sync-from-rust-langrust-to-clippy">راهنمای همگام‌سازی</a>)</li>
+<li><code>portable-simd</code> (<a href="https://github.com/rust-lang/portable-simd/blob/master/subtree-sync.sh">اسکریپت همگام‌سازی</a>)</li>
+<li><code>rustc_codegen_gcc</code> (<a href="https://github.com/rust-lang/rustc_codegen_gcc/blob/master/doc/subtree.md">راهنمای همگام‌سازی</a>)</li>
+</ul>
+</li>
+<li>با استفاده از ابزار <a href="#synchronizing-a-josh-subtree">josh</a>
+<ul>
+<li><code>miri</code></li>
+<li><code>rust-analyzer</code></li>
+<li><code>rustc_codegen_cranelift</code></li>
+<li><code>rustc-dev-guide</code></li>
+<li><code>rustfmt</code></li>
+<li><code>compiler-builtins</code></li>
+<li><code>stdarch</code></li>
+</ul>
+</li>
+</ul>
+<h3 id="josh-subtrees"><a class="header" href="#josh-subtrees">subtreeهای Josh</a></h3>
+<p>ابزار <a href="https://josh-project.github.io/josh/intro.html">josh</a> جایگزینی برای subtreeهای git است که تاریخچه‌ی git را به شیوه‌ای متفاوت مدیریت می‌کند و برای مخزن‌های بزرگ‌تر بهتر مقیاس می‌پذیرد. کار با josh به ابزار مخصوص نیاز دارد. ما یک ابزار کمکی به نام <a href="https://github.com/rust-lang/josh-sync"><code>rustc-josh-sync</code></a> برای کمک به همگام‌سازی فراهم کرده‌ایم که <a href="#synchronizing-a-josh-subtree">در ادامه</a> توضیح داده شده است.</p>
+<h3 id="synchronizing-a-josh-subtree"><a class="header" href="#synchronizing-a-josh-subtree">همگام‌سازی یک subtree از نوع Josh</a></h3>
+<p>برای به‌روزرسانی subtreeهای Josh از ابزار اختصاصی <a href="https://github.com/rust-lang/josh-sync"><code>rustc-josh-sync</code></a> استفاده می‌کنیم. دستورهای زیر برای همه‌ی subtreeهای Josh ما قابل استفاده‌اند، هرچند توجه کنید که <code>miri</code> هنگام pull به انجام <a href="https://github.com/rust-lang/miri/blob/master/CONTRIBUTING.md#advanced-topic-syncing-with-the-rustc-repo">مراحل اضافی</a> نیاز دارد.</p>
+<p>می‌توانید این ابزار را با دستور زیر نصب کنید:</p>
+<pre><code>cargo install --locked --git https://github.com/rust-lang/josh-sync
+</code></pre>
+<p>هم pullها (همگام‌سازی تغییرها از rust-lang/rust به subtree) و هم pushها (همگام‌سازی تغییرها از subtree به rust-lang/rust) از داخل مخزن subtree انجام می‌شوند (پس ابتدا در ترمینال به پوشه‌ی checkout آن مخزن بروید).</p>
+<h4 id="performing-pull"><a class="header" href="#performing-pull">انجام pull</a></h4>
+<ol>
+<li>یک شاخه‌ی جدید checkout کنید که برای ساخت PR به subtree استفاده خواهد شد</li>
+<li>دستور pull را اجرا کنید <code>rustc-josh-sync pull</code>
+<pre><code>rustc-josh-sync pull
+</code></pre>
+</li>
+<li>شاخه را به fork خود push کنید و یک PR به مخزن subtree بسازید
+<ul>
+<li>اگر ابزار خط فرمان <code>gh</code> نصب باشد، <code>rustc-josh-sync</code> می‌تواند PR را برای شما بسازد.</li>
+</ul>
+</li>
+</ol>
+<h4 id="performing-push"><a class="header" href="#performing-push">انجام push</a></h4>
+<blockquote>
+<p>نکته: پیش از ادامه، راهنمایی‌های مربوط به Git را <a href="https://github.com/rust-lang/josh-sync#git-peculiarities">در README مربوط به josh-sync</a> ببینید.</p>
+</blockquote>
+<ol>
+<li>دستور push را اجرا کنید تا شاخه‌ای با نام <code>&lt;branch-name&gt;</code> در یک fork از <code>rustc</code> زیر حساب <code>&lt;gh-username&gt;</code> ساخته شود <code>rustc-josh-sync push &lt;branch-name&gt; &lt;gh-username&gt;</code>
+<pre><code>rustc-josh-sync push &lt;branch-name&gt; &lt;gh-username&gt;
+</code></pre>
+</li>
+<li>از <code>&lt;branch-name&gt;</code> یک PR به <code>rust-lang/rust</code> بسازید</li>
+</ol>
+<h3 id="creating-a-new-josh-subtree-dependency"><a class="header" href="#creating-a-new-josh-subtree-dependency">ساخت یک وابستگی جدید subtree از نوع Josh</a></h3>
+<p>اگر می‌خواهید یک وابستگی مخزنی را از <code>git subtree</code> یا <code>git submodule</code> به josh منتقل کنید، می‌توانید <a href="https://hackmd.io/7pOuxnkdQDaL1Y1FQr65xg">این راهنما</a> را ببینید.</p>
+<h3 id="synchronizing-a-git-subtree"><a class="header" href="#synchronizing-a-git-subtree">همگام‌سازی یک subtree از نوع git</a></h3>
+<p>به‌طور دوره‌ای باید تغییرهایی که در وابستگی‌های مبتنی بر subtree ایجاد شده‌اند بین این مخزن و مخزن‌های بالادستی ابزارها همگام شوند.</p>
+<p>همگام‌سازی subtreeها معمولاً توسط نگهدارندگان هر ابزار انجام می‌شود. سایر کاربران نیز می‌توانند PRهای همگام‌سازی ارسال کنند، اما برای این کار لازم است نصب git محلی خود را تغییر دهید و مجموعه‌ای دقیق از دستورالعمل‌ها را دنبال کنید. این دستورالعمل‌ها، همراه با چند نکته و ترفند مفید، در بخش <a href="../clippy/development/infrastructure/sync.html">همگام‌سازی تغییرهای subtree</a> در راهنمای مشارکت Clippy مستند شده‌اند. این دستورالعمل‌ها برای هر ابزار مبتنی بر subtree قابل استفاده‌اند، فقط حتماً از پوشه‌ی subtree و مخزن راه دور متناظر درست استفاده کنید.</p>
+<p>فرایند همگام‌سازی در دو جهت انجام می‌شود: <code>subtree push</code> و <code>subtree pull</code>.</p>
+<p><code>subtree push</code> همه‌ی تغییرهایی را که روی نسخه‌ی موجود در این مخزن رخ داده‌اند می‌گیرد و روی مخزن راه دور کامیت‌هایی منطبق با تغییرهای محلی می‌سازد. هر کامیت محلی که به subtree دست زده باشد یک کامیت در مخزن راه دور ایجاد می‌کند، اما آن کامیت طوری تغییر می‌یابد که فایل‌ها را از پوشه‌ی مشخص‌شده به ریشه‌ی مخزن ابزار منتقل کند.</p>
+<p><code>subtree pull</code> همه‌ی تغییرهای مخزن ابزار را از آخرین <code>subtree pull</code> به بعد می‌گیرد و این کامیت‌ها را به مخزن rustc اضافه می‌کند، همراه با یک کامیت merge که تغییرهای ابزار را به پوشه‌ی مشخص‌شده در مخزن Rust منتقل می‌کند.</p>
+<p>توصیه می‌شود همیشه ابتدا push انجام دهید و آن را در شاخه‌ی پیش‌فرض ابزار merge کنید. سپس وقتی pull انجام می‌دهید، merge بدون تداخل انجام می‌شود. اگرچه حل تداخل‌ها هنگام pull قطعاً ممکن است، اگر PR شما به‌اندازه‌ی کافی سریع merge نشود و تداخل‌های جدیدی پیش بیاید، شاید مجبور شوید حل تداخل را دوباره انجام دهید. تلاش نکنید نتیجه‌ی <code>git subtree pull</code> را rebase کنید؛ rebase کردن کامیت‌های merge به‌طور کلی ایده‌ی بدی است.</p>
+<p>همیشه باید پیشوند <code>-P</code> را برای پوشه‌ی subtree و مخزن راه دور متناظر مشخص کنید. اگر پوشه یا مخزن اشتباهی مشخص کنید، با merge‌های بسیار «جالبی» روبه‌رو می‌شوید که می‌خواهند پوشه‌ی اشتباه را به مخزن راه دور اشتباه push کنند. خوشبختانه می‌توانید بدون هیچ عواقبی این کار را متوقف کنید، به این صورت که یا کامیت‌های pull‌شده در rustc یا شاخه‌ی push‌شده در مخزن راه دور را دور بیندازید و دوباره تلاش کنید. معمولاً به‌راحتی می‌توان فهمید که چنین اتفاقی افتاده است، چون ناگهان هزاران کامیت می‌خواهند همگام شوند.</p>
+<h3 id="creating-a-new-subtree-dependency"><a class="header" href="#creating-a-new-subtree-dependency">ساخت یک وابستگی جدید subtree</a></h3>
+<p>اگر می‌خواهید از یک مخزن موجود یک وابستگی subtree جدید بسازید، (از پوشه‌ی ریشه‌ی همین مخزن!) دستور زیر را اجرا کنید</p>
+<pre><code>git subtree add -P src/tools/clippy https://github.com/rust-lang/rust-clippy.git master
+</code></pre>
+<p>این کار یک کامیت جدید می‌سازد که به هیچ عنوان نباید آن را rebase کنید! اگر نیاز به rebase دارید، کامیت را حذف کنید و عملیات را دوباره انجام دهید.</p>
+<p>حالا کار تمام است؛ پوشه‌ی <code>src/tools/clippy</code> طوری رفتار می‌کند که گویی Clippy بخشی از تک‌مخزن rustc است، بنابراین جز شما (یا دیگرانی که subtreeها را همگام می‌کنند) هیچ‌کس واقعاً نیازی به استفاده از <code>git subtree</code> ندارد.</p>
+<h2 id="external-dependencies-submodules"><a class="header" href="#external-dependencies-submodules">وابستگی‌های خارجی (زیرماژول‌ها)</a></h2>
+<p>ساخت Rust همچنین از مخزن‌های git خارجی‌ای استفاده می‌کند که با <a href="https://git-scm.com/book/en/v2/Git-Tools-Submodules">زیرماژول‌های git</a> دنبال می‌شوند. فهرست کامل را می‌توانید در فایل <a href="https://github.com/rust-lang/rust/blob/HEAD/.gitmodules"><code>.gitmodules</code></a> ببینید. برخی از این پروژه‌ها الزامی‌اند (مثل <code>stdarch</code> برای کتابخانه‌ی استاندارد) و برخی اختیاری (مثل <code>src/doc/book</code>).</p>
+<p>استفاده از زیرماژول‌ها در <a href="git.html#git-submodules">فصل استفاده از Git</a> بیشتر بحث شده است.</p>
+<p>برخی از زیرماژول‌ها مجازند در وضعیت «خراب» باشند، یعنی یا ساخته نمی‌شوند یا آزمون‌هایشان قبول نمی‌شوند، مثلاً کتاب‌های مستندات مانند <a href="https://github.com/rust-lang/reference/">The Rust Reference</a>. نگهدارندگان این پروژه‌ها وقتی پروژه در وضعیت خراب قرار بگیرد مطلع می‌شوند و باید هرچه سریع‌تر آن را اصلاح کنند. وضعیت فعلی در <a href="https://rust-lang-nursery.github.io/rust-toolstate/">وب‌سایت toolstate</a> دنبال می‌شود. اطلاعات بیشتر را می‌توانید در <a href="https://forge.rust-lang.org/infra/toolstate.html">فصل Toolstate</a> در Forge ببینید. در عمل، بسیار نادر است که مستندات toolstate خراب داشته باشند.</p>
+<p>خرابی در کانال‌های beta و stable مجاز نیست و باید پیش از merge شدن PR برطرف شود. همچنین مجاز نیست که در هفته‌ی منتهی به برش beta، این پروژه‌ها روی <code>main</code> خراب باشند.</p><nav class="page-nav"><a href="bug-fix-procedure.html">→ رویه‌های مربوط به تغییرات ناسازگار</a><a href="fuzzing.html">Fuzzing ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

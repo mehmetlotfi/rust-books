@@ -1,0 +1,172 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>مدیریت نوع‌های با اندازهٔ صفر — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="vec/vec-zsts"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="handling-zero-sized-types"><a class="header" href="#handling-zero-sized-types">مدیریت نوع‌های با اندازهٔ صفر</a></h1>
+<p>وقتش رسیده است. می‌خواهیم با شبح نوع‌های با اندازهٔ صفر (zero-sized type) بجنگیم. Safe Rust <em>هرگز</em> لازم نیست به این موضوع اهمیت بدهد، اما Vec به‌شدت به اشاره‌گرهای خام و تخصیص‌های خام وابسته است، که دقیقاً همان دو چیزی هستند که به نوع‌های با اندازهٔ صفر اهمیت می‌دهند. باید مراقب دو چیز باشیم:</p>
+<ul>
+<li>API تخصیص‌دهندهٔ خام اگر ۰ را به‌عنوان اندازهٔ تخصیص به آن بدهید رفتار تعریف‌نشده دارد.</li>
+<li>offset دادن به اشاره‌گر خام برای نوع‌های با اندازهٔ صفر هیچ کاری نمی‌کند، که iterator اشاره‌گریِ C‌مانند ما را خراب می‌کند.</li>
+</ul>
+<p>خوشبختانه ما iterator‌های اشاره‌گری و مدیریت تخصیص را به‌ترتیب در <code>RawValIter</code> و <code>RawVec</code> جدا کرده‌ایم. چه راحتیِ مرموزی.</p>
+<h2 id="allocating-zero-sized-types"><a class="header" href="#allocating-zero-sized-types">تخصیص نوع‌های با اندازهٔ صفر</a></h2>
+<p>پس اگر API تخصیص‌دهنده از تخصیص‌های با اندازهٔ صفر پشتیبانی نمی‌کند، آخر چه چیزی را به‌عنوان تخصیص خود ذخیره کنیم؟ البته <code>NonNull::dangling()</code>! تقریباً هر عملیاتی روی یک ZST هیچ کاری نمی‌کند، چون ZST‌ها دقیقاً یک مقدار دارند و بنابراین برای ذخیره یا بارگذاری آن‌ها لازم نیست هیچ حالتی در نظر گرفته شود. این در واقع به <code>ptr::read</code> و <code>ptr::write</code> هم تعمیم می‌یابد: آن‌ها اصلاً به اشاره‌گر نگاه نمی‌کنند. به همین دلیل هرگز لازم نیست اشاره‌گر را تغییر دهیم.</p>
+<p>با این حال توجه کنید که تکیهٔ قبلی ما بر این که پیش از سرریز، حافظه تمام می‌شود، با نوع‌های با اندازهٔ صفر دیگر معتبر نیست. باید صراحتاً در برابر سرریز ظرفیت برای نوع‌های با اندازهٔ صفر محافظت کنیم.</p>
+<p>به دلیل معماری فعلی ما، همهٔ این‌ها فقط به معنای نوشتن ۳ محافظ است، یکی در هر متد از <code>RawVec</code>.</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">impl&lt;T&gt; RawVec&lt;T&gt; {
+    fn new() -&gt; Self {
+        // This branch should be stripped at compile time.
+        let cap = if mem::size_of::&lt;T&gt;() == 0 { usize::MAX } else { 0 };
+
+        // `NonNull::dangling()` doubles as "unallocated" and "zero-sized allocation"
+        RawVec {
+            ptr: NonNull::dangling(),
+            cap,
+        }
+    }
+
+    fn grow(&amp;mut self) {
+        // since we set the capacity to usize::MAX when T has size 0,
+        // getting to here necessarily means the Vec is overfull.
+        assert!(mem::size_of::&lt;T&gt;() != 0, "capacity overflow");
+
+        let (new_cap, new_layout) = if self.cap == 0 {
+            (1, Layout::array::&lt;T&gt;(1).unwrap())
+        } else {
+            // This can't overflow because we ensure self.cap &lt;= isize::MAX.
+            let new_cap = 2 * self.cap;
+
+            // `Layout::array` checks that the number of bytes is &lt;= usize::MAX,
+            // but this is redundant since old_layout.size() &lt;= isize::MAX,
+            // so the `unwrap` should never fail.
+            let new_layout = Layout::array::&lt;T&gt;(new_cap).unwrap();
+            (new_cap, new_layout)
+        };
+
+        // Ensure that the new allocation doesn't exceed `isize::MAX` bytes.
+        assert!(new_layout.size() &lt;= isize::MAX as usize, "Allocation too large");
+
+        let new_ptr = if self.cap == 0 {
+            unsafe { alloc::alloc(new_layout) }
+        } else {
+            let old_layout = Layout::array::&lt;T&gt;(self.cap).unwrap();
+            let old_ptr = self.ptr.as_ptr() as *mut u8;
+            unsafe { alloc::realloc(old_ptr, old_layout, new_layout.size()) }
+        };
+
+        // If allocation fails, `new_ptr` will be null, in which case we abort.
+        self.ptr = match NonNull::new(new_ptr as *mut T) {
+            Some(p) =&gt; p,
+            None =&gt; alloc::handle_alloc_error(new_layout),
+        };
+        self.cap = new_cap;
+    }
+}
+
+impl&lt;T&gt; Drop for RawVec&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        let elem_size = mem::size_of::&lt;T&gt;();
+
+        if self.cap != 0 &amp;&amp; elem_size != 0 {
+            unsafe {
+                alloc::dealloc(
+                    self.ptr.as_ptr() as *mut u8,
+                    Layout::array::&lt;T&gt;(self.cap).unwrap(),
+                );
+            }
+        }
+    }
+}</code></pre>
+<p>همین. حالا از push و pop کردن نوع‌های با اندازهٔ صفر پشتیبانی می‌کنیم. با این حال iterator‌های ما (آن‌هایی که از Deref به slice تأمین نمی‌شوند) هنوز خراب‌اند.</p>
+<h2 id="iterating-zero-sized-types"><a class="header" href="#iterating-zero-sized-types">پیمایش نوع‌های با اندازهٔ صفر</a></h2>
+<p>offset‌های با اندازهٔ صفر هیچ کاری نمی‌کنند. این یعنی طراحی فعلی ما همیشه <code>start</code> و <code>end</code> را با یک مقدار یکسان مقداردهی اولیه می‌کند و iterator‌های ما هیچ چیزی تولید نمی‌کنند. راه‌حل فعلی برای این مشکل این است که اشاره‌گرها را به عدد صحیح تبدیل کنیم، افزایش دهیم و سپس دوباره به اشاره‌گر برگردانیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">impl&lt;T&gt; RawValIter&lt;T&gt; {
+    unsafe fn new(slice: &amp;[T]) -&gt; Self {
+        RawValIter {
+            start: slice.as_ptr(),
+            end: if mem::size_of::&lt;T&gt;() == 0 {
+                ((slice.as_ptr() as usize) + slice.len()) as *const _
+            } else if slice.len() == 0 {
+                slice.as_ptr()
+            } else {
+                slice.as_ptr().add(slice.len())
+            },
+        }
+    }
+}</code></pre>
+<p>حالا باگ متفاوتی داریم. به‌جای اینکه iterator‌های ما اصلاً اجرا نشوند، حالا <em>برای همیشه</em> اجرا می‌شوند. باید همین ترفند را در پیاده‌سازی‌های iteratorمان هم به کار ببریم. همچنین، کد محاسبهٔ size_hint ما برای ZST‌ها بر ۰ تقسیم می‌کند. چون اساساً با دو اشاره‌گر طوری رفتار می‌کنیم که انگار به بایت اشاره می‌کنند، اندازهٔ ۰ را فقط به تقسیم بر ۱ نگاشت می‌کنیم. <code>next</code> این‌گونه خواهد بود:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">fn next(&amp;mut self) -&gt; Option&lt;T&gt; {
+    if self.start == self.end {
+        None
+    } else {
+        unsafe {
+            let result = ptr::read(self.start);
+            self.start = if mem::size_of::&lt;T&gt;() == 0 {
+                (self.start as usize + 1) as *const _
+            } else {
+                self.start.offset(1)
+            };
+            Some(result)
+        }
+    }
+}</code></pre>
+<p>«باگ» را می‌بینید؟ هیچ‌کس دیگر هم ندید! نویسندهٔ اصلی سال‌ها بعد، هنگام لینک دادن به این صفحه، تازه متوجه مشکل شد. این کد کمی مشکوک است، چون سوءاستفاده از اشاره‌گرهای iterator به‌عنوان <em>شمارنده</em> باعث می‌شود تراز نباشند! <em>تنها وظیفهٔ</em> ما هنگام کار با ZST‌ها این است که اشاره‌گرها را تراز نگه داریم! <em>کف دست روی پیشانی</em></p>
+<p>اشاره‌گرهای خام لازم نیست همیشه تراز باشند، پس ترفند پایه‌ای استفاده از اشاره‌گرها به‌عنوان شمارنده <em>اشکالی ندارد</em>، اما وقتی به <code>ptr::read</code> داده می‌شوند قطعاً <em>باید</em> تراز باشند! این <em>شاید</em> وسواس بی‌مورد باشد چون <code>ptr::read</code> برای یک ZST هیچ کاری نمی‌کند، اما بیایید <em>کمی</em> مسئولانه‌تر باشیم و در مسیر ZST از <code>NonNull::dangling</code> بخوانیم.</p>
+<p>(به‌عنوان جایگزین، می‌توانید در مسیر ZST تابع <code>read_unaligned</code> را صدا بزنید. هر دو اشکالی ندارد، چون در هر دو حالت داریم مقداری را از هیچ می‌سازیم و همه‌چیز به انجام ندادن هیچ کاری کامپایل می‌شود.)</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">impl&lt;T&gt; Iterator for RawValIter&lt;T&gt; {
+    type Item = T;
+    fn next(&amp;mut self) -&gt; Option&lt;T&gt; {
+        if self.start == self.end {
+            None
+        } else {
+            unsafe {
+                if mem::size_of::&lt;T&gt;() == 0 {
+                    self.start = (self.start as usize + 1) as *const _;
+                    Some(ptr::read(NonNull::&lt;T&gt;::dangling().as_ptr()))
+                } else {
+                    let old_ptr = self.start;
+                    self.start = self.start.offset(1);
+                    Some(ptr::read(old_ptr))
+                }
+            }
+        }
+    }
+
+    fn size_hint(&amp;self) -&gt; (usize, Option&lt;usize&gt;) {
+        let elem_size = mem::size_of::&lt;T&gt;();
+        let len = (self.end as usize - self.start as usize)
+                  / if elem_size == 0 { 1 } else { elem_size };
+        (len, Some(len))
+    }
+}
+
+impl&lt;T&gt; DoubleEndedIterator for RawValIter&lt;T&gt; {
+    fn next_back(&amp;mut self) -&gt; Option&lt;T&gt; {
+        if self.start == self.end {
+            None
+        } else {
+            unsafe {
+                if mem::size_of::&lt;T&gt;() == 0 {
+                    self.end = (self.end as usize - 1) as *const _;
+                    Some(ptr::read(NonNull::&lt;T&gt;::dangling().as_ptr()))
+                } else {
+                    self.end = self.end.offset(-1);
+                    Some(ptr::read(self.end))
+                }
+            }
+        }
+    }
+}</code></pre>
+<p>و تمام! پیمایش کار می‌کند!</p>
+<p>آخرین چیزی که باید در نظر بگیریم این است که وقتی بردار ما drop می‌شود، حافظه‌ای را که در زمان حیاتش تخصیص داده شده بود آزاد می‌کند. با ZSTها، ما هیچ حافظه‌ای تخصیص نداده‌ایم؛ در واقع هرگز نمی‌دهیم. بنابراین، در حال حاضر کد ما ناسالمی (unsoundness) دارد: هنوز سعی می‌کنیم اشاره‌گر <code>NonNull::dangling()</code> را که برای شبیه‌سازی ZST در بردارمان استفاده می‌کنیم آزاد کنیم. این یعنی اگر سعی کنیم چیزی را که هرگز تخصیص نداده‌ایم آزاد کنیم، رفتار تعریف‌نشده ایجاد می‌کنیم (بدیهی است، و به دلایل موجه). برای رفع این مشکل، در صفت <code>Drop</code> مربوط به <code>RawVec</code> آن را تغییر می‌دهیم تا مطمئن شویم فقط نوع‌هایی را آزاد می‌کنیم که اندازه دارند.</p>
+<pre><code class="language-rust ignore">impl&lt;T&gt; Drop for RawVec&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        println!("RawVec&lt;T&gt; Drop called, deallocating memory");
+        if self.cap != 0 &amp;&amp; std::mem::size_of::&lt;T&gt;() &gt; 0 {
+            let layout = std::alloc::Layout::array::&lt;T&gt;(self.cap).unwrap();
+            unsafe {
+                std::alloc::dealloc(self.ptr.as_ptr() as *mut _, layout);
+            }
+        }
+    }
+}</code></pre><nav class="page-nav"><a href="vec-drain.html">→ Drain</a><a href="vec-final.html">کد نهایی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../nomicon/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

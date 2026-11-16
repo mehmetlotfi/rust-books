@@ -1,0 +1,559 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>cargo metadata — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="commands/cargo-metadata"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="cargo-metadata1"><a class="header" href="#cargo-metadata1">cargo-metadata(1)</a></h1>
+<h2 id="name"><a class="header" href="#name">نام</a></h2>
+<p>cargo-metadata — فراداده‌های قابل‌خواندن برای ماشین دربارهٔ بستهٔ فعلی</p>
+<h2 id="synopsis"><a class="header" href="#synopsis">خلاصه</a></h2>
+<p><code>cargo metadata</code> [<em>options</em>]</p>
+<h2 id="description"><a class="header" href="#description">توضیحات</a></h2>
+<p>یک JSON را در stdout خروجی می‌دهد که شامل اطلاعاتی دربارهٔ اعضای workspace و وابستگی‌های حل‌شدهٔ بستهٔ فعلی است.</p>
+<p>قالب خروجی ممکن است در نسخه‌های آیندهٔ Cargo تغییر کند. توصیه می‌شود پرچم <code>--format-version</code> را بگنجانید تا کد شما در برابر تغییرات آینده مقاوم شود و مطمئن شوید خروجی در قالبی است که انتظار دارید. برای اطلاعات بیشتر دربارهٔ انتظارات، به <a href="#compatibility">«سازگاری»</a> مراجعه کنید.</p>
+<p>برای یک API به زبان Rust جهت خواندن فراداده‌ها، <a href="https://crates.io/crates/cargo_metadata">crate با نام cargo_metadata</a> را ببینید.</p>
+<h2 id="output-format"><a class="header" href="#output-format">قالب خروجی</a></h2>
+<h3 id="compatibility"><a class="header" href="#compatibility">سازگاری</a></h3>
+<p>در همان نسخهٔ قالب خروجی، سازگاری حفظ می‌شود، به‌جز در برخی سناریوها. فهرست زیر، که کامل نیست، تغییراتی را نشان می‌دهد که ناسازگار محسوب نمی‌شوند:</p>
+<ul>
+<li><strong>افزودن فیلدهای جدید</strong> — فیلدهای جدید در صورت نیاز اضافه خواهند شد. حفظ این حق به Cargo کمک می‌کند بدون افزایش مکرر نسخهٔ قالب تکامل یابد.</li>
+<li><strong>افزودن مقادیر جدید برای فیلدهای شبیه enum</strong> — مانند افزودن فیلدهای جدید است. این کار باعث می‌شود فراداده‌ها بدون رکود تکامل یابند.</li>
+<li><strong>تغییر نمایش‌های مبهم (opaque)</strong> — نمایش‌های درونی برخی فیلدها جزئیات پیاده‌سازی هستند. برای مثال، فیلدهای مربوط به «Source ID» به‌عنوان شناسه‌های مبهم برای تمایز بسته‌ها یا منابع در نظر گرفته می‌شوند. مصرف‌کنندگان نباید به آن نمایش‌ها تکیه کنند، مگر اینکه خلاف آن مشخص شده باشد.</li>
+</ul>
+<h3 id="json-format"><a class="header" href="#json-format">قالب JSON</a></h3>
+<p>خروجی JSON قالب زیر را دارد:</p>
+<pre><code class="language-javascript">{
+    /* Array of all packages in the workspace.
+       It also includes all feature-enabled dependencies unless --no-deps is used.
+    */
+    "packages": [
+        {
+            /* The name of the package. */
+            "name": "my-package",
+            /* The version of the package. */
+            "version": "0.1.0",
+            /* The Package ID for referring to the
+               package within the document and as the `--package` argument to many commands
+            */
+            "id": "file:///path/to/my-package#0.1.0",
+            /* The license value from the manifest, or null. */
+            "license": "MIT/Apache-2.0",
+            /* The license-file value from the manifest, or null. */
+            "license_file": "LICENSE",
+            /* The description value from the manifest, or null. */
+            "description": "Package description.",
+            /* The source ID of the package, an "opaque" identifier representing
+               where a package is retrieved from. See "Compatibility" above for
+               the stability guarantee.
+
+               This is null for path dependencies and workspace members.
+
+               For other dependencies, it is a string with the format:
+               - "registry+URL" for registry-based dependencies.
+                 Example: "registry+https://github.com/rust-lang/crates.io-index"
+               - "git+URL" for git-based dependencies.
+                 Example: "git+https://github.com/rust-lang/cargo?rev=5e85ba14aaa20f8133863373404cb0af69eeef2c#5e85ba14aaa20f8133863373404cb0af69eeef2c"
+               - "sparse+URL" for dependencies from a sparse registry
+                 Example: "sparse+https://my-sparse-registry.org"
+
+               The value after the `+` is not explicitly defined, and may change
+               between versions of Cargo and may not directly correlate to other
+               things, such as registry definitions in a config file. New source
+               kinds may be added in the future which will have different `+`
+               prefixed identifiers.
+            */
+            "source": null,
+            /* Array of dependencies declared in the package's manifest. */
+            "dependencies": [
+                {
+                    /* The name of the dependency. */
+                    "name": "bitflags",
+                    /* The source ID of the dependency. May be null, see
+                       description for the package source.
+                    */
+                    "source": "registry+https://github.com/rust-lang/crates.io-index",
+                    /* The version requirement for the dependency.
+                       Dependencies without a version requirement have a value of "*".
+                    */
+                    "req": "^1.0",
+                    /* The dependency kind.
+                       "dev", "build", or null for a normal dependency.
+                    */
+                    "kind": null,
+                    /* If the dependency is renamed, this is the new name for
+                       the dependency as a string.  null if it is not renamed.
+                    */
+                    "rename": null,
+                    /* Boolean of whether or not this is an optional dependency. */
+                    "optional": false,
+                    /* Boolean of whether or not default features are enabled. */
+                    "uses_default_features": true,
+                    /* Array of features enabled. */
+                    "features": [],
+                    /* The target platform for the dependency.
+                       null if not a target dependency.
+                    */
+                    "target": "cfg(windows)",
+                    /* The file system path for a local path dependency.
+                       not present if not a path dependency.
+                    */
+                    "path": "/path/to/dep",
+                    /* A string of the URL of the registry this dependency is from.
+                       If not specified or null, the dependency is from the default
+                       registry (crates.io).
+                    */
+                    "registry": null,
+                    /* (unstable) Boolean flag of whether or not this is a pulbic
+                       dependency. This field is only present when
+                       `-Zpublic-dependency` is enabled.
+                    */
+                    "public": false
+                }
+            ],
+            /* Array of Cargo targets. */
+            "targets": [
+                {
+                    /* Array of target kinds.
+                       - lib targets list the `crate-type` values from the
+                         manifest such as "lib", "rlib", "dylib",
+                         "proc-macro", etc. (default ["lib"])
+                       - binary is ["bin"]
+                       - example is ["example"]
+                       - integration test is ["test"]
+                       - benchmark is ["bench"]
+                       - build script is ["custom-build"]
+                    */
+                    "kind": [
+                        "bin"
+                    ],
+                    /* Array of crate types.
+                       - lib and example libraries list the `crate-type` values
+                         from the manifest such as "lib", "rlib", "dylib",
+                         "proc-macro", etc. (default ["lib"])
+                       - all other target kinds are ["bin"]
+                    */
+                    "crate_types": [
+                        "bin"
+                    ],
+                    /* The name of the target.
+                       For lib targets, dashes will be replaced with underscores.
+                    */
+                    "name": "my-package",
+                    /* Absolute path to the root source file of the target. */
+                    "src_path": "/path/to/my-package/src/main.rs",
+                    /* The Rust edition of the target.
+                       Defaults to the package edition.
+                    */
+                    "edition": "2018",
+                    /* Array of required features.
+                       This property is not included if no required features are set.
+                    */
+                    "required-features": ["feat1"],
+                    /* Whether the target should be documented by `cargo doc`. */
+                    "doc": true,
+                    /* Whether or not this target has doc tests enabled, and
+                       the target is compatible with doc testing.
+                    */
+                    "doctest": false,
+                    /* Whether or not this target should be built and run with `--test`
+                    */
+                    "test": true
+                }
+            ],
+            /* Set of features defined for the package.
+               Each feature maps to an array of features or dependencies it
+               enables.
+            */
+            "features": {
+                "default": [
+                    "feat1"
+                ],
+                "feat1": [],
+                "feat2": []
+            },
+            /* Absolute path to this package's manifest. */
+            "manifest_path": "/path/to/my-package/Cargo.toml",
+            /* Package metadata.
+               This is null if no metadata is specified.
+            */
+            "metadata": {
+                "docs": {
+                    "rs": {
+                        "all-features": true
+                    }
+                }
+            },
+            /* List of registries to which this package may be published.
+               Publishing is unrestricted if null, and forbidden if an empty array. */
+            "publish": [
+                "crates-io"
+            ],
+            /* Array of authors from the manifest.
+               Empty array if no authors specified.
+            */
+            "authors": [
+                "Jane Doe &lt;user@example.com&gt;"
+            ],
+            /* Array of categories from the manifest. */
+            "categories": [
+                "command-line-utilities"
+            ],
+            /* Optional string that is the default binary picked by cargo run. */
+            "default_run": null,
+            /* Optional string that is the minimum supported rust version */
+            "rust_version": "1.56",
+            /* Array of keywords from the manifest. */
+            "keywords": [
+                "cli"
+            ],
+            /* The readme value from the manifest or null if not specified. */
+            "readme": "README.md",
+            /* The repository value from the manifest or null if not specified. */
+            "repository": "https://github.com/rust-lang/cargo",
+            /* The homepage value from the manifest or null if not specified. */
+            "homepage": "https://rust-lang.org",
+            /* The documentation value from the manifest or null if not specified. */
+            "documentation": "https://doc.rust-lang.org/stable/std",
+            /* The default edition of the package.
+               Note that individual targets may have different editions.
+            */
+            "edition": "2018",
+            /* Optional string that is the name of a native library the package
+               is linking to.
+            */
+            "links": null,
+        }
+    ],
+    /* Array of members of the workspace.
+       Each entry is the Package ID for the package.
+    */
+    "workspace_members": [
+        "file:///path/to/my-package#0.1.0",
+    ],
+    /* Array of default members of the workspace.
+       Each entry is the Package ID for the package.
+    */
+    "workspace_default_members": [
+        "file:///path/to/my-package#0.1.0",
+    ],
+    // The resolved dependency graph for the entire workspace. The enabled
+    // features are based on the enabled features for the "current" package.
+    // Inactivated optional dependencies are not listed.
+    //
+    // This is null if --no-deps is specified.
+    //
+    // By default, this includes all dependencies for all target platforms.
+    // The `--filter-platform` flag may be used to narrow to a specific
+    // target tuple.
+    "resolve": {
+        /* Array of nodes within the dependency graph.
+           Each node is a package.
+        */
+        "nodes": [
+            {
+                /* The Package ID of this node. */
+                "id": "file:///path/to/my-package#0.1.0",
+                /* The dependencies of this package, an array of Package IDs. */
+                "dependencies": [
+                    "https://github.com/rust-lang/crates.io-index#bitflags@1.0.4"
+                ],
+                /* The dependencies of this package. This is an alternative to
+                   "dependencies" which contains additional information. In
+                   particular, this handles renamed dependencies.
+                */
+                "deps": [
+                    {
+                        /* The name of the dependency's library target.
+                           If this is a renamed dependency, this is the new
+                           name.
+                        */
+                        "name": "bitflags",
+                        /* The Package ID of the dependency. */
+                        "pkg": "https://github.com/rust-lang/crates.io-index#bitflags@1.0.4"
+                        /* Array of dependency kinds. Added in Cargo 1.40. */
+                        "dep_kinds": [
+                            {
+                                /* The dependency kind.
+                                   "dev", "build", or null for a normal dependency.
+                                */
+                                "kind": null,
+                                /* The target platform for the dependency.
+                                   null if not a target dependency.
+                                */
+                                "target": "cfg(windows)"
+                            }
+                        ]
+                    }
+                ],
+                /* Array of features enabled on this package. */
+                "features": [
+                    "default"
+                ]
+            }
+        ],
+        /* The package in the current working directory (if --manifest-path is not given).
+           This is null if there is a virtual workspace. Otherwise it is
+           the Package ID of the package.
+        */
+        "root": "file:///path/to/my-package#0.1.0",
+    },
+    /* The absolute path to the target directory where Cargo places its output. */
+    "target_directory": "/path/to/my-package/target",
+    /* The absolute path to the build directory where Cargo places intermediate build artifacts. (unstable) */
+    "build_directory": "/path/to/my-package/build-dir",
+    /* The version of the schema for this metadata structure.
+       This will be changed if incompatible changes are ever made.
+    */
+    "version": 1,
+    /* The absolute path to the root of the workspace. */
+    "workspace_root": "/path/to/my-package"
+    /* Workspace metadata.
+       This is null if no metadata is specified. */
+    "metadata": {
+        "docs": {
+            "rs": {
+                "all-features": true
+            }
+        }
+    }
+}
+</code></pre>
+<p>یادداشت‌ها:</p>
+<ul>
+<li>برای نحو فیلد <code>"id"</code>، <a href="../reference/pkgid-spec.html">مشخصات Package ID</a> را در مرجع ببینید.</li>
+</ul>
+<h2 id="options"><a class="header" href="#options">گزینه‌ها</a></h2>
+<h3 id="output-options"><a class="header" href="#output-options">گزینه‌های خروجی</a></h3>
+<dl>
+<dt class="option-term" id="option-cargo-metadata---no-deps"><a class="option-anchor" href="#option-cargo-metadata---no-deps"><code>--no-deps</code></a></dt>
+
+<dd class="option-desc">
+<p>فقط اطلاعات اعضای workspace را خروجی می‌دهد و وابستگی‌ها را
+دریافت نمی‌کند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-metadata---format-version"><a class="option-anchor" href="#option-cargo-metadata---format-version"><code>--format-version</code> <em>version</em></a></dt>
+
+<dd class="option-desc">
+<p>نسخهٔ قالب خروجی مورد استفاده را مشخص می‌کند. در حال حاضر <code>1</code> تنها
+مقدار ممکن است.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-metadata---filter-platform"><a class="option-anchor" href="#option-cargo-metadata---filter-platform"><code>--filter-platform</code> <em>tuple</em></a></dt>
+
+<dd class="option-desc">
+<p>این گزینه خروجی <code>resolve</code> را فیلتر می‌کند تا فقط وابستگی‌های
+<a href="../appendix/glossary.html#target">tuple هدف</a> داده‌شده را شامل شود.
+می‌توان از مقدار لفظی <code>"host-tuple"</code> استفاده کرد که به‌طور داخلی با هدف میزبان جایگزین می‌شود.
+بدون این پرچم، resolve همهٔ هدف‌ها را شامل می‌شود.</p>
+
+<p>توجه کنید که وابستگی‌های فهرست‌شده در آرایهٔ «packages» همچنان همهٔ
+وابستگی‌ها را شامل می‌شوند. هر تعریف بسته قرار است بازتولیدی بدون تغییر از
+اطلاعات درون <code>Cargo.toml</code> باشد.</p>
+
+</dd>
+
+</dl>
+
+<h3 id="feature-selection"><a class="header" href="#feature-selection">انتخاب feature</a></h3>
+<p>پرچم‌های feature به شما امکان می‌دهند کنترل کنید کدام featureها فعال باشند. وقتی هیچ گزینهٔ featureای داده نشده باشد، feature به نام <code>default</code> برای هر بستهٔ انتخاب‌شده فعال می‌شود.</p>
+<p>برای جزئیات بیشتر، <a href="../reference/features.html#command-line-feature-options">مستندات featureها</a> را ببینید.</p>
+<dl>
+<dt class="option-term" id="option-cargo-metadata--F"><a class="option-anchor" href="#option-cargo-metadata--F"><code>-F</code> <em>features</em></a></dt>
+
+<dt class="option-term" id="option-cargo-metadata---features"><a class="option-anchor" href="#option-cargo-metadata---features"><code>--features</code> <em>features</em></a></dt>
+
+<dd class="option-desc">
+<p>فهرستی از featureهای قابل فعال‌سازی که با فاصله یا کاما جدا شده است. featureهای اعضای workspace
+را می‌توان با نحو <code>package-name/feature-name</code> فعال کرد. این گزینه را می‌توان
+چندین بار مشخص کرد که همهٔ featureهای مشخص‌شده را فعال می‌کند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-metadata---all-features"><a class="option-anchor" href="#option-cargo-metadata---all-features"><code>--all-features</code></a></dt>
+
+<dd class="option-desc">
+<p>همهٔ featureهای موجود همهٔ بسته‌های انتخاب‌شده را فعال می‌کند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-metadata---no-default-features"><a class="option-anchor" href="#option-cargo-metadata---no-default-features"><code>--no-default-features</code></a></dt>
+
+<dd class="option-desc">
+<p>feature به نام <code>default</code> بسته‌های انتخاب‌شده را فعال نمی‌کند.</p>
+
+</dd>
+
+</dl>
+
+<h3 id="display-options"><a class="header" href="#display-options">گزینه‌های نمایش</a></h3>
+<dl>
+<dt class="option-term" id="option-cargo-metadata--v"><a class="option-anchor" href="#option-cargo-metadata--v"><code>-v</code></a></dt>
+
+<dt class="option-term" id="option-cargo-metadata---verbose"><a class="option-anchor" href="#option-cargo-metadata---verbose"><code>--verbose</code></a></dt>
+
+<dd class="option-desc">
+<p>از خروجی مفصل استفاده می‌کند. برای خروجی «بسیار مفصل» که شامل خروجی اضافی مانند هشدارهای
+وابستگی‌ها و خروجی build script است، می‌توان آن را دو بار مشخص کرد.
+همچنین می‌توان آن را با
+<a href="../reference/config.html">مقدار پیکربندی</a> <code>term.verbose</code> مشخص کرد.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-metadata--q"><a class="option-anchor" href="#option-cargo-metadata--q"><code>-q</code></a></dt>
+
+<dt class="option-term" id="option-cargo-metadata---quiet"><a class="option-anchor" href="#option-cargo-metadata---quiet"><code>--quiet</code></a></dt>
+
+<dd class="option-desc">
+<p>پیام‌های log مربوط به cargo را چاپ نمی‌کند.
+همچنین می‌توان آن را با
+<a href="../reference/config.html">مقدار پیکربندی</a> <code>term.quiet</code> مشخص کرد.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-metadata---color"><a class="option-anchor" href="#option-cargo-metadata---color"><code>--color</code> <em>when</em></a></dt>
+
+<dd class="option-desc">
+<p>تعیین می‌کند خروجی رنگی چه زمانی استفاده شود. مقادیر معتبر:</p>
+
+<ul>
+<li><code>auto</code> (پیش‌فرض): به‌طور خودکار تشخیص می‌دهد که آیا ترمینال از رنگ پشتیبانی می‌کند.</li>
+
+<li><code>always</code>: همیشه رنگ‌ها را نمایش می‌دهد.</li>
+
+<li><code>never</code>: هرگز رنگ‌ها را نمایش نمی‌دهد.</li>
+
+</ul>
+
+<p>همچنین می‌توان آن را با
+<a href="../reference/config.html">مقدار پیکربندی</a> <code>term.color</code> مشخص کرد.</p>
+
+</dd>
+
+</dl>
+
+<h3 id="manifest-options"><a class="header" href="#manifest-options">گزینه‌های manifest</a></h3>
+<dl>
+<dt class="option-term" id="option-cargo-metadata---manifest-path"><a class="option-anchor" href="#option-cargo-metadata---manifest-path"><code>--manifest-path</code> <em>path</em></a></dt>
+
+<dd class="option-desc">
+<p>مسیر فایل <code>Cargo.toml</code>. به‌طور پیش‌فرض، Cargo فایل
+<code>Cargo.toml</code> را در دایرکتوری فعلی یا هر دایرکتوری والد جست‌وجو می‌کند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-metadata---locked"><a class="option-anchor" href="#option-cargo-metadata---locked"><code>--locked</code></a></dt>
+
+<dd class="option-desc">
+<p>تأیید می‌کند که دقیقاً همان وابستگی‌ها و نسخه‌هایی استفاده شوند که هنگام تولید اولیهٔ
+فایل <code>Cargo.lock</code> موجود به کار رفته بودند. Cargo در هر یک از دو حالت زیر
+با خطا خارج می‌شود:</p>
+
+<ul>
+<li>فایل lock وجود نداشته باشد.</li>
+
+<li>Cargo به‌دلیل حل‌وفصل متفاوت وابستگی‌ها بخواهد فایل lock را تغییر دهد.</li>
+
+</ul>
+
+<p>می‌توان از آن در محیط‌هایی استفاده کرد که ساخت‌های قطعی (deterministic) موردنیاز است،
+مانند pipelineهای CI.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-metadata---offline"><a class="option-anchor" href="#option-cargo-metadata---offline"><code>--offline</code></a></dt>
+
+<dd class="option-desc">
+<p>Cargo را از دسترسی به شبکه به هر دلیلی بازمی‌دارد. بدون این
+پرچم، اگر Cargo نیاز به دسترسی به شبکه داشته باشد و
+شبکه در دسترس نباشد، با خطا متوقف می‌شود. با این پرچم، Cargo در صورت امکان
+بدون شبکه ادامه می‌دهد.</p>
+
+<p>توجه داشته باشید که این ممکن است به حل‌وفصل وابستگی‌هایی متفاوت از حالت آنلاین
+منجر شود. Cargo خود را به crateهایی محدود می‌کند که به‌صورت محلی دانلود شده‌اند، حتی
+اگر طبق نسخهٔ محلی index نسخهٔ جدیدتری وجود داشته باشد.
+برای دانلود وابستگی‌ها پیش از آفلاین شدن، فرمان <a href="cargo-fetch.html">cargo-fetch(1)</a> را ببینید.</p>
+
+<p>همچنین می‌توان آن را با <a href="../reference/config.html">مقدار پیکربندی</a> <code>net.offline</code> مشخص کرد.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-metadata---frozen"><a class="option-anchor" href="#option-cargo-metadata---frozen"><code>--frozen</code></a></dt>
+
+<dd class="option-desc">
+<p>معادل مشخص کردن همزمان <code>--locked</code> و <code>--offline</code> است.</p>
+
+</dd>
+
+</dl>
+
+<h3 id="common-options"><a class="header" href="#common-options">گزینه‌های رایج</a></h3>
+<dl>
+<dt class="option-term" id="option-cargo-metadata-+toolchain"><a class="option-anchor" href="#option-cargo-metadata-+toolchain"><code>+</code><em>toolchain</em></a></dt>
+
+<dd class="option-desc">
+<p>اگر Cargo با rustup نصب شده باشد و اولین آرگومان <code>cargo</code>
+با <code>+</code> شروع شود، به‌عنوان نام یک toolchain در rustup تفسیر می‌شود (مانند
+<code>+stable</code> یا <code>+nightly</code>).
+برای اطلاعات بیشتر دربارهٔ نحوهٔ کار override کردن toolchain، به
+<a href="https://rust-lang.github.io/rustup/overrides.html">مستندات rustup</a>
+مراجعه کنید.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-metadata---config"><a class="option-anchor" href="#option-cargo-metadata---config"><code>--config</code> <em>KEY=VALUE</em> یا <em>PATH</em></a></dt>
+
+<dd class="option-desc">
+<p>یک مقدار پیکربندی Cargo را بازنویسی می‌کند. آرگومان باید به نحو TOML و به شکل <code>KEY=VALUE</code> باشد،
+یا مسیر یک فایل پیکربندی اضافی داده شود. این پرچم را می‌توان چندین بار مشخص کرد.
+برای اطلاعات بیشتر <a href="../reference/config.html#command-line-overrides">بخش بازنویسی از خط فرمان</a> را ببینید.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-metadata--C"><a class="option-anchor" href="#option-cargo-metadata--C"><code>-C</code> <em>PATH</em></a></dt>
+
+<dd class="option-desc">
+<p>پیش از اجرای هر عملیات مشخص‌شده، دایرکتوری کاری فعلی را تغییر می‌دهد. این بر مواردی مانند
+محل پیش‌فرض جست‌وجوی manifest پروژه (<code>Cargo.toml</code>) توسط cargo و نیز
+دایرکتوری‌هایی که برای یافتن <code>.cargo/config.toml</code> جست‌وجو می‌شوند اثر می‌گذارد. این گزینه باید
+پیش از نام فرمان بیاید، برای مثال <code>cargo -C path/to/my-project build</code>.</p>
+
+<p>این گزینه فقط در <a href="../../book/appendix-07-nightly-rust.html">کانال
+nightly</a> در دسترس است و
+برای فعال شدن به پرچم <code>-Z unstable-options</code> نیاز دارد (به
+<a href="https://github.com/rust-lang/cargo/issues/10098">#10098</a> مراجعه کنید).</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-metadata--h"><a class="option-anchor" href="#option-cargo-metadata--h"><code>-h</code></a></dt>
+
+<dt class="option-term" id="option-cargo-metadata---help"><a class="option-anchor" href="#option-cargo-metadata---help"><code>--help</code></a></dt>
+
+<dd class="option-desc">
+<p>اطلاعات راهنما را چاپ می‌کند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-metadata--Z"><a class="option-anchor" href="#option-cargo-metadata--Z"><code>-Z</code> <em>flag</em></a></dt>
+
+<dd class="option-desc">
+<p>پرچم‌های ناپایدار (فقط nightly) برای Cargo. برای جزئیات <code>cargo -Z help</code> را اجرا کنید.</p>
+
+</dd>
+
+</dl>
+
+<h2 id="environment"><a class="header" href="#environment">متغیرهای محیطی</a></h2>
+<p>برای جزئیات متغیرهای محیطی که Cargo می‌خواند، <a href="../reference/environment-variables.html">مرجع</a> را ببینید.</p>
+<h2 id="exit-status"><a class="header" href="#exit-status">وضعیت خروج</a></h2>
+<ul>
+<li><code>0</code>: Cargo موفق بود.</li>
+<li><code>101</code>: Cargo نتوانست کار را به پایان برساند.</li>
+</ul>
+<h2 id="examples"><a class="header" href="#examples">مثال‌ها</a></h2>
+<ol>
+<li>
+<p>اطلاعات JSON دربارهٔ بستهٔ فعلی را خروجی بگیرید:</p>
+<pre><code>cargo metadata --format-version=1
+</code></pre>
+</li>
+</ol>
+<h2 id="see-also"><a class="header" href="#see-also">همچنین ببینید</a></h2>
+<p><a href="cargo.html">cargo(1)</a>, <a href="cargo-pkgid.html">cargo-pkgid(1)</a>, <a href="../reference/pkgid-spec.html">مشخصات شناسهٔ بسته (Package ID)</a>, <a href="../reference/external-tools.html#json-messages">پیام‌های JSON</a></p><nav class="page-nav"><a href="cargo-locate-project.html">→ cargo locate-project</a><a href="cargo-pkgid.html">cargo pkgid ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

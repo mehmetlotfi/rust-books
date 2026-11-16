@@ -1,0 +1,193 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>queryهای متعارف — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="traits/canonical-queries"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="canonical-queries"><a class="header" href="#canonical-queries">پرس‌وجوهای کانونی (Canonical queries)</a></h1>
+<p>«آغاز» سامانهٔ صفت (trait) همان <strong>query کانونی</strong> است (این‌ها
+هم query به معنای عام کلمه‌اند – چیزی که دوست دارید پاسخش را بدانید – و هم
+به <a href="../query.html">معنای خاص rustc</a>). ایده این است که
+type checker یا بخش‌های دیگر سامانه، در حین انجام کار خود ممکن است
+بخواهند بدانند آیا صفتی برای نوعی پیاده‌سازی شده است
+(مثلاً آیا <code>u32: Debug</code> درست است؟). یا ممکن است بخواهند
+یک نوع وابسته را نرمال‌سازی کنند.</p>
+<p>این بخش query‌ها را در سطح انتزاع نسبتاً بالا پوشش می‌دهد.
+زیربخش‌ها دقیق‌تر بررسی می‌کنند این ایده‌ها در
+rustc چگونه پیاده‌سازی شده‌اند.</p>
+<h2 id="the-traditional-interactive-prolog-query"><a class="header" href="#the-traditional-interactive-prolog-query">query سنتی و تعاملی Prolog</a></h2>
+<p>در یک سامانهٔ Prolog سنتی، وقتی یک query را شروع می‌کنید، حل‌کننده (solver)
+شروع می‌کند و هر پاسخ ممکنی را که پیدا کند به شما می‌دهد. پس با چیزی مانند این:</p>
+<pre><code class="language-text">?- Vec&lt;i32&gt;: AsRef&lt;?U&gt;
+</code></pre>
+<p>حل‌کننده ممکن است چنین پاسخ دهد:</p>
+<pre><code class="language-text">Vec&lt;i32&gt;: AsRef&lt;[i32]&gt;
+    continue? (y/n)
+</code></pre>
+<p>این بخش <code>continue</code> جالب است. ایده در Prolog این است که
+حل‌کننده <strong>همهٔ نمونه‌سازی‌های ممکن</strong> query شما را که
+درست‌اند پیدا می‌کند. در اینجا، اگر <code>?U = [i32]</code> را نمونه‌سازی کنیم، query
+درست است (توجه کنید که یک رابط Prolog سنتی مستقیماً
+مقدار <code>?U</code> را به ما نمی‌گوید، اما می‌توانیم با یکسان‌سازی (unify) پاسخ
+با query اصلی‌مان آن را استنتاج کنیم – حل‌کنندهٔ Rust در عوض یک
+جایگزین (substitution) برمی‌گرداند). اگر <code>y</code> را بزنیم، حل‌کننده ممکن است
+پاسخ ممکن دیگری به ما بدهد:</p>
+<pre><code class="language-text">Vec&lt;i32&gt;: AsRef&lt;Vec&lt;i32&gt;&gt;
+    continue? (y/n)
+</code></pre>
+<p>این پاسخ از این واقعیت ناشی می‌شود که یک impl بازتابی
+(<code>impl&lt;T&gt; AsRef&lt;T&gt; for T</code>) برای <code>AsRef</code> وجود دارد. اگر دوباره <code>y</code> را بزنیم،
+ممکن است پاسخ منفی بگیریم:</p>
+<pre><code class="language-text">no
+</code></pre>
+<p>طبیعتاً در برخی موارد ممکن است هیچ پاسخ ممکنی وجود نداشته باشد، و بنابراین
+حل‌کننده بلافاصله <code>no</code> برمی‌گرداند:</p>
+<pre><code class="language-text">?- Box&lt;i32&gt;: Copy
+    no
+</code></pre>
+<p>در برخی موارد ممکن است تعداد بی‌نهایت پاسخ وجود داشته باشد. مثلاً
+اگر این query را بدهم و مدام <code>y</code> را بزنم، حل‌کننده
+هرگز از برگرداندن پاسخ باز نمی‌ایستد:</p>
+<pre><code class="language-text">?- Vec&lt;?U&gt;: Clone
+    Vec&lt;i32&gt;: Clone
+        continue? (y/n)
+    Vec&lt;Box&lt;i32&gt;&gt;: Clone
+        continue? (y/n)
+    Vec&lt;Box&lt;Box&lt;i32&gt;&gt;&gt;: Clone
+        continue? (y/n)
+    Vec&lt;Box&lt;Box&lt;Box&lt;i32&gt;&gt;&gt;&gt;: Clone
+        continue? (y/n)
+</code></pre>
+<p>همان‌طور که می‌توانید تصور کنید، حل‌کننده با خوشحالی لایهٔ دیگری از
+<code>Box</code> اضافه می‌کند تا وقتی که از او بخواهیم متوقف شود، یا حافظه‌اش تمام شود.</p>
+<p>نکتهٔ جالب دیگر این است که query‌ها ممکن است همچنان متغیر
+داشته باشند. برای مثال:</p>
+<pre><code class="language-text">?- Rc&lt;?T&gt;: Clone
+</code></pre>
+<p>ممکن است این پاسخ را تولید کند:</p>
+<pre><code class="language-text">Rc&lt;?T&gt;: Clone
+    continue? (y/n)
+</code></pre>
+<p>در نهایت، <code>Rc&lt;?T&gt;</code> <strong>صرف‌نظر از اینکه <code>?T</code> چه نوعی باشد</strong> درست است.</p>
+<p><a id="query-response"></a></p>
+<h2 id="a-trait-query-in-rustc"><a class="header" href="#a-trait-query-in-rustc">یک query صفت در rustc</a></h2>
+<p>query‌های صفت در rustc تا حدی متفاوت کار می‌کنند. به‌جای
+تلاش برای برشمردن <strong>همهٔ پاسخ‌های ممکن</strong> برای شما، به دنبال
+یک پاسخ <strong>بدون ابهام</strong> هستند. به‌ویژه، وقتی مقدار یک متغیر نوع را
+به شما می‌گویند، یعنی این <strong>تنها نمونه‌سازی ممکنی</strong> است
+که با توجه به مجموعهٔ فعلی impl‌ها و
+where-clauseها قابل اثبات است و می‌توانید از آن استفاده کنید.</p>
+<p>پاسخ یک query صفت در rustc معمولاً
+<code>Result&lt;QueryResult&lt;T&gt;, NoSolution&gt;</code> است (که <code>T</code> کمی
+بسته به خود query تغییر می‌کند). حالت <code>Err(NoSolution)</code> نشان می‌دهد
+query نادرست بوده و هیچ پاسخی نداشته است (مثلاً <code>Box&lt;i32&gt;: Copy</code>).
+در غیر این صورت، <code>QueryResult</code> اطلاعاتی دربارهٔ پاسخ(های) ممکنی که
+پیدا کرده‌ایم برمی‌گرداند. از چهار بخش تشکیل شده است:</p>
+<ul>
+<li><strong>Certainty (قطعیت):</strong> نشان می‌دهد چقدر از این پاسخ مطمئنیم. دو
+مقدار می‌تواند داشته باشد:
+<ul>
+<li><code>Proven</code> یعنی نتیجه به‌طور قطعی درست است.
+<ul>
+<li>این ممکن است نتیجهٔ تلاش برای اثبات مثلاً <code>Vec&lt;i32&gt;: Clone</code>
+یا <code>Rc&lt;?T&gt;: Clone</code> باشد.</li>
+</ul>
+</li>
+<li><code>Ambiguous</code> یعنی چیزهایی بود که هنوز نتوانستیم درست یا <em>نادرست</em>
+بودنشان را ثابت کنیم، معمولاً چون اطلاعات نوع بیشتری
+لازم بود. (به‌زودی مثالی خواهیم دید.)
+<ul>
+<li>این ممکن است نتیجهٔ تلاش برای اثبات <code>Vec&lt;?T&gt;: Clone</code> باشد.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Var values (مقادیر متغیرها):</strong> مقادیر هر یک از متغیرهای استنتاج بدون مقدار
+(مانند <code>?T</code>) که در query اصلی شما ظاهر شده بودند. (به یاد داشته باشید که در Prolog
+باید این‌ها را خودمان استنتاج می‌کردیم.)
+<ul>
+<li>همان‌طور که در مثال زیر خواهیم دید، حتی برای حالت‌های
+<code>Ambiguous</code> هم می‌توانیم مقادیر متغیرها را پس بگیریم.</li>
+</ul>
+</li>
+<li><strong>Region constraints (قیدهای ناحیه):</strong> این‌ها روابطی هستند که باید میان
+طول عمرهایی که به‌عنوان ورودی داده‌اید برقرار باشند. در اینجا آن‌ها را نادیده می‌گیریم.</li>
+<li><strong>Value (مقدار):</strong> نتیجهٔ query همچنین با مقداری از نوع <code>T</code> همراه است. برای
+برخی query‌های تخصصی – مانند نرمال‌سازی نوع‌های وابسته –
+از آن برای برگرداندن یک نتیجهٔ اضافی استفاده می‌شود، اما اغلب فقط
+<code>()</code> است.</li>
+</ul>
+<h3 id="examples"><a class="header" href="#examples">مثال‌ها</a></h3>
+<p>بیایید یک query نمونه را مرور کنیم تا ببینیم همهٔ بخش‌ها چه معنایی دارند.
+<a href="https://doc.rust-lang.org/std/borrow/trait.Borrow.html">صفت <code>Borrow</code></a> را در نظر بگیرید. این صفت تعدادی
+impl دارد؛ از جمله این دو (برای وضوح، کران‌های
+<code>Sized</code> را صریح نوشته‌ام):</p>
+<pre><code class="language-rust ignore">impl&lt;T&gt; Borrow&lt;T&gt; for T where T: ?Sized
+impl&lt;T&gt; Borrow&lt;[T]&gt; for Vec&lt;T&gt; where T: Sized</code></pre>
+<p><strong>مثال ۱.</strong> تصور کنید در حال بررسی نوع این قطعه کد (نسبتاً مصنوعی)
+هستیم:</p>
+<pre><code class="language-rust ignore">fn foo&lt;A, B&gt;(a: A, vec_b: Option&lt;B&gt;) where A: Borrow&lt;B&gt; { }
+
+fn main() {
+    let mut t: Vec&lt;_&gt; = vec![]; // Type: Vec&lt;?T&gt;
+    let mut u: Option&lt;_&gt; = None; // Type: Option&lt;?U&gt;
+    foo(t, u); // Example 1: requires `Vec&lt;?T&gt;: Borrow&lt;?U&gt;`
+    ...
+}</code></pre>
+<p>همان‌طور که توضیحات نشان می‌دهند، ابتدا دو متغیر <code>t</code> و <code>u</code> می‌سازیم؛
+<code>t</code> یک بردار خالی و <code>u</code> یک option از نوع <code>None</code> است. هر دوی این
+متغیرها در نوع خود متغیرهای استنتاج بدون مقدار دارند: <code>?T</code>
+عناصر بردار <code>t</code> را نشان می‌دهد و <code>?U</code> مقدار ذخیره‌شده در
+option یعنی <code>u</code> را.  سپس <code>foo</code> را فراخوانی می‌کنیم؛ با مقایسهٔ
+امضای <code>foo</code> با آرگومان‌هایش به <code>A = Vec&lt;?T&gt;</code> و
+<code>B = ?U</code> می‌رسیم. بنابراین، where clause روی <code>foo</code> ایجاب می‌کند که <code>Vec&lt;?T&gt;: Borrow&lt;?U&gt;</code> برقرار باشد. این اولین query صفت نمونهٔ ماست.</p>
+<p>برای query ‏<code>Vec&lt;?T&gt;: Borrow&lt;?U&gt;</code> راه‌حل‌های ممکن فراوانی وجود دارد؛
+برای مثال:</p>
+<ul>
+<li><code>?U = Vec&lt;?T&gt;</code>,</li>
+<li><code>?U = [?T]</code>,</li>
+<li><code>?T = u32, ?U = [u32]</code></li>
+<li>و به همین ترتیب.</li>
+</ul>
+<p>بنابراین نتیجه‌ای که پس می‌گیریم چنین خواهد بود (قیدهای ناحیه و «مقدار» را
+نادیده می‌گیرم):</p>
+<ul>
+<li>Certainty: ‏<code>Ambiguous</code> – هنوز مطمئن نیستیم این برقرار است یا نه</li>
+<li>Var values: ‏<code>[?T = ?T, ?U = ?U]</code> – چیزی دربارهٔ مقادیر
+متغیرها یاد نگرفتیم</li>
+</ul>
+<p>خلاصه اینکه نتیجهٔ query می‌گوید هنوز زود است دربارهٔ
+اثبات‌شدن این صفت چیز زیادی بگوییم. هنگام بررسی نوع، این یک
+خطای فوری نیست: در عوض، type checker این
+الزام (<code>Vec&lt;?T&gt;: Borrow&lt;?U&gt;</code>) را نگه می‌دارد و منتظر می‌ماند. همان‌طور که در مثال
+بعدی خواهیم دید، ممکن است <code>?T</code> و <code>?U</code> از
+منابع دیگر مقید شوند، که در آن صورت می‌توانیم query صفت را دوباره امتحان کنیم.</p>
+<p><strong>مثال ۲.</strong> اکنون می‌توانیم مثال قبلی را کمی گسترش دهیم
+و به <code>u</code> مقداری بدهیم:</p>
+<pre><code class="language-rust ignore">fn foo&lt;A, B&gt;(a: A, vec_b: Option&lt;B&gt;) where A: Borrow&lt;B&gt; { }
+
+fn main() {
+    // What we saw before:
+    let mut t: Vec&lt;_&gt; = vec![]; // Type: Vec&lt;?T&gt;
+    let mut u: Option&lt;_&gt; = None; // Type: Option&lt;?U&gt;
+    foo(t, u); // `Vec&lt;?T&gt;: Borrow&lt;?U&gt;` =&gt; ambiguous
+
+    // New stuff:
+    u = Some(vec![]); // ?U = Vec&lt;?V&gt;
+}</code></pre>
+<p>در نتیجهٔ این انتساب، نوع <code>u</code> ناگزیر
+<code>Option&lt;Vec&lt;?V&gt;&gt;</code> می‌شود، که <code>?V</code> نوع عنصر
+بردار را نشان می‌دهد. این به‌نوبهٔ خود یعنی <code>?U</code> با <code>Vec&lt;?V&gt;</code> <a href="../hir-typeck/summary.html">یکسان‌سازی</a> می‌شود.</p>
+<p>فرض کنیم type checker تصمیم می‌گیرد به
+الزام صفتِ «هنوز اثبات‌نشدهٔ» قبلی یعنی <code>Vec&lt;?T&gt;: Borrow&lt;?U&gt;</code> دوباره نگاهی بیندازد. <code>?U</code> دیگر یک متغیر استنتاج بدون مقدار نیست؛ اکنون
+مقدار <code>Vec&lt;?V&gt;</code> را دارد. پس اگر query را با این مقدار «تازه‌سازی» کنیم، می‌رسیم به:</p>
+<pre><code class="language-text">Vec&lt;?T&gt;: Borrow&lt;Vec&lt;?V&gt;&gt;
+</code></pre>
+<p>این بار فقط یک impl قابل اعمال است، همان impl بازتابی:</p>
+<pre><code class="language-text">impl&lt;T&gt; Borrow&lt;T&gt; for T where T: ?Sized
+</code></pre>
+<p>بنابراین trait checker پاسخ می‌دهد:</p>
+<ul>
+<li>Certainty: <code>Proven</code></li>
+<li>Var values: <code>[?T = ?T, ?V = ?T]</code></li>
+</ul>
+<p>در اینجا می‌گوید که واقعاً ثابت کرده‌ایم این الزام
+برقرار است، و همچنین می‌دانیم <code>?T</code> و <code>?V</code> یک نوع‌اند (اما هنوز
+نمی‌دانیم آن نوع چیست!).</p>
+<p>(در واقع، چون تابع اینجا تمام می‌شود، type checker در این نقطه
+خطا می‌دهد، زیرا نوع عناصر <code>t</code> و <code>u</code> هنوز
+معلوم نیست، هرچند معلوم است که یکسان‌اند.)</p><nav class="page-nav"><a href="goals-and-clauses.html">→ هدف‌ها و بندها</a><a href="canonicalization.html">متعارف‌سازی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,1870 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>سازگاری SemVer — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/semver"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="semver-compatibility"><a class="header" href="#semver-compatibility">SemVer Compatibility</a></h1>
+<p>این فصل جزئیات آنچه را به‌طور قراردادی تغییر سازگار یا شکننده (breaking) در SemVer برای انتشارهای جدید یک بسته به شمار می‌رود ارائه می‌دهد. برای جزئیات اینکه SemVer چیست و Cargo چگونه از آن برای تضمین سازگاری کتابخانه‌ها استفاده می‌کند، بخش <a href="resolver.html#semver-compatibility">سازگاری SemVer</a> را ببینید.</p>
+<p>این‌ها فقط <em>رهنمود</em> هستند و لزوماً قواعد سفت‌وسختی نیستند که همهٔ پروژه‌ها رعایت کنند. بخش <a href="#change-categories">دسته‌بندی تغییرها</a> توضیح می‌دهد این راهنما سطح و شدت یک تغییر را چگونه طبقه‌بندی می‌کند. بیشتر این راهنما بر تغییرهایی تمرکز دارد که باعث می‌شوند <code>cargo</code> و <code>rustc</code> چیزی را که قبلاً ساخته می‌شد نتوانند بسازند. تقریباً هر تغییری این خطر را دارد که بر رفتار زمان اجرا اثر منفی بگذارد، و در آن موارد معمولاً تصمیم با نگه‌دارندگان پروژه است که آیا این یک تغییر ناسازگار با SemVer است یا نه.</p>
+<h2 id="change-categories"><a class="header" href="#change-categories">Change categories</a></h2>
+<p>همهٔ سیاست‌های زیر بر اساس سطح تغییر دسته‌بندی شده‌اند:</p>
+<ul>
+<li><strong>تغییر major</strong>: تغییری که افزایش major در SemVer را می‌طلبد.</li>
+<li><strong>تغییر minor</strong>: تغییری که فقط افزایش minor در SemVer را می‌طلبد.</li>
+<li><strong>تغییر احتمالاً شکننده</strong>: تغییری که برخی پروژه‌ها آن را major و برخی دیگر minor می‌دانند.</li>
+</ul>
+<p>دستهٔ «احتمالاً شکننده» تغییرهایی را شامل می‌شود که <em>پتانسیل</em> شکستن هنگام به‌روزرسانی را دارند، اما لزوماً باعث شکست نمی‌شوند. اثر این تغییرها باید با دقت سنجیده شود. ماهیت دقیق آن به تغییر و اصول نگه‌دارندگان پروژه بستگی دارد.</p>
+<p>برخی پروژه‌ها ممکن است در تغییر minor فقط شمارهٔ patch را افزایش دهند. توصیه می‌شود از مشخصات SemVer پیروی شود و رفع باگ‌ها فقط در انتشارهای patch اعمال شوند. با این حال ممکن است رفع یک باگ نیازمند تغییر API‌ای باشد که «تغییر minor» علامت‌گذاری شده و نباید سازگاری را تحت‌تأثیر قرار دهد. این راهنما موضعی دربارهٔ نحوهٔ برخورد با هر «تغییر minor» مشخص نمی‌گیرد، چون تفاوت بین تغییرهای minor و patch قراردادهایی هستند که به ماهیت تغییر بستگی دارند.</p>
+<p>برخی تغییرها «minor» علامت‌گذاری شده‌اند، با اینکه خطر بالقوهٔ شکستن ساخت را دارند. این برای موقعیت‌هایی است که این احتمال بسیار کم است و کدی که ممکن است بشکند بعید است به Rust اصطلاحی (idiomatic) نوشته شده باشد، یا استفاده از آن صراحتاً منع شده است.</p>
+<p>این راهنما اصطلاح‌های «major» و «minor» را با این فرض به‌کار می‌برد که به انتشار «1.0.0» یا بعد از آن مربوط می‌شود. انتشارهای توسعهٔ اولیه که با «0.y.z» شروع می‌شوند می‌توانند تغییرهای «y» را انتشار major و «z» را انتشار minor بدانند. انتشارهای «0.0.z» همیشه تغییر major‌اند. دلیلش این است که Cargo این قرارداد را به‌کار می‌برد که فقط تغییر در چپ‌ترین مؤلفهٔ غیرصفر ناسازگار محسوب می‌شود.</p>
+<ul>
+<li>API compatibility
+<ul>
+<li>Items
+<ul>
+<li><a href="#item-remove">Major: تغییر نام/جابه‌جایی/حذف هر آیتم عمومی</a></li>
+<li><a href="#item-new">Minor: افزودن آیتم‌های عمومی جدید</a></li>
+</ul>
+</li>
+<li>Types
+<ul>
+<li><a href="#type-layout">Major: تغییر تراز (alignment)، چیدمان (layout) یا اندازهٔ نوعی که به‌خوبی تعریف شده است</a></li>
+</ul>
+</li>
+<li>Structs
+<ul>
+<li><a href="#struct-add-private-field-when-public">Major: افزودن یک فیلد خصوصی به struct وقتی همهٔ فیلدهای فعلی عمومی‌اند</a></li>
+<li><a href="#struct-add-public-field-when-no-private">Major: افزودن یک فیلد عمومی وقتی هیچ فیلد خصوصی وجود ندارد</a></li>
+<li><a href="#struct-private-fields-with-private">Minor: افزودن یا حذف فیلدهای خصوصی وقتی دست‌کم یکی از قبل وجود دارد</a></li>
+<li><a href="#struct-tuple-normal-with-private">Minor: تبدیل tuple struct با همهٔ فیلدهای خصوصی (با دست‌کم یک فیلد) به struct معمولی، یا برعکس</a></li>
+</ul>
+</li>
+<li>Enums
+<ul>
+<li><a href="#enum-variant-new">Major: افزودن variantهای جدید به enum (بدون <code>non_exhaustive</code>)</a></li>
+<li><a href="#enum-fields-new">Major: افزودن فیلدهای جدید به یک variant از enum</a></li>
+</ul>
+</li>
+<li>Traits
+<ul>
+<li><a href="#trait-new-item-no-default">Major: افزودن عضو trait بدون پیاده‌سازی پیش‌فرض</a></li>
+<li><a href="#trait-item-signature">Major: هر تغییر در امضای اعضای trait</a></li>
+<li><a href="#trait-new-default-item">Possibly-breaking: افزودن عضو trait دارای پیاده‌سازی پیش‌فرض</a></li>
+<li><a href="#trait-object-safety">Major: افزودن عضوی به trait که آن را non-object-safe می‌کند</a></li>
+<li><a href="#trait-new-parameter-no-default">Major: افزودن پارامتر نوع بدون مقدار پیش‌فرض</a></li>
+<li><a href="#trait-new-parameter-default">Minor: افزودن پارامتر نوع دارای مقدار پیش‌فرض به trait</a></li>
+</ul>
+</li>
+<li>Implementations
+<ul>
+<li><a href="#impl-item-new">Possibly-breaking: افزودن هر عضو ذاتی (inherent)</a></li>
+</ul>
+</li>
+<li>Generics
+<ul>
+<li><a href="#generic-bounds-tighten">Major: سخت‌گیرانه‌ترکردن کران‌های جنریک</a></li>
+<li><a href="#generic-bounds-loosen">Minor: سهل‌گیرانه‌ترکردن کران‌های جنریک</a></li>
+<li><a href="#generic-new-default">Minor: افزودن پارامترهای نوع دارای مقدار پیش‌فرض</a></li>
+<li><a href="#generic-generalize-identical">Minor: تعمیم یک نوع به جنریک (با نوع‌های یکسان)</a></li>
+<li><a href="#generic-generalize-different">Major: تعمیم یک نوع به جنریک (با نوع‌هایی که ممکن است متفاوت باشند)</a></li>
+<li><a href="#generic-more-generic">Minor: تغییر یک نوع جنریک به نوع جنریک‌تر</a></li>
+<li><a href="#generic-rpit-capture">Major: capture پارامترهای جنریک بیشتر در RPIT</a></li>
+</ul>
+</li>
+<li>Functions
+<ul>
+<li><a href="#fn-change-arity">Major: افزودن/حذف پارامترهای تابع</a></li>
+<li><a href="#fn-generic-new">Possibly-breaking: معرفی پارامتر نوع جدید برای تابع</a></li>
+<li><a href="#fn-generalize-compatible">Minor: تعمیم تابع به جنریک (با پشتیبانی از نوع اصلی)</a></li>
+<li><a href="#fn-generalize-mismatch">Major: تعمیم تابع به جنریک با عدم تطابق نوع</a></li>
+<li><a href="#fn-unsafe-safe">Minor: safe‌کردن یک تابع <code>unsafe</code></a></li>
+</ul>
+</li>
+<li>Attributes
+<ul>
+<li><a href="#attr-no-std-to-std">Major: تغییر از پشتیبانی <code>no_std</code> به نیاز به <code>std</code></a></li>
+<li><a href="#attr-adding-non-exhaustive">Major: افزودن <code>non_exhaustive</code> به enum، variant یا struct موجودی که فیلد خصوصی ندارد</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Tooling and environment compatibility
+<ul>
+<li><a href="#env-new-rust">Possibly-breaking: تغییر حداقل نسخهٔ Rust مورد نیاز</a></li>
+<li><a href="#env-change-requirements">Possibly-breaking: تغییر نیازمندی‌های پلتفرم و محیط</a></li>
+<li><a href="#new-lints">Minor: معرفی lintهای جدید</a></li>
+<li>Cargo
+<ul>
+<li><a href="#cargo-feature-add">Minor: افزودن feature جدید Cargo</a></li>
+<li><a href="#cargo-feature-remove">Major: حذف یک feature در Cargo</a></li>
+<li><a href="#cargo-feature-remove-another">Major: حذف یک feature از فهرست featureها اگر عملکرد یا آیتم‌های عمومی را تغییر دهد</a></li>
+<li><a href="#cargo-remove-opt-dep">Possibly-breaking: حذف یک وابستگی اختیاری</a></li>
+<li><a href="#cargo-change-dep-feature">Minor: تغییر featureهای وابستگی</a></li>
+<li><a href="#cargo-dep-add">Minor: adding dependencies</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#application-compatibility">Application compatibility</a></li>
+</ul>
+<h2 id="api-compatibility"><a class="header" href="#api-compatibility">API compatibility</a></h2>
+<p>همهٔ مثال‌های زیر سه بخش دارند: کد اصلی، کد پس از تغییر، و یک نمونهٔ استفاده از کد که ممکن است در پروژهٔ دیگری بیاید. در تغییر minor، نمونهٔ استفاده باید هم با نسخهٔ قبل و هم با نسخهٔ بعد با موفقیت ساخته شود.</p>
+<h3 id="item-remove"><a class="header" href="#item-remove">Major: تغییر نام/جابه‌جایی/حذف هر آیتم عمومی</a></h3>
+<p>نبودِ یک <a href="../../reference/items.html">آیتم</a> که به‌صورت عمومی در دسترس بود باعث می‌شود هر استفاده‌ای از آن آیتم کامپایل نشود.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub fn foo() {}
+
+///////////////////////////////////////////////////////////
+// After
+// ... item has been removed
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+fn main() {
+    updated_crate::foo(); // Error: cannot find function `foo`
+}</code></pre>
+<p>این شامل افزودن هر نوع <a href="../../reference/conditional-compilation.html#the-cfg-attribute">attribute با نام <code>cfg</code></a> هم می‌شود که می‌تواند بر اساس <a href="../../reference/conditional-compilation.html">کامپایل شرطی</a> تغییر دهد کدام آیتم‌ها یا رفتارها در دسترس‌اند.</p>
+<p>Mitigating strategies:</p>
+<ul>
+<li>آیتم‌هایی را که باید حذف شوند <a href="../../reference/attributes/diagnostics.html#the-deprecated-attribute">deprecated</a> علامت بزنید و بعداً در یک انتشار شکننده از نظر SemVer حذف‌شان کنید.</li>
+<li>آیتم‌های تغییرنام‌یافته را <a href="../../reference/attributes/diagnostics.html#the-deprecated-attribute">deprecated</a> علامت بزنید و با یک آیتم <a href="../../reference/items/use-declarations.html"><code>pub use</code></a> آن را با نام قدیمی دوباره صادر (re-export) کنید.</li>
+</ul>
+<h3 id="item-new"><a class="header" href="#item-new">Minor: افزودن آیتم‌های عمومی جدید</a></h3>
+<p>افزودن <a href="../../reference/items.html">آیتم‌های</a> عمومی جدید یک تغییر minor است.</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+// ... absence of item
+
+///////////////////////////////////////////////////////////
+// After
+pub fn foo() {}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+// `foo` is not used since it didn't previously exist.</code></pre>
+<p>توجه کنید که در برخی موارد نادر این می‌تواند به‌دلیل glob import یک <strong>تغییر شکننده</strong> باشد. برای مثال، اگر trait جدیدی اضافه کنید و پروژه‌ای از glob import استفاده کرده باشد که آن trait را وارد scope می‌کند، و trait جدید عضو وابسته‌ای معرفی کند که با نوع‌هایی که روی آن‌ها پیاده‌سازی شده تداخل دارد، این می‌تواند به‌دلیل ابهام باعث خطای زمان کامپایل شود. مثال:</p>
+<pre><code class="language-rust ignore">// Breaking change example
+
+///////////////////////////////////////////////////////////
+// Before
+// ... absence of trait
+
+///////////////////////////////////////////////////////////
+// After
+pub trait NewTrait {
+    fn foo(&amp;self) {}
+}
+
+impl NewTrait for i32 {}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::*;
+
+pub trait LocalTrait {
+    fn foo(&amp;self) {}
+}
+
+impl LocalTrait for i32 {}
+
+fn main() {
+    123i32.foo(); // Error:  multiple applicable items in scope
+}</code></pre>
+<p>این یک تغییر major به حساب نمی‌آید چون طبق قرارداد glob importها خطری شناخته‌شده برای سازگاری رو‌به‌جلو هستند. glob import آیتم‌ها از crateهای خارجی باید پرهیز شود.</p>
+<h3 id="type-layout"><a class="header" href="#type-layout">Major: تغییر تراز (alignment)، چیدمان (layout) یا اندازهٔ نوعی که به‌خوبی تعریف شده است</a></h3>
+<p>تغییر تراز، چیدمان یا اندازهٔ نوعی که قبلاً به‌خوبی تعریف شده بود یک تغییر شکننده است.</p>
+<p>به‌طور کلی، نوع‌هایی که از <a href="../../reference/type-layout.html#the-default-representation">نمایش پیش‌فرض</a> استفاده می‌کنند تراز، چیدمان یا اندازهٔ به‌خوبی تعریف‌شده‌ای ندارند.
+کامپایلر آزاد است تراز، چیدمان یا اندازه را تغییر دهد، پس کد نباید دربارهٔ آن فرضی بکند.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>ممکن است crateهای خارجی اگر دربارهٔ تراز، چیدمان یا اندازهٔ نوعی فرض کنند، حتی اگر به‌خوبی تعریف نشده باشد، بشکنند.
+این یک شکست SemVer به حساب نمی‌آید چون نباید چنین فرض‌هایی کرد.</p>
+</blockquote>
+<p>برخی نمونه‌های تغییرهایی که شکننده نیستند (با فرض اینکه هیچ قاعدهٔ دیگری در این راهنما نقض نشود):</p>
+<ul>
+<li>افزودن، حذف، جابه‌جایی ترتیب یا تغییر فیلدهای struct، union یا enum با نمایش پیش‌فرض، به‌گونه‌ای که تغییر از قواعد دیگر این راهنما پیروی کند (مثلاً استفاده از <code>non_exhaustive</code> برای مجاز‌کردن آن تغییرها، یا تغییر فیلدهایی که از قبل خصوصی‌اند).
+نگاه کنید به <a href="#struct-add-private-field-when-public">struct-add-private-field-when-public</a>، <a href="#struct-add-public-field-when-no-private">struct-add-public-field-when-no-private</a>، <a href="#struct-private-fields-with-private">struct-private-fields-with-private</a>، <a href="#enum-fields-new">enum-fields-new</a>.</li>
+<li>افزودن variant به enum با نمایش پیش‌فرض، اگر enum از <code>non_exhaustive</code> استفاده کند.
+این ممکن است تراز یا اندازهٔ enum را تغییر دهد، اما آن‌ها به‌خوبی تعریف نشده‌اند.
+نگاه کنید به <a href="#enum-variant-new">enum-variant-new</a>.</li>
+<li>افزودن، حذف، جابه‌جایی ترتیب یا تغییر فیلدهای خصوصی struct، union یا enum از نوع <code>repr(C)</code>، با پیروی از قواعد دیگر این راهنما (مثلاً استفاده از <code>non_exhaustive</code>، یا افزودن فیلد خصوصی وقتی فیلدهای خصوصی دیگری از قبل وجود دارند).
+نگاه کنید به <a href="#repr-c-private-change">repr-c-private-change</a>.</li>
+<li>افزودن variant به enum از نوع <code>repr(C)</code>، اگر enum از <code>non_exhaustive</code> استفاده کند.
+نگاه کنید به <a href="#repr-c-enum-variant-new">repr-c-enum-variant-new</a>.</li>
+<li>افزودن <code>repr(C)</code> به struct، union یا enum با نمایش پیش‌فرض.
+نگاه کنید به <a href="#repr-c-add">repr-c-add</a>.</li>
+<li>افزودن <a href="../../reference/type-layout.html#primitive-representations">نمایش اولیه (primitive representation)</a> به شکل <code>repr(&lt;int&gt;)</code> به یک enum.
+نگاه کنید به <a href="#repr-int-enum-add">repr-int-enum-add</a>.</li>
+<li>افزودن <code>repr(transparent)</code> به struct یا enum با نمایش پیش‌فرض.
+نگاه کنید به <a href="#repr-transparent-add">repr-transparent-add</a>.</li>
+</ul>
+<p>نوع‌هایی که از <a href="../../reference/type-layout.html#representations">attribute با نام <code>repr</code></a> استفاده می‌کنند، تراز و چیدمانی دارند که به‌نحوی تعریف شده و کد ممکن است دربارهٔ آن فرض‌هایی بکند که با تغییر آن نوع می‌شکنند.</p>
+<p>در برخی موارد، نوع‌هایی با attribute با نام <code>repr</code> ممکن است تراز، چیدمان یا اندازهٔ به‌خوبی تعریف‌شده‌ای نداشته باشند.
+در این موارد ممکن است تغییر دادن نوع‌ها ایمن باشد، اما باید احتیاط کرد.
+برای مثال، نوع‌هایی با فیلدهای خصوصی که تضمین‌های تراز، چیدمان یا اندازهٔ خود را مستند نکرده‌اند، نمی‌توانند مورد اتکای crateهای خارجی باشند، چون API عمومی تراز، چیدمان یا اندازهٔ نوع را کامل تعریف نمی‌کند.</p>
+<p>مثال رایج نوعی با فیلدهای <em>خصوصی</em> که به‌خوبی تعریف شده، نوعی با یک فیلد خصوصی از نوع جنریک است که از <code>repr(transparent)</code> استفاده می‌کند
+و متن مستندات دربارهٔ شفاف‌بودن آن نسبت به نوع جنریک بحث می‌کند.
+برای مثال <a href="https://doc.rust-lang.org/std/cell/struct.UnsafeCell.html#memory-layout"><code>UnsafeCell</code></a> را ببینید.</p>
+<p>برخی نمونه‌های تغییرهای شکننده:</p>
+<ul>
+<li>افزودن <code>repr(packed)</code> به struct یا union.
+نگاه کنید به <a href="#repr-packed-add">repr-packed-add</a>.</li>
+<li>افزودن <code>repr(align)</code> به struct، union یا enum.
+نگاه کنید به <a href="#repr-align-add">repr-align-add</a>.</li>
+<li>حذف <code>repr(packed)</code> از struct یا union.
+نگاه کنید به <a href="#repr-packed-remove">repr-packed-remove</a>.</li>
+<li>تغییر مقدار N در <code>repr(packed(N))</code> اگر تراز یا چیدمان را تغییر دهد.
+نگاه کنید به <a href="#repr-packed-n-change">repr-packed-n-change</a>.</li>
+<li>تغییر مقدار N در <code>repr(align(N))</code> اگر تراز را تغییر دهد.
+نگاه کنید به <a href="#repr-align-n-change">repr-align-n-change</a>.</li>
+<li>حذف <code>repr(align)</code> از struct، union یا enum.
+نگاه کنید به <a href="#repr-align-remove">repr-align-remove</a>.</li>
+<li>تغییر ترتیب فیلدهای عمومی نوعی با <code>repr(C)</code>.
+نگاه کنید به <a href="#repr-c-shuffle">repr-c-shuffle</a>.</li>
+<li>حذف <code>repr(C)</code> از struct، union یا enum.
+نگاه کنید به <a href="#repr-c-remove">repr-c-remove</a>.</li>
+<li>حذف <code>repr(&lt;int&gt;)</code> از enum.
+نگاه کنید به <a href="#repr-int-enum-remove">repr-int-enum-remove</a>.</li>
+<li>تغییر نمایش اولیهٔ enum با <code>repr(&lt;int&gt;)</code>.
+نگاه کنید به <a href="#repr-int-enum-change">repr-int-enum-change</a>.</li>
+<li>حذف <code>repr(transparent)</code> از struct یا enum.
+نگاه کنید به <a href="#repr-transparent-remove">repr-transparent-remove</a>.</li>
+</ul>
+<h4 id="repr-c-private-change"><a class="header" href="#repr-c-private-change">Minor: افزودن، حذف یا تغییر فیلد خصوصی در <code>repr(C)</code></a></h4>
+<p>افزودن، حذف یا تغییر فیلد خصوصی struct، union یا enum با <code>repr(C)</code> معمولاً ایمن است، به شرط پیروی از رهنمودهای دیگر این راهنما (نگاه کنید به <a href="#struct-add-private-field-when-public">struct-add-private-field-when-public</a>، <a href="#struct-add-public-field-when-no-private">struct-add-public-field-when-no-private</a>، <a href="#struct-private-fields-with-private">struct-private-fields-with-private</a>، <a href="#enum-fields-new">enum-fields-new</a>).</p>
+<p>برای مثال، افزودن فیلد خصوصی فقط وقتی ممکن است که فیلدهای خصوصی دیگری از قبل وجود داشته باشند، یا نوع <code>non_exhaustive</code> باشد.
+فیلدهای عمومی را می‌توان اضافه کرد اگر فیلد خصوصی وجود داشته باشد یا <code>non_exhaustive</code> باشد، و افزودن آن چیدمان فیلدهای دیگر را تغییر ندهد.</p>
+<p>با این حال، این ممکن است اندازه و تراز نوع را تغییر دهد.
+اگر اندازه یا تراز تغییر کند باید احتیاط کرد.
+کد نباید دربارهٔ اندازه یا تراز نوع‌هایی با فیلد خصوصی یا <code>non_exhaustive</code> فرضی بکند، مگر اینکه اندازه یا ترازی مستند شده باشد.</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[derive(Default)]
+#[repr(C)]
+pub struct Example {
+    pub f1: i32,
+    f2: i32, // a private field
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[derive(Default)]
+#[repr(C)]
+pub struct Example {
+    pub f1: i32,
+    f2: i32,
+    f3: i32, // a new field
+}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+fn main() {
+    // NOTE: Users should not make assumptions about the size or alignment
+    // since they are not documented.
+    let f = updated_crate::Example::default();
+}</code></pre>
+<h4 id="repr-c-enum-variant-new"><a class="header" href="#repr-c-enum-variant-new">Minor: افزودن variant به enum با <code>repr(C)</code></a></h4>
+<p>افزودن variant به enum با <code>repr(C)</code> معمولاً ایمن است، اگر enum از <code>non_exhaustive</code> استفاده کند.
+برای بحث بیشتر <a href="#enum-variant-new">enum-variant-new</a> را ببینید.</p>
+<p>توجه کنید که این می‌تواند تغییری شکننده باشد چون اندازه و تراز نوع را عوض می‌کند.
+برای نگرانی‌های مشابه <a href="#repr-c-private-change">repr-c-private-change</a> را ببینید.</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[repr(C)]
+#[non_exhaustive]
+pub enum Example {
+    Variant1 { f1: i16 },
+    Variant2 { f1: i32 },
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[repr(C)]
+#[non_exhaustive]
+pub enum Example {
+    Variant1 { f1: i16 },
+    Variant2 { f1: i32 },
+    Variant3 { f1: i64 }, // added
+}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+fn main() {
+    // NOTE: Users should not make assumptions about the size or alignment
+    // since they are not specified. For example, this raised the size from 8
+    // to 16 bytes.
+    let f = updated_crate::Example::Variant2 { f1: 123 };
+}</code></pre>
+<h4 id="repr-c-add"><a class="header" href="#repr-c-add">Minor: افزودن <code>repr(C)</code> به نمایش پیش‌فرض</a></h4>
+<p>افزودن <code>repr(C)</code> به struct، union یا enum با <a href="../../reference/type-layout.html#the-default-representation">نمایش پیش‌فرض</a> ایمن است.
+این ایمن است چون کاربران نباید دربارهٔ تراز، چیدمان یا اندازهٔ نوع‌هایی با نمایش پیش‌فرض فرضی بکنند.</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub struct Example {
+    pub f1: i32,
+    pub f2: i16,
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[repr(C)] // added
+pub struct Example {
+    pub f1: i32,
+    pub f2: i16,
+}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+fn main() {
+    let f = updated_crate::Example { f1: 123, f2: 456 };
+}</code></pre>
+<h4 id="repr-int-enum-add"><a class="header" href="#repr-int-enum-add">Minor: افزودن <code>repr(&lt;int&gt;)</code> به enum</a></h4>
+<p>افزودن <a href="../../reference/type-layout.html#primitive-representations">نمایش اولیه</a> <code>repr(&lt;int&gt;)</code> به enum با <a href="../../reference/type-layout.html#the-default-representation">نمایش پیش‌فرض</a> ایمن است.
+این ایمن است چون کاربران نباید دربارهٔ تراز، چیدمان یا اندازهٔ enum با نمایش پیش‌فرض فرضی بکنند.</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub enum E {
+    Variant1,
+    Variant2(i32),
+    Variant3 { f1: f64 },
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[repr(i32)] // added
+pub enum E {
+    Variant1,
+    Variant2(i32),
+    Variant3 { f1: f64 },
+}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+fn main() {
+    let x = updated_crate::E::Variant3 { f1: 1.23 };
+}</code></pre>
+<h4 id="repr-transparent-add"><a class="header" href="#repr-transparent-add">Minor: افزودن <code>repr(transparent)</code> به struct یا enum با نمایش پیش‌فرض</a></h4>
+<p>افزودن <code>repr(transparent)</code> به struct یا enum با <a href="../../reference/type-layout.html#the-default-representation">نمایش پیش‌فرض</a> ایمن است.
+این ایمن است چون کاربران نباید دربارهٔ تراز، چیدمان یا اندازهٔ struct یا enum با نمایش پیش‌فرض فرضی بکنند.</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[derive(Default)]
+pub struct Example&lt;T&gt;(T);
+
+///////////////////////////////////////////////////////////
+// After
+#[derive(Default)]
+#[repr(transparent)] // added
+pub struct Example&lt;T&gt;(T);
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+fn main() {
+    let x = updated_crate::Example::&lt;i32&gt;::default();
+}</code></pre>
+<h4 id="repr-packed-add"><a class="header" href="#repr-packed-add">Major: افزودن <code>repr(packed)</code> به struct یا union</a></h4>
+<p>افزودن <code>repr(packed)</code> به struct یا union تغییری شکننده است.
+<code>repr(packed)</code>کردن یک نوع تغییرهایی ایجاد می‌کند که می‌توانند کد را بشکنند، مثل نامعتبر‌شدن گرفتن ارجاع به یک فیلد، یا کوتاه‌شدن capture‌های مجزای closure.</p>
+<!-- TODO: If all fields are private, should this be safe to do? -->
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub struct Example {
+    pub f1: u8,
+    pub f2: u16,
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[repr(packed)] // added
+pub struct Example {
+    pub f1: u8,
+    pub f2: u16,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+fn main() {
+    let f = updated_crate::Example { f1: 1, f2: 2 };
+    let x = &amp;f.f2; // Error: error[E0793]: reference to field of packed struct is unaligned
+}</code></pre>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub struct Example(pub i32, pub i32);
+
+///////////////////////////////////////////////////////////
+// After
+#[repr(packed)]
+pub struct Example(pub i32, pub i32);
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+fn main() {
+    let mut f = updated_crate::Example(123, 456);
+    let c = || {
+        // Without repr(packed), the closure precisely captures `&amp;f.0`.
+        // With repr(packed), the closure captures `&amp;f` to avoid undefined behavior.
+        let a = f.0;
+    };
+    f.1 = 789; // Error: cannot assign to `f.1` because it is borrowed
+    c();
+}</code></pre>
+<h4 id="repr-align-add"><a class="header" href="#repr-align-add">Major: افزودن <code>repr(align)</code> به struct، union یا enum</a></h4>
+<p>افزودن <code>repr(align)</code> به struct، union یا enum تغییری شکننده است.
+<code>repr(align)</code>کردن یک نوع، هر استفاده از آن نوع را درون نوعی با <code>repr(packed)</code> می‌شکند، چون این ترکیب مجاز نیست.</p>
+<!-- TODO: This seems like it should be extraordinarily rare. Should there be any exceptions carved out for this? -->
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub struct Aligned {
+    pub a: i32,
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[repr(align(8))] // added
+pub struct Aligned {
+    pub a: i32,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Aligned;
+
+#[repr(packed)]
+pub struct Packed { // Error: packed type cannot transitively contain a `#[repr(align)]` type
+    f1: Aligned,
+}
+
+fn main() {
+    let p = Packed {
+        f1: Aligned { a: 123 },
+    };
+}</code></pre>
+<h4 id="repr-packed-remove"><a class="header" href="#repr-packed-remove">Major: حذف <code>repr(packed)</code> از struct یا union</a></h4>
+<p>حذف <code>repr(packed)</code> از struct یا union تغییری شکننده است.
+این ممکن است تراز یا چیدمانی را که crateهای خارجی به آن تکیه دارند عوض کند.</p>
+<p>اگر فیلدهای عمومی وجود داشته باشند، حذف <code>repr(packed)</code> ممکن است نحوهٔ کار capture‌های مجزای closure را تغییر دهد.
+در برخی موارد این می‌تواند باعث شکستن کد شود، شبیه آنچه در <a href="../../edition-guide/rust-2021/disjoint-capture-in-closures.html">راهنمای ویرایش‌ها</a> توضیح داده شده است.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[repr(C, packed)]
+pub struct Packed {
+    pub a: u8,
+    pub b: u16,
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[repr(C)] // removed packed
+pub struct Packed {
+    pub a: u8,
+    pub b: u16,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Packed;
+
+fn main() {
+    let p = Packed { a: 1, b: 2 };
+    // Some assumption about the size of the type.
+    // Without `packed`, this fails since the size is 4.
+    const _: () = assert!(std::mem::size_of::&lt;Packed&gt;() == 3); // Error: assertion failed
+}</code></pre>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[repr(C, packed)]
+pub struct Packed {
+    pub a: *mut i32,
+    pub b: i32,
+}
+unsafe impl Send for Packed {}
+
+///////////////////////////////////////////////////////////
+// After
+#[repr(C)] // removed packed
+pub struct Packed {
+    pub a: *mut i32,
+    pub b: i32,
+}
+unsafe impl Send for Packed {}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Packed;
+
+fn main() {
+    let mut x = 123;
+
+    let p = Packed {
+        a: &amp;mut x as *mut i32,
+        b: 456,
+    };
+
+    // When the structure was packed, the closure captures `p` which is Send.
+    // When `packed` is removed, this ends up capturing `p.a` which is not Send.
+    std::thread::spawn(move || unsafe {
+        *(p.a) += 1; // Error: cannot be sent between threads safely
+    });
+}</code></pre>
+<h4 id="repr-packed-n-change"><a class="header" href="#repr-packed-n-change">Major: تغییر مقدار N در <code>repr(packed(N))</code> اگر تراز یا چیدمان را تغییر دهد</a></h4>
+<p>تغییر مقدار N در <code>repr(packed(N))</code> اگر تراز یا چیدمان را تغییر دهد، تغییری شکننده است.
+این ممکن است تراز یا چیدمانی را که crateهای خارجی به آن تکیه دارند عوض کند.</p>
+<p>اگر مقدار <code>N</code> به کمتر از تراز یک فیلد عمومی کاهش یابد، هر کدی که سعی کند به آن فیلد ارجاع بگیرد می‌شکند.</p>
+<p>توجه کنید که برخی تغییرها در <code>N</code> ممکن است تراز یا چیدمان را تغییر ندهند، مثلاً افزایش آن وقتی مقدار فعلی از قبل برابر تراز طبیعی نوع است.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[repr(packed(4))]
+pub struct Packed {
+    pub a: u8,
+    pub b: u32,
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[repr(packed(2))] // changed to 2
+pub struct Packed {
+    pub a: u8,
+    pub b: u32,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Packed;
+
+fn main() {
+    let p = Packed { a: 1, b: 2 };
+    let x = &amp;p.b; // Error: error[E0793]: reference to field of packed struct is unaligned
+}</code></pre>
+<h4 id="repr-align-n-change"><a class="header" href="#repr-align-n-change">Major: تغییر مقدار N در <code>repr(align(N))</code> اگر تراز را تغییر دهد</a></h4>
+<p>تغییر مقدار <code>N</code> در <code>repr(align(N))</code> اگر تراز را تغییر دهد، تغییری شکننده است.
+این ممکن است ترازی را که crateهای خارجی به آن تکیه دارند عوض کند.</p>
+<p>اگر نوع به‌خوبی تعریف نشده باشد، آن‌طور که در <a href="#type-layout">چیدمان نوع</a> بحث شد (مثلاً فیلد خصوصی داشته باشد و تراز یا چیدمان مستندنشده‌ای داشته باشد)، این تغییر باید ایمن باشد.</p>
+<p>توجه کنید که برخی تغییرها در <code>N</code> ممکن است تراز یا چیدمان را تغییر ندهند، مثلاً کاهش آن وقتی مقدار فعلی از قبل برابر یا کمتر از تراز طبیعی نوع است.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[repr(align(8))]
+pub struct Packed {
+    pub a: u8,
+    pub b: u32,
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[repr(align(4))] // changed to 4
+pub struct Packed {
+    pub a: u8,
+    pub b: u32,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Packed;
+
+fn main() {
+    let p = Packed { a: 1, b: 2 };
+    // Some assumption about the size of the type.
+    // The alignment has changed from 8 to 4.
+    const _: () = assert!(std::mem::align_of::&lt;Packed&gt;() == 8); // Error: assertion failed
+}</code></pre>
+<h4 id="repr-align-remove"><a class="header" href="#repr-align-remove">Major: حذف <code>repr(align)</code> از struct، union یا enum</a></h4>
+<p>حذف <code>repr(align)</code> از struct، union یا enum، اگر چیدمان آن‌ها به‌خوبی تعریف شده بود، تغییری شکننده است.
+این ممکن است تراز یا چیدمانی را که crateهای خارجی به آن تکیه دارند عوض کند.</p>
+<p>اگر نوع به‌خوبی تعریف نشده باشد، آن‌طور که در <a href="#type-layout">چیدمان نوع</a> بحث شد (مثلاً فیلد خصوصی داشته باشد و ترازی مستندنشده داشته باشد)، این تغییر باید ایمن باشد.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[repr(C, align(8))]
+pub struct Packed {
+    pub a: u8,
+    pub b: u32,
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[repr(C)] // removed align
+pub struct Packed {
+    pub a: u8,
+    pub b: u32,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Packed;
+
+fn main() {
+    let p = Packed { a: 1, b: 2 };
+    // Some assumption about the size of the type.
+    // The alignment has changed from 8 to 4.
+    const _: () = assert!(std::mem::align_of::&lt;Packed&gt;() == 8); // Error: assertion failed
+}</code></pre>
+<h4 id="repr-c-shuffle"><a class="header" href="#repr-c-shuffle">Major: تغییر ترتیب فیلدهای عمومی نوعی با <code>repr(C)</code></a></h4>
+<p>تغییر ترتیب فیلدهای عمومی نوعی با <code>repr(C)</code> تغییری شکننده است.
+crateهای خارجی ممکن است به ترتیب مشخص فیلدها تکیه کرده باشند.</p>
+<pre><code class="language-rust ignore run-fail">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[repr(C)]
+pub struct SpecificLayout {
+    pub a: u8,
+    pub b: u32,
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[repr(C)]
+pub struct SpecificLayout {
+    pub b: u32, // changed order
+    pub a: u8,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::SpecificLayout;
+
+unsafe extern "C" {
+    // This C function is assuming a specific layout defined in a C header.
+    fn c_fn_get_b(x: &amp;SpecificLayout) -&gt; u32;
+}
+
+fn main() {
+    let p = SpecificLayout { a: 1, b: 2 };
+    unsafe { assert_eq!(c_fn_get_b(&amp;p), 2) } // Error: value not equal to 2
+}
+
+<span class="boring">mod cdep {
+</span><span class="boring">    // This simulates what would normally be something included from a build script.
+</span><span class="boring">    // This definition would be in a C header.
+</span><span class="boring">    #[repr(C)]
+</span><span class="boring">    pub struct SpecificLayout {
+</span><span class="boring">        pub a: u8,
+</span><span class="boring">        pub b: u32,
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    #[no_mangle]
+</span><span class="boring">    pub fn c_fn_get_b(x: &amp;SpecificLayout) -&gt; u32 {
+</span><span class="boring">        x.b
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<h4 id="repr-c-remove"><a class="header" href="#repr-c-remove">Major: حذف <code>repr(C)</code> از struct، union یا enum</a></h4>
+<p>حذف <code>repr(C)</code> از struct، union یا enum تغییری شکننده است.
+crateهای خارجی ممکن است به چیدمان مشخص نوع تکیه کرده باشند.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[repr(C)]
+pub struct SpecificLayout {
+    pub a: u8,
+    pub b: u32,
+}
+
+///////////////////////////////////////////////////////////
+// After
+// removed repr(C)
+pub struct SpecificLayout {
+    pub a: u8,
+    pub b: u32,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::SpecificLayout;
+
+unsafe extern "C" {
+    // This C function is assuming a specific layout defined in a C header.
+    fn c_fn_get_b(x: &amp;SpecificLayout) -&gt; u32; // Error: is not FFI-safe
+}
+
+fn main() {
+    let p = SpecificLayout { a: 1, b: 2 };
+    unsafe { assert_eq!(c_fn_get_b(&amp;p), 2) }
+}
+
+<span class="boring">mod cdep {
+</span><span class="boring">    // This simulates what would normally be something included from a build script.
+</span><span class="boring">    // This definition would be in a C header.
+</span><span class="boring">    #[repr(C)]
+</span><span class="boring">    pub struct SpecificLayout {
+</span><span class="boring">        pub a: u8,
+</span><span class="boring">        pub b: u32,
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    #[no_mangle]
+</span><span class="boring">    pub fn c_fn_get_b(x: &amp;SpecificLayout) -&gt; u32 {
+</span><span class="boring">        x.b
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<h4 id="repr-int-enum-remove"><a class="header" href="#repr-int-enum-remove">Major: حذف <code>repr(&lt;int&gt;)</code> از enum</a></h4>
+<p>حذف <code>repr(&lt;int&gt;)</code> از enum تغییری شکننده است.
+crateهای خارجی ممکن است فرض کرده باشند که discriminant اندازهٔ مشخصی دارد.
+برای مثال <a href="https://doc.rust-lang.org/std/mem/fn.transmute.html"><code>std::mem::transmute</code></a> روی یک enum ممکن است شکست بخورد.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[repr(u16)]
+pub enum Example {
+    Variant1,
+    Variant2,
+    Variant3,
+}
+
+///////////////////////////////////////////////////////////
+// After
+// removed repr(u16)
+pub enum Example {
+    Variant1,
+    Variant2,
+    Variant3,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+
+fn main() {
+    let e = updated_crate::Example::Variant2;
+    let i: u16 = unsafe { std::mem::transmute(e) }; // Error: cannot transmute between types of different sizes
+}</code></pre>
+<h4 id="repr-int-enum-change"><a class="header" href="#repr-int-enum-change">Major: تغییر نمایش اولیهٔ enum با <code>repr(&lt;int&gt;)</code></a></h4>
+<p>تغییر نمایش اولیهٔ enum با <code>repr(&lt;int&gt;)</code> تغییری شکننده است.
+crateهای خارجی ممکن است فرض کرده باشند که discriminant اندازهٔ مشخصی دارد.
+برای مثال <a href="https://doc.rust-lang.org/std/mem/fn.transmute.html"><code>std::mem::transmute</code></a> روی یک enum ممکن است شکست بخورد.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[repr(u16)]
+pub enum Example {
+    Variant1,
+    Variant2,
+    Variant3,
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[repr(u8)] // changed repr size
+pub enum Example {
+    Variant1,
+    Variant2,
+    Variant3,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+
+fn main() {
+    let e = updated_crate::Example::Variant2;
+    let i: u16 = unsafe { std::mem::transmute(e) }; // Error: cannot transmute between types of different sizes
+}</code></pre>
+<h4 id="repr-transparent-remove"><a class="header" href="#repr-transparent-remove">Major: حذف <code>repr(transparent)</code> از struct یا enum</a></h4>
+<p>حذف <code>repr(transparent)</code> از struct یا enum تغییری شکننده است.
+crateهای خارجی ممکن است به اینکه نوع تراز، چیدمان یا اندازهٔ فیلد شفاف را دارد تکیه کرده باشند.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[repr(transparent)]
+pub struct Transparent&lt;T&gt;(T);
+
+///////////////////////////////////////////////////////////
+// After
+// removed repr
+pub struct Transparent&lt;T&gt;(T);
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+#![deny(improper_ctypes)]
+use updated_crate::Transparent;
+
+unsafe extern "C" {
+    fn c_fn() -&gt; Transparent&lt;f64&gt;; // Error: is not FFI-safe
+}
+
+fn main() {}</code></pre>
+<h3 id="struct-add-private-field-when-public"><a class="header" href="#struct-add-private-field-when-public">Major: افزودن فیلد خصوصی به struct وقتی همهٔ فیلدهای فعلی عمومی‌اند</a></h3>
+<p>وقتی فیلد خصوصی به structی اضافه شود که قبلاً همهٔ فیلدهایش عمومی بود،
+هر کدی که سعی کند آن را با <a href="../../reference/expressions/struct-expr.html">struct literal</a> بسازد می‌شکند.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub struct Foo {
+    pub f1: i32,
+}
+
+///////////////////////////////////////////////////////////
+// After
+pub struct Foo {
+    pub f1: i32,
+    f2: i32,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+fn main() {
+    let x = updated_crate::Foo { f1: 123 }; // Error: cannot construct `Foo`
+}</code></pre>
+<p>Mitigation strategies:</p>
+<ul>
+<li>به structهایی که همهٔ فیلدهایشان عمومی است فیلد جدید اضافه نکنید.</li>
+<li>هنگام معرفی یک struct، آن را به‌صورت <a href="../../reference/attributes/type_system.html#the-non_exhaustive-attribute"><code>#[non_exhaustive]</code></a> علامت بزنید
+تا کاربران از نحو struct literal استفاده نکنند، و به‌جای آن
+یک متد سازنده و/یا پیاده‌سازی <a href="https://doc.rust-lang.org/std/default/trait.Default.html">Default</a> ارائه دهید.</li>
+</ul>
+<h3 id="struct-add-public-field-when-no-private"><a class="header" href="#struct-add-public-field-when-no-private">Major: افزودن فیلد عمومی وقتی هیچ فیلد خصوصی وجود ندارد</a></h3>
+<p>وقتی فیلد عمومی به structی اضافه شود که همهٔ فیلدهایش عمومی است،
+هر کدی که سعی کند آن را با <a href="../../reference/expressions/struct-expr.html">struct literal</a> بسازد می‌شکند.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub struct Foo {
+    pub f1: i32,
+}
+
+///////////////////////////////////////////////////////////
+// After
+pub struct Foo {
+    pub f1: i32,
+    pub f2: i32,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+fn main() {
+    let x = updated_crate::Foo { f1: 123 }; // Error: missing field `f2`
+}</code></pre>
+<p>Mitigation strategies:</p>
+<ul>
+<li>به structهایی که همهٔ فیلدهایشان عمومی است فیلد جدید اضافه نکنید.</li>
+<li>هنگام معرفی یک struct، آن را به‌صورت <a href="../../reference/attributes/type_system.html#the-non_exhaustive-attribute"><code>#[non_exhaustive]</code></a> علامت بزنید
+تا کاربران از نحو struct literal استفاده نکنند، و به‌جای آن
+یک متد سازنده و/یا پیاده‌سازی <a href="https://doc.rust-lang.org/std/default/trait.Default.html">Default</a> ارائه دهید.</li>
+</ul>
+<h3 id="struct-private-fields-with-private"><a class="header" href="#struct-private-fields-with-private">Minor: افزودن یا حذف فیلدهای خصوصی وقتی دست‌کم یکی از قبل وجود دارد</a></h3>
+<p>افزودن یا حذف فیلدهای خصوصی از struct وقتی struct
+از قبل دست‌کم یک فیلد خصوصی دارد ایمن است.</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[derive(Default)]
+pub struct Foo {
+    f1: i32,
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[derive(Default)]
+pub struct Foo {
+    f2: f64,
+}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+fn main() {
+    // Cannot access private fields.
+    let x = updated_crate::Foo::default();
+}</code></pre>
+<p>این ایمن است چون کد موجود نمی‌تواند با <a href="../../reference/expressions/struct-expr.html">struct literal</a> آن را بسازد
+و نه محتوایش را به‌طور کامل match کند.</p>
+<p>توجه کنید که برای tuple structها، اگر tuple فیلدهای عمومی داشته باشد
+و افزودن یا حذف فیلد خصوصی، اندیس هر فیلد عمومی را تغییر دهد، این یک <strong>تغییر major</strong> است.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[derive(Default)]
+pub struct Foo(pub i32, i32);
+
+///////////////////////////////////////////////////////////
+// After
+#[derive(Default)]
+pub struct Foo(f64, pub i32, i32);
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+fn main() {
+    let x = updated_crate::Foo::default();
+    let y = x.0; // Error: is private
+}</code></pre>
+<h3 id="struct-tuple-normal-with-private"><a class="header" href="#struct-tuple-normal-with-private">Minor: تبدیل tuple struct با همهٔ فیلدهای خصوصی (با دست‌کم یک فیلد) به struct معمولی، یا برعکس</a></h3>
+<p>تغییر tuple struct به struct معمولی (یا برعکس) اگر همهٔ
+فیلدها خصوصی باشند ایمن است.</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[derive(Default)]
+pub struct Foo(i32);
+
+///////////////////////////////////////////////////////////
+// After
+#[derive(Default)]
+pub struct Foo {
+    f1: i32,
+}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+fn main() {
+    // Cannot access private fields.
+    let x = updated_crate::Foo::default();
+}</code></pre>
+<p>این ایمن است چون کد موجود نمی‌تواند با <a href="../../reference/expressions/struct-expr.html">struct literal</a> آن را بسازد
+و نه محتوایش را match کند.</p>
+<h3 id="enum-variant-new"><a class="header" href="#enum-variant-new">Major: افزودن variantهای جدید به enum (بدون <code>non_exhaustive</code>)</a></h3>
+<p>افزودن variant جدید به enum اگر enum از attribute با نام
+<a href="../../reference/attributes/type_system.html#the-non_exhaustive-attribute"><code>#[non_exhaustive]</code></a> استفاده نکند، تغییری شکننده است.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub enum E {
+    Variant1,
+}
+
+///////////////////////////////////////////////////////////
+// After
+pub enum E {
+    Variant1,
+    Variant2,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+fn main() {
+    use updated_crate::E;
+    let x = E::Variant1;
+    match x { // Error: `E::Variant2` not covered
+        E::Variant1 =&gt; {}
+    }
+}</code></pre>
+<p>Mitigation strategies:</p>
+<ul>
+<li>هنگام معرفی enum، آن را <a href="../../reference/attributes/type_system.html#the-non_exhaustive-attribute"><code>#[non_exhaustive]</code></a> علامت بزنید
+تا کاربران مجبور شوند از <a href="../../reference/patterns.html#wildcard-pattern">الگوهای wildcard</a> برای گرفتن variantهای جدید استفاده کنند.</li>
+</ul>
+<h3 id="enum-fields-new"><a class="header" href="#enum-fields-new">Major: افزودن فیلدهای جدید به یک variant از enum</a></h3>
+<p>افزودن فیلدهای جدید به variant از enum تغییری شکننده است، چون همهٔ
+فیلدها عمومی‌اند و سازنده‌ها و matchکردن کامپایل نمی‌شوند.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub enum E {
+    Variant1 { f1: i32 },
+}
+
+///////////////////////////////////////////////////////////
+// After
+pub enum E {
+    Variant1 { f1: i32, f2: i32 },
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+fn main() {
+    use updated_crate::E;
+    let x = E::Variant1 { f1: 1 }; // Error: missing f2
+    match x {
+        E::Variant1 { f1 } =&gt; {} // Error: missing f2
+    }
+}</code></pre>
+<p>Mitigation strategies:</p>
+<ul>
+<li>هنگام معرفی enum، variant را <a href="../../reference/attributes/type_system.html#the-non_exhaustive-attribute"><code>non_exhaustive</code></a> علامت بزنید
+تا بدون wildcard نتوان آن را ساخت یا match کرد.
+<pre><code class="language-rust ignore skip">pub enum E {
+    #[non_exhaustive]
+    Variant1{f1: i32}
+}</code></pre>
+</li>
+<li>هنگام معرفی enum، یک struct صریح را به‌عنوان مقدار به‌کار ببرید تا
+بتوانید دید (visibility) فیلدها را کنترل کنید.
+<pre><code class="language-rust ignore skip">pub struct Foo {
+   f1: i32,
+   f2: i32,
+}
+pub enum E {
+    Variant1(Foo)
+}</code></pre>
+</li>
+</ul>
+<h3 id="trait-new-item-no-default"><a class="header" href="#trait-new-item-no-default">Major: افزودن عضو trait بدون پیاده‌سازی پیش‌فرض</a></h3>
+<p>افزودن عضو بدون پیاده‌سازی پیش‌فرض به trait تغییری شکننده است. این
+همهٔ پیاده‌ساز‌های trait را می‌شکند.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub trait Trait {}
+
+///////////////////////////////////////////////////////////
+// After
+pub trait Trait {
+    fn foo(&amp;self);
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Trait;
+struct Foo;
+
+impl Trait for Foo {}  // Error: not all trait items implemented</code></pre>
+<p>Mitigation strategies:</p>
+<ul>
+<li>همیشه برای اعضای وابستهٔ جدید trait پیاده‌سازی یا مقدار پیش‌فرض ارائه دهید.</li>
+<li>هنگام معرفی trait، از تکنیک <a href="https://rust-lang.github.io/api-guidelines/future-proofing.html#sealed-traits-protect-against-downstream-implementations-c-sealed">sealed trait</a> استفاده کنید تا
+کاربران بیرون از crate نتوانند trait را پیاده‌سازی کنند.</li>
+</ul>
+<h3 id="trait-item-signature"><a class="header" href="#trait-item-signature">Major: هر تغییر در امضای اعضای trait</a></h3>
+<p>هر تغییری در امضای عضو trait تغییری شکننده است. این می‌تواند
+پیاده‌ساز‌های خارجی trait را بشکند.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub trait Trait {
+    fn f(&amp;self, x: i32) {}
+}
+
+///////////////////////////////////////////////////////////
+// After
+pub trait Trait {
+    // For sealed traits or normal functions, this would be a minor change
+    // because generalizing with generics strictly expands the possible uses.
+    // But in this case, trait implementations must use the same signature.
+    fn f&lt;V&gt;(&amp;self, x: V) {}
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Trait;
+struct Foo;
+
+impl Trait for Foo {
+    fn f(&amp;self, x: i32) {}  // Error: trait declaration has 1 type parameter
+}</code></pre>
+<p>Mitigation strategies:</p>
+<ul>
+<li>به‌جای تغییر اعضای موجود، اعضای جدید با پیاده‌سازی پیش‌فرض بیفزایید تا
+قابلیت جدید را پوشش دهند.</li>
+<li>هنگام معرفی trait، از تکنیک <a href="https://rust-lang.github.io/api-guidelines/future-proofing.html#sealed-traits-protect-against-downstream-implementations-c-sealed">sealed trait</a> استفاده کنید تا
+کاربران بیرون از crate نتوانند trait را پیاده‌سازی کنند.</li>
+</ul>
+<h3 id="trait-new-default-item"><a class="header" href="#trait-new-default-item">Possibly-breaking: افزودن عضو trait دارای پیاده‌سازی پیش‌فرض</a></h3>
+<p>افزودن عضو trait دارای پیاده‌سازی پیش‌فرض معمولاً ایمن است. اما گاهی
+می‌تواند باعث خطای کامپایل شود. برای مثال اگر متدی با همین نام در trait دیگری وجود داشته باشد، ابهام ایجاد می‌شود.</p>
+<pre><code class="language-rust ignore">// Breaking change example
+
+///////////////////////////////////////////////////////////
+// Before
+pub trait Trait {}
+
+///////////////////////////////////////////////////////////
+// After
+pub trait Trait {
+    fn foo(&amp;self) {}
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Trait;
+struct Foo;
+
+trait LocalTrait {
+    fn foo(&amp;self) {}
+}
+
+impl Trait for Foo {}
+impl LocalTrait for Foo {}
+
+fn main() {
+    let x = Foo;
+    x.foo(); // Error: multiple applicable items in scope
+}</code></pre>
+<p>توجه کنید که این ابهام برای تداخل نام در <a href="../../reference/items/implementations.html#inherent-implementations">پیاده‌سازی‌های ذاتی (inherent)</a> <em>وجود ندارد</em>، چون آن‌ها بر اعضای trait اولویت دارند.</p>
+<p>برای یک حالت خاص که هنگام افزودن اعضای trait باید در نظر گرفت، <a href="#trait-object-safety">trait-object-safety</a> را ببینید.</p>
+<p>Mitigation strategies:</p>
+<ul>
+<li>برخی پروژه‌ها ممکن است این شکستگی را قابل‌قبول بدانند، به‌ویژه اگر نام آیتم جدید بعید باشد با کد موجود تداخل کند. نام‌ها را با دقت انتخاب کنید تا از این تداخل‌ها جلوگیری شود. همچنین ممکن است قابل‌قبول باشد که از کاربران پایین‌دست خواسته شود هنگام به‌روزرسانی وابستگی، <a href="../../reference/expressions/call-expr.html#disambiguating-function-calls">نحو رفع ابهام</a> را اضافه کنند تا تابع درست انتخاب شود.</li>
+</ul>
+<h3 id="trait-object-safety"><a class="header" href="#trait-object-safety">Major: افزودن عضوی به trait که آن را non-object-safe می‌کند</a></h3>
+<p>افزودن عضوی به trait که باعث شود trait دیگر <a href="../../reference/items/traits.html#object-safety">object safe</a> نباشد، تغییری شکننده است.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub trait Trait {}
+
+///////////////////////////////////////////////////////////
+// After
+pub trait Trait {
+    // An associated const makes the trait not object-safe.
+    const CONST: i32 = 123;
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Trait;
+struct Foo;
+
+impl Trait for Foo {}
+
+fn main() {
+    let obj: Box&lt;dyn Trait&gt; = Box::new(Foo); // Error: the trait `updated_crate::Trait` is not dyn compatible
+}</code></pre>
+<p>عکس آن (تبدیل trait غیر object safe به object safe) ایمن است.</p>
+<h3 id="trait-new-parameter-no-default"><a class="header" href="#trait-new-parameter-no-default">Major: افزودن پارامتر نوع بدون مقدار پیش‌فرض</a></h3>
+<p>افزودن پارامتر نوع بدون مقدار پیش‌فرض به trait تغییری شکننده است.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub trait Trait {}
+
+///////////////////////////////////////////////////////////
+// After
+pub trait Trait&lt;T&gt; {}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Trait;
+struct Foo;
+
+impl Trait for Foo {}  // Error: missing generics</code></pre>
+<p>Mitigating strategies:</p>
+<ul>
+<li><a href="#trait-new-parameter-default">افزودن پارامتر نوع دارای مقدار پیش‌فرض به trait</a> را ببینید.</li>
+</ul>
+<h3 id="trait-new-parameter-default"><a class="header" href="#trait-new-parameter-default">Minor: افزودن پارامتر نوع دارای مقدار پیش‌فرض به trait</a></h3>
+<p>افزودن پارامتر نوع به trait تا زمانی که مقدار پیش‌فرض داشته باشد ایمن است.
+پیاده‌ساز‌های خارجی بدون نیاز به مشخص‌کردن پارامتر، از مقدار پیش‌فرض استفاده می‌کنند.</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub trait Trait {}
+
+///////////////////////////////////////////////////////////
+// After
+pub trait Trait&lt;T = i32&gt; {}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+use updated_crate::Trait;
+struct Foo;
+
+impl Trait for Foo {}</code></pre>
+<h3 id="impl-item-new"><a class="header" href="#impl-item-new">Possibly-breaking: افزودن هر عضو ذاتی (inherent)</a></h3>
+<p>معمولاً افزودن اعضای ذاتی به یک پیاده‌سازی باید ایمن باشد چون
+اعضای ذاتی بر اعضای trait اولویت دارند. با این حال، در برخی موارد
+اگر نام با عضو trait پیاده‌سازی‌شده‌ای که امضای متفاوت دارد یکی باشد، این تداخل می‌تواند مشکل ایجاد کند.</p>
+<pre><code class="language-rust ignore">// Breaking change example
+
+///////////////////////////////////////////////////////////
+// Before
+pub struct Foo;
+
+///////////////////////////////////////////////////////////
+// After
+pub struct Foo;
+
+impl Foo {
+    pub fn foo(&amp;self) {}
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Foo;
+
+trait Trait {
+    fn foo(&amp;self, x: i32) {}
+}
+
+impl Trait for Foo {}
+
+fn main() {
+    let x = Foo;
+    x.foo(1); // Error: this method takes 0 arguments but 1 argument was supplied
+}</code></pre>
+<p>توجه کنید که اگر امضاها یکی باشند، خطای زمان کامپایل رخ نمی‌دهد،
+اما ممکن است رفتار زمان اجرا بی‌صدا تغییر کند (چون اکنون تابع دیگری اجرا می‌شود).</p>
+<p>Mitigation strategies:</p>
+<ul>
+<li>برخی پروژه‌ها ممکن است این شکستگی را قابل‌قبول بدانند، به‌ویژه اگر نام آیتم جدید بعید باشد با کد موجود تداخل کند. نام‌ها را با دقت انتخاب کنید تا از این تداخل‌ها جلوگیری شود. همچنین ممکن است قابل‌قبول باشد که از کاربران پایین‌دست خواسته شود هنگام به‌روزرسانی وابستگی، <a href="../../reference/expressions/call-expr.html#disambiguating-function-calls">نحو رفع ابهام</a> را اضافه کنند تا تابع درست انتخاب شود.</li>
+</ul>
+<h3 id="generic-bounds-tighten"><a class="header" href="#generic-bounds-tighten">Major: سخت‌گیرانه‌ترکردن کران‌های جنریک</a></h3>
+<p>سخت‌گیرانه‌ترکردن کران‌های جنریک یک نوع تغییری شکننده است چون می‌تواند
+کاربرانی را که انتظار کران‌های سهل‌گیرانه‌تر دارند بشکند.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub struct Foo&lt;A&gt; {
+    pub f1: A,
+}
+
+///////////////////////////////////////////////////////////
+// After
+pub struct Foo&lt;A: Eq&gt; {
+    pub f1: A,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Foo;
+
+fn main() {
+    let s = Foo { f1: 1.23 }; // Error: the trait bound `{float}: Eq` is not satisfied
+}</code></pre>
+<h3 id="generic-bounds-loosen"><a class="header" href="#generic-bounds-loosen">Minor: سهل‌گیرانه‌ترکردن کران‌های جنریک</a></h3>
+<p>سهل‌گیرانه‌ترکردن کران‌های جنریک یک نوع ایمن است، چون فقط آنچه را مجاز است گسترش می‌دهد.</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub struct Foo&lt;A: Clone&gt; {
+    pub f1: A,
+}
+
+///////////////////////////////////////////////////////////
+// After
+pub struct Foo&lt;A&gt; {
+    pub f1: A,
+}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+use updated_crate::Foo;
+
+fn main() {
+    let s = Foo { f1: 123 };
+}</code></pre>
+<h3 id="generic-new-default"><a class="header" href="#generic-new-default">Minor: افزودن پارامترهای نوع دارای مقدار پیش‌فرض</a></h3>
+<p>افزودن پارامتر نوع به یک نوع تا زمانی که مقدار پیش‌فرض داشته باشد ایمن است. همهٔ
+ارجاع‌های موجود بدون نیاز به مشخص‌کردن پارامتر از مقدار پیش‌فرض استفاده می‌کنند.</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#[derive(Default)]
+pub struct Foo {}
+
+///////////////////////////////////////////////////////////
+// After
+#[derive(Default)]
+pub struct Foo&lt;A = i32&gt; {
+    f1: A,
+}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+use updated_crate::Foo;
+
+fn main() {
+    let s: Foo = Default::default();
+}</code></pre>
+<h3 id="generic-generalize-identical"><a class="header" href="#generic-generalize-identical">Minor: تعمیم یک نوع به جنریک (با نوع‌های یکسان)</a></h3>
+<p>فیلد struct یا enum می‌تواند از نوع مشخص به پارامتر نوع جنریک تغییر کند، به شرط اینکه تغییر
+برای همهٔ موارد استفادهٔ موجود نوعی یکسان بدهد. برای مثال تغییر زیر مجاز است:</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub struct Foo(pub u8);
+
+///////////////////////////////////////////////////////////
+// After
+pub struct Foo&lt;T = u8&gt;(pub T);
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+use updated_crate::Foo;
+
+fn main() {
+    let s: Foo = Foo(123);
+}</code></pre>
+<p>چون استفاده‌های موجود از <code>Foo</code> مخفف <code>Foo&lt;u8&gt;</code> هستند که
+نوع فیلد یکسانی می‌دهد.</p>
+<h3 id="generic-generalize-different"><a class="header" href="#generic-generalize-different">Major: تعمیم یک نوع به جنریک (با نوع‌هایی که ممکن است متفاوت باشند)</a></h3>
+<p>تغییر فیلد struct یا enum از نوع مشخص به پارامتر نوع جنریک می‌تواند شکننده باشد اگر نوع بتواند تغییر کند.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub struct Foo&lt;T = u8&gt;(pub T, pub u8);
+
+///////////////////////////////////////////////////////////
+// After
+pub struct Foo&lt;T = u8&gt;(pub T, pub T);
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::Foo;
+
+fn main() {
+    let s: Foo&lt;f32&gt; = Foo(3.14, 123); // Error: mismatched types
+}</code></pre>
+<h3 id="generic-more-generic"><a class="header" href="#generic-more-generic">Minor: تغییر یک نوع جنریک به نوع جنریک‌تر</a></h3>
+<p>تغییر یک نوع جنریک به نوع جنریک‌تر ایمن است. برای مثال، مثال زیر
+یک پارامتر جنریک می‌افزاید که پیش‌فرضش نوع اصلی است؛ این ایمن است چون همهٔ کاربران موجود
+برای هر دو فیلد همان نوع را به‌کار می‌برند و پارامتر دارای مقدار پیش‌فرض نیازی به مشخص‌شدن ندارد.</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub struct Foo&lt;T&gt;(pub T, pub T);
+
+///////////////////////////////////////////////////////////
+// After
+pub struct Foo&lt;T, U = T&gt;(pub T, pub U);
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+use updated_crate::Foo;
+
+fn main() {
+    let s: Foo&lt;f32&gt; = Foo(1.0, 2.0);
+}</code></pre>
+<h3 id="generic-rpit-capture"><a class="header" href="#generic-rpit-capture">Major: capture پارامترهای جنریک بیشتر در RPIT</a></h3>
+<p>capture پارامترهای جنریک اضافی در یک <a href="../../reference/types/impl-trait.html#abstract-return-types">RPIT</a> (impl trait در جایگاه بازگشتی) تغییری شکننده است.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub fn f&lt;'a, 'b&gt;(x: &amp;'a str, y: &amp;'b str) -&gt; impl Iterator&lt;Item = char&gt; + use&lt;'a&gt; {
+    x.chars()
+}
+
+///////////////////////////////////////////////////////////
+// After
+pub fn f&lt;'a, 'b&gt;(x: &amp;'a str, y: &amp;'b str) -&gt; impl Iterator&lt;Item = char&gt; + use&lt;'a, 'b&gt; {
+    x.chars().chain(y.chars())
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+fn main() {
+    let a = String::new();
+    let b = String::new();
+    let iter = updated_crate::f(&amp;a, &amp;b);
+    drop(b); // Error: cannot move out of `b` because it is borrowed
+}</code></pre>
+<p>افزودن پارامترهای جنریک به RPIT قیدهای اضافی دربارهٔ نحوهٔ استفاده از نوع حاصل ایجاد می‌کند.</p>
+<p>توجه کنید که وقتی نحو <code>use&lt;&gt;</code> مشخص نشده باشد، captureهای ضمنی وجود دارند. در Rust 2021 و ویرایش‌های قبلی، پارامترهای طول عمر فقط وقتی capture می‌شوند که از نظر نحوی درون یک کران در امضای نوع RPIT ظاهر شوند. از Rust 2024، همهٔ پارامترهای طول عمر بدون قید capture می‌شوند. یعنی از Rust 2024 پیش‌فرض حداکثر سازگاری را دارد و وقتی می‌خواهید کمتر capture کنید باید صریح باشید، که یک تعهد SemVer است.</p>
+<p>برای اطلاعات بیشتر دربارهٔ captureکردن در RPIT، <a href="../../edition-guide/rust-2024/rpit-lifetime-capture.html">راهنمای ویرایش‌ها</a> و <a href="../../reference/types/impl-trait.html#capturing">مرجع</a> را ببینید.</p>
+<p>capture پارامترهای جنریک کمتر در RPIT تغییری minor است.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>همهٔ پارامترهای جنریک نوع و ثابت (const) در scope باید یا ضمنی capture شوند (بدون <code>+ use&lt;…&gt;</code>) یا صریح (باید در <code>+ use&lt;…&gt;</code> فهرست شوند)، و بنابراین فعلاً تغییر آنچه از این نوع جنریک‌ها capture می‌شود مجاز نیست.</p>
+</blockquote>
+<h3 id="fn-change-arity"><a class="header" href="#fn-change-arity">Major: افزودن/حذف پارامترهای تابع</a></h3>
+<p>تغییر تعداد پارامترهای تابع (arity) تغییری شکننده است.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub fn foo() {}
+
+///////////////////////////////////////////////////////////
+// After
+pub fn foo(x: i32) {}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+fn main() {
+    updated_crate::foo(); // Error: this function takes 1 argument
+}</code></pre>
+<p>Mitigating strategies:</p>
+<ul>
+<li>تابع جدیدی با امضای جدید معرفی کنید و احتمالاً تابع قدیمی را
+<a href="../../reference/attributes/diagnostics.html#the-deprecated-attribute">deprecate</a> کنید.</li>
+<li>تابع‌هایی معرفی کنید که یک struct را به‌عنوان آرگومان می‌گیرند و struct با الگوی builder ساخته می‌شود. این به افزودن فیلدهای جدید به struct در آینده اجازه می‌دهد.</li>
+</ul>
+<h3 id="fn-generic-new"><a class="header" href="#fn-generic-new">Possibly-breaking: معرفی پارامتر نوع جدید برای تابع</a></h3>
+<p>معمولاً افزودن پارامتر نوع بدون مقدار پیش‌فرض ایمن است، اما در برخی
+موارد می‌تواند تغییری شکننده باشد:</p>
+<pre><code class="language-rust ignore">// Breaking change example
+
+///////////////////////////////////////////////////////////
+// Before
+pub fn foo&lt;T&gt;() {}
+
+///////////////////////////////////////////////////////////
+// After
+pub fn foo&lt;T, U&gt;() {}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::foo;
+
+fn main() {
+    foo::&lt;u8&gt;(); // Error: function takes 2 generic arguments but 1 generic argument was supplied
+}</code></pre>
+<p>با این حال، چنین فراخوانی‌های صریحی آن‌قدر نادرند (و معمولاً می‌توان به شکل دیگری نوشتشان) که این شکستگی معمولاً قابل‌قبول است. باید در نظر گرفت که چقدر احتمال دارد تابع مورد نظر با آرگومان‌های نوع صریح فراخوانی شود.</p>
+<h3 id="fn-generalize-compatible"><a class="header" href="#fn-generalize-compatible">Minor: تعمیم تابع به جنریک (با پشتیبانی از نوع اصلی)</a></h3>
+<p>نوع پارامتر تابع یا مقدار بازگشتی آن را می‌توان با جنریک <em>تعمیم داد</em>، از جمله با معرفی پارامتر نوع جدید،
+مادامی که بتوان آن را با نوع اصلی نمونه‌سازی کرد. برای مثال
+تغییرهای زیر مجازند:</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub fn foo(x: u8) -&gt; u8 {
+    x
+}
+pub fn bar&lt;T: Iterator&lt;Item = u8&gt;&gt;(t: T) {}
+
+///////////////////////////////////////////////////////////
+// After
+use std::ops::Add;
+pub fn foo&lt;T: Add&gt;(x: T) -&gt; T {
+    x
+}
+pub fn bar&lt;T: IntoIterator&lt;Item = u8&gt;&gt;(t: T) {}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+use updated_crate::{bar, foo};
+
+fn main() {
+    foo(1);
+    bar(vec![1, 2, 3].into_iter());
+}</code></pre>
+<p>چون همهٔ استفاده‌های موجود نمونه‌سازی‌هایی از امضای جدید هستند.</p>
+<p>شاید تا حدی شگفت‌آور، تعمیم برای trait objectها هم صدق می‌کند، چون هر trait خودش را پیاده‌سازی می‌کند:</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub trait Trait {}
+pub fn foo(t: &amp;dyn Trait) {}
+
+///////////////////////////////////////////////////////////
+// After
+pub trait Trait {}
+pub fn foo&lt;T: Trait + ?Sized&gt;(t: &amp;T) {}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+use updated_crate::{foo, Trait};
+
+struct Foo;
+impl Trait for Foo {}
+
+fn main() {
+    let obj = Foo;
+    foo(&amp;obj);
+}</code></pre>
+<p>(استفاده از <code>?Sized</code> ضروری است؛ در غیر این صورت نمی‌توانید امضای اصلی را بازیابی کنید.)</p>
+<p>معرفی جنریک‌ها به این شکل می‌تواند بالقوه باعث شکست استنتاج نوع شود. این معمولاً نادر است و ممکن است برای برخی پروژه‌ها شکستگی قابل‌قبول باشد، چون با افزودن annotationهای نوع قابل‌رفع است.</p>
+<pre><code class="language-rust ignore">// Breaking change example
+
+///////////////////////////////////////////////////////////
+// Before
+pub fn foo() -&gt; i32 {
+    0
+}
+
+///////////////////////////////////////////////////////////
+// After
+pub fn foo&lt;T: Default&gt;() -&gt; T {
+    Default::default()
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::foo;
+
+fn main() {
+    let x = foo(); // Error: type annotations needed
+}</code></pre>
+<h3 id="fn-generalize-mismatch"><a class="header" href="#fn-generalize-mismatch">Major: تعمیم تابع به جنریک با عدم تطابق نوع</a></h3>
+<p>تغییر پارامتر یا نوع بازگشتی تابع شکننده است اگر نوع جنریک نوع‌های مجاز قبلی را محدود یا عوض کند. برای مثال، مثال زیر
+قید جنریکی می‌افزاید که ممکن است کد موجود آن را برآورده نکند:</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub fn foo(x: Vec&lt;u8&gt;) {}
+
+///////////////////////////////////////////////////////////
+// After
+pub fn foo&lt;T: Copy + IntoIterator&lt;Item = u8&gt;&gt;(x: T) {}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::foo;
+
+fn main() {
+    foo(vec![1, 2, 3]); // Error: `Copy` is not implemented for `Vec&lt;u8&gt;`
+}</code></pre>
+<h3 id="fn-unsafe-safe"><a class="header" href="#fn-unsafe-safe">Minor: safe‌کردن یک تابع <code>unsafe</code></a></h3>
+<p>تابعی که قبلاً <code>unsafe</code> بود می‌تواند بدون شکستن کد safe شود.</p>
+<p>توجه کنید با این حال ممکن است lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#unused-unsafe"><code>unused_unsafe</code></a> را مانند مثال زیر فعال کند،
+که باعث می‌شود crateهای محلی‌ای که <code>#![deny(warnings)]</code> را مشخص کرده‌اند دیگر کامپایل نشوند. طبق <a href="#new-lints">معرفی lintهای جدید</a>،
+به‌روزرسانی‌ها مجازند هشدارهای جدید معرفی کنند.</p>
+<p>در جهت عکس (<code>unsafe</code>کردن یک تابع safe) تغییری شکننده است.</p>
+<pre><code class="language-rust ignore">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub unsafe fn foo() {}
+
+///////////////////////////////////////////////////////////
+// After
+pub fn foo() {}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will trigger a lint.
+use updated_crate::foo;
+
+unsafe fn bar(f: unsafe fn()) {
+    f()
+}
+
+fn main() {
+    unsafe { foo() }; // The `unused_unsafe` lint will trigger here
+    unsafe { bar(foo) };
+}</code></pre>
+<p>safe‌کردن یک تابع وابسته یا متد <code>unsafe</code> روی structها / enumها هم تغییر minor است، اما همین موضوع برای تابع وابسته در traitها صدق نمی‌کند (<a href="#trait-item-signature">هر تغییر در امضای اعضای trait</a> را ببینید).</p>
+<h3 id="attr-no-std-to-std"><a class="header" href="#attr-no-std-to-std">Major: تغییر از پشتیبانی <code>no_std</code> به نیاز به <code>std</code></a></h3>
+<p>اگر کتابخانهٔ شما صراحتاً از محیط <a href="../../reference/names/preludes.html#the-no_std-attribute"><code>no_std</code></a> پشتیبانی می‌کند،
+انتشار نسخهٔ جدیدی که <code>std</code> را لازم دارد تغییری شکننده است.</p>
+<pre><code class="language-rust ignore skip">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+#![no_std]
+pub fn foo() {}
+
+///////////////////////////////////////////////////////////
+// After
+pub fn foo() {
+    std::time::SystemTime::now();
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+// This will fail to link for no_std targets because they don't have a `std` crate.
+#![no_std]
+use updated_crate::foo;
+
+fn example() {
+    foo();
+}</code></pre>
+<p>Mitigation strategies:</p>
+<ul>
+<li>یک الگوی رایج برای پرهیز از این، افزودن <a href="features.html">feature در Cargo</a> با نام <code>std</code> است که پشتیبانی از <code>std</code> را به‌صورت اختیاری فعال می‌کند، و وقتی feature خاموش باشد، کتابخانه در محیط <code>no_std</code> قابل‌استفاده است.</li>
+</ul>
+<h3 id="attr-adding-non-exhaustive"><a class="header" href="#attr-adding-non-exhaustive">Major: افزودن <code>non_exhaustive</code> به enum، variant یا struct موجودی که فیلد خصوصی ندارد</a></h3>
+<p><a href="../../reference/attributes/type_system.html#the-non_exhaustive-attribute"><code>#[non_exhaustive]</code></a>کردن آیتم‌ها نحوهٔ استفاده از آن‌ها را بیرون از crate‌ای که در آن تعریف شده‌اند تغییر می‌دهد:</p>
+<ul>
+<li>structها و variantهای enum از نوع non-exhaustive را نمی‌توان با نحو <a href="../../reference/expressions/struct-expr.html">struct literal</a> ساخت، از جمله <a href="../../reference/expressions/struct-expr.html#functional-update-syntax">نحو به‌روزرسانی تابعی (functional update)</a>.</li>
+<li>pattern matching روی structهای non-exhaustive نیازمند <code>..</code> است و
+matchکردن روی enumها در جامع‌بودن (exhaustiveness) حساب نمی‌شود.</li>
+<li>تبدیل variantهای enum به discriminant با <code>as</code> مجاز نیست.</li>
+</ul>
+<p>structهای دارای فیلد خصوصی را نمی‌توان با نحو <a href="../../reference/expressions/struct-expr.html">struct literal</a> ساخت،
+چه <a href="../../reference/attributes/type_system.html#the-non_exhaustive-attribute"><code>#[non_exhaustive]</code></a> استفاده شود چه نه.
+افزودن <a href="../../reference/attributes/type_system.html#the-non_exhaustive-attribute"><code>#[non_exhaustive]</code></a> به چنین structی
+تغییر شکننده نیست.</p>
+<pre><code class="language-rust ignore">// MAJOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub struct Foo {
+    pub bar: usize,
+}
+
+pub enum Bar {
+    X,
+    Y(usize),
+    Z { a: usize },
+}
+
+pub enum Quux {
+    Var,
+}
+
+///////////////////////////////////////////////////////////
+// After
+#[non_exhaustive]
+pub struct Foo {
+    pub bar: usize,
+}
+
+pub enum Bar {
+    #[non_exhaustive]
+    X,
+
+    #[non_exhaustive]
+    Y(usize),
+
+    #[non_exhaustive]
+    Z { a: usize },
+}
+
+#[non_exhaustive]
+pub enum Quux {
+    Var,
+}
+
+///////////////////////////////////////////////////////////
+// Example usage that will break.
+use updated_crate::{Bar, Foo, Quux};
+
+fn main() {
+    let foo = Foo { bar: 0 }; // Error: cannot create non-exhaustive struct using struct expression
+
+    let bar_x = Bar::X; // Error: unit variant `X` is private
+    let bar_y = Bar::Y(0); // Error: tuple variant `Y` is private
+    let bar_z = Bar::Z { a: 0 }; // Error: cannot create non-exhaustive variant using struct expression
+
+    let q = Quux::Var;
+    match q {
+        Quux::Var =&gt; 0,
+        // Error: non-exhaustive patterns: `_` not covered
+    };
+}</code></pre>
+<p>Mitigation strategies:</p>
+<ul>
+<li>structها، enumها و variantهای enum را هنگام معرفی اولیه به‌صورت
+<a href="../../reference/attributes/type_system.html#the-non_exhaustive-attribute"><code>#[non_exhaustive]</code></a> علامت بزنید،
+نه اینکه بعداً آن را اضافه کنید.</li>
+</ul>
+<h2 id="tooling-and-environment-compatibility"><a class="header" href="#tooling-and-environment-compatibility">سازگاری ابزار و محیط</a></h2>
+<h3 id="env-new-rust"><a class="header" href="#env-new-rust">Possibly-breaking: تغییر حداقل نسخهٔ Rust مورد نیاز</a></h3>
+<p>استفاده از قابلیت‌های جدید در انتشار جدید Rust می‌تواند پروژه‌هایی را که از نسخه‌های قدیمی‌تر Rust استفاده می‌کنند بشکند. این شامل استفاده از قابلیت‌های جدید در انتشار جدید Cargo هم می‌شود، و نیاز به قابلیتی که فقط در nightly هست در crate‌ای که قبلاً روی stable کار می‌کرد.</p>
+<p>به‌طور کلی توصیه می‌شود این را به‌جای تغییر major، تغییر minor به حساب آورید، به <a href="https://github.com/rust-lang/api-guidelines/discussions/231">دلایل گوناگون</a>.
+معمولاً به‌روزرسانی به نسخهٔ جدیدتر Rust نسبتاً آسان است. Rust همچنین
+چرخهٔ انتشار سریع ۶هفته‌ای دارد و برخی پروژه‌ها در یک پنجرهٔ انتشارها سازگاری ارائه می‌دهند (مثلاً انتشار stable فعلی
+به‌علاوهٔ N انتشار قبلی). فقط به یاد داشته باشید که برخی پروژه‌های بزرگ ممکن است نتوانند toolchain خود را سریع به‌روز کنند.</p>
+<p>Mitigation strategies:</p>
+<ul>
+<li>حداقل نسخهٔ Rust پشتیبانی‌شدهٔ بستهٔ خود را با تنظیم
+<a href="rust-version.html"><code>package.rust-version</code></a> مستند کنید، تا حل وابستگی Cargo در صورت نیاز بتواند
+<a href="resolver.html#rust-version">نسخه‌های قدیمی‌تر بستهٔ شما را انتخاب کند</a>.
+هنگام این کار حتماً <a href="rust-version.html#support-expectations">انتظارات پشتیبانی</a> را در نظر بگیرید.</li>
+<li>از <a href="features.html">featureهای Cargo</a> استفاده کنید تا قابلیت‌های جدید اختیاری (opt-in) باشند.</li>
+<li>پنجرهٔ بزرگی از پشتیبانی برای انتشارهای قدیمی‌تر ارائه دهید.</li>
+<li>اگر ممکن است منبع آیتم‌های جدید کتابخانهٔ استاندارد را کپی کنید تا بتوانید
+همچنان از نسخهٔ قدیمی‌تر استفاده کنید اما از قابلیت جدید بهره ببرید.</li>
+<li>یک شاخهٔ جداگانه برای انتشارهای minor قدیمی‌تر نگه دارید که بتواند backport رفع باگ‌های مهم را دریافت کند.</li>
+<li><a href="https://github.com/rust-lang/rust/issues/64796"><code>[cfg(version(..))]</code></a> و
+<a href="https://github.com/rust-lang/rust/issues/64797"><code>#[cfg(accessible(..))]</code></a> را زیر نظر داشته باشید؛ این قابلیت‌ها سازوکاری اختیاری
+برای قابلیت‌های جدید فراهم می‌کنند. فعلاً ناپایدارند و فقط در کانال nightly در دسترس‌اند.</li>
+</ul>
+<h3 id="env-change-requirements"><a class="header" href="#env-change-requirements">Possibly-breaking: تغییر نیازمندی‌های پلتفرم و محیط</a></h3>
+<p>کتابخانه فرض‌های بسیار گسترده‌ای دربارهٔ محیطی که در آن اجرا می‌شود می‌کند، مثل پلتفرم میزبان، نسخهٔ سیستم‌عامل، سرویس‌های در دسترس، پشتیبانی سیستم‌فایل و غیره. اگر انتشار جدیدی آنچه را قبلاً پشتیبانی می‌شد محدود کند،
+مثلاً نسخهٔ جدیدتری از سیستم‌عامل را لازم بداند، می‌تواند تغییری شکننده باشد. پیگیری این تغییرها دشوار است، چون همیشه نمی‌دانید
+یک تغییر در محیطی که به‌طور خودکار تست نمی‌شود می‌شکند یا نه.</p>
+<p>برخی پروژه‌ها ممکن است این شکستگی را قابل‌قبول بدانند، به‌ویژه اگر شکستگی برای بیشتر کاربران بعید باشد یا پروژه منابع پشتیبانی از همهٔ محیط‌ها را نداشته باشد. موقعیت قابل‌توجه دیگر وقتی است که فروشنده‌ای پشتیبانی از سخت‌افزار یا سیستم‌عاملی را متوقف می‌کند و پروژه ممکن است قطع پشتیبانی خود را هم منطقی بداند.</p>
+<p>Mitigation strategies:</p>
+<ul>
+<li>پلتفرم‌ها و محیط‌هایی را که صراحتاً پشتیبانی می‌کنید مستند کنید.</li>
+<li>کد خود را در CI روی طیف گسترده‌ای از محیط‌ها تست کنید.</li>
+</ul>
+<h3 id="new-lints"><a class="header" href="#new-lints">Minor: معرفی lintهای جدید</a></h3>
+<p>برخی تغییرها در یک کتابخانه ممکن است باعث فعال‌شدن lintهای جدید در کاربران آن کتابخانه شوند.
+این معمولاً باید تغییری سازگار به حساب آید.</p>
+<pre><code class="language-rust ignore dont-deny">// MINOR CHANGE
+
+///////////////////////////////////////////////////////////
+// Before
+pub fn foo() {}
+
+///////////////////////////////////////////////////////////
+// After
+#[deprecated]
+pub fn foo() {}
+
+///////////////////////////////////////////////////////////
+// Example use of the library that will safely work.
+
+fn main() {
+    updated_crate::foo(); // Warning: use of deprecated function
+}</code></pre>
+<p>توجه کنید که از نظر فنی ممکن است این باعث شکست پروژه شود اگر هشدار را صراحتاً deny کرده باشد و crate به‌روزشده وابستگی مستقیم باشد.
+denyکردن هشدارها باید با دقت و با درک اینکه lintهای جدید ممکن است با گذشت زمان معرفی شوند انجام شود.
+با این حال، نویسندگان کتابخانه باید در معرفی هشدارهای جدید محتاط باشند و ممکن است بخواهند اثر بالقوهٔ آن را بر کاربران خود بسنجند.</p>
+<p>lintهای زیر نمونه‌هایی از lintهایی هستند که ممکن است هنگام به‌روزرسانی یک وابستگی معرفی شوند:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#deprecated"><code>deprecated</code></a> — وقتی وابستگی <a href="../../reference/attributes/diagnostics.html#the-deprecated-attribute">attribute با نام <code>#[deprecated]</code></a> را به آیتمی که شما استفاده می‌کنید اضافه کند معرفی می‌شود.</li>
+<li><a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#unused-must-use"><code>unused_must_use</code></a> — وقتی وابستگی <a href="../../reference/attributes/diagnostics.html#the-must_use-attribute">attribute با نام <code>#[must_use]</code></a> را به آیتمی اضافه کند که شما نتیجه‌اش را مصرف نمی‌کنید معرفی می‌شود.</li>
+<li><a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#unused-unsafe"><code>unused_unsafe</code></a> — وقتی وابستگی qualifier با نام <code>unsafe</code> را از تابعی <em>حذف</em> کند و آن تنها تابع unsafe فراخوانی‌شده در بلوک unsafe باشد معرفی می‌شود.</li>
+</ul>
+<p>علاوه بر این، به‌روزرسانی <code>rustc</code> به نسخهٔ جدید ممکن است lintهای جدید معرفی کند.</p>
+<p>وابستگی‌های تعدّی‌ای (transitive) که lintهای جدید معرفی می‌کنند معمولاً نباید باعث شکست شوند، چون Cargo از <a href="../../rustc/lints/levels.html#capping-lints"><code>--cap-lints</code></a> برای خاموش‌کردن همهٔ lintها در وابستگی‌ها استفاده می‌کند.</p>
+<p>Mitigating strategies:</p>
+<ul>
+<li>اگر با deny‌کردن هشدارها می‌سازید، بدانید که ممکن است هر بار که وابستگی‌هایتان را به‌روز می‌کنید لازم شود هشدارهای جدید را رفع کنید.
+اگر برای دادن <code>-Dwarnings</code> از RUSTFLAGS استفاده می‌کنید، پرچم <code>-A</code> را هم برای مجاز‌کردن lintهایی که احتمالاً مشکل‌ساز می‌شوند اضافه کنید، مثل <code>-Adeprecated</code>.</li>
+<li>deprecationها را پشت یک <a href="features.html">feature</a> معرفی کنید.
+برای مثال <code>#[cfg_attr(feature = "deprecated", deprecated="use bar instead")]</code>.
+سپس وقتی قصد دارید آیتمی را در تغییر شکنندهٔ SemVer آینده حذف کنید، می‌توانید به کاربران اطلاع دهید که <em>پیش از</em> به‌روزرسانی، featureٔ <code>deprecated</code> را فعال کنند تا استفاده از آیتم‌های deprecated را از بین ببرند.
+این به کاربران اجازه می‌دهد خودشان تعیین کنند چه زمانی به deprecationها پاسخ دهند، بدون نیاز به پاسخ فوری.
+یک نقطه‌ضعف این است که رساندن این پیام به کاربران که باید این گام‌های دستی را برای آماده‌شدن برای به‌روزرسانی major انجام دهند دشوار است.</li>
+</ul>
+<h3 id="cargo"><a class="header" href="#cargo">Cargo</a></h3>
+<h4 id="cargo-feature-add"><a class="header" href="#cargo-feature-add">Minor: افزودن feature جدید Cargo</a></h4>
+<p>افزودن <a href="features.html">featureهای</a> جدید Cargo معمولاً ایمن است. اگر feature تغییرهایی معرفی کند که باعث شکست شوند، این می‌تواند برای پروژه‌هایی که نیازهای سازگاری رو‌به‌عقب سخت‌گیرانه‌تری دارند مشکل ایجاد کند. در آن سناریو از افزودن feature به فهرست «default» پرهیز کنید و احتمالاً پیامدهای فعال‌کردن feature را مستند کنید.</p>
+<pre><code class="language-toml"># MINOR CHANGE
+
+###########################################################
+# Before
+[features]
+# ..empty
+
+###########################################################
+# After
+[features]
+std = []
+</code></pre>
+<h4 id="cargo-feature-remove"><a class="header" href="#cargo-feature-remove">Major: حذف یک feature در Cargo</a></h4>
+<p>حذف <a href="features.html">featureهای Cargo</a> معمولاً تغییری شکننده است. این برای هر پروژه‌ای که feature را فعال کرده بود خطا ایجاد می‌کند.</p>
+<pre><code class="language-toml"># MAJOR CHANGE
+
+###########################################################
+# Before
+[features]
+logging = []
+
+###########################################################
+# After
+[dependencies]
+# ..logging removed
+</code></pre>
+<p>Mitigation strategies:</p>
+<ul>
+<li>featureهای خود را به‌روشنی مستند کنید. اگر feature داخلی یا آزمایشی وجود دارد، آن را چنین علامت بزنید تا کاربران وضعیت feature را بدانند.</li>
+<li>feature قدیمی را در <code>Cargo.toml</code> نگه دارید، اما عملکردش را حذف کنید. مستند کنید که feature منسوخ (deprecated) است و آن را در یک انتشار major آیندهٔ SemVer حذف کنید.</li>
+</ul>
+<h4 id="cargo-feature-remove-another"><a class="header" href="#cargo-feature-remove-another">Major: حذف یک feature از فهرست featureها اگر عملکرد یا آیتم‌های عمومی را تغییر دهد</a></h4>
+<p>اگر featureای را از feature دیگری حذف کنید، این می‌تواند کاربران موجود را بشکند، اگر انتظار داشته باشند آن عملکرد از طریق همان feature در دسترس باشد.</p>
+<pre><code class="language-toml"># Breaking change example
+
+###########################################################
+# Before
+[features]
+default = ["std"]
+std = []
+
+###########################################################
+# After
+[features]
+default = []  # This may cause packages to fail if they are expecting std to be enabled.
+std = []
+</code></pre>
+<h4 id="cargo-remove-opt-dep"><a class="header" href="#cargo-remove-opt-dep">Possibly-breaking: حذف یک وابستگی اختیاری</a></h4>
+<p>حذف یک <a href="features.html#optional-dependencies">وابستگی اختیاری</a> می‌تواند پروژه‌ای را که از کتابخانهٔ شما استفاده می‌کند بشکند، چون
+پروژه‌ای دیگر ممکن است آن وابستگی را از طریق <a href="features.html">featureهای Cargo</a> فعال کرده باشد.</p>
+<p>وقتی وابستگی اختیاری وجود دارد، cargo به‌طور ضمنی featureای با همان نام تعریف می‌کند تا سازوکاری برای فعال‌کردن وابستگی و بررسی فعال‌بودن آن فراهم شود. می‌توان با استفاده از نحو <code>dep:</code> در
+جدول <code>[features]</code> از این مشکل پرهیز کرد، چون این feature ضمنی را غیرفعال می‌کند. استفاده از <code>dep:</code>
+امکان پنهان‌کردن وجود وابستگی‌های اختیاری را زیر نام‌هایی با معنای مرتبط‌تر می‌دهد که تغییرشان ایمن‌تر است.</p>
+<pre><code class="language-toml"># Breaking change example
+
+###########################################################
+# Before
+[dependencies]
+curl = { version = "0.4.31", optional = true }
+
+###########################################################
+# After
+[dependencies]
+# ..curl removed
+</code></pre>
+<pre><code class="language-toml"># MINOR CHANGE
+#
+# This example shows how to avoid breaking changes with optional dependencies.
+
+###########################################################
+# Before
+[dependencies]
+curl = { version = "0.4.31", optional = true }
+
+[features]
+networking = ["dep:curl"]
+
+###########################################################
+# After
+[dependencies]
+# Here, one optional dependency was replaced with another.
+hyper = { version = "0.14.27", optional = true }
+
+[features]
+networking = ["dep:hyper"]
+</code></pre>
+<p>Mitigation strategies:</p>
+<ul>
+<li>برای اینکه از ابتدا وابستگی‌های اختیاری را آشکار نکنید، از نحو <code>dep:</code> در جدول <code>[features]</code> استفاده کنید. برای اطلاعات بیشتر <a href="features.html#optional-dependencies">وابستگی‌های اختیاری</a> را ببینید.</li>
+<li>featureهای خود را به‌روشنی مستند کنید. اگر وابستگی اختیاری در فهرست مستند featureها نباشد، می‌توانید تغییر ورودی‌های مستندنشده را ایمن بدانید.</li>
+<li>وابستگی اختیاری را نگه دارید و فقط در کتابخانه‌تان از آن استفاده نکنید.</li>
+<li>وابستگی اختیاری را با یک <a href="features.html">feature در Cargo</a> که کاری نمی‌کند جایگزین کنید و مستند کنید که منسوخ است.</li>
+<li>از featureهای سطح بالا استفاده کنید که وابستگی‌های اختیاری را فعال می‌کنند و مستند کنید که این روش ترجیحی برای فعال‌کردن قابلیت گسترش‌یافته است. برای
+مثال، اگر کتابخانهٔ شما پشتیبانی اختیاری از چیزی مثل «networking» دارد، یک نام feature عمومی «networking» بسازید که وابستگی‌های اختیاری لازم برای پیاده‌سازی «networking» را فعال می‌کند. سپس feature «networking» را مستند کنید.</li>
+</ul>
+<h4 id="cargo-change-dep-feature"><a class="header" href="#cargo-change-dep-feature">Minor: تغییر featureهای وابستگی</a></h4>
+<p>تغییر featureهای یک وابستگی معمولاً ایمن است، به شرط اینکه feature تغییری شکننده معرفی نکند.</p>
+<pre><code class="language-toml"># MINOR CHANGE
+
+###########################################################
+# Before
+[dependencies]
+rand = { version = "0.7.3", features = ["small_rng"] }
+
+
+###########################################################
+# After
+[dependencies]
+rand = "0.7.3"
+</code></pre>
+<h4 id="cargo-dep-add"><a class="header" href="#cargo-dep-add">Minor: adding dependencies</a></h4>
+<p>افزودن وابستگی‌های جدید معمولاً ایمن است، به شرط اینکه وابستگی جدید نیازمندی‌های تازه‌ای معرفی نکند که به تغییر شکننده بینجامد.
+برای مثال، افزودن وابستگی جدیدی که nightly می‌خواهد در پروژه‌ای که قبلاً روی stable کار می‌کرد تغییر major است.</p>
+<pre><code class="language-toml"># MINOR CHANGE
+
+###########################################################
+# Before
+[dependencies]
+# ..empty
+
+###########################################################
+# After
+[dependencies]
+log = "0.4.11"
+</code></pre>
+<h2 id="application-compatibility"><a class="header" href="#application-compatibility">Application compatibility</a></h2>
+<p>پروژه‌های Cargo ممکن است شامل فایل‌های دودویی اجرایی هم باشند که رابط‌های خودشان را دارند (مثل رابط CLI، تعامل در سطح سیستم‌عامل و غیره). از آنجا که این‌ها
+بخشی از بستهٔ Cargo هستند، اغلب از همان نسخهٔ بسته استفاده می‌کنند. باید تصمیم بگیرید که آیا و چگونه می‌خواهید یک
+قرارداد SemVer با کاربران خود دربارهٔ تغییرهایی که در برنامه می‌دهید به‌کار ببرید. تغییرهای شکننده و سازگار بالقوهٔ یک برنامه
+آن‌قدر زیادند که نمی‌توان فهرستشان کرد، پس توصیه می‌شود از روح مشخصات <a href="https://semver.org/">SemVer</a> برای هدایت
+تصمیم‌هایتان دربارهٔ نحوهٔ اعمال نسخه‌گذاری بر برنامه استفاده کنید، یا دست‌کم تعهدهایتان را مستند کنید.</p><nav class="page-nav"><a href="registry-web-api.html">→ API وب رجیستری</a><a href="future-incompat-report.html">گزارش ناسازگاری‌های آتی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

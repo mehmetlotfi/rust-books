@@ -1,0 +1,65 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>همگام‌سازی تغییرات میان Clippy و rust-lang/rust — کتاب Clippy</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="development/infrastructure/sync"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../index.html" style="color:inherit;text-decoration:none">کتاب Clippy</a><small class="en-title" dir="ltr">The Clippy Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="syncing-changes-between-clippy-and-rust-langrust"><a class="header" href="#syncing-changes-between-clippy-and-rust-langrust">همگام‌سازی تغییرات بین Clippy و <a href="https://github.com/rust-lang/rust"><code>rust-lang/rust</code></a></a></h1>
+<p>Clippy در حال حاضر با یک نسخهٔ nightly پین‌شده ساخته می‌شود.</p>
+<p>در مخزن <code>rust-lang/rust</code>، که rustc در آن قرار دارد، یک نسخهٔ کپی از Clippy وجود دارد که توسعه‌دهندگان کامپایلر هر از چند گاهی آن را تغییر می‌دهند تا با تغییرات API ناپایدار کامپایلر سازگار شود.</p>
+<p>ما باید این تغییرات را به‌طور دوره‌ای به همین مخزن بازگردانیم، و تغییراتی که در این فاصله در همین مخزن انجام شده‌اند نیز باید به مخزن <code>rust-lang/rust</code> همگام شوند.</p>
+<p>برای جلوگیری از شلوغ شدن صف PRهای <code>rust-lang/rust</code>، اگر تغییر فوری‌ای وجود نداشته باشد، این همگام‌سازی دوطرفه به‌صورت دو هفته یک‌بار انجام می‌شود. این کار از روز انتشار نسخهٔ stable زبان Rust شروع می‌شود و پس از آن هر دو هفته تکرار می‌شود. به این ترتیب تضمین می‌کنیم که این مخزن همیشه با آخرین API کامپایلر به‌روز باشد و هر قابلیت Clippy پیش از رسیدن به beta، دو هفته در nightly در دسترس باشد. برای مرجع، نخستین همگام‌سازی با این رویه در تاریخ 2020-08-27 انجام شد.</p>
+<p>این فرایند در بخش‌های بعدی به‌تفصیل شرح داده شده است. برای اطلاعات کلی دربارهٔ <code>subtree</code>ها در مخزن Rust، <a href="https://rustc-dev-guide.rust-lang.org/external-repos.html#external-dependencies-subtree">راهنمای توسعهٔ rustc</a> را ببینید.</p>
+<h2 id="patching-git-subtree-to-work-with-big-repos"><a class="header" href="#patching-git-subtree-to-work-with-big-repos">وصله‌کردن git-subtree برای کار با مخازن بزرگ</a></h2>
+<p>در حال حاضر باگی در <code>git-subtree</code> وجود دارد که مانع از کار درست آن با مخزن <a href="https://github.com/rust-lang/rust"><code>rust-lang/rust</code></a> می‌شود. یک PR باز برای رفع آن وجود دارد، اما راکد مانده است. پیش از ادامهٔ مراحل زیر، باید این اصلاح را به‌صورت دستی روی نسخهٔ محلی <code>git-subtree</code> اعمال کنیم.</p>
+<p>می‌توانید نسخهٔ وصله‌شدهٔ <code>git-subtree</code> را از <a href="https://github.com/gitgitgadget/git/pull/493">اینجا</a> دریافت کنید. این فایل را در مسیر <code>/usr/lib/git-core</code> قرار دهید (و از فایل قبلی نسخهٔ پشتیبان بگیرید) و مطمئن شوید مجوزهای مناسب را دارد:</p>
+<pre><code class="language-bash">sudo cp --backup /path/to/patched/git-subtree.sh /usr/lib/git-core/git-subtree
+sudo chmod --reference=/usr/lib/git-core/git-subtree~ /usr/lib/git-core/git-subtree
+sudo chown --reference=/usr/lib/git-core/git-subtree~ /usr/lib/git-core/git-subtree
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><em>نکته:</em> بار اول که <code>git subtree push</code> را اجرا می‌کنید، باید یک کش ساخته شود. این کار شامل مرور یک‌بارهٔ کل تاریخچهٔ Clippy است. برای این کار باید محدودیت stack را افزایش دهید، که با <code>ulimit -s 60000</code> انجام می‌شود. دستور <code>ulimit</code> را حتماً از همان نشستی اجرا کنید که git subtree را در آن فراخوانی می‌کنید.</p>
+</blockquote>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><em>نکته:</em> اگر کاربر Debian هستید، <code>dash</code> پوستهٔ پیش‌فرضی است که به‌جای <code>sh</code> برای اسکریپت‌ها استفاده می‌شود. این پوسته یک محدودیت بازگشت (recursion) ثابت برابر 1,000 دارد. برای اینکه این فرایند کار کند، باید اسکریپت را مجبور کنید به‌جای آن از <code>bash</code> استفاده کند. می‌توانید این کار را با ویرایش خط اول اسکریپت <code>git-subtree</code> و تغییر <code>sh</code> به <code>bash</code> انجام دهید.</p>
+</blockquote>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>نکته: بخش‌های زیر فرض می‌کنند که remoteها را مطابق دستورالعمل <a href="release.html#defining-remotes">تعریف remoteها</a> تنظیم کرده‌اید.</p>
+</blockquote>
+<h2 id="performing-the-sync-from-rust-langrust-to-clippy"><a class="header" href="#performing-the-sync-from-rust-langrust-to-clippy">انجام همگام‌سازی از <a href="https://github.com/rust-lang/rust"><code>rust-lang/rust</code></a> به Clippy</a></h2>
+<p>در ادامه نسخهٔ خلاصهٔ فرایند همگام‌سازی آمده است (همهٔ دستورهای زیر باید داخل دایرکتوری <code>rust</code> اجرا شوند):</p>
+<ol>
+<li>مخزن <a href="https://github.com/rust-lang/rust"><code>rust-lang/rust</code></a> را کلون کنید یا مطمئن شوید که به‌روز است.</li>
+<li>commit مربوط به آخرین nightly موجود را checkout کنید. می‌توانید آن را با <code>rustup check</code> به دست آورید.</li>
+<li>تغییرات نسخهٔ کپی‌شدهٔ Clippy در rust را به fork خود از Clippy همگام کنید:
+<pre><code class="language-bash"># Be sure to either use a net-new branch, e.g. `rustup`, or delete the branch beforehand
+# because changes cannot be fast forwarded and you have to run this command again.
+git subtree push -P src/tools/clippy clippy-local rustup
+</code></pre>
+</li>
+</ol>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><em>نکته:</em> در بیشتر موارد باید در مخزن <code>rust-clippy</code> یک merge commit بسازید (این کار باید در مخزن Clippy انجام شود، نه در نسخهٔ کپی‌شدهٔ Clippy): <code>bash git fetch upstream # assuming upstream is the rust-lang/rust remote git switch rustup git merge upstream/main --no-ff</code> نکته: این یکی از معدود مواردی است که وجود merge commit در یک PR مجاز است.</p>
+<pre><code class="language-bash">git fetch upstream  # assuming upstream is the rust-lang/rust remote
+git switch rustup
+git merge upstream/main --no-ff
+</code></pre>
+<p>این یکی از معدود مواردی است که در آن‌ها وجود یک merge commit در یک PR مجاز است.</p>
+</blockquote>
+<ol start="4">
+<li>نسخهٔ nightly را در مخزن Clippy با اجرای این دستورها به‌روز کنید:
+<pre><code class="language-bash">cargo dev sync update_nightly
+git commit -m "Bump nightly version -&gt; YYYY-MM-DD" rust-toolchain.toml clippy_utils/README.md
+</code></pre>
+</li>
+<li>یک PR به <code>rust-lang/rust-clippy</code> باز کنید و منتظر بمانید تا merge شود (برای تسریع فرایند، تیم <code>@rust-lang/clippy</code> را در PR خود mention کنید و/یا از آن‌ها در stream مربوط به <a href="https://rust-lang.zulipchat.com/#narrow/stream/t-clippy">Zulip</a> بپرسید.)</li>
+</ol>
+<h2 id="performing-the-sync-from-clippy-to-rust-langrust"><a class="header" href="#performing-the-sync-from-clippy-to-rust-langrust">انجام همگام‌سازی از Clippy به <a href="https://github.com/rust-lang/rust"><code>rust-lang/rust</code></a></a></h2>
+<p>همهٔ دستورهای زیر باید داخل دایرکتوری <code>rust</code> اجرا شوند.</p>
+<ol>
+<li>مطمئن شوید که آخرین <code>main</code> از <code>rust-lang/rust</code> را checkout کرده‌اید.</li>
+<li>شاخهٔ master مخزن <code>rust-lang/rust-clippy</code> را به نسخهٔ کپی‌شدهٔ Clippy همگام کنید: <code>bash git switch -c clippy-subtree-update git subtree pull -P src/tools/clippy clippy-upstream master</code>
+<pre><code class="language-bash">git switch -c clippy-subtree-update
+git subtree pull -P src/tools/clippy clippy-upstream master
+</code></pre>
+</li>
+<li>یک PR به <a href="https://github.com/rust-lang/rust"><code>rust-lang/rust</code></a> باز کنید.</li>
+</ol><nav class="page-nav"><a href="index.html">→ زیرساخت</a><a href="backport.html">بک‌پورت تغییرات ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../clippy/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

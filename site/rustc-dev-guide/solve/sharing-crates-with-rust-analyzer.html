@@ -1,0 +1,206 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>اشتراک حل‌کنندهٔ صفت با rust-analyzer — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="solve/sharing-crates-with-rust-analyzer"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="sharing-the-trait-solver-with-rust-analyzer"><a class="header" href="#sharing-the-trait-solver-with-rust-analyzer">به‌اشتراک‌گذاری solver صفت با rust-analyzer</a></h1>
+<p>rust-analyzer را می‌توان یک frontend کامپایلر دانست: کارهایی شبیه بخش‌هایی از rustc انجام می‌دهد
+که پیش از تولید کد اجرا می‌شوند، مانند parsing، lexing، ساخت و پایین‌آوری AST، پایین‌آوری
+HIR، و حتی ساخت محدود MIR و ارزیابی const.</p>
+<p>اما چون rust-analyzer در درجهٔ اول یک language server است، معماری‌اش از چند جهت مهم
+با معماری rustc فرق دارد.
+با وجود این تفاوت‌ها، بخش عمدهٔ مسئولیت‌های آن—به‌ویژه استنتاج
+نوع و حل صفت—با کامپایلر همپوشانی دارد.</p>
+<p>برای پرهیز از تکرار و حفظ سازگاری میان دو پیاده‌سازی، rust-analyzer
+چند crate را از rustc دوباره استفاده می‌کند و تا حد امکان به انتزاع‌های مشترک تکیه دارد.</p>
+<h2 id="shared-crates"><a class="header" href="#shared-crates">crateهای مشترک</a></h2>
+<p>در حال حاضر rust-analyzer به چند crate ‏<code>rustc_*</code> از کامپایلر وابسته است:</p>
+<ul>
+<li><code>rustc_abi</code></li>
+<li><code>rustc_ast_ir</code></li>
+<li><code>rustc_index</code></li>
+<li><code>rustc_lexer</code></li>
+<li><code>rustc_next_trait_solver</code></li>
+<li><code>rustc_parse_format</code></li>
+<li><code>rustc_pattern_analysis</code></li>
+<li><code>rustc_type_ir</code></li>
+</ul>
+<p>چون این crateها به‌عنوان بخشی از فرایند توزیع عادی کامپایلر در <code>crates.io</code> منتشر نمی‌شوند، rust-analyzer
+خط لولهٔ انتشار خودش را نگه می‌دارد.
+از <a href="https://github.com/rust-analyzer/rustc-auto-publish">اسکریپت rustc-auto-publish</a> برای انتشار این crateها در <code>crates.io</code>
+با پیشوند <code>ra-ap-rustc_*</code> استفاده می‌کند
+(برای مثال: <a href="https://crates.io/crates/ra-ap-rustc_next_trait_solver">https://crates.io/crates/ra-ap-rustc_next_trait_solver</a>).
+سپس rust-analyzer در build خود به این crateهای بازمنتشرشده وابسته می‌شود.</p>
+<p>به‌طور مشخص برای حل صفت، crateهای مشترک اصلی <code>rustc_type_ir</code> و
+<code>rustc_next_trait_solver</code> هستند که IR هسته و منطق solver را که هر دو
+frontend کامپایلر به کار می‌برند فراهم می‌کنند.</p>
+<h2 id="the-abstraction-layer"><a class="header" href="#the-abstraction-layer">لایهٔ انتزاع</a></h2>
+<p>چون rust-analyzer یک language server است، باید با کد منبعی که مدام تغییر می‌کند و
+کد منبع نیمه‌نامعتبر یا ناقص سروکار داشته باشد.
+این به زیرساختی کاملاً متفاوت از rustc نیاز دارد، به‌ویژه در لایه‌های میان
+کد منبع و HIR—برای مثال <code>Ty</code> و interner پشتیبان آن.</p>
+<p>برای پُر کردن این تفاوت‌ها، کامپایلر <code>rustc_type_ir</code> را به‌عنوان لایهٔ انتزاعی مشترک میان
+rustc و rust-analyzer فراهم می‌کند.
+این crate رابط‌های بنیادی را که برای نمایش نوع‌ها، گزاره‌ها و بسترِ
+مورد نیاز solver صفت به کار می‌روند تعریف می‌کند.
+هم rustc و هم rust-analyzer این صفت‌ها را برای بازنمایی‌های نوع مشخص خودشان پیاده‌سازی می‌کنند،
+و <code>rustc_next_trait_solver</code> طوری نوشته شده که نسبت به این انتزاع‌ها جنریک باشد.</p>
+<p>افزون بر این رابط‌ها، <code>rustc_type_ir</code> چند مؤلفهٔ غیربدیهی نیز دارد که روی لایهٔ انتزاع ساخته شده‌اند—مانند منطق elaboration و ماشین گراف جستجو که solver
+به کار می‌برد.</p>
+<h2 id="design-concepts"><a class="header" href="#design-concepts">مفاهیم طراحی</a></h2>
+<p>قرار است <code>rustc_next_trait_solver</code> فقط به رابط‌های انتزاعی تعریف‌شده در
+<code>rustc_type_ir</code> وابسته باشد.
+برای پشتیبانی از این، صفت‌های سامانهٔ نوع در <code>rustc_type_ir</code> باید هر رابطی را که solver
+لازم دارد در دسترس بگذارند—برای مثال، <a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_type_ir/inherent/trait.Ty.html#tymethod.new_infer">ساخت یک متغیر نوع استنتاج جدید</a>
+(<a href="https://github.com/rust-lang/rust/blob/63b1db05801271e400954e41b8600a3cf1482363/compiler/rustc_middle/src/ty/sty.rs#L413-L420">rustc</a>, <a href="https://github.com/rust-lang/rust-analyzer/blob/34f47d9298c478c12c6c4c0348771d1b05706e09/crates/hir-ty/src/next_solver/ty.rs#L59-L92">rust-analyzer</a>).
+برای آیتم‌هایی که به بازنمایی مختص کامپایلر نیاز ندارند، <code>rustc_type_ir</code> آن‌ها را مستقیماً
+به‌صورت structها یا enumهای پارامتری‌شده روی این صفت‌ها تعریف می‌کند—برای مثال <a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_type_ir/struct.TraitRef.html"><code>TraitRef</code></a>.</p>
+<p>موارد زیر برخی آیتم‌های قابل‌توجه crate ‏<code>rustc_type_ir</code> هستند.</p>
+<h3 id="trait-interner"><a class="header" href="#trait-interner"><code>trait Interner</code></a></h3>
+<p>صفت مرکزی در این طراحی <a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_type_ir/trait.Interner.html"><code>Interner</code></a> است که همهٔ
+جزئیات مختص پیاده‌سازی را برای هر دوی rustc و rust-analyzer مشخص می‌کند.
+از مسئولیت‌های اساسی آن:</p>
+<ul>
+<li>
+<p>نوع‌های مشخصی را که پیاده‌سازی به کار می‌برد از طریق
+<a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_type_ir/trait.Interner.html#required-associated-types">نوع‌های وابسته</a>اش <strong>مشخص می‌کند</strong>؛ این‌ها ستون فقرات چگونگی
+نمونه‌سازی IR مشترک توسط هر frontend کامپایلر را می‌سازند،</p>
+</li>
+<li>
+<p>بسترِ مورد نیاز solver را فراهم می‌کند (مثلاً query کردن <a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_type_ir/trait.Interner.html#tymethod.require_lang_item">lang itemها</a>،
+شمارش <a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_type_ir/trait.Interner.html#tymethod.for_each_blanket_impl">همهٔ impl‌های blanket یک صفت</a>)؛</p>
+</li>
+<li>
+<p>و باید <a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_type_ir/ir_print/trait.IrPrint.html"><code>IrPrint</code></a> را برای قالب‌بندی و ردیابی (tracing) پیاده‌سازی کند.</p>
+<p>در عمل، این impl‌های <code>IrPrint</code> صرفاً به منطق قالب‌بندی موجود درون rustc یا
+rust-analyzer هدایت می‌شوند.</p>
+</li>
+</ul>
+<p>در rustc، <a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html#impl-Interner-for-TyCtxt%3C&#39;tcx%3E"><code>TyCtxt</code> صفت <code>Interner</code> را پیاده‌سازی می‌کند</a>: متدهای query مربوط به rustc را در دسترس می‌گذارد
+و متدهای لازم صفت <code>Interner</code> با فراخوانی آن queryها پیاده‌سازی می‌شوند.
+در rust-analyzer، نوع پیاده‌ساز <a href="https://github.com/rust-lang/rust-analyzer/blob/a50c1ccc9cf3dab1afdc857a965a9992fbad7a53/crates/hir-ty/src/next_solver/interner.rs"><code>DbInterner</code></a> نام دارد (چون بیشتر interning را
+از طریق پایگاه‌دادهٔ <a href="https://github.com/salsa-rs/salsa">salsa</a> انجام می‌دهد) و بیشتر متدهایش به‌جای queryهای rustc، توسط queryهای salsa پشتیبانی می‌شوند.</p>
+<h3 id="mod-inherent"><a class="header" href="#mod-inherent"><code>mod inherent</code></a></h3>
+<p>آیتم قابل‌توجه دیگر در <code>rustc_type_ir</code> <a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_type_ir/inherent/index.html">ماژول <code>inherent</code></a> است.
+این ماژول <em>تعریف‌های پیشین (forward definitions)</em> متدهای inherent را—که به‌صورت صفت بیان شده‌اند—فراهم می‌کند، متناظر با
+متدهایی که روی نوع‌های مختص کامپایلر مانند <code>Ty</code> یا <code>GenericArg</code> وجود دارند.</p>
+<p>این تعریف‌ها به crateهای جنریک (مانند <code>rustc_next_trait_solver</code>) اجازه می‌دهند متدهایی را فراخوانی کنند که
+در rustc و rust-analyzer به‌طور متفاوت پیاده‌سازی شده‌اند.</p>
+<p>کد درون crateهای جنریک باید این تعریف‌ها را این‌گونه import کند:</p>
+<pre><code class="language-rust">use inherent::*;</code></pre>
+<p>این تعریف‌های پیشین <strong>هرگز نباید درون خود پیاده‌سازی‌های مشخص به کار روند</strong>.
+crateهایی که صفت‌های <code>mod inherent</code> را پیاده‌سازی می‌کنند باید متدهای inherent واقعی را روی
+نوع‌های مشخص خود فراخوانی کنند، وقتی آن نوع‌ها قابل نام بردن باشند.</p>
+<p>پیاده‌سازی‌های rustc برای این صفت‌ها را در ماژول
+<a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_middle/ty/inherent/index.html">rustc_middle::ty::inherent</a> می‌توانید بیابید.
+برای rust-analyzer، پیاده‌سازی‌های متناظر در چند ماژول زیر
+<code>hir_ty::next_solver</code> قرار دارند، مانند <a href="https://github.com/rust-lang/rust-analyzer/blob/a50c1ccc9cf3dab1afdc857a965a9992fbad7a53/crates/hir-ty/src/next_solver/region.rs">hir_ty::next_solver::region</a>.</p>
+<h3 id="trait-inferctxtlike-and-trait-solverdelegate"><a class="header" href="#trait-inferctxtlike-and-trait-solverdelegate"><code>trait InferCtxtLike</code> and <code>trait SolverDelegate</code></a></h3>
+<p>این دو صفت با نقش <a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_infer/infer/struct.InferCtxt.html"><code>InferCtxt</code></a> در rustc متناظرند.</p>
+<p><a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_type_ir/trait.InferCtxtLike.html"><code>InferCtxtLike</code></a> به‌دلیل محدودیت‌های coherence (قواعد orphan) باید در <code>rustc_infer</code>
+تعریف شود.
+در نتیجه نمی‌تواند قابلیتی را که در <code>rustc_trait_selection</code> قرار دارد فراهم کند.
+در عوض، رفتاری که به منطق حل صفت وابسته است در یک صفت جداگانه انتزاع می‌شود:
+<a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_next_trait_solver/delegate/trait.SolverDelegate.html"><code>SolverDelegate</code></a>.
+پیاده‌ساز آن در rustc <a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/rustc_trait_selection/solve/delegate/struct.SolverDelegate.html">صرفاً یک struct از نوع newtype روی <code>InferCtxt</code></a>
+در <code>rustc_trait_selection</code> است.</p>
+<p>(در rust-analyzer نیز برای یک wrapper از نوع newtype روی
+<a href="https://github.com/rust-lang/rust-analyzer/blob/a50c1ccc9cf3dab1afdc857a965a9992fbad7a53/crates/hir-ty/src/next_solver/infer/context.rs"><code>InferCtxt</code></a> خودش پیاده‌سازی شده است، عمدتاً برای بازتاب ساختار rustc، هرچند این
+کاملاً ضروری نیست چون همهٔ منطق مربوط به solver از پیش در crate ‏<code>hir-ty</code> قرار دارد.)</p>
+<p>در بلندمدت، طراحی ایده‌آل این است که همهٔ منطقی را که اکنون از طریق
+<code>SolverDelegate</code> بیان می‌شود به <code>rustc_next_trait_solver</code> منتقل کنیم و هر عملیات هستهٔ لازم را مستقیماً به
+<code>InferCtxtLike</code> اضافه کنیم.
+این به بخش بیشتری از رفتار solver اجازه می‌دهد کاملاً درون crate مشترک solver قرار بگیرد.</p>
+<h3 id="rustc_type_irsearch_graphcx-delegate"><a class="header" href="#rustc_type_irsearch_graphcx-delegate"><code>rustc_type_ir::search_graph::{Cx, Delegate}</code></a></h3>
+<p>صفت‌های انتزاعی <a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/src/rustc_type_ir/interner.rs.html#550-575"><code>Cx</code></a> و <a href="https://doc.rust-lang.org/1.91.1/nightly-rustc/src/rustc_next_trait_solver/solve/search_graph.rs.html#20-123"><code>Delegate</code></a>
+از پیش درون خود <code>rustc_next_trait_solver</code> پیاده‌سازی شده‌اند.
+بنابراین استفاده‌کنندگان از crateهای مشترک—هم rustc و هم rust-analyzer—لازم نیست
+پیاده‌سازی خودشان را ارائه دهند.</p>
+<p>این صفت‌ها عمدتاً برای پشتیبانی از fuzzing گراف جستجو مستقل از solver کامل صفت
+وجود دارند.
+این زیرساخت توسط پروژهٔ fuzzing خارجی به کار می‌رود:
+<a href="https://github.com/lcnr/search_graph_fuzz">https://github.com/lcnr/search_graph_fuzz</a>.</p>
+<h2 id="derived-traits"><a class="header" href="#derived-traits">صفت‌های مشتق‌شده</a></h2>
+<ul>
+<li><code>trait TypeVisitable</code> و <code>TypeVisitable_Generic</code></li>
+<li><code>trait TypeFoldable</code> و <code>TypeFoldable_Generic</code></li>
+<li><code>trait Lift</code> و <code>Lift_Generic</code></li>
+<li><code>trait GenericTypeVisitable</code></li>
+</ul>
+<p>این صفت‌ها در <code>rustc_type_ir</code> بسیار استفاده می‌شوند و ماکروهای وابسته‌شان
+عمدتاً برای کاهش مقدار boilerplate که در غیر این صورت برای پیاده‌سازی <code>Lift</code>،
+<code>TypeFoldable</code>، <code>TypeVisitable</code> و <code>GenericTypeVisitable</code> لازم است وجود دارند.</p>
+<h3 id="trait-typevisitable-and-typevisitable_generic"><a class="header" href="#trait-typevisitable-and-typevisitable_generic"><code>trait TypeVisitable</code> و <code>TypeVisitable_Generic</code></a></h3>
+<p>این صفت الزام می‌کند که یک struct یا enum متد <code>visit_with(...)</code> را پیاده‌سازی کند،
+که به نوبهٔ خود کنترل را به <code>TypeVisitor</code> منتقل می‌کند؛ این را می‌توان
+<a href="https://github.com/rust-lang/rust/blob/0913b18e489ac1011b580e31fa5559654be12bfc/compiler/rustc_type_ir/src/visit.rs#L62">به‌تفصیل در اینجا دید</a>.</p>
+<p>هرچند به‌دلیل نام‌هایشان ظاهراً شبیه‌اند، <code>TypeVisitable_Generic</code> و
+<code>GenericTypeVisitable</code> دو سامانهٔ بازدید متفاوت را پیاده‌سازی می‌کنند.</p>
+<ul>
+<li><code>TypeVisitable_Generic</code> یعنی: صفت معمولی <code>TypeVisitable</code> را
+به‌صورت جنریک روی یک <code>Interner</code> مشتق کن.</li>
+<li><code>GenericTypeVisitable</code> یعنی: صفت جداگانهٔ <code>GenericTypeVisitable</code> را که
+مصرف‌کنندگان غیر-nightly مانند rust-analyzer به کار می‌برند مشتق کن.</li>
+</ul>
+<h4 id="typevisitable_generic"><a class="header" href="#typevisitable_generic"><code>TypeVisitable_Generic</code></a></h4>
+<p>فیلدهای مقدار را به ترتیب تعریف بازدید می‌کند و هر فیلد را به
+پیاده‌سازی <code>TypeVisitable&lt;I&gt;</code> خود آن فیلد واگذار می‌کند.
+اگر visitor یک نتیجهٔ باقی‌مانده (residual) برگرداند، پیمایش می‌تواند زودتر متوقف شود.</p>
+<p>از <code>#[type_visitable(ignore)]</code> برای نادیده گرفتن یک فیلد استفاده کنید؛ آن فیلد بخشی از
+پیمایش نخواهد بود و نیازی به پیاده‌سازی <code>TypeVisitable&lt;I&gt;</code> نخواهد داشت.
+این را فقط وقتی باید به کار برد که فیلد نیازی به پیمایش ندارد.</p>
+<h3 id="trait-typefoldable-and-typefoldable_generic"><a class="header" href="#trait-typefoldable-and-typefoldable_generic"><code>trait TypeFoldable</code> و <code>TypeFoldable_Generic</code></a></h3>
+<p>این صفت توسط چیزهایی پیاده‌سازی می‌شود که باید نوع‌ها را در خود جای دهند.
+این مفهوم <a href="../ty-fold.html">در اینجا</a> به‌تفصیل بحث شده و می‌توان آن را
+<a href="https://github.com/rust-lang/rust/blob/0913b18e489ac1011b580e31fa5559654be12bfc/compiler/rustc_type_ir/src/fold.rs#L71">در سورس دنبال کرد</a>.</p>
+<p><code>TypeFoldable_Generic</code> برای یک struct یا enum صفت <code>rustc_type_ir::TypeFoldable&lt;I&gt;</code> را مشتق می‌کند.</p>
+<p>یک مقدار را مصرف می‌کند و پس از fold کردن فیلدهایش همان struct یا گونهٔ enum را بازسازی می‌کند.
+هم متدهای fold شکست‌پذیر و هم شکست‌ناپذیر تولید می‌کند.</p>
+<p>از <code>#[type_foldable(identity)]</code> برای فیلدی استفاده کنید که مقدارش باید بدون تغییر حفظ شود.
+ماکرو آن فیلد را مستقیماً به مقدار بازسازی‌شده منتقل می‌کند
+به‌جای اینکه آن را به folder بدهد.
+بنابراین نوع آن لازم نیست <code>TypeFoldable&lt;I&gt;</code> را پیاده‌سازی کند.</p>
+<p>برای یک enum، match تولیدشده به ازای هر گونه یک بازوی بازسازی دارد.</p>
+<h3 id="trait-lift-and-lift_generic"><a class="header" href="#trait-lift-and-lift_generic"><code>trait Lift</code> و <code>Lift_Generic</code></a></h3>
+<p>این صفت متدی به نام <code>lift_to_interner(...)</code> دارد.
+همان‌طور که نام نشان می‌دهد، باید چیزی را به interner «بالا ببرد (lift)».
+برای خواندن بیشتر دربارهٔ interner <a href="../memory.html">اینجا را ببینید</a> <a href="https://github.com/rust-lang/rust/blob/0913b18e489ac1011b580e31fa5559654be12bfc/compiler/rustc_type_ir/src/lift.rs#L18">و برای سورس اینجا</a>.</p>
+<p>ماکرو <code>Lift_Generic</code> برای یک struct یا enum صفت <code>Lift</code> را مشتق می‌کند، با سه ملاحظهٔ غیربدیهی:</p>
+<ol>
+<li>پارامترهای جنریک <code>I</code> و <code>J</code> رزرو شده‌اند: <code>I: Interner</code> و <code>J</code>
+interner‌ای است که چیزی به آن بالا برده می‌شود.</li>
+<li><code>PhantomData</code> به‌طور خودکار مدیریت می‌شود و یک <code>PhantomData</code> جدید می‌سازد.
+اما <em>باید</em> به شکل کاملاً بدون qualifier به کار رود – نمی‌توانید
+<code>std::marker::PhantomData</code> را مستقیماً در فیلد به کار ببرید.</li>
+<li>کران‌ها عمداً به‌صورت کران‌های نوع وابسته روی صفت <code>Interner</code>
+نوشته شده‌اند، نه به‌صورت بندهای <code>where</code> روی <code>LiftInto</code>.
+با داشتن فقط <code>I: LiftInto&lt;J&gt;</code>،
+Rust می‌تواند کران‌هایی مانند زیر را ضمنی بداند:</li>
+</ol>
+<pre><code class="language-rust">I::Ty: Lift&lt;J, Lifted = J::Ty&gt;
+I::Const: Lift&lt;J, Lifted = J::Const&gt;</code></pre>
+<p>این به <code>Lift_Generic</code> اجازه می‌دهد کران <code>I: LiftInto&lt;J&gt;</code> را صادر کند و در عین حال
+<code>lift_to_interner</code> را روی فیلدهایی از نوع <code>I::Ty</code>، <code>I::Const</code> و سایر
+نوع‌های وابستهٔ اعلام‌شده فراخوانی کند.
+همچنین تضمین می‌کند که هر فراخوانی
+نوع فیلد مقصد مورد انتظار را پس از بازنویسی <code>I::Assoc</code> به <code>J::Assoc</code> توسط derive تولید کند.</p>
+<p>بدون <code>declare_lift_into!</code>، derive باید برای هر نوع وابسته به interner که هر فیلد به کار می‌برد
+یک کران جداگانه تولید می‌کرد.
+اگر انتظار می‌رود یک نوع وابستهٔ جدید <code>Interner</code> با <code>Lift_Generic</code> کار کند، به یک پیاده‌سازی مناسب
+<code>Lift</code> نیاز دارد و معمولاً باید در فراخوانی <code>declare_lift_into!</code> گنجانده شود.</p>
+<p>اگر می‌خواهید فیلدی را نادیده بگیرید، مثلاً یک نوع اولیه مانند <code>u32</code> که نمی‌توان
+آن را lift کرد، می‌توانید آن فیلد را با <code>#[lift(ignore)]</code> رد کنید.</p>
+<h3 id="trait-generictypevisitable"><a class="header" href="#trait-generictypevisitable"><code>trait GenericTypeVisitable</code></a></h3>
+<p>این یک صفت پیمایش جداگانه و عمومی‌تر است که صرفاً توسط <code>rust-analyzer</code> به کار می‌رود.
+نوع visitor پارامتر صفت است نه پارامتر متد،
+و بازدید نه نتیجه‌ای برمی‌گرداند و نه از short-circuit پشتیبانی می‌کند.</p>
+<p>به همین دلیل یک struct یا enum می‌تواند هر دوی <code>TypeVisitable_Generic</code> و <code>GenericTypeVisitable</code> را مشتق کند</p>
+<p>عمداً هیچ attribute نادیده‌گیری وجود ندارد.
+پیمایش باید هر فیلد را بازدید کند.
+این یک الزام soundness برای استفادهٔ rust-analyzer از پیمایش است
+هنگام ردیابی و garbage-collect کردن نوع‌های interned.</p>
+<h2 id="long-term-plans-for-supporting-rust-analyzer"><a class="header" href="#long-term-plans-for-supporting-rust-analyzer">برنامه‌های بلندمدت برای پشتیبانی از rust-analyzer</a></h2>
+<p>به‌طور کلی، هدف ما این است که در این crateهای مشترک از rust-analyzer به همان خوبی rustc پشتیبانی کنیم—به شرطی
+که این کار به عملکرد یا نگه‌داشت‌پذیری rustc آسیب جدی نزند.
+(مثلاً <a href="https://github.com/rust-lang/rust/pull/145377">#145377</a>، <a href="https://github.com/rust-lang/rust/pull/146111">#146111</a>، <a href="https://github.com/rust-lang/rust/pull/146182">#146182</a> و <a href="https://github.com/rust-lang/rust/pull/147723">#147723</a>)</p>
+<p>crateهای مشترکی که به قابلیت‌های فقط-nightly نیاز دارند باید چنین کدی را پشت یک feature flag ‏<code>nightly</code>
+محافظت کنند، چون rust-analyzer با toolchain پایدار build می‌شود.</p>
+<p>در آینده قصد داریم منطق مشترک بیشتری را به <code>rustc_type_ir</code> ارتقا دهیم.
+هنوز پیاده‌سازی‌های تکراری میان rustc و rust-analyzer هست—مانند <code>ObligationCtxt</code>
+(<a href="https://github.com/rust-lang/rust/blob/63b1db05801271e400954e41b8600a3cf1482363/compiler/rustc_trait_selection/src/traits/engine.rs#L48-L386">rustc</a>, <a href="https://github.com/rust-lang/rust-analyzer/blob/34f47d9298c478c12c6c4c0348771d1b05706e09/crates/hir-ty/src/next_solver/obligation_ctxt.rs">rust-analyzer</a>) و منطق coercion نوع
+(<a href="https://github.com/rust-lang/rust/blob/63b1db05801271e400954e41b8600a3cf1482363/compiler/rustc_hir_typeck/src/coercion.rs">rustc</a>, <a href="https://github.com/rust-lang/rust-analyzer/blob/34f47d9298c478c12c6c4c0348771d1b05706e09/crates/hir-ty/src/infer/coerce.rs">rust-analyzer</a>)—که می‌خواهیم با گذشت زمان یکپارچه‌شان کنیم.</p><nav class="page-nav"><a href="significant-changes.html">→ تغییرات مهم و نکات عجیب</a><a href="../traits/unsize.html">صفت‌های Unsize و CoerceUnsized ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

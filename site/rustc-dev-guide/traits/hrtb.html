@@ -1,0 +1,94 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>کران‌های صفت مرتبهٔ بالاتر — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="traits/hrtb"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="higher-ranked-trait-bounds"><a class="header" href="#higher-ranked-trait-bounds">کران‌های صفت مرتبهٔ بالاتر</a></h1>
+<p>یکی از مفاهیم ظریف‌تر در تفکیک صفت (trait resolution)، <em>کران‌های صفت مرتبهٔ بالاتر (higher-ranked trait bounds)</em> است. نمونه‌ای از چنین کرانی <code>for&lt;'a&gt; MyTrait&lt;&amp;'a isize&gt;</code> است.
+بیایید ببینیم انتخاب (selection) روی ارجاع‌های صفت مرتبهٔ بالاتر چگونه کار می‌کند.</p>
+<h2 id="basic-matching-and-placeholder-leaks"><a class="header" href="#basic-matching-and-placeholder-leaks">تطبیق پایه و نشت Placeholder</a></h2>
+<p>فرض کنید صفتی به نام <code>Foo</code> داریم:</p>
+<pre><code class="language-rust">trait Foo&lt;X&gt; {
+    fn foo(&amp;self, x: X) { }
+}</code></pre>
+<p>فرض کنید تابعی به نام <code>want_hrtb</code> داریم که نوعی می‌خواهد که
+<code>Foo&lt;&amp;'a isize&gt;</code> را برای هر <code>'a</code> پیاده‌سازی کرده باشد:</p>
+<pre><code class="language-rust ignore">fn want_hrtb&lt;T&gt;() where T : for&lt;'a&gt; Foo&lt;&amp;'a isize&gt; { ... }</code></pre>
+<p>حال ساختاری به نام <code>AnyInt</code> داریم که
+<code>Foo&lt;&amp;'a isize&gt;</code> را برای هر <code>'a</code> پیاده‌سازی می‌کند:</p>
+<pre><code class="language-rust ignore">struct AnyInt;
+impl&lt;'a&gt; Foo&lt;&amp;'a isize&gt; for AnyInt { }</code></pre>
+<p>و پرسش این است که آیا <code>AnyInt : for&lt;'a&gt; Foo&lt;&amp;'a isize&gt;</code> برقرار است؟ می‌خواهیم
+پاسخ «بله» باشد. الگوریتم تشخیص آن ارتباط نزدیکی با زیرنوع‌سازی (subtyping)
+برای نوع‌های مرتبهٔ بالاتر دارد (که <a href="./hrtb.html">اینجا</a> توضیح داده شده
+و همچنین در <a href="https://www.microsoft.com/en-us/research/publication/practical-type-inference-for-arbitrary-rank-types">مقاله‌ای از SPJ</a> آمده است. اگر می‌خواهید زیرنوع‌سازی مرتبهٔ بالاتر را بفهمید، توصیه می‌کنیم آن مقاله را بخوانید). این الگوریتم چند بخش دارد:</p>
+<ol>
+<li>ناحیه‌های مقید (bound regions) در تعهد (obligation) را با placeholderها جایگزین کن.</li>
+<li>impl را با تعهدِ دارای <a href="../appendix/glossary.html#placeholder">placeholder</a> تطبیق بده.</li>
+<li>نشت placeholder (<em>placeholder leaks</em>) را بررسی کن.</li>
+</ol>
+<p>پس بیایید مثال خود را مرحله به مرحله پیش ببریم.</p>
+<ol>
+<li>
+<p>نخستین کاری که انجام می‌دهیم این است که
+ناحیهٔ مقید در تعهد را با یک placeholder جایگزین کنیم و
+<code>AnyInt : Foo&lt;&amp;'0 isize&gt;</code> به دست آوریم (در اینجا <code>'0</code> نمایندهٔ ناحیهٔ placeholder شمارهٔ ۰ است).
+توجه کنید که اکنون هیچ سور (quantifier) ای نداریم؛
+از نظر نوع‌های کامپایلر، این به معنای تغییر از <code>ty::PolyTraitRef</code>
+به <code>TraitRef</code> است. سپس <code>TraitRef</code> را از impl می‌سازیم
+و برای ناحیه‌های مقید آن از متغیرهای تازه استفاده می‌کنیم (و به این ترتیب
+<code>Foo&lt;&amp;'$a isize&gt;</code> به دست می‌آید، که در آن <code>'$a</code> متغیر استنتاج برای <code>'a</code> است).</p>
+</li>
+<li>
+<p>سپس
+این دو ارجاع صفت (trait ref) را به هم مرتبط می‌کنیم و گرافی با این قید
+به دست می‌آوریم که <code>'0 == '$a</code>.</p>
+</li>
+<li>
+<p>در نهایت، «نشت»‌های placeholder را بررسی می‌کنیم – نشت
+در اصل هر تلاشی است برای مرتبط‌کردن یک ناحیهٔ placeholder با ناحیهٔ placeholder دیگر،
+یا با هر ناحیه‌ای که پیش از تطبیق impl وجود داشته است.
+بررسی نشت (leak check) با جست‌وجو از ناحیهٔ placeholder انجام می‌شود تا
+مجموعهٔ ناحیه‌هایی که به هر نحو با آن مرتبط‌اند پیدا شود. این مجموعه
+«مجموعهٔ آلوده» (taint set) نام دارد. برای قبول‌شدن در بررسی، این مجموعه باید <em>صرفاً</em> از
+خود آن ناحیه و متغیرهای ناحیهٔ impl تشکیل شده باشد. اگر مجموعهٔ آلوده
+هر ناحیهٔ دیگری را شامل شود، تطبیق شکست می‌خورد. در این مورد، مجموعهٔ آلوده
+برای <code>'0</code> برابر <code>{'0, '$a}</code> است و بنابراین بررسی موفق می‌شود.</p>
+</li>
+</ol>
+<p>حال یک حالت شکست را بررسی کنیم. تصور کنید ساختار زیر را هم داریم</p>
+<pre><code class="language-rust ignore">struct StaticInt;
+impl Foo&lt;&amp;'static isize&gt; for StaticInt;</code></pre>
+<p>می‌خواهیم تعهد <code>StaticInt : for&lt;'a&gt; Foo&lt;&amp;'a isize&gt;</code> برآورده‌نشده
+در نظر گرفته شود. بررسی دقیقاً مانند قبل آغاز می‌شود. <code>'a</code>
+با یک placeholder به نام <code>'0</code> جایگزین می‌شود و ارجاع صفت impl به
+<code>Foo&lt;&amp;'static isize&gt;</code> نمونه‌سازی می‌شود. وقتی این دو را به هم مرتبط می‌کنیم، قیدی
+مانند <code>'static == '0</code> به دست می‌آید. این یعنی مجموعهٔ آلوده برای <code>'0</code> برابر <code>{'0, 'static}</code> است که در بررسی نشت رد می‌شود.</p>
+<p><strong>TODO</strong>: دلیلش این است که <code>'static</code> متغیر ناحیه نیست اما در
+مجموعهٔ آلوده است، درست است؟</p>
+<h2 id="higher-ranked-trait-obligations"><a class="header" href="#higher-ranked-trait-obligations">تعهدهای صفت مرتبهٔ بالاتر</a></h2>
+<p>پس از انجام تطبیق پایه، به موضوع جالب دیگری می‌رسیم:
+چگونه با تعهدهای impl برخورد کنیم. در اینجا یک مثال ساده را مرحله به مرحله بررسی می‌کنم.
+تصور کنید صفت‌های <code>Foo</code> و <code>Bar</code> و یک impl وابسته به آن‌ها داریم:</p>
+<pre><code class="language-rust">trait Foo&lt;X&gt; {
+    fn foo(&amp;self, x: X) { }
+}
+
+trait Bar&lt;X&gt; {
+    fn bar(&amp;self, x: X) { }
+}
+
+impl&lt;X,F&gt; Foo&lt;X&gt; for F
+    where F : Bar&lt;X&gt;
+{
+}</code></pre>
+<p>حال فرض کنید تعهد <code>Baz: for&lt;'a&gt; Foo&lt;&amp;'a isize&gt;</code> را داریم و این
+impl را با آن تطبیق می‌دهیم. در نتیجه چه تعهدی تولید می‌شود؟ می‌خواهیم
+<code>Baz: for&lt;'a&gt; Bar&lt;&amp;'a isize&gt;</code> را به دست آوریم، اما این چگونه رخ می‌دهد؟</p>
+<p>پس از تطبیق، در وضعیتی هستیم که یک جانشینی placeholder مانند <code>X =&gt; &amp;'0 isize</code>
+داریم. اگر این جانشینی را روی تعهدهای impl اعمال کنیم، <code>F : Bar&lt;&amp;'0 isize&gt;</code> به دست می‌آید.
+بدیهی است که این مستقیماً قابل استفاده نیست، زیرا ناحیهٔ placeholder به نام <code>'0</code> نباید
+از محاسبهٔ ما بیرون نشت کند.</p>
+<p>کاری که می‌کنیم این است که یک نگاشت معکوس از مجموعهٔ آلودهٔ <code>'0</code>
+به ناحیهٔ مقید اصلی (که در اینجا <code>'a</code> است) که <code>'0</code> از آن پدید آمده بود، می‌سازیم.
+(این کار در <code>higher_ranked::plug_leaks</code> انجام می‌شود.) می‌دانیم که
+بررسی نشت موفق بوده است، پس این مجموعهٔ آلوده صرفاً از خود ناحیهٔ placeholder
+به‌علاوهٔ چند متغیر ناحیهٔ میانی تشکیل شده است. سپس
+ارجاع صفت را پیمایش می‌کنیم و هر ناحیه در آن مجموعهٔ آلوده را دوباره به
+یک ناحیهٔ late-bound تبدیل می‌کنیم، به‌طوری که در این مورد به
+<code>Baz: for&lt;'a&gt; Bar&lt;&amp;'a isize&gt;</code> می‌رسیم.</p><nav class="page-nav"><a href="resolution.html">→ حل صفت</a><a href="caching.html">ظرافت‌های کش‌کردن ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

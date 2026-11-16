@@ -1,0 +1,227 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>تقسیم قرض‌ها — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="borrow-splitting"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="splitting-borrows"><a class="header" href="#splitting-borrows">تقسیم قرض‌ها (Splitting Borrows)</a></h1>
+<p>ویژگی انحصار متقابل ارجاع‌های تغییرپذیر هنگام کار با یک ساختار مرکب می‌تواند بسیار محدودکننده باشد. بررسی‌گر قرض (borrow checker، به اختصار borrowck) چند چیز پایه را می‌فهمد، اما خیلی راحت از کار می‌افتد. این بررسی‌گر ساختارها را به اندازه‌ی کافی می‌فهمد تا بداند می‌توان فیلدهای مجزای یک ساختار را هم‌زمان قرض گرفت. بنابراین این کد امروز کار می‌کند:</p>
+<pre><code class="language-rust">struct Foo {
+    a: i32,
+    b: i32,
+    c: i32,
+}
+
+let mut x = Foo {a: 0, b: 0, c: 0};
+let a = &amp;mut x.a;
+let b = &amp;mut x.b;
+let c = &amp;x.c;
+*b += 1;
+let c2 = &amp;x.c;
+*a += 10;
+println!("{} {} {} {}", a, b, c, c2);</code></pre>
+<p>اما borrowck آرایه‌ها یا slice ها را به هیچ شکلی نمی‌فهمد، بنابراین این کد کار نمی‌کند:</p>
+<pre><code class="language-rust compile_fail">let mut x = [1, 2, 3];
+let a = &amp;mut x[0];
+let b = &amp;mut x[1];
+println!("{} {}", a, b);</code></pre>
+<pre><code class="language-text">error[E0499]: cannot borrow `x[..]` as mutable more than once at a time
+ --&gt; src/lib.rs:4:18
+  |
+3 |     let a = &amp;mut x[0];
+  |                  ---- first mutable borrow occurs here
+4 |     let b = &amp;mut x[1];
+  |                  ^^^^ second mutable borrow occurs here
+5 |     println!("{} {}", a, b);
+6 | }
+  | - first borrow ends here
+
+error: aborting due to previous error
+</code></pre>
+<p>هرچند معقول بود که borrowck بتواند این حالت ساده را بفهمد، اما روشن است که امید بستن به اینکه borrowck در نوع‌های کانتینر عمومی مانند درخت، مجزا بودن را تشخیص دهد بی‌فایده است، به‌ویژه اگر کلیدهای متفاوت واقعاً <em>به</em> یک مقدار نگاشت شوند.</p>
+<p>برای اینکه به borrowck «یاد بدهیم» کاری که می‌کنیم درست است، باید به کد unsafe پایین بیاییم. برای مثال، slice های تغییرپذیر تابعی به نام <code>split_at_mut</code> عرضه می‌کنند که slice را مصرف می‌کند و دو slice تغییرپذیر برمی‌گرداند. یکی برای هر چیز سمت چپ اندیس، و دیگری برای هر چیز سمت راست آن. به‌طور شهودی می‌دانیم این کار امن است چون slice ها هم‌پوشانی ندارند و بنابراین alias نیستند. با این حال پیاده‌سازی آن به مقداری ناامنی (unsafety) نیاز دارد:</p>
+<pre><code class="language-rust"><span class="boring">use std::slice::from_raw_parts_mut;
+</span><span class="boring">struct FakeSlice&lt;T&gt;(T);
+</span><span class="boring">impl&lt;T&gt; FakeSlice&lt;T&gt; {
+</span><span class="boring">fn len(&amp;self) -&gt; usize { unimplemented!() }
+</span><span class="boring">fn as_mut_ptr(&amp;mut self) -&gt; *mut T { unimplemented!() }
+</span>pub fn split_at_mut(&amp;mut self, mid: usize) -&gt; (&amp;mut [T], &amp;mut [T]) {
+    let len = self.len();
+    let ptr = self.as_mut_ptr();
+
+    unsafe {
+        assert!(mid &lt;= len);
+
+        (from_raw_parts_mut(ptr, mid),
+         from_raw_parts_mut(ptr.add(mid), len - mid))
+    }
+}
+<span class="boring">}</span></code></pre>
+<p>این در واقع کمی ظریف است. برای اینکه هرگز دو <code>&amp;mut</code> به یک مقدار نسازیم، صراحتاً slice های کاملاً جدیدی را از طریق اشاره‌گرهای خام می‌سازیم.</p>
+<p>اما ظریف‌تر از آن، نحوه‌ی کار iterator هایی است که ارجاع‌های تغییرپذیر تولید می‌کنند. صفت Iterator به شکل زیر تعریف شده است:</p>
+<pre><code class="language-rust">trait Iterator {
+    type Item;
+
+    fn next(&amp;mut self) -&gt; Option&lt;Self::Item&gt;;
+}</code></pre>
+<p>با این تعریف، Self::Item هیچ ارتباطی با <code>self</code> ندارد. این یعنی می‌توانیم <code>next</code> را چندین بار پشت سر هم صدا بزنیم و همه‌ی نتایج را <em>هم‌زمان</em> نگه داریم. این برای iterator های by-value که دقیقاً چنین معناشناسی‌ای دارند کاملاً مشکلی ندارد. برای ارجاع‌های اشتراکی هم در واقع مشکلی نیست، چون آن‌ها تعداد دلخواهی ارجاع به یک چیز را می‌پذیرند (هرچند iterator باید شیئی جدا از چیزی باشد که به اشتراک گذاشته می‌شود).</p>
+<p>اما ارجاع‌های تغییرپذیر این را به هم می‌ریزند. در نگاه اول ممکن است کاملاً با این API ناسازگار به نظر برسند، زیرا چندین ارجاع تغییرپذیر به یک شیء تولید می‌کند!</p>
+<p>با این حال در واقع <em>کار می‌کند</em>، دقیقاً به این دلیل که iterator ها اشیای یک‌بارمصرف هستند. هر چیزی که یک IterMut تولید کند حداکثر یک بار تولید می‌شود، بنابراین در عمل هرگز چندین ارجاع تغییرپذیر به یک تکه داده تولید نمی‌کنیم.</p>
+<p>شاید جالب باشد که iterator های تغییرپذیر برای بسیاری از نوع‌ها برای پیاده‌سازی نیازی به کد unsafe ندارند!</p>
+<p>برای مثال، این یک لیست پیوندی یک‌طرفه است:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {}
+</span>type Link&lt;T&gt; = Option&lt;Box&lt;Node&lt;T&gt;&gt;&gt;;
+
+struct Node&lt;T&gt; {
+    elem: T,
+    next: Link&lt;T&gt;,
+}
+
+pub struct LinkedList&lt;T&gt; {
+    head: Link&lt;T&gt;,
+}
+
+pub struct IterMut&lt;'a, T: 'a&gt;(Option&lt;&amp;'a mut Node&lt;T&gt;&gt;);
+
+impl&lt;T&gt; LinkedList&lt;T&gt; {
+    fn iter_mut(&amp;mut self) -&gt; IterMut&lt;T&gt; {
+        IterMut(self.head.as_mut().map(|node| &amp;mut **node))
+    }
+}
+
+impl&lt;'a, T&gt; Iterator for IterMut&lt;'a, T&gt; {
+    type Item = &amp;'a mut T;
+
+    fn next(&amp;mut self) -&gt; Option&lt;Self::Item&gt; {
+        self.0.take().map(|node| {
+            self.0 = node.next.as_mut().map(|node| &amp;mut **node);
+            &amp;mut node.elem
+        })
+    }
+}</code></pre>
+<p>این هم یک slice تغییرپذیر:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {}
+</span>use std::mem;
+
+pub struct IterMut&lt;'a, T: 'a&gt;(&amp;'a mut[T]);
+
+impl&lt;'a, T&gt; Iterator for IterMut&lt;'a, T&gt; {
+    type Item = &amp;'a mut T;
+
+    fn next(&amp;mut self) -&gt; Option&lt;Self::Item&gt; {
+        let slice = mem::take(&amp;mut self.0);
+        if slice.is_empty() { return None; }
+
+        let (l, r) = slice.split_at_mut(1);
+        self.0 = r;
+        l.get_mut(0)
+    }
+}
+
+impl&lt;'a, T&gt; DoubleEndedIterator for IterMut&lt;'a, T&gt; {
+    fn next_back(&amp;mut self) -&gt; Option&lt;Self::Item&gt; {
+        let slice = mem::take(&amp;mut self.0);
+        if slice.is_empty() { return None; }
+
+        let new_len = slice.len() - 1;
+        let (l, r) = slice.split_at_mut(new_len);
+        self.0 = l;
+        r.get_mut(0)
+    }
+}</code></pre>
+<p>و این هم یک درخت دودویی:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {}
+</span>use std::collections::VecDeque;
+
+type Link&lt;T&gt; = Option&lt;Box&lt;Node&lt;T&gt;&gt;&gt;;
+
+struct Node&lt;T&gt; {
+    elem: T,
+    left: Link&lt;T&gt;,
+    right: Link&lt;T&gt;,
+}
+
+pub struct Tree&lt;T&gt; {
+    root: Link&lt;T&gt;,
+}
+
+struct NodeIterMut&lt;'a, T: 'a&gt; {
+    elem: Option&lt;&amp;'a mut T&gt;,
+    left: Option&lt;&amp;'a mut Node&lt;T&gt;&gt;,
+    right: Option&lt;&amp;'a mut Node&lt;T&gt;&gt;,
+}
+
+enum State&lt;'a, T: 'a&gt; {
+    Elem(&amp;'a mut T),
+    Node(&amp;'a mut Node&lt;T&gt;),
+}
+
+pub struct IterMut&lt;'a, T: 'a&gt;(VecDeque&lt;NodeIterMut&lt;'a, T&gt;&gt;);
+
+impl&lt;T&gt; Tree&lt;T&gt; {
+    pub fn iter_mut(&amp;mut self) -&gt; IterMut&lt;T&gt; {
+        let mut deque = VecDeque::new();
+        if let Some(root) = self.root.as_mut() {
+            deque.push_front(root.iter_mut());
+        }
+        IterMut(deque)
+    }
+}
+
+impl&lt;T&gt; Node&lt;T&gt; {
+    pub fn iter_mut(&amp;mut self) -&gt; NodeIterMut&lt;T&gt; {
+        NodeIterMut {
+            elem: Some(&amp;mut self.elem),
+            left: self.left.as_deref_mut(),
+            right: self.right.as_deref_mut(),
+        }
+    }
+}
+
+impl&lt;'a, T&gt; Iterator for NodeIterMut&lt;'a, T&gt; {
+    type Item = State&lt;'a, T&gt;;
+
+    fn next(&amp;mut self) -&gt; Option&lt;Self::Item&gt; {
+        self.left.take().map(State::Node).or_else(|| {
+            self.elem
+                .take()
+                .map(State::Elem)
+                .or_else(|| self.right.take().map(State::Node))
+        })
+    }
+}
+
+impl&lt;'a, T&gt; DoubleEndedIterator for NodeIterMut&lt;'a, T&gt; {
+    fn next_back(&amp;mut self) -&gt; Option&lt;Self::Item&gt; {
+        self.right.take().map(State::Node).or_else(|| {
+            self.elem
+                .take()
+                .map(State::Elem)
+                .or_else(|| self.left.take().map(State::Node))
+        })
+    }
+}
+
+impl&lt;'a, T&gt; Iterator for IterMut&lt;'a, T&gt; {
+    type Item = &amp;'a mut T;
+    fn next(&amp;mut self) -&gt; Option&lt;Self::Item&gt; {
+        loop {
+            match self.0.front_mut().and_then(Iterator::next) {
+                Some(State::Elem(elem)) =&gt; return Some(elem),
+                Some(State::Node(node)) =&gt; self.0.push_front(node.iter_mut()),
+                None =&gt; {
+                    self.0.pop_front()?;
+                }
+            }
+        }
+    }
+}
+
+impl&lt;'a, T&gt; DoubleEndedIterator for IterMut&lt;'a, T&gt; {
+    fn next_back(&amp;mut self) -&gt; Option&lt;Self::Item&gt; {
+        loop {
+            match self.0.back_mut().and_then(DoubleEndedIterator::next_back) {
+                Some(State::Elem(elem)) =&gt; return Some(elem),
+                Some(State::Node(node)) =&gt; self.0.push_back(node.iter_mut()),
+                None =&gt; {
+                    self.0.pop_back()?;
+                }
+            }
+        }
+    }
+}</code></pre>
+<p>همه‌ی این‌ها کاملاً امن هستند و روی Rust پایدار (stable) کار می‌کنند! این در نهایت از همان حالت ساده‌ی ساختار که پیش‌تر دیدیم نتیجه می‌شود: Rust می‌فهمد که می‌توانید یک ارجاع تغییرپذیر را با امنیت به زیرفیلدها تقسیم کنید. سپس می‌توانیم مصرف دائمی یک ارجاع را از طریق Option ها کدگذاری کنیم (یا در مورد slice ها، با جایگزین کردن آن با یک slice خالی).</p><nav class="page-nav"><a href="phantom-data.html">→ PhantomData</a><a href="conversions.html">تبدیل نوع‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

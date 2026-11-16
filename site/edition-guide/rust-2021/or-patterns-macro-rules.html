@@ -1,0 +1,41 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>الگوهای or در macro-rules — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2021/or-patterns-macro-rules"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="or-patterns-in-macro-rules"><a class="header" href="#or-patterns-in-macro-rules">الگوهای or در macro-rules</a></h1>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<ul>
+<li>نحوهٔ کار الگوها در ماکروهای <code>macro_rules</code> اندکی تغییر می‌کند:
+<ul>
+<li><code>$_:pat</code> در <code>macro_rules</code> اکنون با استفاده از <code>|</code> نیز مطابقت پیدا می‌کند؛ مثلاً <code>A | B</code>.</li>
+<li><code>$_:pat_param</code> جدید مانند <code>$_:pat</code> پیشین رفتار می‌کند؛ یعنی با <code>|</code> (در سطح بالا) مطابقت پیدا نمی‌کند.</li>
+<li><code>$_:pat_param</code> در همهٔ ویرایش‌ها در دسترس است.</li>
+</ul>
+</li>
+</ul>
+<h2 id="details"><a class="header" href="#details">جزئیات</a></h2>
+<p>از Rust 1.53.0 به بعد، <a href="../../reference/patterns.html">الگوها</a> گسترش یافته‌اند تا از <code>|</code> در هر جایی از درون الگو پشتیبانی کنند. این کار به شما امکان می‌دهد به‌جای <code>Some(1) | Some(2)</code> بنویسید <code>Some(1 | 2)</code>. از آنجا که این کار پیش‌تر به‌سادگی مجاز نبود، این یک تغییر ناسازگار نیست.</p>
+<p>با این حال، این تغییر بر <a href="../../reference/macros-by-example.html">ماکروهای <code>macro_rules</code></a> نیز تأثیر می‌گذارد. چنین ماکروهایی می‌توانند با استفاده از مشخص‌کنندهٔ قطعهٔ <code>:pat</code> الگوها را بپذیرند. در حال حاضر، <code>:pat</code> با <code>|</code> در سطح بالا مطابقت پیدا <em>نمی‌کند</em>، زیرا پیش از Rust 1.53 همهٔ الگوها (در همهٔ سطوح تودرتو) نمی‌توانستند شامل <code>|</code> باشند. ماکروهایی که الگوهایی مانند <code>A | B</code> را می‌پذیرند، مانند <a href="https://doc.rust-lang.org/1.51.0/std/macro.matches.html"><code>matches!()</code></a>، از چیزی شبیه <code>$($_:pat)|+</code> استفاده می‌کنند.</p>
+<p>چون این کار می‌توانست ماکروهای موجود را خراب کند، معنای <code>:pat</code> در Rust 1.53.0 برای شمول <code>|</code> تغییر نکرد. در عوض، این تغییر در Rust 2021 رخ می‌دهد. در ویرایش جدید، مشخص‌کنندهٔ قطعهٔ <code>:pat</code> <em>با</em> <code>A | B</code> مطابقت پیدا خواهد کرد.</p>
+<p>قطعه‌های <code>$_:pat</code> در Rust 2021 نمی‌توانند بلافاصله با یک <code>|</code> صریح دنبال شوند. از آنجا که گاهی هنوز می‌خواهیم قطعه‌های الگو را که با <code>|</code> دنبال می‌شوند مطابقت دهیم، مشخص‌کنندهٔ قطعهٔ <code>:pat_param</code> اضافه شده است تا رفتار قدیمی‌تر حفظ شود.</p>
+<p>مهم است به یاد داشته باشید که ویرایش‌ها <em>برای هر crate</em> تعیین می‌شوند، بنابراین تنها ویرایش مرتبط، ویرایش همان crate است که ماکرو در آن تعریف شده است. ویرایش crate که ماکرو در آن استفاده می‌شود بر نحوهٔ کار ماکرو تأثیری ندارد.</p>
+<h2 id="migration"><a class="header" href="#migration">مهاجرت</a></h2>
+<p>یک lint با نام <code>rust_2021_incompatible_or_patterns</code> هر زمان که استفاده‌ای از <code>$_:pat</code> وجود داشته باشد که در Rust 2021 معنایش تغییر می‌کند فعال می‌شود.</p>
+<p>می‌توانید کد خود را به‌طور خودکار طوری مهاجرت دهید که با ویرایش Rust 2021 سازگار شود، یا مطمئن شوید که از قبل سازگار است، با اجرای:</p>
+<pre><code class="language-sh">cargo fix --edition
+</code></pre>
+<p>اگر ماکرویی دارید که به مطابقت نداشتن <code>$_:pat</code> با استفادهٔ سطح بالای <code>|</code> در الگوها وابسته است، باید هر وقوع <code>$_:pat</code> را به <code>$_:pat_param</code> تغییر دهید.</p>
+<p>برای مثال:</p>
+<pre><code class="language-rust">macro_rules! my_macro { 
+	($x:pat | $y:pat) =&gt; {
+		// TODO: implementation
+	} 
+}
+
+// This macro works in Rust 2018 since `$x:pat` does not match against `|`:
+my_macro!(1 | 2);
+
+// In Rust 2021 however, the `$_:pat` fragment matches `|` and is not allowed
+// to be followed by a `|`. To make sure this macro still works in Rust 2021
+// change the macro to the following:
+macro_rules! my_macro { 
+	($x:pat_param | $y:pat) =&gt; { // &lt;- this line is different
+		// TODO: implementation
+	} 
+}</code></pre><nav class="page-nav"><a href="warnings-promoted-to-error.html">→ هشدارهایی که به خطا ارتقا یافتند</a><a href="c-string-literals.html">لیترال‌های رشتهٔ C ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

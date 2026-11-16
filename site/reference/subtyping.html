@@ -1,0 +1,120 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>زیرنوع‌سازی و واریانس (Subtyping and variance) — مرجع زبان Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="subtyping"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="introduction.html" style="color:inherit;text-decoration:none">مرجع زبان Rust</a><small class="en-title" dir="ltr">The Rust Reference</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><div class="rule" id="r-subtype"><a class="rule-link" href="#r-subtype" title="subtype"><span>[subtype]</span></a>
+</div>
+
+<h1 id="subtyping-and-variance"><a class="header" href="#subtyping-and-variance">زیرنوع‌سازی و واریانس</a></h1>
+<div class="rule" id="r-subtype.intro"><a class="rule-link" href="#r-subtype.intro" title="subtype.intro"><span>[subtype<wbr>.intro]</span></a>
+</div>
+
+<p>زیرنوع‌سازی ضمنی است و می‌تواند در هر مرحله‌ای از بررسی یا استنتاج نوع رخ دهد.</p>
+<div class="rule" id="r-subtype.kinds"><a class="rule-link" href="#r-subtype.kinds" title="subtype.kinds"><span>[subtype<wbr>.kinds]</span></a>
+</div>
+
+<p>زیرنوع‌سازی به دو حالت محدود می‌شود: واریانس نسبت به طول‌عمرها، و رابطهٔ میان نوع‌هایی با طول‌عمرهای رتبه‌بالاتر. اگر طول‌عمرها را از نوع‌ها حذف کنیم، تنها زیرنوع‌سازی باقی‌مانده از برابری نوع‌ها ناشی خواهد شد.</p>
+<p>مثال زیر را در نظر بگیرید: لفظ‌های رشته‌ای همیشه طول‌عمر <code>'static</code> دارند. بااین‌حال می‌توانیم <code>s</code> را به <code>t</code> نسبت دهیم:</p>
+<pre><code class="language-rust">fn bar&lt;'a&gt;() {
+    let s: &amp;'static str = "hi";
+    let t: &amp;'a str = s;
+}</code></pre>
+<p>چون <code>'static</code> بیشتر از پارامتر طول‌عمر <code>'a</code> عمر می‌کند، <code>&amp;'static str</code> زیرنوع <code>&amp;'a str</code> است.</p>
+<div class="rule" id="r-subtype.higher-ranked"><a class="rule-link" href="#r-subtype.higher-ranked" title="subtype.higher-ranked"><span>[subtype<wbr>.higher-ranked]</span></a>
+</div>
+
+<p><a href="types/function-pointer.html">اشاره‌گرهای تابع</a> و <a href="types/trait-object.html">شیءهای trait</a> <a href="../nomicon/hrtb.html">رتبه‌بالاتر</a> رابطهٔ زیرنوع دیگری نیز دارند. آن‌ها زیرنوعِ نوع‌هایی هستند که با جایگزینی طول عمرهای رتبه‌بالاتر به‌دست می‌آیند. چند نمونه:</p>
+<pre><code class="language-rust">// Here 'a is substituted for 'static
+let subtype: &amp;(for&lt;'a&gt; fn(&amp;'a i32) -&gt; &amp;'a i32) = &amp;((|x| x) as fn(&amp;_) -&gt; &amp;_);
+let supertype: &amp;(fn(&amp;'static i32) -&gt; &amp;'static i32) = subtype;
+
+// This works similarly for trait objects
+let subtype: &amp;(dyn for&lt;'a&gt; Fn(&amp;'a i32) -&gt; &amp;'a i32) = &amp;|x| x;
+let supertype: &amp;(dyn Fn(&amp;'static i32) -&gt; &amp;'static i32) = subtype;
+
+// We can also substitute one higher-ranked lifetime for another
+let subtype: &amp;(for&lt;'a, 'b&gt; fn(&amp;'a i32, &amp;'b i32)) = &amp;((|x, y| {}) as fn(&amp;_, &amp;_));
+let supertype: &amp;for&lt;'c&gt; fn(&amp;'c i32, &amp;'c i32) = subtype;</code></pre>
+<div class="rule" id="r-subtyping.variance"><a class="rule-link" href="#r-subtyping.variance" title="subtyping.variance"><span>[subtyping<wbr>.variance]</span></a>
+</div>
+
+<h2 id="variance"><a class="header" href="#variance">واریانس</a></h2>
+<div class="rule" id="r-subtyping.variance.intro"><a class="rule-link" href="#r-subtyping.variance.intro" title="subtyping.variance.intro"><span>[subtyping<wbr>.variance<wbr>.intro]</span></a>
+</div>
+
+<p>واریانس ویژگی نوع‌های عمومی نسبت به آرگومان‌هایشان است. <em>واریانس</em> یک نوع عمومی در یک پارامتر نشان می‌دهد زیرنوع‌سازی آن پارامتر چگونه بر زیرنوع‌سازی خود نوع اثر می‌گذارد.</p>
+<div class="rule" id="r-subtyping.variance.covariant"><a class="rule-link" href="#r-subtyping.variance.covariant" title="subtyping.variance.covariant"><span>[subtyping<wbr>.variance<wbr>.covariant]</span></a>
+</div>
+
+<ul>
+<li><code>F&lt;T&gt;</code> نسبت به <code>T</code> <em>هم‌وردا</em> است اگر زیرنوع <code>U</code> بودن <code>T</code> به این معنا باشد که <code>F&lt;T&gt;</code> نیز زیرنوع <code>F&lt;U&gt;</code> است (زیرنوع‌سازی «عبور می‌کند»).</li>
+</ul>
+<div class="rule" id="r-subtyping.variance.contravariant"><a class="rule-link" href="#r-subtyping.variance.contravariant" title="subtyping.variance.contravariant"><span>[subtyping<wbr>.variance<wbr>.contravariant]</span></a>
+</div>
+
+<ul>
+<li><code>F&lt;T&gt;</code> نسبت به <code>T</code> <em>پادوردا</em> است اگر زیرنوع <code>U</code> بودن <code>T</code> به این معنا باشد که <code>F&lt;U&gt;</code> زیرنوع <code>F&lt;T&gt;</code> است.</li>
+</ul>
+<div class="rule" id="r-subtyping.variance.invariant"><a class="rule-link" href="#r-subtyping.variance.invariant" title="subtyping.variance.invariant"><span>[subtyping<wbr>.variance<wbr>.invariant]</span></a>
+</div>
+
+<ul>
+<li>در غیر این صورت <code>F&lt;T&gt;</code> نسبت به <code>T</code> <em>ناوردا</em> است (هیچ رابطهٔ زیرنوعی نمی‌توان نتیجه گرفت).</li>
+</ul>
+<div class="rule" id="r-subtyping.variance.builtin-types"><a class="rule-link" href="#r-subtyping.variance.builtin-types" title="subtyping.variance.builtin-types"><span>[subtyping<wbr>.variance<wbr>.builtin-types]</span></a>
+</div>
+
+<p>واریانس نوع‌ها به‌طور خودکار به‌شکل زیر تعیین می‌شود:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>نوع</th><th>واریانس در <code>'a</code></th><th>واریانس در <code>T</code></th></tr>
+</thead>
+<tbody>
+<tr><td><code>&amp;'a T</code></td><td>هم‌وردا</td><td>هم‌وردا</td></tr>
+<tr><td><code>&amp;'a mut T</code></td><td>هم‌وردا</td><td>ناوردا</td></tr>
+<tr><td><code>*const T</code></td><td></td><td>هم‌وردا</td></tr>
+<tr><td><code>*mut T</code></td><td></td><td>ناوردا</td></tr>
+<tr><td><code>[T]</code> و <code>[T; n]</code></td><td></td><td>هم‌وردا</td></tr>
+<tr><td><code>fn() -&gt; T</code></td><td></td><td>هم‌وردا</td></tr>
+<tr><td><code>fn(T) -&gt; ()</code></td><td></td><td>پادوردا</td></tr>
+<tr><td><code>std::cell::UnsafeCell&lt;T&gt;</code></td><td></td><td>ناوردا</td></tr>
+<tr><td><code>std::marker::PhantomData&lt;T&gt;</code></td><td></td><td>هم‌وردا</td></tr>
+<tr><td><code>dyn Trait&lt;T&gt; + 'a</code></td><td>هم‌وردا</td><td>ناوردا</td></tr>
+</tbody>
+</table>
+</div>
+<div class="rule" id="r-subtyping.variance.user-composite-types"><a class="rule-link" href="#r-subtyping.variance.user-composite-types" title="subtyping.variance.user-composite-types"><span>[subtyping<wbr>.variance<wbr>.user-composite-types]</span></a>
+</div>
+
+<p>واریانس دیگر نوع‌های <code>struct</code>، ‏<code>enum</code> و <code>union</code> با بررسی واریانس نوع فیلدهایشان تعیین می‌شود. اگر پارامتر در موقعیت‌هایی با واریانس متفاوت به‌کار رود، آن پارامتر ناورداست. برای مثال، ساختار زیر در <code>'a</code> و <code>T</code> هم‌وردا و در <code>'b</code>، ‏<code>'c</code> و <code>U</code> ناورداست.</p>
+<pre><code class="language-rust">use std::cell::UnsafeCell;
+struct Variance&lt;'a, 'b, 'c, T, U: 'a&gt; {
+    x: &amp;'a U,               // This makes `Variance` covariant in 'a, and would
+                            // make it covariant in U, but U is used later
+    y: *const T,            // Covariant in T
+    z: UnsafeCell&lt;&amp;'b f64&gt;, // Invariant in 'b
+    w: *mut U,              // Invariant in U, makes the whole struct invariant
+
+    f: fn(&amp;'c ()) -&gt; &amp;'c () // Both co- and contravariant, makes 'c invariant
+                            // in the struct.
+}</code></pre>
+<div class="rule" id="r-subtyping.variance.builtin-composite-types"><a class="rule-link" href="#r-subtyping.variance.builtin-composite-types" title="subtyping.variance.builtin-composite-types"><span>[subtyping<wbr>.variance<wbr>.builtin-composite-types]</span></a>
+</div>
+
+<p>هنگامی که پارامترها بیرون از یک <code>struct</code>، ‏<code>enum</code> یا <code>union</code> به‌کار می‌روند، واریانس آن‌ها در هر محل به‌طور جداگانه بررسی می‌شود.</p>
+<pre><code class="language-rust"><span class="boring">use std::cell::UnsafeCell;
+</span>fn generic_tuple&lt;'short, 'long: 'short&gt;(
+    // 'long is used inside of a tuple in both a co- and invariant position.
+    x: (&amp;'long u32, UnsafeCell&lt;&amp;'long u32&gt;),
+) {
+    // As the variance at these positions is computed separately,
+    // we can freely shrink 'long in the covariant position.
+    let _: (&amp;'short u32, UnsafeCell&lt;&amp;'long u32&gt;) = x;
+}
+
+fn takes_fn_ptr&lt;'short, 'middle: 'short&gt;(
+    // 'middle is used in both a co- and contravariant position.
+    f: fn(&amp;'middle ()) -&gt; &amp;'middle (),
+) {
+    // As the variance at these positions is computed separately,
+    // we can freely shrink 'middle in the covariant position
+    // and extend it in the contravariant position.
+    let _: fn(&amp;'static ()) -&gt; &amp;'short () = f;
+}</code></pre><nav class="page-nav"><a href="interior-mutability.html">→ تغییرپذیری درونی (Interior mutability)</a><a href="trait-bounds.html">کران‌های صفت و طول‌عمر (Trait and lifetime bounds) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../reference/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

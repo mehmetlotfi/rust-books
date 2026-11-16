@@ -1,0 +1,111 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>ADTها و آرگومان‌های جنریک — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="ty-module/generic-arguments"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="adts-and-generic-arguments"><a class="header" href="#adts-and-generic-arguments">ADTها و آرگومان‌های جنریک</a></h1>
+<p>اصطلاح <code>ADT</code> مخفف «نوع داده جبری» (Algebraic data type) است؛ در Rust به struct، enum یا union اشاره می‌کند.</p>
+<h2 id="adts-representation"><a class="header" href="#adts-representation">نمایش ADTها</a></h2>
+<p>نوعی مانند <code>MyStruct&lt;u32&gt;</code> را در نظر بگیرید که در آن <code>MyStruct</code> این‌گونه تعریف شده است:</p>
+<pre><code class="language-rust ignore">struct MyStruct&lt;T&gt; { x: u8, y: T }</code></pre>
+<p>نوع <code>MyStruct&lt;u32&gt;</code> نمونه‌ای از <code>TyKind::Adt</code> خواهد بود:</p>
+<pre><code class="language-rust ignore">Adt(&amp;'tcx AdtDef, GenericArgs&lt;'tcx&gt;)
+//  ------------  ---------------
+//  (1)            (2)
+//
+// (1) represents the `MyStruct` part
+// (2) represents the `&lt;u32&gt;`, or "substitutions" / generic arguments</code></pre>
+<p>دو بخش وجود دارد:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.AdtDef.html"><code>AdtDef</code></a> به struct/enum/union اشاره می‌کند، اما بدون مقادیر پارامترهای نوع آن.
+در مثال ما این همان بخش <code>MyStruct</code> <em>بدون</em> آرگومان <code>u32</code> است.
+(توجه کنید که در HIR، structها، enumها و unionها به‌طور متفاوتی نمایش داده می‌شوند، اما در <code>ty::Ty</code>
+همه با <code>TyKind::Adt</code> نمایش داده می‌شوند.)</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.GenericArgs.html"><code>GenericArgs</code></a> فهرستی از مقادیر است که قرار است به‌جای
+پارامترهای جنریک جایگزین شوند.
+در مثال ما با <code>MyStruct&lt;u32&gt;</code>، به فهرستی مانند <code>[u32]</code> می‌رسیم.
+کمی بعد بیشتر به جنریک‌ها و جایگزینی‌ها خواهیم پرداخت.</li>
+</ul>
+<h3 id="adtdef-and-defid"><a class="header" href="#adtdef-and-defid"><strong><code>AdtDef</code> و <code>DefId</code></strong></a></h3>
+<p>برای هر نوعی که در کد منبع تعریف شده است یک <code>DefId</code> یکتا وجود دارد (<a href="../hir.html#identifiers-in-the-hir">این
+فصل</a> را ببینید).
+این شامل ADTها و جنریک‌ها هم می‌شود.
+در تعریف <code>MyStruct&lt;T&gt;</code> که در بالا آوردیم
+دو <code>DefId</code> وجود دارد: یکی برای <code>MyStruct</code> و یکی برای <code>T</code>.
+توجه کنید که کد بالا یک <code>DefId</code> جدید برای <code>u32</code> تولید نمی‌کند،
+چون در آن کد تعریف نشده است (فقط به آن ارجاع داده شده).</p>
+<p><code>AdtDef</code> کم‌وبیش یک پوشش (wrapper) دور <code>DefId</code> با کلی متد کمکی مفید است.
+اساساً میان <code>AdtDef</code> و <code>DefId</code> رابطهٔ یک‌به‌یک وجود دارد.
+می‌توانید <code>AdtDef</code> یک <code>DefId</code> را با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html#method.adt_def">query ‏<code>tcx.adt_def(def_id)</code></a> به دست آورید.
+همهٔ <code>AdtDef</code>ها interned هستند، همان‌طور که طول عمر <code>'tcx</code> نشان می‌دهد.</p>
+<h2 id="question-why-not-substitute-inside-the-adtdef"><a class="header" href="#question-why-not-substitute-inside-the-adtdef">پرسش: چرا «درون» <code>AdtDef</code> جایگزین نکنیم؟</a></h2>
+<p>به یاد بیاورید که یک struct جنریک را با <code>(AdtDef, args)</code> نمایش می‌دهیم.
+پس چرا به این طرح زحمت می‌دهیم؟</p>
+<p>خب، راه دیگری که می‌توانستیم برای نمایش نوع‌ها انتخاب کنیم این بود که همیشه یک شکل جدید
+کاملاً جایگزین‌شده از <code>AdtDef</code> بسازیم که در آن همهٔ نوع‌ها از پیش جایگزین شده‌اند.
+این کار دردسر کمتری به نظر می‌رسد.
+با این حال، طرح <code>(AdtDef, args)</code> مزیت‌هایی نسبت به آن دارد.</p>
+<p>اول اینکه طرح <code>(AdtDef, args)</code> از نظر کارایی برتری دارد:</p>
+<pre><code class="language-rust ignore">struct MyStruct&lt;T&gt; {
+  ... 100s of fields ...
+}
+
+// Want to do: MyStruct&lt;A&gt; ==&gt; MyStruct&lt;B&gt;</code></pre>
+<p>در مثالی مانند این، می‌توانیم <code>MyStruct&lt;A&gt;</code> را بسیار ارزان به <code>MyStruct&lt;B&gt;</code> (و همین‌طور ادامه) نمونه‌سازی کنیم،
+فقط با جایگزین کردن یک ارجاع <code>A</code> با <code>B</code>.
+اما اگر همهٔ فیلدها را زودهنگام نمونه‌سازی می‌کردیم،
+می‌توانست کار بسیار بیشتری باشد، چون ممکن بود مجبور شویم همهٔ فیلدهای <code>AdtDef</code> را مرور کنیم
+و نوع همهٔ آن‌ها را به‌روز کنیم.</p>
+<p>کمی عمیق‌تر، این با <a href="https://en.wikipedia.org/wiki/Nominal_type_system">نوع‌های <em>اسمی</em></a> بودن structها در Rust مطابقت دارد — که
+یعنی آن‌ها با <em>نام</em> خود تعریف می‌شوند (و محتویاتشان سپس از
+تعریف آن نام اندیس‌گذاری می‌شود و «درون» خود نوع حمل نمی‌شود).</p>
+<h2 id="the-genericargs-type"><a class="header" href="#the-genericargs-type">نوع <code>GenericArgs</code></a></h2>
+<p>با داشتن یک نوع جنریک <code>MyType&lt;A, B, …&gt;</code>، باید فهرست آرگومان‌های جنریک <code>MyType</code> را ذخیره کنیم.</p>
+<p>در rustc این کار با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.GenericArgs.html"><code>GenericArgs</code></a> انجام می‌شود.
+<code>GenericArgs</code> یک اشاره‌گر باریک به برشی از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.GenericArg.html"><code>GenericArg</code></a> است که فهرست آرگومان‌های جنریک یک آیتم جنریک را نمایش می‌دهد.
+برای مثال، با داشتن <code>struct HashMap&lt;K, V&gt;</code> که دو پارامتر نوع <code>K</code> و <code>V</code> دارد، <code>GenericArgs</code> مورد استفاده برای نمایش نوع <code>HashMap&lt;i32, u32&gt;</code> با <code>&amp;'tcx [tcx.types.i32, tcx.types.u32]</code> نمایش داده می‌شود.</p>
+<p><code>GenericArg</code> از نظر مفهومی یک <code>enum</code> با سه حالت است: یکی برای آرگومان‌های نوع، یکی برای آرگومان‌های ثابت و یکی برای آرگومان‌های طول عمر.
+در عمل این با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.GenericArgKind.html"><code>GenericArgKind</code></a> نمایش داده می‌شود و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.GenericArg.html"><code>GenericArg</code></a> نسخه‌ای کم‌حجم‌تر است که متدی برای
+تبدیل به <code>GenericArgKind</code> دارد.</p>
+<p>struct واقعی <code>GenericArg</code> نوع، طول عمر یا ثابت را به‌صورت یک اشاره‌گر interned ذخیره می‌کند و discriminant در ۲ بیت پایین ذخیره می‌شود.
+مگر اینکه به‌طور خاص روی پیاده‌سازی <code>GenericArgs</code> کار کنید، معمولاً نباید با <code>GenericArg</code> سروکار داشته باشید و به‌جای آن
+از انتزاع ایمن <code>GenericArgKind</code> استفاده کنید که از طریق متد <code>GenericArg::unpack()</code> به دست می‌آید.</p>
+<p>در برخی موارد ممکن است لازم باشد یک <code>GenericArg</code> بسازید؛ این کار از طریق <code>Ty/Const/Region::into()</code> یا <code>GenericArgKind::pack</code> ممکن است.</p>
+<pre><code class="language-rust ignore">// An example of unpacking and packing a generic argument.
+fn deal_with_generic_arg&lt;'tcx&gt;(generic_arg: GenericArg&lt;'tcx&gt;) -&gt; GenericArg&lt;'tcx&gt; {
+    // Unpack a raw `GenericArg` to deal with it safely.
+    let new_generic_arg: GenericArgKind&lt;'tcx&gt; = match generic_arg.unpack() {
+        GenericArgKind::Type(ty) =&gt; { /* ... */ }
+        GenericArgKind::Lifetime(lt) =&gt; { /* ... */ }
+        GenericArgKind::Const(ct) =&gt; { /* ... */ }
+    };
+    // Pack the `GenericArgKind` to store it in a generic args list.
+    new_generic_arg.pack()
+}</code></pre>
+<p>پس برای جمع‌بندی همهٔ این‌ها:</p>
+<pre><code class="language-rust ignore">struct MyStruct&lt;T&gt;(T);
+type Foo = MyStruct&lt;u32&gt;</code></pre>
+<p>برای <code>MyStruct&lt;U&gt;</code> که در نام مستعار نوع <code>Foo</code> نوشته شده است، آن را به این شکل نمایش می‌دهیم:</p>
+<ul>
+<li>یک <code>AdtDef</code> (و <code>DefId</code> متناظر) برای <code>MyStruct</code> وجود خواهد داشت.</li>
+<li>یک <code>GenericArgs</code> شامل فهرست <code>[GenericArgKind::Type(Ty(u32))]</code> وجود خواهد داشت</li>
+<li>و در نهایت یک <code>TyKind::Adt</code> با <code>AdtDef</code> و <code>GenericArgs</code> فهرست‌شده در بالا.</li>
+</ul>
+<h2 id="nested-generic-args"><a class="header" href="#nested-generic-args">آرگومان‌های جنریک تودرتو</a></h2>
+<pre><code class="language-rust">struct MyStruct&lt;T&gt;(T);
+
+impl&lt;T&gt; MyStruct&lt;T&gt; {
+    fn func&lt;T2, T3&gt;() {}
+}
+
+fn main() {
+    MyStruct::&lt;u32&gt;::func::&lt;bool, char&gt;();
+}</code></pre>
+<p>ساختار <code>MyStruct::&lt;u32&gt;::func::&lt;bool, char&gt;</code> با یک تاپل نمایش داده می‌شود: یک DefId که به <code>func</code> اشاره می‌کند، و سپس یک
+فهرست <code>GenericArgs</code> که همهٔ پارامترهای جنریک دربرگیرنده را «طی می‌کند» - در این مورد فهرست <code>[u32, bool, char]</code> خواهد بود.</p>
+<p>نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Generics.html"><code>ty::Generics</code></a> (که توسط query ‏<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html#method.generics_of"><code>generics_of</code></a> برگردانده می‌شود) اطلاعات اینکه یک سلسله‌مراتب تودرتو
+چگونه به یک فهرست مسطح می‌شود را دارد و به شما امکان می‌دهد بفهمید کدام اندیس در فهرست <code>GenericArgs</code> متناظر با کدام
+جنریک است.
+خط کلی نحوهٔ کار از بیرونی‌ترین به درونی‌ترین (در مثال <code>T</code> پیش از <code>T2</code>) و از چپ به راست
+(<code>T2</code> پیش از <code>T3</code>) است، اما چند پیچیدگی وجود دارد:</p>
+<ul>
+<li>صفت‌ها (traits) یک پارامتر جنریک ضمنی <code>Self</code> دارند که اولین (یعنی صفرمین) پارامتر جنریک است. توجه کنید که <code>Self</code> در همهٔ موقعیت‌ها به معنای یک پارامتر جنریک نیست؛ <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/def/enum.Res.html#variant.SelfTyAlias">Res::SelfTyAlias</a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/def/enum.Res.html#variant.SelfCtor">Res::SelfCtor</a> را ببینید.</li>
+<li>فقط پارامترهای جنریک early-bound شامل می‌شوند؛ <a href="../early-late-parameters.html">جنریک‌های late-bound</a> شامل نمی‌شوند.</li>
+<li>… و موارد بیشتر…</li>
+</ul>
+<p>برای جزئیات دقیق نحوهٔ مسطح‌سازی، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Generics.html"><code>ty::Generics</code></a> را ببینید.</p><nav class="page-nav"><a href="../ty.html">→ ماژول ty: نمایش نوع‌ها</a><a href="param-ty-const-regions.html">نوع‌ها/ثابت‌ها/ناحیه‌های پارامتر ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

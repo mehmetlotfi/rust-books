@@ -1,0 +1,100 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>کنترل دامنه و حریم خصوصی با ماژول‌ها — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch07-02-defining-modules-to-control-scope-and-privacy"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><!-- Old headings. Do not remove or links may break. -->
+<p><a id="defining-modules-to-control-scope-and-privacy"></a></p>
+<h2 id="control-scope-and-privacy-with-modules"><a class="header" href="#control-scope-and-privacy-with-modules">تعریف ماژول‌ها برای کنترل محدوده و حریم خصوصی</a></h2>
+<p>در این بخش، ما درباره ماژول‌ها و سایر بخش‌های سیستم ماژول صحبت خواهیم کرد، یعنی <em>مسیرها</em> که به شما امکان می‌دهند آیتم‌ها را نام‌گذاری کنید؛ کلمه کلیدی <code>use</code> که مسیر را به محدوده وارد می‌کند؛ و کلمه کلیدی <code>pub</code> برای عمومی کردن آیتم‌ها. همچنین درباره کلمه کلیدی <code>as</code>، بسته‌های خارجی، و عملگر <code>glob</code> صحبت خواهیم کرد.</p>
+<h3 id="modules-cheat-sheet"><a class="header" href="#modules-cheat-sheet">خلاصه‌ای از ماژول‌ها</a></h3>
+<p>قبل از اینکه به جزئیات ماژول‌ها و مسیرها بپردازیم، اینجا یک مرجع سریع در مورد نحوه عملکرد ماژول‌ها، مسیرها، کلمه کلیدی <code>use</code> و کلمه کلیدی <code>pub</code> در کامپایلر ارائه می‌دهیم و همچنین نحوه سازماندهی کد توسط اکثر توسعه‌دهندگان را نشان می‌دهیم. ما در طول این فصل به مثال‌هایی از هر یک از این قواعد خواهیم پرداخت، اما این یک مکان عالی برای یادآوری نحوه عملکرد ماژول‌ها است.</p>
+<ul>
+<li><strong>شروع از ریشه جعبه (crate):</strong> هنگام کامپایل یک جعبه (crate)، کامپایلر ابتدا در فایل ریشه جعبه (crate) (معمولاً <em>src/lib.rs</em> برای یک جعبه (crate) کتابخانه‌ای یا <em>src/main.rs</em> برای یک جعبه (crate) باینری) به دنبال کد برای کامپایل می‌گردد.</li>
+<li><strong>تعریف ماژول‌ها:</strong> در فایل ریشه جعبه (crate)، می‌توانید ماژول‌های جدید تعریف کنید؛ مثلاً می‌توانید یک ماژول “garden” با <code>mod garden;</code> تعریف کنید. کامپایلر کد ماژول را در مکان‌های زیر جستجو می‌کند:
+<ul>
+<li>به‌صورت درون‌خطی (inline)، درون آکولادهایی که جایگزین نقطه‌ویرگول بعد از <code>mod garden</code> می‌شوند</li>
+<li>در فایل <em>src/garden.rs</em></li>
+<li>در فایل <em>src/garden/mod.rs</em></li>
+</ul>
+</li>
+<li><strong>تعریف زیرماژول‌ها:</strong> در هر فایلی به جز فایل ریشه جعبه (crate)، می‌توانید زیرماژول‌ها تعریف کنید. برای مثال، ممکن است <code>mod vegetables;</code> را در فایل <em>src/garden.rs</em> تعریف کنید. کامپایلر کد زیرماژول را در دایرکتوری‌ای که به نام ماژول والد است، در مکان‌های زیر جستجو می‌کند:
+<ul>
+<li>به صورت درون‌خطی، مستقیماً بعد از <code>mod vegetables</code>، داخل براکت‌های موج‌دار به جای نقطه‌ویرگول</li>
+<li>در فایل <em>src/garden/vegetables.rs</em></li>
+<li>در فایل <em>src/garden/vegetables/mod.rs</em></li>
+</ul>
+</li>
+<li><strong>مسیرها به کد در ماژول‌ها:</strong> وقتی یک ماژول بخشی از جعبه (crate) شما باشد، می‌توانید از هر جای دیگر در همان جعبه (crate) (تا زمانی که قواعد حریم خصوصی اجازه دهند) با استفاده از مسیر به کد آن ارجاع دهید. برای مثال، یک نوع <code>Asparagus</code> در ماژول vegetables در garden به این صورت پیدا می‌شود: <code>crate::garden::vegetables::Asparagus</code>.</li>
+<li><strong>خصوصی در مقابل عمومی:</strong> کد درون یک ماژول به صورت پیش‌فرض برای ماژول‌های والد خصوصی است. برای عمومی کردن یک ماژول، آن را با <code>pub mod</code> به جای <code>mod</code> تعریف کنید. برای عمومی کردن آیتم‌های داخل یک ماژول عمومی، از <code>pub</code> قبل از اعلان آن‌ها استفاده کنید.</li>
+<li><strong>کلمه کلیدی <code>use</code>:</strong> در یک محدوده، کلمه کلیدی <code>use</code> میانبری به آیتم‌ها ایجاد می‌کند تا تکرار مسیرهای طولانی کاهش یابد. در هر محدوده‌ای که می‌تواند به <code>crate::garden::vegetables::Asparagus</code> ارجاع دهد، می‌توانید یک میانبر با <code>use crate::garden::vegetables::Asparagus;</code> ایجاد کنید و از آن به بعد فقط کافی است <code>Asparagus</code> را در آن محدوده استفاده کنید.</li>
+</ul>
+<p>اینجا، ما یک جعبه (crate) باینری به نام <code>backyard</code> ایجاد می‌کنیم که این قواعد را نشان می‌دهد. دایرکتوری جعبه (crate) که آن هم <code>backyard</code> نامیده می‌شود شامل این فایل‌ها و دایرکتوری‌ها است:</p>
+<pre><code class="language-text">backyard
+├── Cargo.lock
+├── Cargo.toml
+└── src
+    ├── garden
+    │   └── vegetables.rs
+    ├── garden.rs
+    └── main.rs
+</code></pre>
+<p>فایل ریشه جعبه (crate) در اینجا <em>src/main.rs</em> است و حاوی موارد زیر است:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust noplayground ignore">use crate::garden::vegetables::Asparagus;
+
+pub mod garden;
+
+fn main() {
+    let plant = Asparagus {};
+    println!("I'm growing {plant:?}!");
+}</code></pre>
+</figure>
+<p>خط <code>pub mod garden;</code> به کامپایلر می‌گوید که کدی را که در <em>src/garden.rs</em> پیدا می‌کند وارد کند، که شامل موارد زیر است:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/garden.rs</span>
+<pre><code class="language-rust noplayground ignore">pub mod vegetables;</code></pre>
+</figure>
+<p>اینجا، <code>pub mod vegetables;</code> به این معنا است که کد موجود در <em>src/garden/vegetables.rs</em> نیز وارد می‌شود. آن کد به صورت زیر است:</p>
+<pre><code class="language-rust noplayground ignore">#[derive(Debug)]
+pub struct Asparagus {}</code></pre>
+<p>حالا بیایید به جزئیات این قواعد بپردازیم و آن‌ها را در عمل نشان دهیم!</p>
+<h3 id="grouping-related-code-in-modules"><a class="header" href="#grouping-related-code-in-modules">گروه‌بندی کدهای مرتبط در ماژول‌ها</a></h3>
+<p><em>ماژول‌ها</em> به ما امکان می‌دهند کد را در یک جعبه (crate) برای خوانایی و بازاستفاده آسان سازماندهی کنیم. ماژول‌ها همچنین به ما امکان کنترل <em>حریم خصوصی</em> آیتم‌ها را می‌دهند زیرا کد درون یک ماژول به صورت پیش‌فرض خصوصی است. آیتم‌های خصوصی جزئیات پیاده‌سازی داخلی هستند که برای استفاده خارجی در دسترس نیستند. ما می‌توانیم انتخاب کنیم که ماژول‌ها و آیتم‌های درون آن‌ها عمومی باشند، که این موارد را برای استفاده خارجی آشکار می‌کند.</p>
+<p>برای مثال، بیایید یک جعبه (crate) کتابخانه‌ای بنویسیم که عملکرد یک رستوران را ارائه دهد. امضای توابع را تعریف می‌کنیم اما بدنه آن‌ها را خالی می‌گذاریم تا بیشتر بر سازماندهی کد تمرکز کنیم تا پیاده‌سازی عملکرد یک رستوران.</p>
+<p>در صنعت رستوران، برخی قسمت‌های یک رستوران به عنوان <em>جلوی خانه</em> و دیگر قسمت‌ها به عنوان <em>پشت خانه</em> شناخته می‌شوند. جلوی خانه جایی است که مشتریان هستند؛ این شامل جایی است که میزبان‌ها مشتریان را می‌نشانند، گارسون‌ها سفارش می‌گیرند و پرداخت‌ها را انجام می‌دهند، و بارتندرها نوشیدنی درست می‌کنند. پشت خانه جایی است که سرآشپزها و آشپزها در آشپزخانه کار می‌کنند، ظرف‌شورها ظروف را تمیز می‌کنند، و مدیران کارهای اداری انجام می‌دهند.</p>
+<p>برای ساختاردهی جعبه (crate) خود به این روش، می‌توانیم عملکردها را در ماژول‌های تو در تو سازماندهی کنیم. یک کتابخانه جدید به نام <code>restaurant</code> با اجرای دستور <code>cargo new restaurant --lib</code> ایجاد کنید. سپس کد لیستینگ 7-1 را در <em>src/lib.rs</em> وارد کنید تا برخی ماژول‌ها و امضای توابع تعریف شود. این کد بخش جلوی خانه را تعریف می‌کند.</p>
+<figure class="listing" id="listing-7-1">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">mod front_of_house {
+    mod hosting {
+        fn add_to_waitlist() {}
+
+        fn seat_at_table() {}
+    }
+
+    mod serving {
+        fn take_order() {}
+
+        fn serve_order() {}
+
+        fn take_payment() {}
+    }
+}</code></pre>
+<figcaption><a href="#listing-7-1">لیست ۷-۱</a>: یک ماژول &lt;code&gt;&lt;/x-listing&gt;front_of_house&lt;/code&gt; که شامل ماژول‌های دیگر است که سپس شامل توابع می‌شوند</figcaption>
+</figure>
+<p>ماژولی را با استفاده از کلیدواژه‌ی <code>mod</code> و به‌دنبال آن نام ماژول تعریف می‌کنیم<br> (در این مثال، <code>front_of_house</code>). بدنه‌ی ماژول درون آکولاد قرار می‌گیرد.<br> درون ماژول‌ها می‌توان ماژول‌های دیگری نیز قرار داد، همان‌طور که در این مثال،<br> ماژول‌های <code>hosting</code> و <code>serving</code> درون <code>front_of_house</code> قرار گرفته‌اند.<br> ماژول‌ها همچنین می‌توانند شامل تعریف آیتم‌های دیگر نیز باشند،<br> مانند <code>struct</code>ها، <code>enum</code>ها، ثابت‌ها (constants)، <code>trait</code>ها،<br> و همان‌طور که در لیستینگ 7-1 می‌بینید، توابع.</p>
+<p>با استفاده از ماژول‌ها، می‌توانیم تعاریف مرتبط را با هم گروه‌بندی کنیم و دلیل ارتباط آن‌ها را نام‌گذاری کنیم. برنامه‌نویسانی که از این کد استفاده می‌کنند می‌توانند بر اساس گروه‌ها کد را مرور کنند، به جای اینکه مجبور باشند تمام تعاریف را بخوانند. این کار پیدا کردن تعاریف مرتبط با آن‌ها را آسان‌تر می‌کند. برنامه‌نویسانی که عملکرد جدیدی به این کد اضافه می‌کنند می‌دانند که کد را کجا قرار دهند تا برنامه سازماندهی شده باقی بماند.</p>
+<p>قبلاً اشاره کردیم که <em>src/main.rs</em> و <em>src/lib.rs</em> به نام ریشه جعبه (crate) شناخته می‌شوند. دلیل نام‌گذاری آن‌ها این است که محتوای هر یک از این دو فایل یک ماژول به نام <code>crate</code> را در ریشه ساختار ماژول جعبه (crate) تشکیل می‌دهند، که به عنوان <em>درخت ماژول</em> شناخته می‌شود.</p>
+<p>لیستینگ 7-2 درخت ماژول را برای ساختار موجود در لیستینگ 7-1 نشان می‌دهد.</p>
+<figure class="listing" id="listing-7-2">
+<pre><code class="language-text">crate
+ └── front_of_house
+     ├── hosting
+     │   ├── add_to_waitlist
+     │   └── seat_at_table
+     └── serving
+         ├── take_order
+         ├── serve_order
+         └── take_payment
+</code></pre>
+<figcaption><a href="#listing-7-2">لیست ۷-۲</a>: درخت ماژول برای کد موجود در لیستینگ 7-1</figcaption>
+</figure>
+<p>این درخت نشان می‌دهد که برخی از ماژول‌ها در داخل ماژول‌های دیگر قرار دارند؛ برای مثال، <code>hosting</code> در داخل <code>front_of_house</code> قرار دارد. درخت همچنین نشان می‌دهد که برخی از ماژول‌ها <em>هم‌سطح</em> هستند، به این معنی که در همان ماژول تعریف شده‌اند؛ <code>hosting</code> و <code>serving</code> هم‌سطح هستند و درون <code>front_of_house</code> تعریف شده‌اند. اگر ماژول A درون ماژول B قرار گیرد، می‌گوییم ماژول A <em>فرزند</em> ماژول B است و ماژول B <em>والد</em> ماژول A است. توجه کنید که کل درخت ماژول در زیر ماژول ضمنی به نام <code>crate</code> ریشه دارد.</p>
+<p>درخت ماژول ممکن است شما را به یاد درخت دایرکتوری‌های فایل‌سیستم کامپیوتر بیندازد؛ این مقایسه بسیار مناسبی است! درست همان‌طور که دایرکتوری‌ها در فایل‌سیستم کد را سازماندهی می‌کنند، شما می‌توانید از ماژول‌ها برای سازماندهی کد خود استفاده کنید. و درست مانند فایل‌ها در یک دایرکتوری، ما نیاز به روشی برای پیدا کردن ماژول‌ها داریم.</p><nav class="page-nav"><a href="ch07-01-packages-and-crates.html">→ بسته‌ها و crateها</a><a href="ch07-03-paths-for-referring-to-an-item-in-the-module-tree.html">مسیرها برای ارجاع به یک آیتم در درخت ماژول ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

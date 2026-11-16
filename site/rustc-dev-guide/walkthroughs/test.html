@@ -1,0 +1,97 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>گام‌به‌گام: افزودن یک آزمون جدید — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="walkthroughs/test"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="walkthrough-adding-a-new-test"><a class="header" href="#walkthrough-adding-a-new-test">گام‌به‌گام: افزودن یک تست جدید</a></h1>
+<p>این فصل مثالی از یک تغییر کوچک ارائه می‌دهد که می‌توانید به‌عنوان اولین مشارکت خود در Rust انجام دهید،
+با استفاده از <a href="https://github.com/rust-lang/rust/issues/59333">rust#59333</a> و <a href="https://github.com/rust-lang/rust/issues/161442">rust#161442</a> به‌عنوان مثال.</p>
+<h2 id="find-an-e-needs-test-issue-to-work-on"><a class="header" href="#find-an-e-needs-test-issue-to-work-on">یک issue با برچسب <code>E-needs-test</code> برای کار پیدا کنید</a></h2>
+<p>برای فهرستی از کارهای ممکن <a href="../getting-started.html">«روی چه چیزی کار کنم؟»</a> را ببینید.
+اینجا یک issue با <code>E-needs-test</code> انتخاب کرده‌ایم:
+<a href="https://github.com/rust-lang/rust/issues/59333">rust#59333</a>.
+این به‌ویژه مناسب است چون یک مثال
+<a href="https://github.com/rust-lang/rust/issues/59333#issuecomment-555973113">مستقیماً در issue</a> دارد،
+بدون اینکه نیاز به کار اضافه از شما برای کمینه‌کردن باگ باشد.
+البته همیشه بسیار مفید است که issueی با <code>E-needs-test</code> را بردارید که مثال کمینه <em>ندارد</em> و برایش یکی بسازید.</p>
+<h2 id="reproduce-the-issue"><a class="header" href="#reproduce-the-issue">issue را بازتولید کنید</a></h2>
+<p>مثال اینجا در سال ۲۰۱۹ منتشر شد، یعنی کاملاً ۷ سال پیش (در زمان نگارش).
+در این بازه چیزهای زیادی در کامپایلر تغییر می‌کند.
+برای اطمینان از اینکه تست هنوز دقیق است، <em>آن را با جدیدترین کامپایلر بازتولید کنید</em>.
+راه آسان انجام این کار استفاده از <a href="https://play.rust-lang.org/?version=nightly">play.rust-lang.org</a> روی شاخهٔ <code>nightly</code>،
+یا <a href="https://rust.godbolt.org/">rust.godbolt.org</a> با <code>rustc nightly</code> است.
+همچنین اگر به راه‌اندازی پیچیده‌ای نیاز دارید که در Playground ممکن نیست می‌توانید به‌صورت محلی از <code>rustc +nightly</code> استفاده کنید.</p>
+<h2 id="convert-the-issue-to-a-test"><a class="header" href="#convert-the-issue-to-a-test">issue را به تست تبدیل کنید</a></h2>
+<p>مخزن <code>rust-lang/rust</code> را checkout و راه‌اندازی کنید، همان‌طور که در <a href="../building/quickstart.html">شروع سریع</a> مستند شده:</p>
+<pre><code class="language-console">$ git clone https://github.com/rust-lang/rust
+$ cd rust
+$ ./x setup compiler
+$ ./x build library
+</code></pre>
+<p>اینجا از <code>compiler</code> به‌عنوان profile پیش‌فرض استفاده می‌کنیم، چون باگی که رفع می‌کنیم به کامپایلر مربوط است.
+اگر تست واحد به کتابخانهٔ استاندارد اضافه می‌کنید، از <code>./x setup library</code> استفاده می‌کنید.</p>
+<p>این همچنین پیشنهاد می‌کند یک <a href="../building/suggested.html#installing-a-pre-push-hook">بررسی <code>.git/hooks/pre-push</code></a> راه‌اندازی شود.
+این اختیاری اما توصیه‌شده است.</p>
+<p>ما همچنین ساختی را در پس‌زمینه با <code>./x build library</code> شروع کردیم.
+متأسفانه ساخت Rust مدتی طول می‌کشد،
+پس شروع زودهنگام ساخت اجازه می‌دهد در پس‌زمینه اجرا شود در حالی که روی چیزهای دیگر کار می‌کنید.</p>
+<p>برای راهنمای افزودن تست‌های جدید <a href="../tests/ui.html">تست‌های UI</a> را ببینید.
+در موارد نادر ممکن است به تست <a href="../tests/compiletest.html#run-make-tests">run-make</a> یا نوع تخصصی‌تری نیاز داشته باشید.
+برای اطلاعات بیشتر <a href="../tests/compiletest.html">Compiletest</a> را ببینید.</p>
+<p>در مورد ما، تست نسبتاً ساده است:</p>
+<pre><code class="language-rust">// Save this file to `tests/ui/lint/dead-code/type-alias-used-in-impl-59333.rs`.
+
+//@ check-pass
+//! Regression test for &lt;https://github.com/rust-lang/rust/issues/59333&gt;.
+//! A type alias used only as (part of) the self type of an impl was
+//! incorrectly flagged as dead code.
+
+#![deny(dead_code)]
+
+struct Runner;
+
+type RuntimeImpl = Runner;
+
+trait Runtime {
+    fn run(&amp;mut self);
+}
+
+impl Runtime for &amp;mut RuntimeImpl {
+    fn run(&amp;mut self) {}
+}
+
+struct Walker;
+
+type WalkerImpl = Walker;
+
+trait Walk {
+    fn walk(&amp;self) {}
+}
+
+impl Walk for WalkerImpl {}
+
+fn main() {
+    let mut runner = Runner;
+    (&amp;mut runner).run();
+    Walker.walk();
+}</code></pre>
+<p>بیشتر جزئیات اینجا چندان اهمیت ندارند، اما به <code>//@ check-pass</code> و <code>#![deny(dead_code)]</code> در بالا توجه کنید.
+این دو با هم تضمین می‌کنند کامپایلر هنگام کامپایل این فایل lint با نام <code>dead_code</code> صادر نمی‌کند.</p>
+<p>همچنین به کامنت «Regression test for …» توجه کنید.
+این برای بازبین شما <em>بسیار</em> مفید است، چون کمک می‌کند بفهمد تست چه می‌کند و آیا راه ساده‌تری برای تست آن رفتار هست.
+لطفاً تمام تلاشتان را بکنید که توضیح کاملی برای تست بنویسید.</p>
+<p>تست خود را اجرا کنید.
+<a href="https://github.com/rust-lang/rust/issues/161442">rust#161442</a> تست خود را <code>tests/ui/lint/dead-code/type-alias-used-in-impl-59333.rs</code> نام‌گذاری کرد،
+پس می‌توانید این را اجرا کنید:</p>
+<pre><code>./x test tests/ui/lint/dead-code/type-alias-used-in-impl-59333.rs
+</code></pre>
+<p>اگر موفق شد، تست شما آماده است.</p>
+<h2 id="open-a-pr"><a class="header" href="#open-a-pr">یک PR باز کنید</a></h2>
+<p>دستورالعمل‌های <a href="../pr-lifecycle.html">چرخهٔ عمر PR</a> را دنبال کنید.</p>
+<p>ابتدا اگر قبلاً راه‌اندازی نکرده‌اید بررسی pre-push را اجرا کنید:</p>
+<pre><code class="language-sh">./x test tidy
+</code></pre>
+<p>سپس <a href="https://guides.github.com/activities/forking/#making-a-pull-request">PR را باز کنید</a>:</p>
+<pre><code>git switch --create issue-59333-test
+git add tests/ui/lint/dead-code/type-alias-used-in-impl-59333.rs
+git commit
+git remote add personal https://github.com/YOUR_USERNAME_HERE/rust.git
+git push --set-upstream personal issue-59333-test
+</code></pre>
+<h2 id="review-and-feedback"><a class="header" href="#review-and-feedback">بازبینی و بازخورد</a></h2>
+<p>برای اطلاعات دربارهٔ بازبینی و merge شدن <a href="../pr-lifecycle.html">چرخهٔ عمر PR</a> را ببینید.</p><nav class="page-nav"><a href="../llm-guidance/reviewing.html">→ بازبینی کد با LLMها</a><a href="../implementing-new-features.html">پیاده‌سازی قابلیت‌های جدید زبان ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

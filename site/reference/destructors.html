@@ -1,0 +1,683 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>تخریب‌گرها (Destructors) — مرجع زبان Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="destructors"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="introduction.html" style="color:inherit;text-decoration:none">مرجع زبان Rust</a><small class="en-title" dir="ltr">The Rust Reference</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><div class="rule" id="r-destructors"><a class="rule-link" href="#r-destructors" title="destructors"><span>[destructors]</span></a>
+</div>
+
+<h1 id="destructors"><a class="header" href="#destructors">نابودگرها</a></h1>
+<div class="rule" id="r-destructors.intro"><a class="rule-link" href="#r-destructors.intro" title="destructors.intro"><span>[destructors<wbr>.intro]</span></a>
+</div>
+
+<p>وقتی یک <a href="variables.html">متغیر</a> <a href="glossary.html#initialized">مقداردهی‌شده</a> یا <a href="expressions.html#temporaries">مقدار موقت</a> از <a href="#drop-scopes">دامنه</a> خارج می‌شود، <em>نابودگر</em> (destructor) آن اجرا می‌شود یا به عبارتی <em>حذف (drop)</em> می‌شود. <a href="expressions/operator-expr.html#assignment-expressions">انتساب</a> نیز، اگر عملوند سمت چپ مقداردهی شده باشد، نابودگر آن را اجرا می‌کند. اگر متغیری به‌صورت جزئی مقداردهی شده باشد، تنها فیلدهای مقداردهی‌شدهٔ آن حذف می‌شوند.</p>
+<div class="rule" id="r-destructors.operation"><a class="rule-link" href="#r-destructors.operation" title="destructors.operation"><span>[destructors<wbr>.operation]</span></a>
+</div>
+
+<p>نابودگر نوع <code>T</code> از این مراحل تشکیل می‌شود:</p>
+<ol>
+<li>اگر <code>T: Drop</code> باشد، فراخوانی <a href="https://doc.rust-lang.org/core/ops/drop/trait.Drop.html#method.drop"><code>&lt;T as core::ops::Drop&gt;::drop</code></a></li>
+<li>اجرای بازگشتی نابودگر همهٔ میدان‌ها.
+<ul>
+<li>میدان‌های یک <a href="types/struct.html">ساختار</a> به ترتیب اعلان حذف می‌شوند.</li>
+<li>میدان‌های <a href="types/enum.html">گونهٔ برشمردنی</a> فعال به ترتیب اعلان حذف می‌شوند.</li>
+<li>میدان‌های یک <a href="types/tuple.html">تاپل</a> به‌ترتیب حذف می‌شوند.</li>
+<li>عنصرهای یک <a href="types/array.html">آرایه</a> یا <a href="types/slice.html">برش</a> مالکیت‌شده از نخستین تا آخرین عنصر حذف می‌شوند.</li>
+<li>متغیرهایی که یک <a href="types/closure.html">بستار</a> با انتقال می‌گیرد، با ترتیبی نامشخص حذف می‌شوند.</li>
+<li><a href="types/trait-object.html">اشیای صفت</a> نابودگر نوع زیربنایی را اجرا می‌کنند.</li>
+<li>نوع‌های دیگر حذف بیشتری ایجاد نمی‌کنند.</li>
+</ul>
+</li>
+</ol>
+<div class="rule" id="r-destructors.drop_in_place"><a class="rule-link" href="#r-destructors.drop_in_place" title="destructors.drop_in_place"><span>[destructors<wbr>.drop_in_place]</span></a>
+</div>
+
+<p>اگر لازم باشد نابودگری به‌صورت دستی اجرا شود، مانند زمان پیاده‌سازی اشاره‌گر هوشمند خودتان، می‌توان از <code>core::ptr::drop_in_place</code> استفاده کرد.</p>
+<p>چند نمونه:</p>
+<pre><code class="language-rust">struct PrintOnDrop(&amp;'static str);
+
+impl Drop for PrintOnDrop {
+    fn drop(&amp;mut self) {
+        println!("{}", self.0);
+    }
+}
+
+let mut overwritten = PrintOnDrop("drops when overwritten");
+overwritten = PrintOnDrop("drops when scope ends");
+
+let tuple = (PrintOnDrop("Tuple first"), PrintOnDrop("Tuple second"));
+
+let moved;
+// No destructor run on assignment.
+moved = PrintOnDrop("Drops when moved");
+// Drops now, but is then uninitialized.
+moved;
+
+// Uninitialized does not drop.
+let uninitialized: PrintOnDrop;
+
+// After a partial move, only the remaining fields are dropped.
+let mut partial_move = (PrintOnDrop("first"), PrintOnDrop("forgotten"));
+// Perform a partial move, leaving only `partial_move.0` initialized.
+core::mem::forget(partial_move.1);
+// When partial_move's scope ends, only the first field is dropped.</code></pre>
+<div class="rule" id="r-destructors.scope"><a class="rule-link" href="#r-destructors.scope" title="destructors.scope"><span>[destructors<wbr>.scope]</span></a>
+</div>
+
+<h2 id="drop-scopes"><a class="header" href="#drop-scopes">دامنه‌های حذف</a></h2>
+<div class="rule" id="r-destructors.scope.intro"><a class="rule-link" href="#r-destructors.scope.intro" title="destructors.scope.intro"><span>[destructors<wbr>.scope<wbr>.intro]</span></a>
+</div>
+
+<p>هر متغیر یا مقدار موقت به یک <em>دامنهٔ حذف</em> وابسته است. وقتی جریان کنترل دامنهٔ حذف را ترک کند، همهٔ متغیرهای وابسته به آن دامنه با ترتیب معکوس اعلان برای متغیرها، یا معکوس ایجاد برای مقادیر موقت، حذف می‌شوند.</p>
+<div class="rule" id="r-destructors.scope.desugaring"><a class="rule-link" href="#r-destructors.scope.desugaring" title="destructors.scope.desugaring"><span>[destructors<wbr>.scope<wbr>.desugaring]</span></a>
+</div>
+
+<p>دامنه‌های حذف را می‌توان با جایگزین کردن عبارت‌های <a href="expressions/loop-expr.html#iterator-loops"><code>for</code></a>، <a href="expressions/if-expr.html#if-expressions"><code>if</code></a> و <a href="expressions/loop-expr.html#predicate-loops"><code>while</code></a> با عبارت‌های معادل مبتنی بر <a href="expressions/match-expr.html"><code>match</code></a>، <a href="expressions/loop-expr.html#infinite-loops"><code>loop</code></a> و <code>break</code> تعیین کرد.</p>
+<div class="rule" id="r-destructors.scope.operators"><a class="rule-link" href="#r-destructors.scope.operators" title="destructors.scope.operators"><span>[destructors<wbr>.scope<wbr>.operators]</span></a>
+</div>
+
+<p>عملگرهای بارگذاری‌شده از عملگرهای داخلی متمایز نمی‌شوند و <a href="patterns.html#binding-modes">حالت‌های مقیدسازی</a> در نظر گرفته نمی‌شوند.</p>
+<div class="rule" id="r-destructors.scope.list"><a class="rule-link" href="#r-destructors.scope.list" title="destructors.scope.list"><span>[destructors<wbr>.scope<wbr>.list]</span></a>
+</div>
+
+<p>برای یک تابع یا بستار، دامنهٔ حذف برای موارد زیر وجود دارد:</p>
+<div class="rule" id="r-destructors.scope.function"><a class="rule-link" href="#r-destructors.scope.function" title="destructors.scope.function"><span>[destructors<wbr>.scope<wbr>.function]</span></a>
+</div>
+
+<ul>
+<li>هر <a href="statements.html">دستور</a></li>
+</ul>
+<div class="rule" id="r-destructors.scope.statement"><a class="rule-link" href="#r-destructors.scope.statement" title="destructors.scope.statement"><span>[destructors<wbr>.scope<wbr>.statement]</span></a>
+</div>
+
+<ul>
+<li>هر <a href="statements.html">دستور</a></li>
+</ul>
+<div class="rule" id="r-destructors.scope.expression"><a class="rule-link" href="#r-destructors.scope.expression" title="destructors.scope.expression"><span>[destructors<wbr>.scope<wbr>.expression]</span></a>
+</div>
+
+<ul>
+<li>هر <a href="expressions.html">عبارت</a></li>
+</ul>
+<div class="rule" id="r-destructors.scope.block"><a class="rule-link" href="#r-destructors.scope.block" title="destructors.scope.block"><span>[destructors<wbr>.scope<wbr>.block]</span></a>
+</div>
+
+<ul>
+<li>هر بلوک، از جمله بدنهٔ تابع
+<ul>
+<li>در مورد <a href="expressions/block-expr.html">عبارت بلوک</a>، دامنهٔ بلوک و عبارت یک دامنه هستند.</li>
+</ul>
+</li>
+</ul>
+<div class="rule" id="r-destructors.scope.match-arm"><a class="rule-link" href="#r-destructors.scope.match-arm" title="destructors.scope.match-arm"><span>[destructors<wbr>.scope<wbr>.match-arm]</span></a>
+</div>
+
+<ul>
+<li>هر بازوی یک عبارت <a href="expressions/match-expr.html"><code>match</code></a></li>
+</ul>
+<div class="rule" id="r-destructors.scope.nesting"><a class="rule-link" href="#r-destructors.scope.nesting" title="destructors.scope.nesting"><span>[destructors<wbr>.scope<wbr>.nesting]</span></a>
+</div>
+
+<p>دامنه‌های حذف به شکل زیر درون یکدیگر قرار می‌گیرند:</p>
+<div class="rule" id="r-destructors.scope.nesting-function"><a class="rule-link" href="#r-destructors.scope.nesting-function" title="destructors.scope.nesting-function"><span>[destructors<wbr>.scope<wbr>.nesting-function]</span></a>
+</div>
+
+<ul>
+<li>دامنهٔ کل تابع بیرونی‌ترین دامنه است.</li>
+</ul>
+<div class="rule" id="r-destructors.scope.nesting-function-body"><a class="rule-link" href="#r-destructors.scope.nesting-function-body" title="destructors.scope.nesting-function-body"><span>[destructors<wbr>.scope<wbr>.nesting-function-body]</span></a>
+</div>
+
+<ul>
+<li>بلوک بدنهٔ تابع درون دامنهٔ کل تابع قرار دارد.</li>
+</ul>
+<div class="rule" id="r-destructors.scope.nesting-expr-statement"><a class="rule-link" href="#r-destructors.scope.nesting-expr-statement" title="destructors.scope.nesting-expr-statement"><span>[destructors<wbr>.scope<wbr>.nesting-expr-statement]</span></a>
+</div>
+
+<ul>
+<li>والد عبارت در یک دستور عبارتی، دامنهٔ همان دستور است.</li>
+</ul>
+<div class="rule" id="r-destructors.scope.nesting-let-initializer"><a class="rule-link" href="#r-destructors.scope.nesting-let-initializer" title="destructors.scope.nesting-let-initializer"><span>[destructors<wbr>.scope<wbr>.nesting-let-initializer]</span></a>
+</div>
+
+<ul>
+<li>والد مقداردهندهٔ یک <a href="statements.html#let-statements">دستور <code>let</code></a> دامنهٔ همان دستور <code>let</code> است.</li>
+</ul>
+<div class="rule" id="r-destructors.scope.nesting-statement"><a class="rule-link" href="#r-destructors.scope.nesting-statement" title="destructors.scope.nesting-statement"><span>[destructors<wbr>.scope<wbr>.nesting-statement]</span></a>
+</div>
+
+<ul>
+<li>والد دامنهٔ یک دستور، دامنهٔ بلوک دربرگیرندهٔ دستور است.</li>
+</ul>
+<div class="rule" id="r-destructors.scope.nesting-match-guard"><a class="rule-link" href="#r-destructors.scope.nesting-match-guard" title="destructors.scope.nesting-match-guard"><span>[destructors<wbr>.scope<wbr>.nesting-match-guard]</span></a>
+</div>
+
+<ul>
+<li>والد عبارت یک نگهبان <code>match</code>، دامنهٔ بازویی است که نگهبان به آن تعلق دارد.</li>
+</ul>
+<div class="rule" id="r-destructors.scope.nesting-match-arm"><a class="rule-link" href="#r-destructors.scope.nesting-match-arm" title="destructors.scope.nesting-match-arm"><span>[destructors<wbr>.scope<wbr>.nesting-match-arm]</span></a>
+</div>
+
+<ul>
+<li>والد عبارت پس از <code>=&gt;</code> در عبارت <code>match</code>، دامنهٔ بازویی است که عبارت در آن قرار دارد.</li>
+</ul>
+<div class="rule" id="r-destructors.scope.nesting-match"><a class="rule-link" href="#r-destructors.scope.nesting-match" title="destructors.scope.nesting-match"><span>[destructors<wbr>.scope<wbr>.nesting-match]</span></a>
+</div>
+
+<ul>
+<li>والد دامنهٔ بازو، دامنهٔ عبارت <code>match</code> متناظر است.</li>
+</ul>
+<div class="rule" id="r-destructors.scope.nesting-other"><a class="rule-link" href="#r-destructors.scope.nesting-other" title="destructors.scope.nesting-other"><span>[destructors<wbr>.scope<wbr>.nesting-other]</span></a>
+</div>
+
+<ul>
+<li>والد همهٔ دامنه‌های دیگر، دامنهٔ عبارت بلافاصله دربرگیرنده است.</li>
+</ul>
+<div class="rule" id="r-destructors.scope.nesting-drop-order"><a class="rule-link" href="#r-destructors.scope.nesting-drop-order" title="destructors.scope.nesting-drop-order"><span>[destructors<wbr>.scope<wbr>.nesting-drop-order]</span></a>
+</div>
+
+<p>وقتی چند دامنه هم‌زمان ترک شوند، مانند هنگام بازگشت از یک تابع، متغیرها از درون به بیرون حذف می‌شوند.</p>
+<div class="rule" id="r-destructors.scope.params"><a class="rule-link" href="#r-destructors.scope.params" title="destructors.scope.params"><span>[destructors<wbr>.scope<wbr>.params]</span></a>
+</div>
+
+<h3 id="scopes-of-function-parameters"><a class="header" href="#scopes-of-function-parameters">دامنهٔ پارامترهای تابع</a></h3>
+<p>همهٔ پارامترهای تابع در دامنهٔ کل بدنهٔ تابع قرار دارند، پس هنگام ارزیابی تابع در پایان حذف می‌شوند. هر پارامتر واقعی تابع پس از مقیدسازی‌های معرفی‌شده در الگوی همان پارامتر حذف می‌شود.</p>
+<pre><code class="language-rust"><span class="boring">struct PrintOnDrop(&amp;'static str);
+</span><span class="boring">impl Drop for PrintOnDrop {
+</span><span class="boring">    fn drop(&amp;mut self) {
+</span><span class="boring">        println!("drop({})", self.0);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>// Drops `y`, then the second parameter, then `x`, then the first parameter
+fn patterns_in_parameters(
+    (x, _): (PrintOnDrop, PrintOnDrop),
+    (_, y): (PrintOnDrop, PrintOnDrop),
+) {}
+
+// drop order is 3 2 0 1
+patterns_in_parameters(
+    (PrintOnDrop("0"), PrintOnDrop("1")),
+    (PrintOnDrop("2"), PrintOnDrop("3")),
+);</code></pre>
+<div class="rule" id="r-destructors.scope.bindings"><a class="rule-link" href="#r-destructors.scope.bindings" title="destructors.scope.bindings"><span>[destructors<wbr>.scope<wbr>.bindings]</span></a>
+</div>
+
+<h3 id="scopes-of-local-variables"><a class="header" href="#scopes-of-local-variables">دامنهٔ متغیرهای محلی</a></h3>
+<div class="rule" id="r-destructors.scope.bindings.let"><a class="rule-link" href="#r-destructors.scope.bindings.let" title="destructors.scope.bindings.let"><span>[destructors<wbr>.scope<wbr>.bindings<wbr>.let]</span></a>
+</div>
+
+<p>متغیرهای محلی اعلان‌شده در یک دستور <code>let</code> به دامنهٔ بلوک دربرگیرندهٔ دستور <code>let</code> وابسته‌اند.</p>
+<pre><code class="language-rust"><span class="boring">struct PrintOnDrop(&amp;'static str);
+</span><span class="boring">impl Drop for PrintOnDrop {
+</span><span class="boring">    fn drop(&amp;mut self) {
+</span><span class="boring">        println!("drop({})", self.0);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>let declared_first = PrintOnDrop("Dropped last in outer scope");
+{
+    let declared_in_block = PrintOnDrop("Dropped in inner scope");
+}
+let declared_last = PrintOnDrop("Dropped first in outer scope");</code></pre>
+<div class="rule" id="r-destructors.scope.bindings.match-arm"><a class="rule-link" href="#r-destructors.scope.bindings.match-arm" title="destructors.scope.bindings.match-arm"><span>[destructors<wbr>.scope<wbr>.bindings<wbr>.match-arm]</span></a>
+</div>
+
+<p>متغیرهای محلی که در یک عبارت <code>match</code> یا در نگهبان (guard) تطبیق‌الگوی <code>match</code> اعلان می‌شوند، به دامنهٔ بازو (arm scope) همان بازوی <code>match</code> که در آن اعلان شده‌اند وابسته‌اند.</p>
+<pre><code class="language-rust"><span class="boring">#![allow(irrefutable_let_patterns)]
+</span><span class="boring">struct PrintOnDrop(&amp;'static str);
+</span><span class="boring">impl Drop for PrintOnDrop {
+</span><span class="boring">    fn drop(&amp;mut self) {
+</span><span class="boring">        println!("drop({})", self.0);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>match PrintOnDrop("Dropped last in the first arm's scope") {
+    // When guard evaluation succeeds, control-flow stays in the arm and
+    // values may be moved from the scrutinee into the arm's bindings,
+    // causing them to be dropped in the arm's scope.
+    x if let y = PrintOnDrop("Dropped second in the first arm's scope")
+        &amp;&amp; let z = PrintOnDrop("Dropped first in the first arm's scope") =&gt;
+    {
+        let declared_in_block = PrintOnDrop("Dropped in inner scope");
+        // Pattern-matching guards' bindings and temporaries are dropped in
+        // reverse order, dropping each guard condition operand's bindings
+        // before its temporaries. Lastly, variables bound by the arm's
+        // pattern are dropped.
+    }
+    _ =&gt; unreachable!(),
+}
+
+match PrintOnDrop("Dropped in the enclosing temporary scope") {
+    // When guard evaluation fails, control-flow leaves the arm scope,
+    // causing bindings and temporaries from earlier pattern-matching
+    // guard condition operands to be dropped. This occurs before evaluating
+    // the next arm's guard or body.
+    _ if let y = PrintOnDrop("Dropped in the first arm's scope")
+        &amp;&amp; false =&gt; unreachable!(),
+    // When a guard is executed multiple times due to self-overlapping
+    // or-patterns, control-flow leaves the arm scope when the guard fails
+    // and re-enters the arm scope before executing the guard again.
+    _ | _ if let y = PrintOnDrop("Dropped in the second arm's scope twice")
+        &amp;&amp; false =&gt; unreachable!(),
+    _ =&gt; {},
+}</code></pre>
+<div class="rule" id="r-destructors.scope.bindings.patterns"><a class="rule-link" href="#r-destructors.scope.bindings.patterns" title="destructors.scope.bindings.patterns"><span>[destructors<wbr>.scope<wbr>.bindings<wbr>.patterns]</span></a>
+</div>
+
+<p>متغیرهای درون الگو با ترتیب معکوس اعلان در الگو حذف می‌شوند.</p>
+<pre><code class="language-rust"><span class="boring">struct PrintOnDrop(&amp;'static str);
+</span><span class="boring">impl Drop for PrintOnDrop {
+</span><span class="boring">    fn drop(&amp;mut self) {
+</span><span class="boring">        println!("drop({})", self.0);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>let (declared_first, declared_last) = (
+    PrintOnDrop("Dropped last"),
+    PrintOnDrop("Dropped first"),
+);</code></pre>
+<div class="rule" id="r-destructors.scope.bindings.or-patterns"><a class="rule-link" href="#r-destructors.scope.bindings.or-patterns" title="destructors.scope.bindings.or-patterns"><span>[destructors<wbr>.scope<wbr>.bindings<wbr>.or-patterns]</span></a>
+</div>
+
+<p>برای تعیین ترتیب حذف، <a href="patterns.html#or-patterns">الگوهای یا</a> مقیدسازی‌ها را با ترتیب ارائه‌شده در نخستین زیرالگو اعلان می‌کنند.</p>
+<pre><code class="language-rust"><span class="boring">struct PrintOnDrop(&amp;'static str);
+</span><span class="boring">impl Drop for PrintOnDrop {
+</span><span class="boring">    fn drop(&amp;mut self) {
+</span><span class="boring">        println!("drop({})", self.0);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>// Drops `x` before `y`.
+fn or_pattern_drop_order&lt;T&gt;(
+    (Ok([x, y]) | Err([y, x])): Result&lt;[T; 2], [T; 2]&gt;
+//   ^^^^^^^^^^   ^^^^^^^^^^^ This is the second subpattern.
+//   |
+//   This is the first subpattern.
+//
+//   In the first subpattern, `x` is declared before `y`. Since it is
+//   the first subpattern, that is the order used even if the second
+//   subpattern, where the bindings are declared in the opposite
+//   order, is matched.
+) {}
+
+// Here we match the first subpattern, and the drops happen according
+// to the declaration order in the first subpattern.
+or_pattern_drop_order(Ok([
+    PrintOnDrop("Declared first, dropped last"),
+    PrintOnDrop("Declared last, dropped first"),
+]));
+
+// Here we match the second subpattern, and the drops still happen
+// according to the declaration order in the first subpattern.
+or_pattern_drop_order(Err([
+    PrintOnDrop("Declared last, dropped first"),
+    PrintOnDrop("Declared first, dropped last"),
+]));</code></pre>
+<div class="rule" id="r-destructors.scope.temporary"><a class="rule-link" href="#r-destructors.scope.temporary" title="destructors.scope.temporary"><span>[destructors<wbr>.scope<wbr>.temporary]</span></a>
+</div>
+
+<h3 id="temporary-scopes"><a class="header" href="#temporary-scopes">دامنهٔ مقادیر موقت</a></h3>
+<div class="rule" id="r-destructors.scope.temporary.intro"><a class="rule-link" href="#r-destructors.scope.temporary.intro" title="destructors.scope.temporary.intro"><span>[destructors<wbr>.scope<wbr>.temporary<wbr>.intro]</span></a>
+</div>
+
+<p><em>دامنهٔ موقت</em> یک عبارت، دامنه‌ای است که برای متغیر موقت نگهدارندهٔ نتیجهٔ آن عبارت هنگام استفاده در <a href="expressions.html#place-expressions-and-value-expressions">بافت مکان</a> به کار می‌رود؛ مگر آنکه عبارت <a href="destructors.html#constant-promotion">ارتقا یافته باشد</a>.</p>
+<div class="rule" id="r-destructors.scope.temporary.enclosing"><a class="rule-link" href="#r-destructors.scope.temporary.enclosing" title="destructors.scope.temporary.enclosing"><span>[destructors<wbr>.scope<wbr>.temporary<wbr>.enclosing]</span></a>
+</div>
+
+<p>جدا از گسترش طول‌عمر، دامنهٔ موقت یک عبارت کوچک‌ترین دامنه‌ای است که عبارت را در خود دارد و یکی از موارد زیر است:</p>
+<ul>
+<li>کل تابع.</li>
+<li>یک دستور.</li>
+<li>بدنهٔ یک عبارت <a href="expressions/if-expr.html#if-expressions"><code>if</code></a>، <a href="expressions/loop-expr.html#predicate-loops"><code>while</code></a> یا <a href="expressions/loop-expr.html#infinite-loops"><code>loop</code></a>.</li>
+<li>بلوک <code>else</code> یک عبارت <a href="expressions/if-expr.html#if-expressions"><code>if</code></a>.</li>
+<li>عبارت شرط بدون تطبیق الگوی یک عبارت <a href="expressions/if-expr.html#if-expressions"><code>if</code></a> یا <a href="expressions/loop-expr.html#predicate-loops"><code>while</code></a>، یا <a href="expressions/match-expr.html#match-guard-chains">عملوند شرط نگهبان</a> بدون تطبیق الگوی <code>match</code>.</li>
+<li>نگهبان دارای تطبیق الگو، در صورت وجود، و عبارت بدنهٔ یک بازوی <code>match</code>.</li>
+<li>هر عملوند یک <a href="expressions/operator-expr.html#lazy-boolean-operators">عبارت بولی تنبل</a>.</li>
+<li>شرط یا شرط‌های دارای تطبیق الگو و بدنهٔ نتیجهٔ <code>if</code> (<a href="expressions/if-expr.html#if-expressions">destructors.scope.temporary.edition2024</a>).</li>
+<li>شرط دارای تطبیق الگو و بدنهٔ حلقهٔ <code>while</code>.</li>
+<li>تمام عبارت پایانی یک بلوک (<a href="destructors.html#r-destructors.scope.temporary.edition2024">destructors.scope.temporary.edition2024</a>).</li>
+</ul>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> <a href="glossary.html#scrutinee">عبارت بررسی‌شوندهٔ</a> یک عبارت <code>match</code> دامنهٔ موقت نیست؛ بنابراین مقادیر موقت آن ممکن است پس از عبارت <code>match</code> حذف شوند. برای نمونه، مقدار موقت <code>1</code> در <code>match 1 { ref mut z =&gt; z };</code> تا انتهای دستور زنده می‌ماند.</p>
+</blockquote>
+</div>
+
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> بازنویسی <a href="expressions/operator-expr.html#r-expr.assign.destructure">انتساب واسازی</a> دامنهٔ موقت عملوند مقدار انتسابی آن (سمت راست) را محدود می‌کند. برای جزئیات <a href="expressions/operator-expr.html#r-expr.assign.destructure.tmp-scopes">expr.assign.destructure.tmp-scopes</a> را ببینید.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-destructors.scope.temporary.edition2024"><a class="rule-link" href="#r-destructors.scope.temporary.edition2024" title="destructors.scope.temporary.edition2024"><span>[destructors<wbr>.scope<wbr>.temporary<wbr>.edition2024]</span></a>
+</div>
+
+<blockquote>
+<p><strong>تفاوت‌های ویرایش 2024</strong> ویرایش ۲۰۲۴ دو قاعدهٔ جدید برای کوچک کردن دامنهٔ موقت افزود: مقادیر موقت <code>if let</code> پیش از بلوک <code>else</code> حذف می‌شوند و مقادیر موقت عبارت‌های پایانی بلوک‌ها بلافاصله پس از ارزیابی عبارت پایانی حذف می‌شوند.</p>
+</blockquote>
+<p>چند نمونه:</p>
+<pre><code class="language-rust"><span class="boring">#![allow(irrefutable_let_patterns)]
+</span><span class="boring">struct PrintOnDrop(&amp;'static str);
+</span><span class="boring">impl Drop for PrintOnDrop {
+</span><span class="boring">    fn drop(&amp;mut self) {
+</span><span class="boring">        println!("drop({})", self.0);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>let local_var = PrintOnDrop("local var");
+
+// Dropped once the condition has been evaluated
+if PrintOnDrop("If condition").0 == "If condition" {
+    // Dropped at the end of the block
+    PrintOnDrop("If body").0
+} else {
+    unreachable!()
+};
+
+if let "if let scrutinee" = PrintOnDrop("if let scrutinee").0 {
+    PrintOnDrop("if let consequent").0
+    // `if let consequent` dropped here
+}
+// `if let scrutinee` is dropped here
+else {
+    PrintOnDrop("if let else").0
+    // `if let else` dropped here
+};
+
+while let x = PrintOnDrop("while let scrutinee").0 {
+    PrintOnDrop("while let loop body").0;
+    break;
+    // `while let loop body` dropped here.
+    // `while let scrutinee` dropped here.
+}
+
+// Dropped before the first ||
+(PrintOnDrop("first operand").0 == ""
+// Dropped before the )
+|| PrintOnDrop("second operand").0 == "")
+// Dropped before the ;
+|| PrintOnDrop("third operand").0 == "";
+
+// Scrutinee is dropped at the end of the function, before local variables
+// (because this is the tail expression of the function body block).
+match PrintOnDrop("Matched value in final expression") {
+    // Non-pattern-matching guards' temporaries are dropped once the
+    // condition has been evaluated
+    _ if PrintOnDrop("guard condition").0 == "" =&gt; (),
+    // Pattern-matching guards' temporaries are dropped when leaving the
+    // arm's scope
+    _ if let "guard scrutinee" = PrintOnDrop("guard scrutinee").0 =&gt; {
+        let _ = &amp;PrintOnDrop("lifetime-extended temporary in inner scope");
+        // `lifetime-extended temporary in inner scope` is dropped here
+    }
+    // `guard scrutinee` is dropped here
+    _ =&gt; (),
+}</code></pre>
+<div class="rule" id="r-destructors.scope.operands"><a class="rule-link" href="#r-destructors.scope.operands" title="destructors.scope.operands"><span>[destructors<wbr>.scope<wbr>.operands]</span></a>
+</div>
+
+<h3 id="operands"><a class="header" href="#operands">عملوندها</a></h3>
+<p>هنگام ارزیابی دیگر عملوندهای یک عبارت، برای نگهداری نتیجهٔ عملوندها نیز مقادیر موقت ساخته می‌شوند. مقادیر موقت به دامنهٔ عبارتی وابسته‌اند که آن عملوند را دارد. چون پس از ارزیابی عبارت، مقدار از این مقادیر موقت منتقل می‌شود، حذف آن‌ها اثری ندارد؛ مگر آنکه یکی از عملوندهای عبارت از عبارت خارج شود، بازگردد یا <a href="panic.html">وحشت کند</a>.</p>
+<pre><code class="language-rust"><span class="boring">struct PrintOnDrop(&amp;'static str);
+</span><span class="boring">impl Drop for PrintOnDrop {
+</span><span class="boring">    fn drop(&amp;mut self) {
+</span><span class="boring">        println!("drop({})", self.0);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>loop {
+    // Tuple expression doesn't finish evaluating so operands drop in reverse order
+    (
+        PrintOnDrop("Outer tuple first"),
+        PrintOnDrop("Outer tuple second"),
+        (
+            PrintOnDrop("Inner tuple first"),
+            PrintOnDrop("Inner tuple second"),
+            break,
+        ),
+        PrintOnDrop("Never created"),
+    );
+}</code></pre>
+<div class="rule" id="r-destructors.scope.const-promotion"><a class="rule-link" href="#r-destructors.scope.const-promotion" title="destructors.scope.const-promotion"><span>[destructors<wbr>.scope<wbr>.const-promotion]</span></a>
+</div>
+
+<h3 id="constant-promotion"><a class="header" href="#constant-promotion">ارتقای ثابت</a></h3>
+<p>ارتقای یک عبارت مقدار به جایگاهی با طول‌عمر <code>'static</code> هنگامی رخ می‌دهد که عبارت بتواند درون یک ثابت نوشته و قرض گرفته شود و آن قرض در محل اصلی عبارت بدون تغییر رفتار زمان اجرا قابل ارجاع‌زدایی باشد. یعنی عبارت ارتقایافته در زمان کامپایل قابل ارزیابی است و مقدار حاصل <a href="interior-mutability.html">تغییرپذیری درونی</a> یا <a href="destructors.html">نابودگر</a> ندارد. این ویژگی‌ها در صورت امکان بر پایهٔ خود مقدار تعیین می‌شوند؛ برای نمونه <code>&amp;None</code> همیشه نوع <code>&amp;'static Option&lt;_&gt;</code> دارد، زیرا هیچ چیز غیرمجازی در خود ندارد.</p>
+<div class="rule" id="r-destructors.scope.lifetime-extension"><a class="rule-link" href="#r-destructors.scope.lifetime-extension" title="destructors.scope.lifetime-extension"><span>[destructors<wbr>.scope<wbr>.lifetime-extension]</span></a>
+</div>
+
+<h3 id="temporary-lifetime-extension"><a class="header" href="#temporary-lifetime-extension">گسترش طول‌عمر مقادیر موقت</a></h3>
+<div class="rule" id="r-destructors.scope.lifetime-extension.intro"><a class="rule-link" href="#r-destructors.scope.lifetime-extension.intro" title="destructors.scope.lifetime-extension.intro"><span>[destructors<wbr>.scope<wbr>.lifetime-extension<wbr>.intro]</span></a>
+</div>
+
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> قواعد دقیق گسترش طول‌عمر مقادیر موقت ممکن است تغییر کنند. این بخش فقط رفتار کنونی را شرح می‌دهد.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-destructors.scope.lifetime-extension.let"><a class="rule-link" href="#r-destructors.scope.lifetime-extension.let" title="destructors.scope.lifetime-extension.let"><span>[destructors<wbr>.scope<wbr>.lifetime-extension<wbr>.let]</span></a>
+</div>
+
+<p>دامنهٔ موقت عبارت‌های درون دستورهای <code>let</code> گاهی تا دامنهٔ بلوک دربرگیرندهٔ دستور <code>let</code> <em>گسترش</em> می‌یابد. این کار بر پایهٔ قواعد نحوی مشخصی و هنگامی انجام می‌شود که دامنهٔ موقت عادی بیش از حد کوچک باشد. برای نمونه:</p>
+<pre><code class="language-rust">let x = &amp;mut 0;
+// Usually a temporary would be dropped by now, but the temporary for `0` lives
+// to the end of the block.
+println!("{}", x);</code></pre>
+<div class="rule" id="r-destructors.scope.lifetime-extension.static"><a class="rule-link" href="#r-destructors.scope.lifetime-extension.static" title="destructors.scope.lifetime-extension.static"><span>[destructors<wbr>.scope<wbr>.lifetime-extension<wbr>.static]</span></a>
+</div>
+
+<p>گسترش طول‌عمر دربارهٔ اقلام <code>static</code> و <code>const</code> نیز اعمال می‌شود و مقادیر موقت را تا پایان برنامه زنده نگه می‌دارد. برای نمونه:</p>
+<pre><code class="language-rust">const C: &amp;Vec&lt;i32&gt; = &amp;Vec::new();
+// Usually this would be a dangling reference as the `Vec` would only
+// exist inside the initializer expression of `C`, but instead the
+// borrow gets lifetime-extended so it effectively has `'static` lifetime.
+println!("{:?}", C);</code></pre>
+<div class="rule" id="r-destructors.scope.lifetime-extension.sub-expressions"><a class="rule-link" href="#r-destructors.scope.lifetime-extension.sub-expressions" title="destructors.scope.lifetime-extension.sub-expressions"><span>[destructors<wbr>.scope<wbr>.lifetime-extension<wbr>.sub-expressions]</span></a>
+</div>
+
+<p>اگر یک <a href="expressions/operator-expr.html#the-dereference-operator">قرض‌گیری</a>، <a href="expressions/operator-expr.html#r-expr.operator.borrow">ارجاع‌زدایی</a>، <a href="expressions/field-expr.html">میدان</a> یا <a href="expressions/tuple-expr.html#tuple-indexing-expressions">عبارت اندیس‌گذاری تاپل</a> دامنهٔ موقت گسترش‌یافته‌ای داشته باشد، عملوند آن نیز چنین است. اگر یک <a href="expressions/array-expr.html#array-and-slice-indexing-expressions">عبارت اندیس‌گذاری</a> دامنهٔ موقت گسترش‌یافته داشته باشد، عبارت اندیس‌شونده نیز دامنهٔ موقت گسترش‌یافته دارد.</p>
+<div class="rule" id="r-destructors.scope.lifetime-extension.patterns"><a class="rule-link" href="#r-destructors.scope.lifetime-extension.patterns" title="destructors.scope.lifetime-extension.patterns"><span>[destructors<wbr>.scope<wbr>.lifetime-extension<wbr>.patterns]</span></a>
+</div>
+
+<h4 id="extending-based-on-patterns"><a class="header" href="#extending-based-on-patterns">گسترش بر پایهٔ الگوها</a></h4>
+<div class="rule" id="r-destructors.scope.lifetime-extension.patterns.extending"><a class="rule-link" href="#r-destructors.scope.lifetime-extension.patterns.extending" title="destructors.scope.lifetime-extension.patterns.extending"><span>[destructors<wbr>.scope<wbr>.lifetime-extension<wbr>.patterns<wbr>.extending]</span></a>
+</div>
+
+<p><em>الگوی گسترش‌دهنده</em> یکی از موارد زیر است:</p>
+<ul>
+<li>
+<p><a href="patterns.html#identifier-patterns">الگوی شناسه‌ای</a> که با ارجاع یا ارجاع تغییرپذیر مقید می‌شود.</p>
+<pre><code class="language-rust"><span class="boring">fn temp() {}
+</span>let ref x = temp(); // Binds by reference.
+<span class="boring">x;
+</span>let ref mut x = temp(); // Binds by mutable reference.
+<span class="boring">x;</span></code></pre>
+</li>
+<li>
+<p>یک <a href="patterns.html#struct-patterns">ساختار</a>، <a href="patterns.html#tuple-patterns">تاپل</a>، <a href="patterns.html#tuple-struct-patterns">ساختار تاپلی</a>، <a href="patterns.html#slice-patterns">برش</a> یا <a href="patterns.html#or-patterns">الگوی یا</a> که دست‌کم یکی از زیرالگوهای مستقیمش الگوی گسترش‌دهنده باشد.</p>
+<pre><code class="language-rust"><span class="boring">use core::sync::atomic::{AtomicU64, Ordering::Relaxed};
+</span><span class="boring">static X: AtomicU64 = AtomicU64::new(0);
+</span>struct W&lt;T&gt;(T);
+<span class="boring">impl&lt;T&gt; Drop for W&lt;T&gt; { fn drop(&amp;mut self) { X.fetch_add(1, Relaxed); } }
+</span>let W { 0: ref x } = W(()); // Struct pattern.
+<span class="boring">x;
+</span>let W(ref x) = W(()); // Tuple struct pattern.
+<span class="boring">x;
+</span>let (W(ref x),) = (W(()),); // Tuple pattern.
+<span class="boring">x;
+</span>let [W(ref x), ..] = [W(())]; // Slice pattern.
+<span class="boring">x;
+</span>let (Ok(W(ref x)) | Err(&amp;ref x)) = Ok(W(())); // Or pattern.
+<span class="boring">x;
+</span>//
+// All of the temporaries above are still live here.
+<span class="boring">assert_eq!(0, X.load(Relaxed));</span></code></pre>
+</li>
+</ul>
+<p>بنابراین <code>ref x</code>، <code>V(ref x)</code> و <code>[ref x, y]</code> همگی الگوهای گسترش‌دهنده‌اند، اما <code>x</code>، <code>&amp;ref x</code> و <code>&amp;(ref x,)</code> چنین نیستند.</p>
+<div class="rule" id="r-destructors.scope.lifetime-extension.patterns.let"><a class="rule-link" href="#r-destructors.scope.lifetime-extension.patterns.let" title="destructors.scope.lifetime-extension.patterns.let"><span>[destructors<wbr>.scope<wbr>.lifetime-extension<wbr>.patterns<wbr>.let]</span></a>
+</div>
+
+<p>اگر الگوی یک دستور <code>let</code> گسترش‌دهنده باشد، دامنهٔ موقت عبارت مقداردهنده گسترش می‌یابد.</p>
+<pre><code class="language-rust"><span class="boring">fn temp() {}
+</span>// This is an extending pattern, so the temporary scope is extended.
+let ref x = *&amp;temp(); // OK
+<span class="boring">x;</span></code></pre>
+<pre><code class="language-rust compile_fail E0716"><span class="boring">fn temp() {}
+</span>// This is neither an extending pattern nor an extending expression,
+// so the temporary is dropped at the semicolon.
+let &amp;ref x = *&amp;&amp;temp(); // ERROR
+<span class="boring">x;</span></code></pre>
+<pre><code class="language-rust"><span class="boring">fn temp() {}
+</span>// This is not an extending pattern but it is an extending expression,
+// so the temporary lives beyond the `let` statement.
+let &amp;ref x = &amp;*&amp;temp(); // OK
+<span class="boring">x;</span></code></pre>
+<div class="rule" id="r-destructors.scope.lifetime-extension.exprs"><a class="rule-link" href="#r-destructors.scope.lifetime-extension.exprs" title="destructors.scope.lifetime-extension.exprs"><span>[destructors<wbr>.scope<wbr>.lifetime-extension<wbr>.exprs]</span></a>
+</div>
+
+<h4 id="extending-based-on-expressions"><a class="header" href="#extending-based-on-expressions">گسترش بر پایهٔ عبارت‌ها</a></h4>
+<div class="rule" id="r-destructors.scope.lifetime-extension.exprs.extending"><a class="rule-link" href="#r-destructors.scope.lifetime-extension.exprs.extending" title="destructors.scope.lifetime-extension.exprs.extending"><span>[destructors<wbr>.scope<wbr>.lifetime-extension<wbr>.exprs<wbr>.extending]</span></a>
+</div>
+
+<p>برای یک دستور let دارای مقداردهنده، <em>عبارت گسترش‌دهنده</em> (extending expression) عبارتی است که یکی از موارد زیر باشد:</p>
+<ul>
+<li>خود عبارت مقداردهنده.</li>
+<li>عملوند یک عبارت <a href="expressions/operator-expr.html#r-expr.operator.borrow">قرض‌گیری</a> گسترش‌دهنده.</li>
+<li>عملوند یک عبارت <a href="expressions/operator-expr.html#r-expr.operator.borrow">قرض‌گیری</a> گسترش‌دهنده.</li>
+<li><a href="expressions.html#r-expr.super-macros">ابرعملوندهای</a> یک عبارت <a href="expressions.html#r-expr.super-macros">فراخوانی ابرماکرو</a> گسترش‌دهنده.</li>
+<li>آرگومان‌های عبارت سازندهٔ <a href="types/struct.html#r-type.struct.tuple">ساختار تاپلی</a> یا <a href="types/enum.html#r-type.enum.declaration">گونهٔ برشمردنی تاپلی</a> گسترش‌دهنده.</li>
+<li>عبارت پایانی یک <a href="expressions/block-expr.html">عبارت بلوک</a> گسترش‌دهنده، جز <a href="expressions/block-expr.html#r-expr.block.async">عبارت بلوک ناهمگام</a>.</li>
+<li>عبارت پایانی بلوک نتیجه، <code>else if</code> یا <code>else</code> یک عبارت <code>if</code> گسترش‌دهنده.</li>
+<li>عبارت یک بازوی <code>match</code> گسترش‌دهنده.</li>
+</ul>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> بازنویسی یک <a href="expressions/operator-expr.html#r-expr.assign.destructure">انتساب واسازی</a>، عملوند مقدار انتسابی آن (سمت راست) را درون بلوکی تازه‌ساخته‌شده به عبارت گسترش‌دهنده تبدیل می‌کند. برای جزئیات <a href="expressions/operator-expr.html#r-expr.assign.destructure.tmp-ext">expr.assign.destructure.tmp-ext</a> را ببینید.</p>
+</blockquote>
+</div>
+
+<p>بنابراین عبارت‌های قرض‌گیری در <code>&amp;mut 0</code>، <code>(&amp;1, &amp;mut 2)</code> و <code>Some(&amp;mut 3)</code> همگی عبارت گسترش‌دهنده‌اند. قرض‌گیری‌های <code>&amp;0 + &amp;1</code> و <code>f(&amp;mut 0)</code> چنین نیستند.</p>
+<div class="rule" id="r-destructors.scope.lifetime-extension.exprs.borrows"><a class="rule-link" href="#r-destructors.scope.lifetime-extension.exprs.borrows" title="destructors.scope.lifetime-extension.exprs.borrows"><span>[destructors<wbr>.scope<wbr>.lifetime-extension<wbr>.exprs<wbr>.borrows]</span></a>
+</div>
+
+<p><a href="destructors.html#r-destructors.scope.temporary">دامنهٔ موقت</a> عملوند یک عبارت <a href="expressions/operator-expr.html#r-expr.operator.borrow">قرض‌گیری</a> گسترش‌دهنده <a href="destructors.html#r-destructors.scope.lifetime-extension">گسترش داده می‌شود</a>.</p>
+<div class="rule" id="r-destructors.scope.lifetime-extension.exprs.super-macros"><a class="rule-link" href="#r-destructors.scope.lifetime-extension.exprs.super-macros" title="destructors.scope.lifetime-extension.exprs.super-macros"><span>[destructors<wbr>.scope<wbr>.lifetime-extension<wbr>.exprs<wbr>.super-macros]</span></a>
+</div>
+
+<p><a href="expressions.html#r-expr.super-macros">super temporaryهای</a> یک عبارت گسترش‌دهندهٔ <a href="expressions.html#r-expr.super-macros">فراخوانی ماکروی super</a>، <a href="destructors.html#r-destructors.scope.temporary">دامنه‌هایشان</a> <a href="destructors.html#r-destructors.scope.lifetime-extension">گسترش داده می‌شود</a>.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> <code>rustc</code> <a href="expressions/array-expr.html#r-expr.array.repeat-operand">عملوندهای تکرار آرایه</a> در عبارت‌های <a href="types/array.html">آرایه</a> گسترش‌دهنده را عبارت گسترش‌دهنده در نظر نمی‌گیرد. اینکه آیا باید چنین کند یا نه، پرسشی باز است.</p>
+<p>برای جزئیات <a href="https://github.com/rust-lang/rust/issues/146092">مسئلهٔ شمارهٔ 146092 در Rust</a> را ببینید.</p>
+</blockquote>
+</div>
+
+<h4 id="examples"><a class="header" href="#examples">مثال‌ها</a></h4>
+<p>این‌ها نمونه‌هایی هستند که عبارت‌ها در آن‌ها دامنهٔ موقت گسترش‌یافته دارند:</p>
+<pre><code class="language-rust edition2024"><span class="boring">use core::pin::pin;
+</span><span class="boring">use core::sync::atomic::{AtomicU64, Ordering::Relaxed};
+</span><span class="boring">static X: AtomicU64 = AtomicU64::new(0);
+</span><span class="boring">#[derive(Debug)] struct S;
+</span><span class="boring">impl Drop for S { fn drop(&amp;mut self) { X.fetch_add(1, Relaxed); } }
+</span><span class="boring">const fn temp() -&gt; S { S }
+</span>let x = &amp;temp(); // Operand of borrow.
+<span class="boring">x;
+</span>let x = &amp;raw const *&amp;temp(); // Operand of raw borrow.
+<span class="boring">assert_eq!(X.load(Relaxed), 0);
+</span>let x = &amp;temp() as &amp;dyn Send; // Operand of cast.
+<span class="boring">x;
+</span>let x = (&amp;*&amp;temp(),); // Operand of tuple constructor.
+<span class="boring">x;
+</span>struct W&lt;T&gt;(T);
+let x = W(&amp;temp()); // Argument to tuple struct constructor.
+<span class="boring">x;
+</span>let x = Some(&amp;temp()); // Argument to tuple enum variant constructor.
+<span class="boring">x;
+</span>let x = { [Some(&amp;temp())] }; // Final expr of block.
+<span class="boring">x;
+</span>let x = const { &amp;temp() }; // Final expr of `const` block.
+<span class="boring">x;
+</span>let x = unsafe { &amp;temp() }; // Final expr of `unsafe` block.
+<span class="boring">x;
+</span>let x = if true { &amp;temp() } else { &amp;temp() };
+//              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+//           Final exprs of `if`/`else` blocks.
+<span class="boring">x;
+</span>let x = match () { _ =&gt; &amp;temp() }; // `match` arm expression.
+<span class="boring">x;
+</span>let x = pin!(temp()); // Super operand of super macro call expression.
+<span class="boring">x;
+</span>let x = pin!({ &amp;mut temp() }); // As above.
+<span class="boring">x;
+</span>let x = format_args!("{:?}", temp()); // As above.
+<span class="boring">x;
+</span>//
+// All of the temporaries above are still live here.
+<span class="boring">assert_eq!(0, X.load(Relaxed));</span></code></pre>
+<p>این‌ها نمونه‌هایی هستند که عبارت‌ها در آن‌ها دامنهٔ موقت گسترش‌یافته ندارند:</p>
+<pre><code class="language-rust compile_fail E0716"><span class="boring">fn temp() {}
+</span>// Arguments to function calls are not extending expressions. The
+// temporary is dropped at the semicolon.
+let x = core::convert::identity(&amp;temp()); // ERROR
+<span class="boring">x;</span></code></pre>
+<pre><code class="language-rust compile_fail E0716"><span class="boring">fn temp() {}
+</span><span class="boring">trait Use { fn use_temp(&amp;self) -&gt; &amp;Self { self } }
+</span><span class="boring">impl Use for () {}
+</span>// Receivers of method calls are not extending expressions.
+let x = (&amp;temp()).use_temp(); // ERROR
+<span class="boring">x;</span></code></pre>
+<pre><code class="language-rust compile_fail E0716"><span class="boring">fn temp() {}
+</span>// Scrutinees of match expressions are not extending expressions.
+let x = match &amp;temp() { x =&gt; x }; // ERROR
+<span class="boring">x;</span></code></pre>
+<pre><code class="language-rust compile_fail E0515"><span class="boring">fn temp() {}
+</span>// Final expressions of `async` blocks are not extending expressions.
+let x = async { &amp;temp() }; // ERROR
+<span class="boring">x;</span></code></pre>
+<pre><code class="language-rust compile_fail E0515"><span class="boring">fn temp() {}
+</span>// Final expressions of closures are not extending expressions.
+let x = || &amp;temp(); // ERROR
+<span class="boring">x;</span></code></pre>
+<pre><code class="language-rust compile_fail E0716"><span class="boring">fn temp() {}
+</span>// Operands of loop breaks are not extending expressions.
+let x = loop { break &amp;temp() }; // ERROR
+<span class="boring">x;</span></code></pre>
+<pre><code class="language-rust compile_fail E0716"><span class="boring">fn temp() {}
+</span>// Operands of breaks to labels are not extending expressions.
+let x = 'a: { break 'a &amp;temp() }; // ERROR
+<span class="boring">x;</span></code></pre>
+<pre><code class="language-rust edition2024 compile_fail E0716"><span class="boring">use core::pin::pin;
+</span><span class="boring">fn temp() {}
+</span>// The argument to `pin!` is only an extending expression if the call
+// is an extending expression. Since it's not, the inner block is not
+// an extending expression, so the temporaries in its trailing
+// expression are dropped immediately.
+pin!({ &amp;temp() }); // ERROR</code></pre>
+<pre><code class="language-rust edition2024 compile_fail E0716"><span class="boring">fn temp() {}
+</span>// As above.
+format_args!("{:?}", { &amp;temp() }); // ERROR</code></pre>
+<div class="rule" id="r-destructors.forget"><a class="rule-link" href="#r-destructors.forget" title="destructors.forget"><span>[destructors<wbr>.forget]</span></a>
+</div>
+
+<h2 id="not-running-destructors"><a class="header" href="#not-running-destructors">اجرا نکردن نابودگرها</a></h2>
+<div class="rule" id="r-destructors.manually-suppressing"><a class="rule-link" href="#r-destructors.manually-suppressing" title="destructors.manually-suppressing"><span>[destructors<wbr>.manually-suppressing]</span></a>
+</div>
+
+<h3 id="manually-suppressing-destructors"><a class="header" href="#manually-suppressing-destructors">جلوگیری دستی از اجرای نابودگرها</a></h3>
+<p>با <code>core::mem::forget</code> می‌توان از اجرای نابودگر یک متغیر جلوگیری کرد و <code>core::mem::ManuallyDrop</code> پوششی فراهم می‌کند که از حذف خودکار یک متغیر یا میدان جلوگیری می‌کند.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> جلوگیری از اجرای نابودگر با <code>core::mem::forget</code> یا روش‌های دیگر، حتی برای نوعی که <code>'static</code> نیست، امن است. جز محل‌هایی که اجرای نابودگر طبق این سند تضمین شده، نوع‌ها برای صحت خود نمی‌توانند با ایمنی به اجرای نابودگر تکیه کنند.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-destructors.process-termination"><a class="rule-link" href="#r-destructors.process-termination" title="destructors.process-termination"><span>[destructors<wbr>.process-termination]</span></a>
+</div>
+
+<h3 id="process-termination-without-unwinding"><a class="header" href="#process-termination-without-unwinding">پایان فرایند بدون بازپیچی</a></h3>
+<p>راه‌هایی برای پایان دادن به فرایند بدون <a href="panic.html#unwinding">بازپیچی</a> وجود دارد که در آن صورت نابودگرها اجرا نمی‌شوند.</p>
+<p>کتابخانهٔ استاندارد <code>std::process::exit</code> و <code>std::process::abort</code> را برای انجام صریح این کار فراهم می‌کند. همچنین اگر <a href="panic.html#r-panic.panic_handler.std">مدیریت‌کنندهٔ وحشت</a> روی <code>abort</code> تنظیم شده باشد، وحشت همیشه فرایند را بدون اجرای نابودگرها پایان می‌دهد.</p>
+<p>یک حالت دیگر نیز باید در نظر گرفته شود: وقتی وحشت به یک <a href="items/functions.html#unwinding">مرز ABI بدون بازپیچی</a> برسد، یا هیچ نابودگری اجرا نمی‌شود یا همهٔ نابودگرها تا مرز ABI اجرا می‌شوند.</p><nav class="page-nav"><a href="divergence.html">→ واگرایی (Divergence)</a><a href="lifetime-elision.html">حذف طول‌عمر (Lifetime elision) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../reference/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

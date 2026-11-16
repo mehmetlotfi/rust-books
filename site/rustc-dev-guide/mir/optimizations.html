@@ -1,0 +1,77 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>بهینه‌سازی‌های MIR — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="mir/optimizations"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="mir-optimizations"><a class="header" href="#mir-optimizations">MIR optimizations</a></h1>
+<p>بهینه‌سازی‌های MIR بهینه‌سازی‌هایی هستند که روی <a href="../mir/index.html">MIR</a> اجرا می‌شوند تا پیش از codegen MIR بهتری تولید کنند.
+این به دو دلیل مهم است: اول اینکه کد اجرایی تولیدشدهٔ نهایی را بهتر می‌کند، و دوم اینکه LLVM کار کمتری برای انجام دارد، پس کامپایل سریع‌تر است.
+توجه کنید چون MIR جنریک است (هنوز <a href="../appendix/glossary.html#mono">monomorphize</a> نشده)، این بهینه‌سازی‌ها به‌ویژه مؤثرند؛ می‌توانیم نسخهٔ جنریک را بهینه کنیم، پس همهٔ monomorphizationها ارزان‌تر می‌شوند!</p>
+<p>بهینه‌سازی‌های MIR پس از borrow checking اجرا می‌شوند.
+رشته‌ای از گذرهای بهینه‌سازی را روی MIR اجرا می‌کنیم تا آن را بهبود دهیم.
+برخی گذرها لازم است روی همهٔ کدها اجرا شوند،
+برخی گذرها واقعاً بهینه‌سازی نمی‌کنند بلکه فقط چیزهایی را بررسی می‌کنند، و برخی گذرها فقط در حالت <code>release</code> فعال‌اند.</p>
+<p>کوئری <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/fn.optimized_mir.html"><code>optimized_mir</code></a> <a href="../query.html"></a> برای تولید MIR بهینه‌شده برای یک <a href="../appendix/glossary.html#def-id"><code>DefId</code></a> داده‌شده فراخوانی می‌شود.
+این کوئری مطمئن می‌شود borrow checker اجرا شده و برخی اعتبارسنجی‌ها انجام شده است.
+سپس MIR را <a href="../mir/passes.html#stealing">می‌دزدد</a>،
+بهینه می‌کند و MIR بهبودیافته را برمی‌گرداند.</p>
+<h2 id="quickstart-for-adding-a-new-optimization"><a class="header" href="#quickstart-for-adding-a-new-optimization">شروع سریع برای افزودن بهینه‌سازی جدید</a></h2>
+<ol>
+<li>
+<p>فایل منبع Rust در <code>tests/mir-opt</code> بسازید که کدی را که می‌خواهید بهینه کنید نشان می‌دهد.
+آن را ساده نگه دارید، پس اگر برای بهینه‌سازی لازم نیست از <code>println!</code> یا کد قالب‌بندی دیگر پرهیز کنید.
+دلیلش این است که
+<code>println!</code>، <code>format!</code> و مانند آن مقدار زیادی MIR تولید می‌کنند که فهم اثر بهینه‌سازی روی تست را دشوارتر می‌کند.</p>
+</li>
+<li>
+<p><code>./x test --bless tests/mir-opt/&lt;your-test&gt;.rs</code> را اجرا کنید تا dump مربوط به MIR تولید شود.
+برای دستورالعمل dump‌کردن چیزها <a href="https://github.com/rust-lang/rust/blob/HEAD/tests/mir-opt/README.md">این README</a> را بخوانید.</p>
+</li>
+<li>
+<p>وضعیت پوشهٔ کاری فعلی را commit کنید.
+دلیل اینکه باید خروجی تست را پیش از پیاده‌سازی بهینه‌سازی commit کنید این است که شما (و بازبین‌هایتان) بتوانید diff قبل/بعد از تغییرات بهینه‌سازی را ببینید.</p>
+</li>
+<li>
+<p>بهینه‌سازی جدید را در <a href="https://github.com/rust-lang/rust/tree/HEAD/compiler/rustc_mir_transform/src"><code>compiler/rustc_mir_transform/src</code></a> پیاده‌سازی کنید.
+سریع‌ترین و ساده‌ترین راه برای این کار:</p>
+<ol>
+<li>بهینه‌سازی کوچکی انتخاب کنید (مثل <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_mir_transform/src/remove_storage_markers.rs"><code>remove_storage_markers</code></a>) و آن را به فایل جدیدی کپی کنید،</li>
+<li>بهینه‌سازی خود را به یکی از فهرست‌ها در تابع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/fn.run_optimization_passes.html"><code>run_optimization_passes()</code></a> اضافه کنید،</li>
+<li>و سپس شروع به تغییر بهینه‌سازی کپی‌شده کنید.</li>
+</ol>
+</li>
+<li>
+<p>دوباره <code>./x test --bless tests/mir-opt/&lt;your-test&gt;.rs</code> را اجرا کنید تا dumpهای MIR دوباره تولید شوند.
+diffها را ببینید تا بدانید همان چیزی است که انتظار داشتید یا نه.</p>
+</li>
+<li>
+<p><code>./x test tests/ui</code> را اجرا کنید تا ببینید بهینه‌سازی شما چیزی را شکسته است یا نه.</p>
+</li>
+<li>
+<p>اگر مشکلاتی در بهینه‌سازی شما هست، کمی با آن آزمایش کنید و گام‌های ۵ و ۶ را تکرار کنید.</p>
+</li>
+<li>
+<p>commit کنید و PR باز کنید.
+می‌توانید این کار را در هر نقطه‌ای بکنید، حتی اگر هنوز همه‌چیز کار نمی‌کند، تا بتوانید روی PR بازخورد بخواهید.
+در آن صورت PR از نوع «WIP» باز کنید (فقط پیشوند <code>[WIP]</code> را به عنوان PR اضافه کنید یا به شکل دیگری اعلام کنید در دست انجام است).</p>
+<p>مطمئن شوید خروجی تست bless‌شده را هم commit می‌کنید!
+برای گذراندن CI لازم است و برای بازبین‌ها بسیار مفید است.</p>
+</li>
+</ol>
+<p>اگر در طول مسیر پرسشی داشتید، با خیال راحت در <code>#t-compiler/wg-mir-opt</code> در Zulip بپرسید.</p>
+<h2 id="defining-optimization-passes"><a class="header" href="#defining-optimization-passes">Defining optimization passes</a></h2>
+<p>فهرست گذرهای اجراشده و ترتیب اجرای آن‌ها توسط تابع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/fn.run_optimization_passes.html"><code>run_optimization_passes</code></a> تعریف می‌شود.
+آرایه‌ای از گذرها برای اجرا دارد.
+هر گذر در آرایه structی است که trait با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/pass_manager/trait.MirPass.html"><code>MirPass</code></a> را پیاده‌سازی می‌کند.
+آرایه آرایه‌ای از trait objectهای <code>&amp;dyn MirPass</code> است.
+معمولاً گذر در ماژول خودش در crate با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/index.html"><code>rustc_mir_transform</code></a> پیاده‌سازی می‌شود.</p>
+<p>برخی نمونه‌های گذرها:</p>
+<ul>
+<li><code>CleanupPostBorrowck</code>: بخشی از اطلاعاتی را که فقط برای تحلیل‌ها لازم است نه codegen حذف می‌کند.</li>
+<li><code>ConstProp</code>: <a href="https://en.wikipedia.org/wiki/Constant_folding#Constant_propagation">انتشار ثابت (constant propagation)</a> را انجام می‌دهد.</li>
+</ul>
+<p>برای نمونه‌های بیشتر <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/pass_manager/trait.MirPass.html#implementors">بخش «Implementors» در rustdoc مربوط به <code>MirPass</code></a> را ببینید.</p>
+<h2 id="mir-optimization-levels"><a class="header" href="#mir-optimization-levels">MIR optimization levels</a></h2>
+<p>بهینه‌سازی‌های MIR می‌توانند سطوح مختلفی از آمادگی داشته باشند.
+بهینه‌سازی‌های آزمایشی ممکن است باعث miscompilation شوند یا زمان کامپایل را کند کنند.
+این گذرها همچنان در ساخت‌های nightly گنجانده می‌شوند تا بازخورد جمع شود و تغییر گذر آسان‌تر باشد.
+برای کار با گذرهای بهینه‌سازی کند یا آزمایشی،
+می‌توانید پرچم اشکال‌زدایی <code>-Z mir-opt-level</code> را مشخص کنید.
+تعریف سطوح را می‌توانید در <a href="https://github.com/rust-lang/compiler-team/issues/319">MCP کامپایلر</a> بیابید.
+اگر گذر MIR توسعه می‌دهید و می‌خواهید بپرسید آیا گذر شما باید اجرا شود،
+می‌توانید سطح فعلی را با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_session/config/struct.UnstableOptions.html#structfield.mir_opt_level"><code>tcx.sess.opts.unstable_opts.mir_opt_level</code></a> بررسی کنید.</p><nav class="page-nav"><a href="../part-5-intro.html">→ پیشگفتار</a><a href="debugging.html">اشکال‌زدایی MIR ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

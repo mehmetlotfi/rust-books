@@ -1,0 +1,604 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>خطاها و lintها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="diagnostics"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="errors-and-lints"><a class="header" href="#errors-and-lints">خطاها و lintها</a></h1>
+<p>تلاش زیادی صرف این شده که <code>rustc</code> پیام‌های خطای عالی داشته باشد.
+این فصل دربارهٔ نحوهٔ صدور خطاها و lintهای کامپایل از کامپایلر است.</p>
+<h2 id="diagnostic-structure"><a class="header" href="#diagnostic-structure">Diagnostic structure</a></h2>
+<p>بخش‌های اصلی یک خطای تشخیصی (diagnostic) این‌هاست:</p>
+<pre><code>error[E0000]: main error message
+  --&gt; file.rs:LL:CC
+   |
+LL | &lt;code&gt;
+   | -^^^^- secondary label
+   |  |
+   |  primary label
+   |
+   = note: note without a `Span`, created with `.note`
+note: sub-diagnostic message for `.span_note`
+  --&gt; file.rs:LL:CC
+   |
+LL | more code
+   |      ^^^^
+</code></pre>
+<ul>
+<li>سطح (<code>error</code>، <code>warning</code> و غیره). شدت پیام را نشان می‌دهد.
+(<a href="#diagnostic-levels">سطوح diagnostic</a> را ببینید)</li>
+<li>کد (مثلاً برای «mismatched types» کد <code>E0308</code> است).
+به کاربران کمک می‌کند با توضیح مفصل مشکل در فهرست کدهای خطا اطلاعات بیشتری دربارهٔ خطای فعلی بگیرند.
+همهٔ diagnosticها کد ندارند.
+برای مثال diagnosticهایی که توسط lintها ساخته می‌شوند کد ندارند.</li>
+<li>پیام.
+توضیح اصلی مشکل است.
+باید کلی باشد و مستقل بتواند معنا بدهد، طوری که حتی به‌تنهایی هم قابل‌فهم باشد.</li>
+<li>Diagnostic window.
+This contains several things:
+<ul>
+<li>مسیر، شمارهٔ خط و ستون ابتدای span اصلی.</li>
+<li>کد تحت‌تأثیر کاربر و محیط اطراف آن.</li>
+<li>Primary and secondary spans underlying the users’ code.
+These spans can optionally contain one or more labels.
+<ul>
+<li>span‌های اصلی باید متن کافی برای توصیف مشکل داشته باشند طوری که اگر تنها چیز نمایش‌داده‌شده باشد (مثلاً در IDE) باز هم معنا بدهد.
+چون «آگاه به مکان» است (به کد اشاره می‌کند)، معمولاً می‌تواند از پیام خطا مختصرتر باشد.</li>
+<li>اگر بتوان در مواردی که چند برچسب span هم‌پوشانی دارند خروجی شلوغ پیش‌بینی کرد، ایدهٔ خوبی است خروجی را مناسب تنظیم کنیم.
+برای مثال، خطای <code>if/else arms have incompatible types</code> بسته به اینکه بازوها همه در یک خط باشند، یکی از بازوها خالی باشد یا هیچ‌کدام، از spanهای متفاوتی استفاده می‌کند.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>sub-diagnosticها.
+هر خطا می‌تواند چند sub-diagnostic شبیه بخش اصلی خطا داشته باشد.
+این‌ها برای مواردی به‌کار می‌روند که ترتیب توضیح ممکن است با ترتیب کد جور نباشد.
+اگر ترتیب توضیح می‌تواند «بدون ترتیب» باشد، استفاده از برچسب‌های ثانویه در diagnostic اصلی ترجیح دارد چون معمولاً کم‌حرف‌تر است.</li>
+</ul>
+<p>متن باید واقع‌گرایانه باشد و از حرف بزرگ و نقطه پرهیز کند، مگر اینکه چند جمله <em>لازم</em> باشد:</p>
+<pre><code class="language-txt">error: the fobrulator needs to be krontrificated
+</code></pre>
+<p>وقتی کد یا شناسه‌ای باید در پیام یا برچسب بیاید، باید داخل backtick قرار گیرد:</p>
+<pre><code class="language-txt">error: the identifier `foo.bar` is invalid
+</code></pre>
+<h3 id="error-codes-and-explanations"><a class="header" href="#error-codes-and-explanations">کدهای خطا و توضیحات</a></h3>
+<p>بیشتر خطاها کد خطای مرتبط دارند.
+کدهای خطا به توضیحات طولانی‌تری پیوند دارند که مثالی از نحوهٔ فعال‌کردن خطا و جزئیات عمیق دربارهٔ آن دارند.
+می‌توان آن‌ها را با پرچم <code>--explain</code> یا از طریق <a href="https://doc.rust-lang.org/error-index.html">فهرست خطاها</a> دید.</p>
+<p>قاعدهٔ کلی: اگر توضیح اطلاعات بیشتری از خود خطا می‌دهد، به خطا کد (با توضیح مرتبط) بدهید.
+بسیاری از اوقات بهتر است همهٔ اطلاعات در خود خطای صادرشده باشد.
+اما گاهی این خطا را پرحرف می‌کند یا محرک‌های ممکن آن‌قدر زیادند که نمی‌توان اطلاعات مفید برای همهٔ موارد را در خطا گنجاند،
+که در آن صورت ایدهٔ خوبی است توضیحی اضافه شود.<sup class="footnote-reference" id="fr-estebank-1"><a href="#footnote-estebank">1</a></sup>
+مثل همیشه، اگر مطمئن نیستید از بازبین خود بپرسید!</p>
+<p>اگر تصمیم دارید خطای جدیدی با کد خطای مرتبط اضافه کنید،
+لطفاً <a href="./diagnostics/error-codes.html">این بخش</a> را برای راهنما و جزئیات مهم فرایند بخوانید.</p>
+<h3 id="lints-versus-fixed-diagnostics"><a class="header" href="#lints-versus-fixed-diagnostics">lintها در برابر diagnosticهای ثابت</a></h3>
+<p>برخی پیام‌ها از طریق <a href="#lints">lintها</a> صادر می‌شوند، که کاربر می‌تواند سطح آن‌ها را کنترل کند.
+بیشتر diagnosticها hard-coded هستند طوری که کاربر نمی‌تواند سطحشان را کنترل کند.</p>
+<p>معمولاً روشن است که diagnostic باید «ثابت» باشد یا lint،
+اما چند ناحیهٔ خاکستری هست.</p>
+<p>چند مثال:</p>
+<ul>
+<li>خطاهای borrow checker: این‌ها خطاهای ثابت‌اند.
+کاربر نمی‌تواند سطح این diagnosticها را برای خاموش‌کردن borrow checker تنظیم کند.</li>
+<li>کد مرده: این lint است.
+در حالی که کاربر احتمالاً کد مرده در crate خود نمی‌خواهد،
+خطای سخت‌کردن آن بازآرایی و توسعه را بسیار دردناک می‌کند.</li>
+<li><a href="#future-incompatible-lints">lintهای ناسازگار با آینده</a>: این‌ها lintهای قابل‌خاموش‌شدن‌اند.
+تصمیم گرفته شد ثابت‌کردنشان به‌صورت خطا شکستگی زیادی ایجاد می‌کند،
+پس به‌جای آن هشدار صادر می‌شود،
+و در نهایت به خطاهای ثابت (سخت) تبدیل خواهند شد.</li>
+</ul>
+<p>هشدارهای hard-coded (آن‌هایی که از متدهایی مثل <code>span_warn</code> استفاده می‌کنند) باید برای کد معمولی پرهیز شوند و به‌جایشان lint به‌کار رود.
+برخی موارد، مثل هشدار با پرچم‌های CLI، نیازمند استفاده از هشدار hard-coded‌اند.</p>
+<p>برای رهنمود دربارهٔ اینکه چه وقت lint سطح خطا را به‌جای خطای ثابت به‌کار ببریم، <a href="#diagnostic-levels">سطح lint</a> با نام <code>deny</code> را در ادامه ببینید.</p>
+<h2 id="diagnostic-output-style-guide"><a class="header" href="#diagnostic-output-style-guide">راهنمای سبک خروجی diagnostic</a></h2>
+<ul>
+<li>به انگلیسی ساده و روان بنویسید.
+اگر پیام شما، وقتی روی صفحه‌ای – که شاید کوچک باشد – (که مدتی است تمیز نشده) نمایش داده می‌شود، توسط برنامه‌نویس عادی‌ای که تازه پس از شب مهمانی از خواب بلند شده قابل‌فهم نباشد، بیش‌ازحد پیچیده است.</li>
+<li>پیام‌های <code>Error</code>، <code>Warning</code>، <code>Note</code> و <code>Help</code> با حرف کوچک شروع می‌شوند و با علامت نگارشی تمام نمی‌شوند.</li>
+<li>پیام‌های خطا باید مختصر باشند.
+کاربران این پیام‌ها را بارها می‌بینند،
+و توضیحات مفصل‌تر را می‌توان با پرچم <code>--explain</code> دید.
+با این حال آن‌قدر کوتاه نکنید که فهمیدنشان سخت شود.</li>
+<li>کلمهٔ «illegal» غیرقانونی است.
+به‌جای آن «invalid» یا کلمهٔ دقیق‌تری را ترجیح دهید.</li>
+<li>خطاها باید span کدی را که در آن رخ می‌دهند مستند کنند (برای انجام آسان این از متدهای <code>span_*</code> در
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.DiagCtxt.html"><code>rustc_errors::DiagCtxt</code></a> یا <code>#[primary_span]</code> در struct مربوط به diagnostic استفاده کنید).
+همچنین اگر span زیادی بزرگ نیست، span‌های دیگری را که در خطا مشارکت داشته‌اند با <code>note</code> یادداشت کنید.</li>
+<li>هنگام صدور پیام با span، سعی کنید span را به کوچک‌ترین مقداری که هنوز مشکل را نشان می‌دهد کاهش دهید</li>
+<li>سعی کنید برای یک خطای واحد چند پیام خطا صادر نکنید.
+این ممکن است نیازمند تشخیص تکراری‌ها باشد.</li>
+<li>وقتی کامپایلر اطلاعات کمی برای پیام خطای مشخصی دارد، با تیم کامپایلر مشورت کنید تا attributeهای جدیدی برای کد کتابخانه اضافه شوند که امکان افزودن اطلاعات بیشتر را بدهند.
+برای مثال <code>#[rustc_on_unimplemented]</code> را ببینید.
+وقتی در دسترس‌اند از این annotationها استفاده کنید!</li>
+<li>به یاد داشته باشید شیب یادگیری Rust نسبتاً تند است،
+و پیام‌های کامپایلر ابزار یادگیری مهمی هستند.</li>
+<li>هنگام صحبت دربارهٔ کامپایلر، آن را <code>the compiler</code> بنامید، نه <code>Rust</code> یا <code>rustc</code>.</li>
+<li>هنگام نوشتن فهرست آیتم‌ها از <a href="https://en.wikipedia.org/wiki/Serial_comma">ویرگول آکسفورد</a> استفاده کنید.</li>
+<li>هنگام ذکر attributeها در صورت امکان از این شکل استفاده کنید: «the <code>inline</code> attribute».
+نویسه‌های <code>#[</code>/<code>#![</code>/<code>]</code> یا آرگومان‌های attribute را در پیام یا span نگنجانید مگر مرتبط باشند.</li>
+</ul>
+<h3 id="lint-naming"><a class="header" href="#lint-naming">Lint naming</a></h3>
+<p>از <a href="https://github.com/rust-lang/rfcs/blob/master/text/0344-conventions-galore.md#lints">RFC 0344</a>، نام‌های lint باید سازگار باشند، با این رهنمودها:</p>
+<p>قاعدهٔ اصلی: نام lint باید وقتی به شکل «allow <em>lint-name</em>» یا «allow <em>lint-name</em> items» خوانده می‌شود معنا بدهد.
+برای مثال، «allow <code>deprecated</code> items» و «allow <code>dead_code</code>» معنا دارند،
+در حالی که «allow <code>unsafe_block</code>» از نظر دستوری نادرست است (باید جمع باشد).</p>
+<ul>
+<li>
+<p>نام‌های lint باید چیز بدی را که بررسی می‌شود بیان کنند، مثل <code>deprecated</code>،
+تا <code>#[allow(deprecated)]</code> (items) درست خوانده شود.
+بنابراین <code>ctypes</code> نام مناسبی نیست؛ <code>improper_ctypes</code> هست.</p>
+</li>
+<li>
+<p>lintهایی که برای آیتم‌های دلخواه اعمال می‌شوند (مثل lintهای پایداری) باید فقط بگویند چه چیزی را بررسی می‌کنند: به‌جای <code>deprecated_items</code> از <code>deprecated</code> استفاده کنید.
+این نام‌های lint را کوتاه نگه می‌دارد.
+(باز هم، به «allow <em>lint-name</em> items» فکر کنید.)</p>
+</li>
+<li>
+<p>اگر lint روی رستهٔ دستوری مشخصی اعمال می‌شود،
+آن رسته را ذکر کنید و شکل جمع به‌کار ببرید: به‌جای <code>unused_variable</code> از <code>unused_variables</code> استفاده کنید.
+این باعث می‌شود <code>#[allow(unused_variables)]</code> درست خوانده شود.</p>
+</li>
+<li>
+<p>lintهایی که جنبه‌های غیرضروری، استفاده‌نشده یا بی‌فایدهٔ کد را می‌گیرند باید از واژهٔ <code>unused</code> استفاده کنند، مثل <code>unused_imports</code>، <code>unused_typecasts</code>.</p>
+</li>
+<li>
+<p>از snake case استفاده کنید، همان‌طور که برای نام توابع می‌کنید.</p>
+</li>
+</ul>
+<h3 id="diagnostic-levels"><a class="header" href="#diagnostic-levels">Diagnostic levels</a></h3>
+<p>رهنمودها برای سطوح مختلف diagnostic:</p>
+<ul>
+<li>
+<p><code>error</code>: وقتی صادر می‌شود که کامپایلر مشکلی تشخیص دهد که کامپایل برنامه را ناممکن می‌کند، یا چون برنامه نامعتبر است یا چون برنامه‌نویس تصمیم گرفته <code>warning</code> مشخصی را به خطا تبدیل کند.</p>
+</li>
+<li>
+<p><code>warning</code>: وقتی صادر می‌شود که کامپایلر چیز عجیبی در برنامه تشخیص دهد.
+هنگام افزودن هشدارها باید مراقب بود تا خستگی از هشدار و مثبت‌های کاذب جایی که واقعاً مشکلی در کد نیست ایجاد نشود.
+چند مثال از مواردی که صدور هشدار مناسب است:</p>
+<ul>
+<li>موقعیتی که کاربر <em>باید</em> اقدام کند، مثل جایگزینی آیتم منسوخ یا استفاده از <code>Result</code>، اما در غیر این صورت مانع کامپایل نیست.</li>
+<li>نحو غیرضروری که می‌توان بدون تأثیر بر معناشناسی کد حذفش کرد.
+برای مثال، کد استفاده‌نشده یا <code>unsafe</code> غیرضروری.</li>
+<li>کدی که به احتمال زیاد نادرست، خطرناک یا گیج‌کننده است، اما زبان از نظر فنی آن را مجاز می‌کند و برای خطاکردنش آماده یا مطمئن نیستیم.
+نمونه‌ها <code>unused_comparisons</code> (مقایسه‌های خارج از محدوده) یا <code>bindings_with_variant_name</code> (کاربر احتمالاً نمی‌خواسته binding در الگو بسازد) هستند.</li>
+<li>lintهای ناسازگار با آینده، که چیزی در گذشته به‌طور تصادفی یا اشتباهی پذیرفته شده بود، اما رد‌کردنش شکستگی بیش‌ازحد در اکوسیستم ایجاد می‌کند.</li>
+<li>انتخاب‌های سبکی.
+برای مثال camel یا snake case، یا هشدار trait با نام <code>dyn</code> در edition 2018.
+آستانهٔ افزودن این‌ها بالاست و فقط باید در شرایط استثنایی به‌کار روند.
+انتخاب‌های سبکی دیگر باید یا lintهای allow-by-default باشند یا بخشی از ابزارهای دیگر مثل Clippy یا rustfmt.</li>
+</ul>
+</li>
+<li>
+<p><code>help</code>: پس از <code>error</code> یا <code>warning</code> صادر می‌شود تا اطلاعات بیشتری دربارهٔ نحوهٔ حل مشکل به کاربر بدهد.
+این پیام‌ها اغلب شامل رشتهٔ پیشنهاد و سطح اطمینان <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/enum.Applicability.html"><code>rustc_errors::Applicability</code></a> هستند تا اصلاحات خودکار منبع توسط ابزارها هدایت شود.
+برای جزئیات بیشتر بخش <a href="#suggestions">پیشنهادها</a> را ببینید.</p>
+<p>بخش error یا warning نباید <em>نحوهٔ رفع</em> مشکل را پیشنهاد کند، فقط sub-diagnostic با نام «help» باید این کار را بکند.</p>
+</li>
+<li>
+<p><code>note</code>: برای ارائهٔ زمینهٔ بیشتر و شناسایی شرایط و بخش‌های کد اضافی که باعث هشدار یا خطا شده‌اند صادر می‌شود.
+برای مثال، borrow checker هر borrow متعارض قبلی را یادداشت می‌کند.</p>
+<p><code>help</code> در برابر <code>note</code>: <code>help</code> باید برای نمایش تغییراتی که کاربر ممکن است برای رفع مشکل بدهد به‌کار رود.
+<code>note</code> برای هر چیز دیگر مثل زمینه، اطلاعات و واقعیت‌ها، منابع آنلاین برای مطالعه و غیره به‌کار می‌رود.</p>
+</li>
+</ul>
+<p>با <em>سطوح lint</em> اشتباه نشود، که رهنمودهایشان این است:</p>
+<ul>
+<li>
+<p><code>forbid</code>: lintها هرگز نباید پیش‌فرض <code>forbid</code> باشند.</p>
+</li>
+<li>
+<p><code>deny</code>: معادل سطح diagnostic با نام <code>error</code> است.
+چند مثال:</p>
+<ul>
+<li>lint ناسازگار با آینده یا مبتنی بر edition که از سطح warning ارتقا یافته.</li>
+<li>چیزی که اطمینان بسیار بالایی دارد نادرست است، اما همچنان می‌خواهیم دریچهٔ فرار برای اجازهٔ عبور داشته باشیم.</li>
+</ul>
+</li>
+<li>
+<p><code>warn</code>: معادل سطح diagnostic با نام <code>warning</code> است.
+رهنمودها را در <code>warning</code> بالا ببینید.</p>
+</li>
+<li>
+<p><code>allow</code>: نمونه‌هایی از lintهایی که باید پیش‌فرض <code>allow</code> باشند:</p>
+<ul>
+<li>lint نرخ مثبت کاذب بسیار بالایی دارد.</li>
+<li>lint بیش‌ازحد سلیقه‌ای است.</li>
+<li>lint آزمایشی است.</li>
+<li>lint برای اعمال چیزی به‌کار می‌رود که معمولاً اعمال نمی‌شود.
+برای مثال lint با نام <code>unsafe_code</code> را می‌توان برای جلوگیری از استفاده از کد unsafe به‌کار برد.</li>
+</ul>
+</li>
+</ul>
+<p>اطلاعات بیشتر دربارهٔ سطوح lint را در <a href="../rustc/lints/levels.html">کتاب rustc</a> و <a href="../reference/attributes/diagnostics.html#lint-check-attributes">مرجع</a> می‌توانید بیابید.</p>
+<h2 id="helpful-tips-and-options"><a class="header" href="#helpful-tips-and-options">نکات و گزینه‌های مفید</a></h2>
+<h3 id="finding-the-source-of-errors"><a class="header" href="#finding-the-source-of-errors">یافتن منبع خطاها</a></h3>
+<p>سه راه اصلی برای یافتن اینکه خطای مشخصی کجا صادر می‌شود هست:</p>
+<ul>
+<li>
+<p><code>grep</code> برای بخشی از پیام خطا/برچسب یا کد خطا.
+این معمولاً خوب کار می‌کند و سرراست است، اما مواردی هست که کد صادرکنندهٔ خطا با کدی که خطا را می‌سازد پشت پشتهٔ فراخوانی نسبتاً عمیقی فاصله دارد.
+حتی در آن صورت هم راه خوبی برای جهت‌یابی است.</p>
+</li>
+<li>
+<p>فراخوانی <code>rustc</code> با پرچم مخصوص nightly به نام <code>-Z treat-err-as-bug=1</code>
+اولین خطای صادرشده را به‌عنوان خطای داخلی کامپایلر (ICE) در نظر می‌گیرد،
+که اجازه می‌دهد در نقطه‌ای که خطا صادر شد ردیابی پشته بگیرید.
+اگر می‌خواهید روی خطای بعدی فعال شود <code>1</code> را به عدد دیگری تغییر دهید.</p>
+<p>این رویکرد محدودیت‌هایی دارد:</p>
+<ul>
+<li>برخی فراخوانی‌ها از ردیابی پشته حذف می‌شوند چون در <code>rustc</code> کامپایل‌شده inline شده‌اند.</li>
+<li><em>ساخت</em> خطا از جایی که <em>صادر</em> می‌شود دور است، مشکلی شبیه رویکرد <code>grep</code>.
+در برخی موارد، چند خطا را بافر می‌کنیم تا به ترتیب صادرشان کنیم.</li>
+</ul>
+</li>
+<li>
+<p>فراخوانی <code>rustc</code> با <code>-Z track-diagnostics</code> محل‌های ساخت خطا را کنار خطا چاپ می‌کند.</p>
+</li>
+</ul>
+<p>شیوه‌های عادی توسعه صدق می‌کنند: استفادهٔ حساب‌شده از دستورهای <code>debug!()</code> و استفاده از دیباگر برای فعال‌کردن breakpointها تا بفهمید چه چیزی به چه ترتیبی رخ می‌دهد.</p>
+<h2 id="span"><a class="header" href="#span"><code>Span</code></a></h2>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/struct.Span.html"><code>Span</code></a> ساختار داده اصلی در <code>rustc</code> است که مکانی را در کد در حال کامپایل نشان می‌دهد.
+<code>Span</code>ها به بیشتر ساختارها در HIR و MIR متصل‌اند، که گزارش خطای آگاهانه‌تر را ممکن می‌کنند.</p>
+<p>می‌توان <code>Span</code> را در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/source_map/struct.SourceMap.html"><code>SourceMap</code></a> جست‌وجو کرد تا «snippet» مفید برای نمایش خطاها با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/source_map/struct.SourceMap.html#method.span_to_snippet"><code>span_to_snippet</code></a> و متدهای مشابه دیگر در <code>SourceMap</code> گرفت.</p>
+<h2 id="error-messages"><a class="header" href="#error-messages">Error messages</a></h2>
+<p>crate با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/index.html"><code>rustc_errors</code></a> بیشتر ابزارهای مورد استفاده برای گزارش خطا را تعریف می‌کند.</p>
+<p>diagnosticها را می‌توان به‌صورت نوع‌هایی پیاده‌سازی کرد که trait با نام <code>Diagnostic</code> را پیاده می‌کنند.
+برای diagnosticهای جدید ترجیح دارد چون جداسازی منطق صدور diagnostic از مسیرهای کد اصلی را اعمال می‌کند.
+برای diagnosticهای ساده‌تر،
+می‌توان trait با نام <code>Diagnostic</code> را derive کرد – <a href="./diagnostics/diagnostic-structs.html">structهای Diagnostic</a> را ببینید.
+درون پیاده‌سازی trait، APIهای شرح‌داده‌شده در ادامه را می‌توان به‌صورت عادی به‌کار برد.</p>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.DiagCtxt.html"><code>DiagCtxt</code></a> متدهایی دارد که خطا می‌سازند و صادر می‌کنند.
+این متدها معمولاً نام‌هایی مثل <code>span_err</code> یا <code>struct_span_err</code> یا <code>span_warn</code> و غیره دارند…
+تعداد زیادی از آن‌ها هست؛ انواع مختلف «خطا» را صادر می‌کنند مثل هشدارها، خطاها، خطاهای مرگبار، پیشنهادها و غیره.</p>
+<p>عموماً دو دستهٔ چنین متدی هست: آن‌هایی که مستقیماً خطا صادر می‌کنند و آن‌هایی که کنترل ریزتر بر آنچه صادر می‌شود می‌دهند.
+برای مثال،
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.DiagCtxt.html#method.span_err"><code>span_err</code></a> پیام خطای داده‌شده را در <code>Span</code> داده‌شده صادر می‌کند،
+اما <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.DiagCtxt.html#method.struct_span_err"><code>struct_span_err</code></a> به‌جای آن <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.Diag.html"><code>Diag</code></a> برمی‌گرداند.</p>
+<p>بیشتر این متدها رشته می‌پذیرند، اما برای diagnosticهای جدید توصیه می‌شود از شناسه‌های نوع‌دار برای diagnosticهای قابل‌ترجمه استفاده شود (<a href="./diagnostics/translation.html">ترجمه</a> را ببینید).</p>
+<p><code>Diag</code> اجازه می‌دهد پیش از صدور خطا با فراخوانی متد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.Diag.html#method.emit"><code>emit</code></a> یادداشت‌ها و پیشنهادهای مرتبط به آن بیفزایید.
+(عدم صدور یا <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.Diag.html#method.cancel">لغو</a> یک <code>Diag</code> منجر به ICE می‌شود.) برای اطلاعات بیشتر دربارهٔ آنچه می‌توانید بکنید <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.Diag.html">مستندات</a> را ببینید.</p>
+<pre><code class="language-rust ignore">// Get a `Diag`. This does _not_ emit an error yet.
+let mut err = sess.dcx.struct_span_err(sp, fluent::example::example_error);
+
+// In some cases, you might need to check if `sp` is generated by a macro to
+// avoid printing weird errors about macro-generated code.
+
+if let Ok(snippet) = sess.source_map().span_to_snippet(sp) {
+    // Use the snippet to generate a suggested fix
+    err.span_suggestion(suggestion_sp, fluent::example::try_qux_suggestion, format!("qux {}", snippet));
+} else {
+    // If we weren't able to generate a snippet, then emit a "help" message
+    // instead of a concrete "suggestion". In practice this is unlikely to be
+    // reached.
+    err.span_help(suggestion_sp, fluent::example::qux_suggestion);
+}
+
+// emit the error
+err.emit();</code></pre>
+<pre><code class="language-fluent">example-example-error = oh no! this is an error!
+  .try-qux-suggestion = try using a qux here
+  .qux-suggestion = you could use a qux here instead
+</code></pre>
+<h2 id="suggestions"><a class="header" href="#suggestions">Suggestions</a></h2>
+<p>علاوه بر گفتن دقیق اینکه <em>چرا</em> کد کاربر اشتباه است،
+اغلب می‌توان به او گفت چگونه آن را رفع کند.
+برای این منظور، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.Diag.html"><code>Diag</code></a> API پیشنهاد ساختاریافته‌ای ارائه می‌دهد که پیشنهادهای کد را در ترمینال به‌شکلی دلپذیر یا (وقتی پرچم <code>--error-format json</code> داده شود) به‌صورت JSON برای مصرف توسط ابزارهایی مثل <a href="https://github.com/rust-lang/rustfix"><code>rustfix</code></a> قالب‌بندی می‌کند.</p>
+<p>همهٔ پیشنهادها نباید مکانیکی اعمال شوند؛
+درجه‌ای از اطمینان به کد پیشنهادی دارند،
+از بالا (<code>Applicability::MachineApplicable</code>) تا پایین (<code>Applicability::MaybeIncorrect</code>).
+هنگام انتخاب سطح محتاط باشید.
+برای ارائهٔ پیشنهاد از متد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.Diag.html#method.span_suggestion"><code>span_suggestion</code></a> در <code>Diag</code> استفاده کنید.
+آرگومان آخر به ابزارها اشاره می‌کند که پیشنهاد مکانیکی قابل‌اعمال است یا نه.</p>
+<p>پیشنهادها به یک یا چند span با کد متناظر اشاره می‌کنند که جایگزین محتوای فعلی‌شان می‌شود.</p>
+<p>پیامی که همراه آن‌هاست باید در زمینه‌های زیر قابل‌فهم باشد:</p>
+<ul>
+<li>به‌صورت sub-diagnostic مستقل نمایش داده شود (خروجی پیش‌فرض)</li>
+<li>به‌صورت برچسبی که به span تحت‌تأثیر اشاره می‌کند نمایش داده شود (اگر برخی ابتکارهای پرحرفی برآورده شوند خودکار انجام می‌شود)</li>
+<li>به‌صورت sub-diagnostic با نام <code>help</code> بدون محتوا نمایش داده شود (برای مواردی که پیشنهاد از متن بدیهی است اما همچنان می‌خواهیم ابزارها بتوانند آن را اعمال کنند)</li>
+<li>نمایش داده نشود (برای موارد <em>بسیار</em> بدیهی، اما همچنان می‌خواهیم به ابزارها اجازهٔ اعمال بدهیم)</li>
+</ul>
+<p>برای مثال، برای machine-applicable کردن پیشنهاد <code>qux</code> این کار را می‌کنیم:</p>
+<pre><code class="language-rust ignore">let mut err = sess.dcx.struct_span_err(sp, fluent::example::message);
+
+if let Ok(snippet) = sess.source_map().span_to_snippet(sp) {
+    err.span_suggestion(
+        suggestion_sp,
+        fluent::example::try_qux_suggestion,
+        format!("qux {}", snippet),
+        Applicability::MachineApplicable,
+    );
+} else {
+    err.span_help(suggestion_sp, fluent::example::qux_suggestion);
+}
+
+err.emit();</code></pre>
+<p>این ممکن است خطایی شبیه این صادر کند</p>
+<pre><code class="language-console">$ rustc mycode.rs
+error[E0999]: oh no! this is an error!
+ --&gt; mycode.rs:3:5
+  |
+3 |     sad()
+  |     ^ help: try using a qux here: `qux sad()`
+
+error: aborting due to previous error
+
+For more information about this error, try `rustc --explain E0999`.
+</code></pre>
+<p>در برخی موارد، مثل وقتی پیشنهاد چند خط را دربر می‌گیرد یا چند پیشنهاد هست، پیشنهادها جداگانه نمایش داده می‌شوند:</p>
+<pre><code class="language-console">error[E0999]: oh no! this is an error!
+ --&gt; mycode.rs:3:5
+  |
+3 |     sad()
+  |     ^
+help: try using a qux here:
+  |
+3 |     qux sad()
+  |     ^^^
+
+error: aborting due to previous error
+
+For more information about this error, try `rustc --explain E0999`.
+</code></pre>
+<p>مقادیر ممکن <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/enum.Applicability.html"><code>Applicability</code></a> این‌هاست:</p>
+<ul>
+<li><code>MachineApplicable</code>: می‌توان مکانیکی اعمال کرد.</li>
+<li><code>HasPlaceholders</code>: نمی‌توان مکانیکی اعمال کرد چون متن جانگهدار در پیشنهادها دارد.
+برای مثال: <code>try adding a type: `let x: &lt;type&gt;` </code>.</li>
+<li><code>MaybeIncorrect</code>: نمی‌توان مکانیکی اعمال کرد چون پیشنهاد ممکن است خوب باشد یا نه.</li>
+<li><code>Unspecified</code>: نمی‌توان مکانیکی اعمال کرد چون نمی‌دانیم در کدام یک از حالات بالا قرار می‌گیرد.</li>
+</ul>
+<h3 id="suggestion-style-guide"><a class="header" href="#suggestion-style-guide">Suggestion Style Guide</a></h3>
+<ul>
+<li>
+<p>پیشنهادها نباید پرسش باشند.
+به‌طور خاص، عباراتی مثل «did you mean» باید پرهیز شوند.
+گاهی روشن نیست چرا پیشنهاد مشخصی داده می‌شود.
+در این موارد بهتر است در مورد پیشنهاد شفاف بود.</p>
+<p>«did you mean: <code>Foo</code>» را با «there is a struct with a similar name: <code>Foo</code>» مقایسه کنید.</p>
+</li>
+<li>
+<p>پیام نباید عباراتی مثل «the following»، «as shown» و غیره داشته باشد. از span برای بیان آنچه دربارهٔ آن صحبت می‌شود استفاده کنید.</p>
+</li>
+<li>
+<p>پیام ممکن است دستور بیشتری مثل «to do xyz, use» یا «to do xyz, use abc» داشته باشد.</p>
+</li>
+<li>
+<p>پیام ممکن است نام تابع، متغیر یا نوع داشته باشد، اما از عبارت‌های کامل پرهیز کنید.</p>
+</li>
+</ul>
+<h2 id="lints"><a class="header" href="#lints">Lints</a></h2>
+<p>زیرساخت linting کامپایلر در ماژول <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/lint/index.html"><code>rustc_middle::lint</code></a> تعریف شده است.</p>
+<h3 id="when-do-lints-run"><a class="header" href="#when-do-lints-run">lintها چه وقت اجرا می‌شوند؟</a></h3>
+<p>lintهای مختلف بسته به اطلاعاتی که برای انجام کارشان لازم دارند در زمان‌های مختلف اجرا می‌شوند.
+برخی lintها در <em>گذرها (passes)</em> گروه‌بندی می‌شوند که lintهای هر گذر با یک visitor واحد پردازش می‌شوند.
+برخی گذرها:</p>
+<ul>
+<li>
+<p>گذر Pre-expansion: روی <a href="the-parser.html">گره‌های AST</a> پیش از <a href="macro-expansion.html">گسترش ماکرو</a> کار می‌کند.
+عموماً باید پرهیز شود.</p>
+<ul>
+<li>مثال: <a href="https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html#keyword-idents"><code>keyword_idents</code></a> شناسه‌هایی را بررسی می‌کند که در editionهای آینده کلیدواژه می‌شوند، اما به شناسه‌های درون ماکروها حساس است.</li>
+</ul>
+</li>
+<li>
+<p>گذر Early lint: روی <a href="the-parser.html">گره‌های AST</a> پس از <a href="macro-expansion.html">گسترش ماکرو</a> و name resolution، درست پیش از <a href="./hir/lowering.html">lowering AST</a> کار می‌کند.
+این lintها برای lintهای صرفاً نحوی‌اند.</p>
+<ul>
+<li>مثال: lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#unused-parens"><code>unused_parens</code></a> عبارت‌های داخل پرانتز را جایی که لازم نیستند بررسی می‌کند، مثل شرط <code>if</code>.</li>
+</ul>
+</li>
+<li>
+<p>گذر Late lint: روی <a href="hir.html">گره‌های HIR</a>، در اواخر <a href="part-4-intro.html">تحلیل</a> (پس از borrow checking و غیره) کار می‌کند. این lintها اطلاعات کامل نوع در اختیار دارند.
+بیشتر lintها late هستند.</p>
+<ul>
+<li>مثال: lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#invalid-value"><code>invalid_value</code></a> (که مقادیر مقداردهی‌نشدهٔ آشکارا نامعتبر را بررسی می‌کند) lint از نوع late است چون برای فهمیدن اینکه نوعی اجازهٔ مقداردهی‌نشدن می‌دهد یا نه اطلاعات نوع لازم دارد.</li>
+</ul>
+</li>
+<li>
+<p>گذر MIR: روی <a href="mir/index.html">گره‌های MIR</a> کار می‌کند.
+این دقیقاً مثل گذرهای دیگر نیست؛
+lintهایی که روی گره‌های MIR کار می‌کنند متدهای خودشان برای اجرا دارند.</p>
+<ul>
+<li>مثال: lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/deny-by-default.html#arithmetic-overflow"><code>arithmetic_overflow</code></a> وقتی صادر می‌شود که مقدار ثابتی را تشخیص دهد که ممکن است سرریز کند.</li>
+</ul>
+</li>
+</ul>
+<p>بیشتر lintها با سامانهٔ گذرها خوب کار می‌کنند، و رابط نسبتاً سرراست و راه آسان ادغام دارند (بیشتر فقط پیاده‌سازی یک تابع <code>check</code> مشخص).
+با این حال، نوشتن برخی lintها وقتی در مسیر کد مشخصی در هر جای کامپایلر باشند ساده‌تر است.
+برای مثال، lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#unused-mut"><code>unused_mut</code></a> در borrow checker پیاده‌سازی شده چون نیازمند برخی اطلاعات و حالت در borrow checker است.</p>
+<p>برخی از این lintهای inline پیش از آماده‌شدن سامانهٔ linting شلیک می‌شوند.
+آن lintها <em>بافر</em> می‌شوند و تا مراحل بعدی کامپایلر که سامانهٔ linting آماده است نگه داشته می‌شوند.
+<a href="#linting-early-in-the-compiler">Linting زودهنگام در کامپایلر</a> را ببینید.</p>
+<h3 id="lint-definition-terms"><a class="header" href="#lint-definition-terms">Lint definition terms</a></h3>
+<p>lintها از طریق <a href="diagnostics/lintstore.html"><code>LintStore</code></a> مدیریت و به راه‌های مختلفی ثبت می‌شوند.
+اصطلاحات زیر به رسته‌های مختلف lint اشاره می‌کنند، عموماً بر اساس نحوهٔ ثبتشان.</p>
+<ul>
+<li>lintهای <em>داخلی (Built-in)</em> در منبع کامپایلر تعریف می‌شوند.</li>
+<li>lintهای <em>ثبت‌شده توسط driver</em> هنگام ساخت driver کامپایلر توسط driver خارجی ثبت می‌شوند.
+این سازوکاری است که مثلاً Clippy به‌کار می‌برد.</li>
+<li>lintهای <em>ابزاری (Tool)</em> lintهایی با پیشوند مسیر مثل <code>clippy::</code> یا <code>rustdoc::</code> هستند.</li>
+<li>lintهای <em>داخلی کامپایلر (Internal)</em> lintهای ابزاری با دامنهٔ <code>rustc::</code> هستند که فقط روی خود درخت منبع rustc اجرا می‌شوند و در منبع کامپایلر مثل lint داخلی معمولی تعریف می‌شوند.</li>
+</ul>
+<p>اطلاعات بیشتر دربارهٔ ثبت lint را در فصل <a href="diagnostics/lintstore.html">LintStore</a> می‌یابید.</p>
+<h3 id="declaring-a-lint"><a class="header" href="#declaring-a-lint">اعلان یک lint</a></h3>
+<p>lintهای داخلی کامپایلر در crate با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/index.html"><code>rustc_lint</code></a> تعریف شده‌اند.
+lintهایی که باید در crateهای دیگر پیاده‌سازی شوند در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint_defs/index.html"><code>rustc_lint_defs</code></a> تعریف می‌شوند.
+در صورت امکان باید lintها را در <code>rustc_lint</code> بگذارید.
+یک مزیت این است که نزدیک ریشهٔ وابستگی است، پس کار روی آن می‌تواند بسیار سریع‌تر باشد.</p>
+<p>هر lint با یک <code>struct</code> پیاده‌سازی می‌شود که <code>trait</code> با نام <code>LintPass</code> را پیاده‌سازی می‌کند
+(همچنین می‌توانید یکی از traitهای گذر lint مشخص‌تر،
+یعنی <code>EarlyLintPass</code> یا <code>LateLintPass</code> را بسته به زمانی که بهتر است lint شما اجرا شود پیاده‌سازی کنید).
+پیاده‌سازی trait اجازه می‌دهد ساختارهای نحوی مشخصی را هنگام پیمایش AST توسط linter بررسی کنید.
+سپس می‌توانید lintها را شبیه خطاهای کامپایل صادر کنید.</p>
+<p>فراداده یک lint مشخص را هم با ماکروی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint_defs/macro.declare_lint.html"><code>declare_lint!</code></a> اعلان می‌کنید.
+این ماکرو نام، سطح پیش‌فرض، توضیح کوتاه و چند جزئیات دیگر را شامل می‌شود.</p>
+<p>توجه کنید lint و گذر lint باید در کامپایلر ثبت شوند.</p>
+<p>برای مثال، lint زیر استفاده از <code>while true { ... }</code> را بررسی می‌کند و پیشنهاد می‌دهد به‌جای آن <code>loop { ... }</code> استفاده شود.</p>
+<pre><code class="language-rust ignore">// Declare a lint called `WHILE_TRUE`
+declare_lint! {
+    WHILE_TRUE,
+
+    // warn-by-default
+    Warn,
+
+    // This string is the lint description
+    "suggest using `loop { }` instead of `while true { }`"
+}
+
+// This declares a struct and a lint pass, providing a list of associated lints. The
+// compiler currently doesn't use the associated lints directly (e.g., to not
+// run the pass or otherwise check that the pass emits the appropriate set of
+// lints). However, it's good to be accurate here as it's possible that we're
+// going to register the lints via the get_lints method on our lint pass (that
+// this macro generates).
+declare_lint_pass!(WhileTrue =&gt; [WHILE_TRUE]);
+
+// Helper function for `WhileTrue` lint.
+// Traverse through any amount of parenthesis and return the first non-parens expression.
+fn pierce_parens(mut expr: &amp;ast::Expr) -&gt; &amp;ast::Expr {
+    while let ast::ExprKind::Paren(sub) = &amp;expr.kind {
+        expr = sub;
+    }
+    expr
+}
+
+// `EarlyLintPass` has lots of methods. We only override the definition of
+// `check_expr` for this lint because that's all we need, but you could
+// override other methods for your own lint. See the rustc docs for a full
+// list of methods.
+impl EarlyLintPass for WhileTrue {
+    fn check_expr(&amp;mut self, cx: &amp;EarlyContext&lt;'_&gt;, e: &amp;ast::Expr) {
+        if let ast::ExprKind::While(cond, ..) = &amp;e.kind
+            &amp;&amp; let ast::ExprKind::Lit(ref lit) = pierce_parens(cond).kind
+            &amp;&amp; let ast::LitKind::Bool(true) = lit.kind
+            &amp;&amp; !lit.span.from_expansion()
+        {
+            let condition_span = cx.sess.source_map().guess_head_span(e.span);
+            cx.struct_span_lint(WHILE_TRUE, condition_span, |lint| {
+                lint.build(fluent::example::use_loop)
+                    .span_suggestion_short(
+                        condition_span,
+                        fluent::example::suggestion,
+                        "loop".to_owned(),
+                        Applicability::MachineApplicable,
+                    )
+                    .emit();
+            })
+        }
+    }
+}</code></pre>
+<pre><code class="language-fluent">example-use-loop = denote infinite loops with `loop {"{"} ... {"}"}`
+  .suggestion = use `loop`
+</code></pre>
+<h3 id="edition-gated-lints"><a class="header" href="#edition-gated-lints">Edition-gated lints</a></h3>
+<p>گاهی می‌خواهیم رفتار lint را در edition جدید تغییر دهیم.
+برای این کار، فقط گذار را به فراخوانی <code>declare_lint!</code> اضافه می‌کنیم:</p>
+<pre><code class="language-rust ignore">declare_lint! {
+    pub ANONYMOUS_PARAMETERS,
+    Allow,
+    "detects anonymous parameters",
+    Edition::Edition2018 =&gt; Warn,
+}</code></pre>
+<p>این باعث می‌شود lint با نام <code>ANONYMOUS_PARAMETERS</code> در edition 2015 به‌طور پیش‌فرض allow باشد اما در edition 2018 به‌طور پیش‌فرض warn.</p>
+<p>برای اطلاعات بیشتر <a href="./guides/editions.html#edition-specific-lints">lintهای مخصوص edition</a> را ببینید.</p>
+<h3 id="feature-gated-lints"><a class="header" href="#feature-gated-lints">Feature-gated lints</a></h3>
+<p>lintهای متعلق به یک قابلیت فقط وقتی باید قابل‌استفاده باشند که قابلیت در crate فعال باشد.
+برای پشتیبانی از این، اعلان‌های lint می‌توانند feature gate داشته باشند، این‌طور:</p>
+<pre><code class="language-rust ignore">declare_lint! {
+    pub SOME_LINT_NAME,
+    Warn,
+    "a new and useful, but feature gated lint",
+    @feature_gate = sym::feature_name;
+}</code></pre>
+<h3 id="future-incompatible-lints"><a class="header" href="#future-incompatible-lints">future-incompatible lints</a></h3>
+<p>کاربرد اصطلاح <code>future-incompatible</code> در کامپایلر کمی گسترده‌تر از چیزی است که rustc به کاربران کامپایلر نمایان می‌کند.</p>
+<p>در داخل rustc، lintهای future-incompatible برای هشدار به کاربر هستند که کدشان ممکن است در آینده کامپایل نشود.
+عموماً کد future-incompatible به دو دلیل وجود دارد:</p>
+<ul>
+<li>کد unsound است و کامپایلر اشتباهاً آن را پذیرفته است.
+هرچند رفع حفرهٔ soundness (شکستن کد کاربر) در چارچوب تضمین‌های سازگاری رو‌به‌عقب Rust است، lint برای هشدار به کاربر هست که این در نسخه‌ای آینده از rustc رخ خواهد داد <em>صرف‌نظر از اینکه کد از کدام edition استفاده می‌کند</em>.
+این معنایی است که rustc منحصراً به‌عنوان «future incompatible» به کاربران نمایان می‌کند.</li>
+<li>کد در <em>edition</em> آینده یا دیگر کامپایل نمی‌شود <em>یا</em> معنایش تغییر می‌کند.
+این‌ها اغلب «lintهای edition» نامیده می‌شوند و معمولاً در گروه‌های مختلف lint با نام «edition compatibility» دیده می‌شوند (مثلاً <code>rust_2021_compatibility</code>) که برای lint در برابر کدی به‌کار می‌روند که اگر کاربر edition crate را به‌روز کند می‌شکند.
+برای جزئیات بیشتر <a href="guides/editions.html#migration-lints">lintهای مهاجرت</a> را ببینید.</li>
+</ul>
+<p>lint ناسازگار با آینده باید با «فیلد» اضافی <code>@future_incompatible</code> اعلان شود:</p>
+<pre><code class="language-rust ignore">declare_lint! {
+    pub ANONYMOUS_PARAMETERS,
+    Allow,
+    "detects anonymous parameters",
+    @future_incompatible = FutureIncompatibleInfo {
+        reason: fcw!(EditionError 2018 "slug-of-edition-guide-page")
+    };
+}</code></pre>
+<p>به فیلد <code>reason</code> توجه کنید که توضیح می‌دهد چرا تغییر ناسازگار با آینده رخ می‌دهد.
+این پیام diagnostic دریافتی کاربر را تغییر می‌دهد و همچنین تعیین می‌کند lint به کدام گروه‌های lint افزوده شود.
+در مثال بالا، lint «lint از نوع edition» است (چون «reason» آن <code>EditionError</code> است)،
+که به کاربر می‌گوید استفاده از پارامترهای بی‌نام در Rust 2018 و بعد از آن دیگر کامپایل نمی‌شود.</p>
+<p>درون <a href="https://github.com/rust-lang/rust/blob/51fd129ac12d5bfeca7d216c47b0e337bf13e0c2/compiler/rustc_lint/src/context.rs#L212-L237">LintStore::register_lints</a>، lintهایی که فیلد <code>future_incompatible</code> دارند یا در گروه‌های lint مبتنی بر edition قرار می‌گیرند (اگر <code>reason</code> آن‌ها به edition گره خورده باشد) یا در گروه lint با نام <code>future_incompatibility</code>.</p>
+<p>اگر ترکیبی از گزینه‌ها می‌خواهید که ماکروی <code>declare_lint!</code> پشتیبانی نمی‌کند، همیشه می‌توانید ماکروی <code>declare_lint!</code> را برای پشتیبانی از آن تغییر دهید.</p>
+<h3 id="renaming-or-removing-a-lint"><a class="header" href="#renaming-or-removing-a-lint">تغییر نام یا حذف یک lint</a></h3>
+<p>اگر مشخص شود lint نام نادرستی دارد یا دیگر لازم نیست، lint باید برای تغییر نام یا حذف ثبت شود، که اگر کاربر سعی کند از نام قدیمی lint استفاده کند هشدار می‌دهد.
+برای اعلان تغییر نام/حذف، خطی با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/struct.LintStore.html#method.register_renamed"><code>store.register_renamed</code></a> یا <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/struct.LintStore.html#method.register_removed"><code>store.register_removed</code></a> را به کد تابع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/fn.register_builtins.html"><code>rustc_lint::register_builtins</code></a> بیفزایید.</p>
+<pre><code class="language-rust ignore">store.register_renamed("single_use_lifetime", "single_use_lifetimes");</code></pre>
+<h3 id="lint-groups"><a class="header" href="#lint-groups">Lint groups</a></h3>
+<p>lintها را می‌توان گروهی فعال کرد.
+این گروه‌ها در تابع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/fn.register_builtins.html"><code>register_builtins</code></a> در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/index.html"><code>rustc_lint::lib</code></a> اعلان می‌شوند.
+ماکروی <code>add_lint_group!</code> برای اعلان گروه جدید به‌کار می‌رود.</p>
+<p>برای مثال،</p>
+<pre><code class="language-rust ignore">add_lint_group!(sess,
+    "nonstandard_style",
+    NON_CAMEL_CASE_TYPES,
+    NON_SNAKE_CASE,
+    NON_UPPER_CASE_GLOBALS);</code></pre>
+<p>این گروه <code>nonstandard_style</code> را تعریف می‌کند که lintهای فهرست‌شده را روشن می‌کند.
+کاربر می‌تواند این lintها را با attribute با نام <code>#![warn(nonstandard_style)]</code> در کد منبع یا با دادن <code>-W nonstandard-style</code> در خط فرمان روشن کند.</p>
+<p>برخی گروه‌های lint خودکار در <code>LintStore::register_lints</code> ساخته می‌شوند.
+برای مثال، هر lintی که با <code>FutureIncompatibleInfo</code> اعلان شده باشد و reason آن
+<code>FutureIncompatibilityReason::FutureReleaseError</code> باشد (پیش‌فرض وقتی <code>@future_incompatible</code> در <code>declare_lint!</code> به‌کار رود)،
+به گروه lint با نام <code>future_incompatible</code> افزوده می‌شود.
+editionها هم گروه‌های lint خودشان را دارند (مثلاً <code>rust_2021_compatibility</code>) که به‌طور خودکار برای هر lintی ساخته می‌شود که کد ناسازگار با آینده‌ای را نشان می‌دهد که در edition مشخص می‌شکند.</p>
+<h3 id="linting-early-in-the-compiler"><a class="header" href="#linting-early-in-the-compiler">Linting زودهنگام در کامپایلر</a></h3>
+<p>گاهی ممکن است لازم باشد lintی تعریف کنید که پیش از مقداردهی اولیهٔ سامانهٔ linting اجرا شود (مثلاً هنگام parsing یا گسترش ماکرو). این مشکل‌ساز است چون برای دانستن اینکه باید هشدار صادر کنیم یا خطا یا هیچ، باید سطوح lint محاسبه شده باشند.</p>
+<p>برای حل این مشکل، lintها را تا پردازش سامانهٔ linting بافر می‌کنیم.
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_session/struct.Session.html#method.buffer_lint"><code>Session</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_session/parse/struct.ParseSess.html#method.buffer_lint"><code>ParseSess</code></a> هر دو متدهای <code>buffer_lint</code> دارند که اجازه می‌دهند lint را برای بعد بافر کنید.
+سامانهٔ linting خودکار مدیریت lintهای بافرشده را بعداً بر عهده می‌گیرد.</p>
+<p>پس برای تعریف lintی که زود در کامپایل اجرا می‌شود،
+lint را مثل همیشه تعریف می‌کنید اما با <code>buffer_lint</code> فراخوانی‌اش می‌کنید.</p>
+<h4 id="linting-even-earlier-in-the-compiler"><a class="header" href="#linting-even-earlier-in-the-compiler">Linting حتی زودتر در کامپایلر</a></h4>
+<p>parser (<code>rustc_ast</code>) جالب است چون نمی‌تواند به هیچ‌یک از crateهای دیگر <code>rustc*</code> وابسته باشد.
+به‌طور خاص، نمی‌تواند به <code>rustc_middle::lint</code> یا <code>rustc_lint</code> وابسته باشد، که همهٔ زیرساخت linting کامپایلر در آن‌ها تعریف شده.
+این دردسرساز است!</p>
+<p>برای حل این، <code>rustc_ast</code> نوع lint بافرشدهٔ خودش را تعریف می‌کند که <code>ParseSess::buffer_lint</code> استفاده می‌کند.
+پس از گسترش ماکرو، این lintهای بافرشده در <code>Session::buffered_lints</code> که بقیهٔ کامپایلر استفاده می‌کند ریخته می‌شوند.</p>
+<h2 id="json-diagnostic-output"><a class="header" href="#json-diagnostic-output">JSON diagnostic output</a></h2>
+<p>کامپایلر پرچم <code>--error-format json</code> را می‌پذیرد تا diagnosticها را به‌صورت اشیای JSON خروجی دهد (به نفع ابزارهایی مثل <code>cargo fix</code>).
+این‌طور به نظر می‌رسد:</p>
+<pre><code class="language-console">$ rustc json_error_demo.rs --error-format json
+{"message":"cannot add `&amp;str` to `{integer}`","code":{"code":"E0277","explanation":"\nYou tried to use a type which doesn't implement some trait in a place which\nexpected that trait. Erroneous code example:\n\n```compile_fail,E0277\n// here we declare the Foo trait with a bar method\ntrait Foo {\n    fn bar(&amp;self);\n}\n\n// we now declare a function which takes an object implementing the Foo trait\nfn some_func&lt;T: Foo&gt;(foo: T) {\n    foo.bar();\n}\n\nfn main() {\n    // we now call the method with the i32 type, which doesn't implement\n    // the Foo trait\n    some_func(5i32); // error: the trait bound `i32 : Foo` is not satisfied\n}\n```\n\nIn order to fix this error, verify that the type you're using does implement\nthe trait. Example:\n\n```\ntrait Foo {\n    fn bar(&amp;self);\n}\n\nfn some_func&lt;T: Foo&gt;(foo: T) {\n    foo.bar(); // we can now use this method since i32 implements the\n               // Foo trait\n}\n\n// we implement the trait on the i32 type\nimpl Foo for i32 {\n    fn bar(&amp;self) {}\n}\n\nfn main() {\n    some_func(5i32); // ok!\n}\n```\n\nOr in a generic context, an erroneous code example would look like:\n\n```compile_fail,E0277\nfn some_func&lt;T&gt;(foo: T) {\n    println!(\"{:?}\", foo); // error: the trait `core::fmt::Debug` is not\n                           //        implemented for the type `T`\n}\n\nfn main() {\n    // We now call the method with the i32 type,\n    // which *does* implement the Debug trait.\n    some_func(5i32);\n}\n```\n\nNote that the error here is in the definition of the generic function: Although\nwe only call it with a parameter that does implement `Debug`, the compiler\nstill rejects the function: It must work with all possible input types. In\norder to make this example compile, we need to restrict the generic type we're\naccepting:\n\n```\nuse std::fmt;\n\n// Restrict the input type to types that implement Debug.\nfn some_func&lt;T: fmt::Debug&gt;(foo: T) {\n    println!(\"{:?}\", foo);\n}\n\nfn main() {\n    // Calling the method is still fine, as i32 implements Debug.\n    some_func(5i32);\n\n    // This would fail to compile now:\n    // struct WithoutDebug;\n    // some_func(WithoutDebug);\n}\n```\n\nRust only looks at the signature of the called function, as such it must\nalready specify all requirements that will be used for every type parameter.\n"},"level":"error","spans":[{"file_name":"json_error_demo.rs","byte_start":50,"byte_end":51,"line_start":4,"line_end":4,"column_start":7,"column_end":8,"is_primary":true,"text":[{"text":"    a + b","highlight_start":7,"highlight_end":8}],"label":"no implementation for `{integer} + &amp;str`","suggested_replacement":null,"suggestion_applicability":null,"expansion":null}],"children":[{"message":"the trait `std::ops::Add&lt;&amp;str&gt;` is not implemented for `{integer}`","code":null,"level":"help","spans":[],"children":[],"rendered":null}],"rendered":"error[E0277]: cannot add `&amp;str` to `{integer}`\n --&gt; json_error_demo.rs:4:7\n  |\n4 |     a + b\n  |       ^ no implementation for `{integer} + &amp;str`\n  |\n  = help: the trait `std::ops::Add&lt;&amp;str&gt;` is not implemented for `{integer}`\n\n"}
+{"message":"aborting due to previous error","code":null,"level":"error","spans":[],"children":[],"rendered":"error: aborting due to previous error\n\n"}
+{"message":"For more information about this error, try `rustc --explain E0277`.","code":null,"level":"","spans":[],"children":[],"rendered":"For more information about this error, try `rustc --explain E0277`.\n"}
+</code></pre>
+<p>توجه کنید خروجی مجموعه‌ای از خطوط است که هر کدام شیء JSON است،
+اما مجموعهٔ خطوط در کنار هم، متأسفانه، JSON معتبر نیست و ابزارها و ترفندهایی (مثل <a href="https://docs.python.org/3/library/json.html#module-json.tool">pipe کردن به <code>python3 -m json.tool</code></a>) را که چنین چیزی لازم دارند ناکام می‌گذارد.
+(حدس می‌زنم این عمداً برای عملکرد LSP بوده، تا هر خط/شیء به‌محض flush شدن ارسال شود؟)</p>
+<p>همچنین به فیلد «rendered» توجه کنید که خروجی «انسانی» را به‌صورت رشته دارد؛ این معرفی شد تا تست‌های UI هم از JSON ساختاریافته استفاده کنند و هم خروجی «انسانی» (خب، <em>بدون</em> رنگ) را ببینند بدون اینکه مجبور باشند همه‌چیز را دو بار کامپایل کنند.</p>
+<p>emitterهای قالب «انسانی» و json را می‌توان زیر <code>rustc_errors</code> یافت، هر دو از crate با نام <code>rustc_ast</code> به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/index.html">crate با نام rustc_errors</a> منتقل شدند.</p>
+<p>emitter مربوط به JSON <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/json/struct.Diagnostic.html"><code>struct</code> با نام <code>Diagnostic</code> خودش</a> را (و زیرstructها) برای سریالایز JSON تعریف می‌کند.
+آن را با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.Diag.html"><code>errors::Diag</code></a> اشتباه نگیرید!</p>
+<h2 id="diagnostic-attributes"><a class="header" href="#diagnostic-attributes">Diagnostic attributes</a></h2>
+<p>attributeهای زیادی هست که می‌توان برای تولید یا بهبود پیام‌های خطا به‌کار برد:</p>
+<ul>
+<li><code>diagnostic::on_unimplemented</code> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_attr_ir/attribute.rustc_on_unimplemented.html"><code>rustc_on_unimplemented</code></a>: سفارشی‌کردن خطاهای trait پیاده‌نشده</li>
+<li><code>diagnostic::on_move</code>: customize borrowcheck errors</li>
+<li><code>diagnostic::on_unknown</code>: سفارشی‌کردن خطاهای importهای حل‌نشده</li>
+<li><code>diagnostic::on_unmatched_args</code>: سفارشی‌کردن خطاهای matcher مربوط به ماکرو</li>
+<li><code>diagnostic::opaque</code>: جلوگیری از ظاهرشدن درون‌ساز ماکروها در پیام‌های خطا</li>
+<li><code>diagnostic::on_const</code>: سفارشی‌کردن خطاهای impl غیر‌const برای trait</li>
+<li><code>rustc_as_ptr</code>: توسط lint با نام <code>dangling_pointers_from_temporaries</code> استفاده می‌شود.</li>
+<li><code>rustc_never_returns_null_ptr</code>: توسط lint با نام <code>useless_ptr_null_checks</code> استفاده می‌شود.</li>
+<li><code>rustc_no_implicit_autorefs</code>: برای lint با نام <code>dangerous_implicit_autorefs</code> استفاده می‌شود.</li>
+</ul>
+<p>در صورت امکان، به‌جای افزودن کد گزارش خطای سفارشی، بهبود یا پیاده‌سازی چنین attributeی را در نظر بگیرید.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-estebank">
+<p>این قاعدهٔ سرانگشتی را <strong>@estebank</strong> <a href="https://github.com/rust-lang/rustc-dev-guide/pull/967#issuecomment-733218283">اینجا</a> پیشنهاد داد. <a href="#fr-estebank-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="rustc-driver/getting-diagnostics.html">→ مثال: دریافت تشخیص‌ها</a><a href="diagnostics/diagnostic-structs.html">ساختارهای تشخیص و تشخیص فرعی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

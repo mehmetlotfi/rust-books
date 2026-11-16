@@ -1,0 +1,287 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>آوردن مسیرها به دامنه با کلیدواژهٔ use — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch07-04-bringing-paths-into-scope-with-the-use-keyword"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="bringing-paths-into-scope-with-the-use-keyword"><a class="header" href="#bringing-paths-into-scope-with-the-use-keyword">وارد کردن مسیرها به محدوده با کلمه کلیدی <code>use</code></a></h2>
+<p>نوشتن مسیرها برای فراخوانی توابع می‌تواند ناخوشایند و تکراری به نظر برسد. در فهرست ۷-۷، چه مسیر مطلق را برای تابع <code>add_to_waitlist</code> انتخاب می‌کردیم و چه مسیر نسبی را، هر بار که می‌خواستیم <code>add_to_waitlist</code> را فراخوانی کنیم، باید <code>front_of_house</code> و <code>hosting</code> را هم مشخص می‌کردیم. خوشبختانه راهی برای ساده‌کردن این فرایند وجود دارد: می‌توانیم یک بار با کلیدواژهٔ <code>use</code> برای یک مسیر میان‌بر بسازیم و سپس در بقیهٔ دامنه از نام کوتاه‌تر استفاده کنیم.</p>
+<p>در لیستینگ 7-11، ماژول <code>crate::front_of_house::hosting</code> را به محدوده تابع <code>eat_at_restaurant</code> می‌آوریم تا فقط نیاز به مشخص کردن <code>hosting::add_to_waitlist</code> برای فراخوانی تابع <code>add_to_waitlist</code> در <code>eat_at_restaurant</code> داشته باشیم.</p>
+<figure class="listing" id="listing-7-11">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground test_harness">mod front_of_house {
+    pub mod hosting {
+        pub fn add_to_waitlist() {}
+    }
+}
+
+use crate::front_of_house::hosting;
+
+pub fn eat_at_restaurant() {
+    hosting::add_to_waitlist();
+}</code></pre>
+<figcaption><a href="#listing-7-11">لیست ۷-۱۱</a>: وارد کردن یک ماژول به محدوده با &lt;code&gt;&lt;/x-listing&gt;use&lt;/code&gt;</figcaption>
+</figure>
+<p>اضافه کردن <code>use</code> و یک مسیر در یک محدوده مشابه ایجاد یک لینک نمادین در فایل‌سیستم است. با اضافه کردن <code>use crate::front_of_house::hosting</code> در ریشه جعبه (crate)، <code>hosting</code> اکنون یک نام معتبر در آن محدوده است، درست مانند اینکه ماژول <code>hosting</code> در ریشه جعبه (crate) تعریف شده باشد. مسیرهایی که با <code>use</code> به محدوده آورده می‌شوند مانند هر مسیر دیگری حریم خصوصی را بررسی می‌کنند.</p>
+<p>توجه کنید که <code>use</code> فقط میانبر را برای محدوده خاصی که در آن <code>use</code> استفاده شده ایجاد می‌کند. لیستینگ 7-12 تابع <code>eat_at_restaurant</code> را به یک زیرماژول جدید به نام <code>customer</code> منتقل می‌کند که سپس یک محدوده متفاوت از دستور <code>use</code> است، بنابراین بدنه تابع کامپایل نمی‌شود.</p>
+<figure class="listing" id="listing-7-12">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground test_harness does_not_compile ignore">mod front_of_house {
+    pub mod hosting {
+        pub fn add_to_waitlist() {}
+    }
+}
+
+use crate::front_of_house::hosting;
+
+mod customer {
+    pub fn eat_at_restaurant() {
+        hosting::add_to_waitlist();
+    }
+}</code></pre>
+<figcaption><a href="#listing-7-12">لیست ۷-۱۲</a>: دستور &lt;code&gt;&lt;/x-listing&gt;use&lt;/code&gt; تنها در همان حوزه‌ای (scope) اعمال می‌شود که در آن قرار دارد</figcaption>
+</figure>
+<p>خطای کامپایلر نشان می‌دهد که میانبر دیگر در ماژول <code>customer</code> اعمال نمی‌شود:</p>
+<pre><code class="language-console">$ cargo build
+   Compiling restaurant v0.1.0 (file:///projects/restaurant)
+error[E0433]: cannot find module or crate `hosting` in this scope
+  --&gt; src/lib.rs:11:9
+   |
+11 |         hosting::add_to_waitlist();
+   |         ^^^^^^^ use of unresolved module or unlinked crate `hosting`
+   |
+   = help: if you wanted to use a crate named `hosting`, use `cargo add hosting` to add it to your `Cargo.toml`
+help: consider importing this module through its public re-export
+   |
+10 +     use crate::hosting;
+   |
+
+warning: unused import: `crate::front_of_house::hosting`
+ --&gt; src/lib.rs:7:5
+  |
+7 | use crate::front_of_house::hosting;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+For more information about this error, try `rustc --explain E0433`.
+warning: `restaurant` (lib) generated 1 warning
+error: could not compile `restaurant` (lib) due to 1 previous error; 1 warning emitted
+</code></pre>
+<p>توجه کنید که همچنین یک هشدار وجود دارد که <code>use</code> دیگر در محدوده خود استفاده نمی‌شود! برای رفع این مشکل، دستور <code>use</code> را نیز به داخل ماژول <code>customer</code> منتقل کنید، یا میانبر را در ماژول والد با <code>super::hosting</code> در داخل ماژول <code>customer</code> ارجاع دهید.</p>
+<h3 id="creating-idiomatic-use-paths"><a class="header" href="#creating-idiomatic-use-paths">ایجاد مسیرهای <code>use</code> به صورت ایدیوماتیک</a></h3>
+<p>در لیستینگ 7-11، ممکن است این سوال پیش بیاید که چرا ما <code>use crate::front_of_house::hosting</code> را مشخص کرده‌ایم و سپس <code>hosting::add_to_waitlist</code> را در <code>eat_at_restaurant</code> فراخوانی کرده‌ایم، به جای اینکه مسیر <code>use</code> را تا تابع <code>add_to_waitlist</code> مشخص کنیم تا همان نتیجه را به دست آوریم، همان‌طور که در لیستینگ 7-13 نشان داده شده است.</p>
+<figure class="listing" id="listing-7-13">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground test_harness">mod front_of_house {
+    pub mod hosting {
+        pub fn add_to_waitlist() {}
+    }
+}
+
+use crate::front_of_house::hosting::add_to_waitlist;
+
+pub fn eat_at_restaurant() {
+    add_to_waitlist();
+}</code></pre>
+<figcaption><a href="#listing-7-13">لیست ۷-۱۳</a>: وارد کردن تابع &lt;code&gt;&lt;/x-listing&gt;add_to_waitlist&lt;/code&gt; به محدوده با &lt;code&gt;use&lt;/code&gt; که غیر ایدیوماتیک است</figcaption>
+</figure>
+<p>اگرچه هم لیستینگ 7-11 و هم لیستینگ 7-13 کار مشابهی انجام می‌دهند، لیستینگ 7-11 روش ایدیوماتیک برای وارد کردن یک تابع به محدوده با <code>use</code> است. وارد کردن ماژول والد تابع با <code>use</code> به این معنا است که باید ماژول والد را هنگام فراخوانی تابع مشخص کنیم. مشخص کردن ماژول والد هنگام فراخوانی تابع نشان می‌دهد که تابع به صورت محلی تعریف نشده است، در حالی که همچنان تکرار مسیر کامل را به حداقل می‌رساند. کد موجود در لیستینگ 7-13 مشخص نمی‌کند که <code>add_to_waitlist</code> کجا تعریف شده است.</p>
+<p>از طرف دیگر، وقتی ساختارها، enumها، و سایر آیتم‌ها را با <code>use</code> وارد می‌کنیم، ایدیوماتیک است که مسیر کامل را مشخص کنیم. لیستینگ 7-14 روش ایدیوماتیک برای وارد کردن ساختار <code>HashMap</code> از کتابخانه استاندارد به محدوده جعبه (crate) باینری را نشان می‌دهد.</p>
+<figure class="listing" id="listing-7-14">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::collections::HashMap;
+
+fn main() {
+    let mut map = HashMap::new();
+    map.insert(1, 2);
+}</code></pre>
+<figcaption><a href="#listing-7-14">لیست ۷-۱۴</a>: وارد کردن &lt;code&gt;&lt;/x-listing&gt;HashMap&lt;/code&gt; به محدوده به روش ایدیوماتیک</figcaption>
+</figure>
+<p>هیچ دلیل قوی پشت این عرف نیست: این فقط کنوانسیونی است که در جامعه Rust به وجود آمده و افراد به خواندن و نوشتن کد Rust به این روش عادت کرده‌اند.</p>
+<p>استثنای این عرف زمانی است که دو آیتم با نام یکسان را با دستورات <code>use</code> وارد محدوده می‌کنیم، زیرا Rust این اجازه را نمی‌دهد. لیستینگ 7-15 نشان می‌دهد که چگونه دو نوع <code>Result</code> را که نام یکسانی دارند اما از ماژول‌های والد متفاوتی می‌آیند وارد محدوده کنیم و چگونه به آن‌ها ارجاع دهیم.</p>
+<figure class="listing" id="listing-7-15">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">use std::fmt;
+use std::io;
+
+fn function1() -&gt; fmt::Result {
+    // --snip--
+<span class="boring">    Ok(())
+</span>}
+
+fn function2() -&gt; io::Result&lt;()&gt; {
+    // --snip--
+<span class="boring">    Ok(())
+</span>}</code></pre>
+<figcaption><a href="#listing-7-15">لیست ۷-۱۵</a>: وارد کردن دو نوع با نام یکسان به یک محدوده نیازمند استفاده از ماژول‌های والد آن‌ها است.</figcaption>
+</figure>
+<p>همان‌طور که می‌بینید، استفاده از ماژول‌های والد دو نوع <code>Result</code> را از هم متمایز می‌کند. اگر به جای آن <code>use std::fmt::Result</code> و <code>use std::io::Result</code> مشخص کنیم، دو نوع <code>Result</code> در یک محدوده خواهیم داشت و Rust نمی‌تواند بفهمد منظور ما از <code>Result</code> کدام است.</p>
+<h3 id="providing-new-names-with-the-as-keyword"><a class="header" href="#providing-new-names-with-the-as-keyword">ارائه نام‌های جدید با کلمه کلیدی <code>as</code></a></h3>
+<p>یک راه‌حل دیگر برای مشکل وارد کردن دو نوع با نام یکسان به یک محدوده با <code>use</code> این است که پس از مسیر، با استفاده از <code>as</code> یک نام محلی جدید یا <em>نام مستعار</em> برای نوع مشخص کنیم. لیستینگ 7-16 راه دیگری برای نوشتن کد در لیستینگ 7-15 را نشان می‌دهد که در آن یکی از دو نوع <code>Result</code> را با استفاده از <code>as</code> تغییر نام داده‌ایم.</p>
+<figure class="listing" id="listing-7-16">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">use std::fmt::Result;
+use std::io::Result as IoResult;
+
+fn function1() -&gt; Result {
+    // --snip--
+<span class="boring">    Ok(())
+</span>}
+
+fn function2() -&gt; IoResult&lt;()&gt; {
+    // --snip--
+<span class="boring">    Ok(())
+</span>}</code></pre>
+<figcaption><a href="#listing-7-16">لیست ۷-۱۶</a>: تغییر نام یک نوع هنگام وارد کردن به محدوده با کلمه کلیدی &lt;code&gt;&lt;/x-listing&gt;as&lt;/code&gt;</figcaption>
+</figure>
+<p>در دستور دوم <code>use</code>، ما نام جدید <code>IoResult</code> را برای نوع <code>std::io::Result</code> انتخاب کردیم، که با نوع <code>Result</code> از <code>std::fmt</code> که آن را نیز وارد محدوده کرده‌ایم، تضاد نخواهد داشت. هر دو لیستینگ 7-15 و 7-16 ایدیوماتیک در نظر گرفته می‌شوند، بنابراین انتخاب با شماست!</p>
+<h3 id="re-exporting-names-with-pub-use"><a class="header" href="#re-exporting-names-with-pub-use">دوباره صادر کردن نام‌ها با <code>pub use</code></a></h3>
+<p>وقتی با استفاده از کلیدواژه‌ی <code>use</code> یک نام را وارد حوزه‌ای می‌کنیم،<br> آن نام تنها در همان حوزه خصوصی است که در آن وارد شده است.<br> برای این‌که کد خارج از آن حوزه نیز بتواند به آن نام دسترسی داشته باشد،<br> انگار که در همان حوزه تعریف شده است، می‌توانیم <code>pub</code> و <code>use</code> را با هم ترکیب کنیم.<br> این تکنیک <em>re-exporting</em> نامیده می‌شود، زیرا در حالی که یک آیتم را وارد حوزه می‌کنیم،<br> همزمان آن را برای دیگران نیز قابل دسترس می‌کنیم تا بتوانند آن را وارد حوزه‌ی خود کنند.</p>
+<p>لیستینگ 7-17 کد موجود در لیستینگ 7-11 را با تغییر دستور <code>use</code> در ماژول ریشه به <code>pub use</code> نشان می‌دهد.</p>
+<figure class="listing" id="listing-7-17">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground test_harness">mod front_of_house {
+    pub mod hosting {
+        pub fn add_to_waitlist() {}
+    }
+}
+
+pub use crate::front_of_house::hosting;
+
+pub fn eat_at_restaurant() {
+    hosting::add_to_waitlist();
+}</code></pre>
+<figcaption><a href="#listing-7-17">لیست ۷-۱۷</a>: در دسترس قرار دادن یک نام برای هر کدی که از محدوده جدید استفاده می‌کند با &lt;code&gt;&lt;/x-listing&gt;pub use&lt;/code&gt;</figcaption>
+</figure>
+<p>قبل از این تغییر، کد خارجی باید تابع <code>add_to_waitlist</code> را با استفاده از مسیر <code>restaurant::front_of_house::hosting::add_to_waitlist()</code> فراخوانی می‌کرد، که همچنین نیاز داشت ماژول <code>front_of_house</code> به عنوان <code>pub</code> علامت‌گذاری شود. حالا که این <code>pub use</code> ماژول <code>hosting</code> را از ماژول ریشه دوباره صادر کرده است، کد خارجی می‌تواند از مسیر <code>restaurant::hosting::add_to_waitlist()</code> استفاده کند.</p>
+<p>Re-exporting زمانی مفید است که ساختار داخلی کد شما با نحوه‌ی تفکر برنامه‌نویسانی که از کد شما استفاده می‌کنند درباره‌ی دامنه، متفاوت باشد. برای مثال، در این تمثیل رستوران، کسانی که رستوران را اداره می‌کنند درباره‌ی «بخش جلویی» (front of house) و «بخش پشتی» (back of house) فکر می‌کنند. اما مشتریانی که به رستوران می‌آیند احتمالاً درباره‌ی قسمت‌های رستوران با چنین اصطلاحاتی فکر نمی‌کنند. با استفاده از <code>pub use</code> می‌توانیم کد خود را با یک ساختار بنویسیم ولی ساختاری متفاوت را در معرض استفاده قرار دهیم. این کار باعث می‌شود کتابخانه‌ی ما هم برای برنامه‌نویسانی که روی کتابخانه کار می‌کنند و هم برای برنامه‌نویسانی که از آن استفاده می‌کنند، به‌خوبی سازمان‌دهی شده باشد. در فصل ۱۴، در بخش <a href="ch14-02-publishing-to-crates-io.html#exporting-a-convenient-public-api">“صادرات یک API عمومی راحت با استفاده از <code>pub use</code>”</a><!-- ignore -->، مثال دیگری از <code>pub use</code> و تأثیر آن بر مستندات crate شما را بررسی خواهیم کرد.</p>
+<h3 id="using-external-packages"><a class="header" href="#using-external-packages">استفاده از بسته‌های خارجی</a></h3>
+<p>در فصل ۲، ما یک پروژه بازی حدس‌زنی برنامه‌ریزی کردیم که از یک بسته خارجی به نام <code>rand</code> برای تولید اعداد تصادفی استفاده می‌کرد. برای استفاده از <code>rand</code> در پروژه خود، این خط را به <em>Cargo.toml</em> اضافه کردیم:</p>
+<!-- When updating the version of `rand` used, also update the version of
+`rand` used in these files so they all match:
+
+* ch01-01-installation.md
+* ch02-00-guessing-game-tutorial.md
+* ch14-03-cargo-workspaces.md
+-->
+<figure class="listing">
+<span class="file-name">Filename: Cargo.toml</span>
+<pre><code class="language-toml">rand = "0.10.1"
+</code></pre>
+</figure>
+<p>اضافه کردن <code>rand</code> به عنوان یک وابستگی در <em>Cargo.toml</em> به Cargo می‌گوید که بسته <code>rand</code> و هرگونه وابستگی را از <a href="https://crates.io/">crates.io</a> دانلود کرده و <code>rand</code> را در پروژه ما در دسترس قرار دهد.</p>
+<p>سپس، برای وارد کردن تعریف‌های <code>rand</code> به دامنهٔ بستهٔ خود، یک خط <code>use</code> اضافه کردیم که با نام crate یعنی <code>rand</code> شروع می‌شود و مواردی را که می‌خواستیم وارد دامنه کنیم فهرست کردیم. به یاد بیاورید که در بخش <a href="ch02-00-guessing-game-tutorial.html#generating-a-random-number">«تولید یک عدد تصادفی»</a><!-- ignore --> در فصل ۲، مواردی از ماژول <code>rand::prelude</code> را وارد دامنه کردیم و تابع <code>rand::rng</code> را فراخوانی کردیم:</p>
+<pre><code class="language-rust ignore"><span class="boring">use std::io;
+</span><span class="boring">
+</span>use rand::prelude::*;
+
+fn main() {
+<span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span>    let secret_number = rand::rng().random_range(1..=100);
+<span class="boring">
+</span><span class="boring">    println!("The secret number is: {secret_number}");
+</span><span class="boring">
+</span><span class="boring">    println!("Please input your guess.");
+</span><span class="boring">
+</span><span class="boring">    let mut guess = String::new();
+</span><span class="boring">
+</span><span class="boring">    io::stdin()
+</span><span class="boring">        .read_line(&amp;mut guess)
+</span><span class="boring">        .expect("Failed to read line");
+</span><span class="boring">
+</span><span class="boring">    println!("You guessed: {guess}");
+</span>}</code></pre>
+<p>اعضای جامعه Rust بسیاری از بسته‌ها را در <a href="https://crates.io/">crates.io</a> به اشتراک گذاشته‌اند، و وارد کردن هر یک از آن‌ها به بسته شما شامل این مراحل است: فهرست کردن آن‌ها در فایل <em>Cargo.toml</em> بسته شما و استفاده از <code>use</code> برای وارد کردن آیتم‌ها از جعبه (crate) آن‌ها به محدوده.</p>
+<p>توجه داشته باشید که کتابخانه استاندارد <code>std</code> نیز یک جعبه (crate) خارجی برای بسته ما است. از آنجا که کتابخانه استاندارد همراه با زبان Rust ارائه می‌شود، نیازی به تغییر <em>Cargo.toml</em> برای گنجاندن <code>std</code> نداریم. اما برای وارد کردن آیتم‌ها از آن به محدوده بسته خود، باید به آن با <code>use</code> ارجاع دهیم. برای مثال، با <code>HashMap</code> از این خط استفاده می‌کردیم:</p>
+<pre><code class="language-rust">use std::collections::HashMap;</code></pre>
+<p>این یک مسیر مطلق است که با <code>std</code>، نام جعبه (crate) کتابخانه استاندارد، شروع می‌شود.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="using-nested-paths-to-clean-up-large-use-lists"></a></p>
+<h3 id="using-nested-paths-to-clean-up-use-lists"><a class="header" href="#using-nested-paths-to-clean-up-use-lists">استفاده از مسیرهای تو در تو برای ساده‌سازی لیست‌های بزرگ <code>use</code></a></h3>
+<p>اگر از چندین آیتم تعریف‌شده در یک جعبه (crate) یا ماژول استفاده کنیم، فهرست کردن هر آیتم در خط خود می‌تواند فضای عمودی زیادی در فایل‌های ما اشغال کند. برای مثال، این دو دستور <code>use</code> که در بازی حدس‌زنی در لیستینگ ۲-۴ استفاده کردیم آیتم‌هایی از <code>std</code> را به محدوده می‌آورند:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore">// --snip--
+use std::cmp::Ordering;
+use std::io;
+// --snip--
+<span class="boring">
+</span><span class="boring">use rand::prelude::*;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    let secret_number = rand::rng().random_range(1..=100);
+</span><span class="boring">
+</span><span class="boring">    println!("The secret number is: {secret_number}");
+</span><span class="boring">
+</span><span class="boring">    println!("Please input your guess.");
+</span><span class="boring">
+</span><span class="boring">    let mut guess = String::new();
+</span><span class="boring">
+</span><span class="boring">    io::stdin()
+</span><span class="boring">        .read_line(&amp;mut guess)
+</span><span class="boring">        .expect("Failed to read line");
+</span><span class="boring">
+</span><span class="boring">    println!("You guessed: {guess}");
+</span><span class="boring">
+</span><span class="boring">    match guess.cmp(&amp;secret_number) {
+</span><span class="boring">        Ordering::Less =&gt; println!("Too small!"),
+</span><span class="boring">        Ordering::Greater =&gt; println!("Too big!"),
+</span><span class="boring">        Ordering::Equal =&gt; println!("You win!"),
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+</figure>
+<p>در عوض، می‌توانیم از مسیرهای تو در تو استفاده کنیم تا همان آیتم‌ها را در یک خط به محدوده بیاوریم. این کار را با مشخص کردن بخش مشترک مسیر، به دنبال آن دو نقطه دوبل و سپس یک لیست از بخش‌های متفاوت مسیرها در داخل آکولاد انجام می‌دهیم، همان‌طور که در لیستینگ 7-18 نشان داده شده است.</p>
+<figure class="listing" id="listing-7-18">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">use rand::prelude::*;
+</span>// --snip--
+use std::{cmp::Ordering, io};
+// --snip--
+<span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    let secret_number = rand::rng().random_range(1..=100);
+</span><span class="boring">
+</span><span class="boring">    println!("The secret number is: {secret_number}");
+</span><span class="boring">
+</span><span class="boring">    println!("Please input your guess.");
+</span><span class="boring">
+</span><span class="boring">    let mut guess = String::new();
+</span><span class="boring">
+</span><span class="boring">    io::stdin()
+</span><span class="boring">        .read_line(&amp;mut guess)
+</span><span class="boring">        .expect("Failed to read line");
+</span><span class="boring">
+</span><span class="boring">    let guess: u32 = guess.trim().parse().expect("Please type a number!");
+</span><span class="boring">
+</span><span class="boring">    println!("You guessed: {guess}");
+</span><span class="boring">
+</span><span class="boring">    match guess.cmp(&amp;secret_number) {
+</span><span class="boring">        Ordering::Less =&gt; println!("Too small!"),
+</span><span class="boring">        Ordering::Greater =&gt; println!("Too big!"),
+</span><span class="boring">        Ordering::Equal =&gt; println!("You win!"),
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-7-18">لیست ۷-۱۸</a>: مشخص کردن یک مسیر تو در تو برای وارد کردن چندین آیتم با پیشوند مشابه به محدوده</figcaption>
+</figure>
+<p>در برنامه‌های بزرگ‌تر، وارد کردن بسیاری از آیتم‌ها از یک جعبه (crate) یا ماژول مشابه با استفاده از مسیرهای تو در تو می‌تواند تعداد دستورات <code>use</code> جداگانه مورد نیاز را به طور قابل‌توجهی کاهش دهد.</p>
+<p>ما می‌توانیم در هر سطحی از یک مسیر، از یک مسیر تو در تو استفاده کنیم، که این کار در مواقعی که دو دستور <code>use</code> دارای یک زیرمسیر مشترک هستند، مفید است. برای مثال، لیستینگ 7-19 دو دستور <code>use</code> را نشان می‌دهد: یکی که <code>std::io</code> را به محدوده وارد می‌کند و دیگری که <code>std::io::Write</code> را به محدوده وارد می‌کند.</p>
+<figure class="listing" id="listing-7-19">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">use std::io;
+use std::io::Write;</code></pre>
+<figcaption><a href="#listing-7-19">لیست ۷-۱۹</a>: دو دستور &lt;code&gt;&lt;/x-listing&gt;use&lt;/code&gt; که یکی زیرمسیر دیگری است</figcaption>
+</figure>
+<p>بخش مشترک این دو مسیر، <code>std::io</code> است که مسیر کامل اولین دستور <code>use</code> را تشکیل می‌دهد. برای ترکیب این دو مسیر به یک دستور <code>use</code>، می‌توانیم از <code>self</code> در مسیر تو در تو استفاده کنیم، همان‌طور که در لیستینگ 7-20 نشان داده شده است.</p>
+<figure class="listing" id="listing-7-20">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">use std::io::{self, Write};</code></pre>
+<figcaption><a href="#listing-7-20">لیست ۷-۲۰</a>: ترکیب مسیرهای موجود در لیستینگ 7-19 به یک دستور &lt;code&gt;&lt;/x-listing&gt;use&lt;/code&gt;</figcaption>
+</figure>
+<p>این خط، <code>std::io</code> و <code>std::io::Write</code> را به محدوده وارد می‌کند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="the-glob-operator"></a></p>
+<h3 id="importing-items-with-the-glob-operator"><a class="header" href="#importing-items-with-the-glob-operator">وارد کردن موارد با عملگر Glob</a></h3>
+<p>اگر بخواهیم <em>تمام</em> آیتم‌های عمومی تعریف‌شده در یک مسیر را به محدوده وارد کنیم، می‌توانیم آن مسیر را به همراه عملگر <code>*</code> مشخص کنیم:</p>
+<pre><code class="language-rust">use std::collections::*;</code></pre>
+<p>این دستور <code>use</code> تمام آیتم‌های عمومی تعریف‌شده در <code>std::collections</code> را وارد حوزه‌ی فعلی می‌کند. در استفاده از عملگر glob دقت کنید! استفاده از glob می‌تواند باعث شود تشخیص این‌که چه نام‌هایی در حوزه هستند و یک نام استفاده‌شده در برنامه از کجا آمده، دشوارتر شود. علاوه بر این، اگر وابستگی تغییراتی در تعاریف خود ایجاد کند، آن‌چه شما وارد کرده‌اید نیز تغییر می‌کند، که ممکن است هنگام به‌روزرسانی وابستگی، باعث بروز خطای کامپایلر شود— برای مثال، اگر وابستگی تعریفی با همان نامی اضافه کند که شما نیز در همان حوزه تعریف کرده‌اید.</p>
+<p>عملگر glob اغلب هنگام تست برای وارد کردن تمام آیتم‌های تحت تست به ماژول <code>tests</code> استفاده می‌شود؛ در فصل ۱۱ در بخش <a href="ch11-01-writing-tests.html#how-to-write-tests">“چگونه تست بنویسیم”</a><!-- ignore --> درباره‌ی آن صحبت خواهیم کرد. همچنین، عملگر glob گاهی در قالب الگوی prelude نیز به‌کار می‌رود؛ برای اطلاعات بیشتر درباره‌ی این الگو، به <a href="https://doc.rust-lang.org/std/prelude/index.html#other-preludes">مستندات کتابخانه‌ی استاندارد</a><!-- ignore --> مراجعه کنید.</p><nav class="page-nav"><a href="ch07-03-paths-for-referring-to-an-item-in-the-module-tree.html">→ مسیرها برای ارجاع به یک آیتم در درخت ماژول</a><a href="ch07-05-separating-modules-into-different-files.html">جداسازی ماژول‌ها در فایل‌های مختلف ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,81 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>بازبینی کد با LLMها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="llm-guidance/reviewing"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="reviewing-with-llms"><a class="header" href="#reviewing-with-llms">بازبینی با LLMها</a></h1>
+<h2 id="using-an-llm-to-review-code"><a class="header" href="#using-an-llm-to-review-code">استفاده از LLM برای بازبینی کد</a></h2>
+<ul>
+<li>اگر ابزار قابل‌اعتمادتری مثل linter یا formatter از قبل برای زبانی که می‌نویسید وجود دارد، قویاً پیشنهاد می‌کنیم از آن ابزار به‌جای LLM یا همراه آن استفاده کنید.</li>
+<li>ابزارهای بازبینی LLM را پیکربندی کنید تا مثبت‌های کاذب و تمرکز بیش‌ازحد بر جزئیات بی‌اهمیت کم شود، چون این‌ها حالت‌های شکست رایج و خسته‌کننده‌اند.</li>
+<li>هر جا ممکن است از LLM بخواهید <em>یک linter تولید یا پیکربندی کند</em> و سپس به آن بگویید آن را اجرا کند.
+این هم هزینهٔ توکن را کم می‌کند و هم به افرادی که از LLM استفاده نمی‌کنند اجازه می‌دهد تحلیل را اجرا کنند.
+برای مثال، اگر wrapper مخصوص codebase دارید که اجرای دستورها را در بر می‌گیرد،
+به‌جای اینکه از LLM بخواهید جاهایی را بیابد که باید از wrapper استفاده کنید،
+<a href="../../clippy/lint_configuration.html#disallowed-methods">clippy را طوری پیکربندی کنید که <code>Command::new</code> را ممنوع کند</a>.</li>
+<li>LLMها گاهی خروجی تولیدشده با LLM را ترجیح می‌دهند، به‌ویژه خروجی همان مدل.
+بازبینی LLM را مشورتی بدانید، و به مدلی که
+تغییر را تولید کرده به‌عنوان تنها بازبین آن تکیه نکنید.</li>
+</ul>
+<h2 id="reviewing-llm-created-code"><a class="header" href="#reviewing-llm-created-code">Reviewing LLM-created code</a></h2>
+<p>ابتدا برچسب جدید <code>llm-assisted</code> را به PR اضافه کنید.</p>
+<h3 id="rules"><a class="header" href="#rules">Rules</a></h3>
+<p>انتظار داریم همه، نه فقط نویسندگان، از سیاست جدید پیروی کنند.
+یعنی <strong>مسئولیت شماست</strong> بررسی کنید آیا PR با برچسب <code>llm-assisted</code> به حوزه‌ای می‌خورد که سیاست آن را ممنوع کرده است.
+می‌توانید از نویسنده بخواهید بدون کد تولیدشده با LLM دوباره انجام دهد، که در آن صورت این بخش اعمال نمی‌شود.</p>
+<p>حوزه‌های زیر فعلاً ممنوع‌اند:</p>
+<ul>
+<li>کدی که بر soundness اثر می‌گذارد.
+اگر نویسنده عضو سازمان با تجربه در آن حوزه نباشد، موظفید PR را ببندید.</li>
+<li>پیام‌های تشخیصی.
+همهٔ پیام‌های تشخیصی رو به کاربر باید با دست انسان نوشته شوند.</li>
+<li>مستندات.
+همهٔ doc-commentهای عمومی و همهٔ کامنت‌های <code>// SAFETY</code> باید با دست انسان نوشته شوند.</li>
+</ul>
+<p>«کدی که بر soundness اثر می‌گذارد» هم گسترده‌تر و هم محدودتر از آن چیزی است که به نظر می‌رسد.
+گسترده‌تر است چون تقریباً همهٔ کامپایلر به soundness مربوط است؛
+محدودتر است چون بخش قابل‌توجهی از rust-lang/rust کامپایلر نیست
+(کتابخانه، bootstrap، compiletest، rustdoc، CI، …).</p>
+<p>در صورت تردید این معیار را پیشنهاد می‌کنیم:
+برای بخش‌هایی از کامپایلر که <a href="https://www.joelonsoftware.com/2005/05/11/making-wrong-code-look-wrong/">کد اشتباه اشتباه به نظر نمی‌رسد</a> اجازهٔ کد تولیدشده با LLM ندهید.
+در نهایت این به قضاوت شما به‌عنوان بازبین بستگی دارد.</p>
+<p>همچنان انتظار می‌رود به <a href="../compiler-team.html#r-rights">حقوق r+</a> خود احترام بگذارید.
+لطفاً PRها را merge نکنید مگر به آن بخش از آن کد اطمینان داشته باشید،
+حتی اگر نگه‌دارنده نخواهد PRهای LLM را بازبینی کند.</p>
+<h3 id="guidelines"><a class="header" href="#guidelines">Guidelines</a></h3>
+<p>افراد را آزادانه به <a href="https://rust-lang.zulipchat.com/join/rlfvpemsaacs3pfi6kwqnqjb/">#llm-mentoring</a> ارجاع دهید.
+با PRهای کم‌کیفیت با بستن PR و درخواست از نویسنده برای پیروی از سیاست برخورد کنید.
+با PRهای مرزی با درخواست از نویسنده برخورد کنید که خودش کار را انجام دهد، نه اینکه آن را به شما واگذار کند.
+برای مثال از آن‌ها بخواهید باگ را بازتولید کنند، تغییر را با کلمات خودشان
+توضیح دهند، حالت‌های لبهٔ مرتبط را شناسایی کنند، یا تست اضافه یا توجیه کنند.</p>
+<p>اگر دیدید در چند PR یک رفع را پیشنهاد می‌کنید،
+افزودن آن‌ها به dev-guide را در نظر بگیرید.</p>
+<h4 id="missing-disclosure"><a class="header" href="#missing-disclosure">Missing disclosure</a></h4>
+<p>اگر PRای را می‌بینید که «آشکارا» با LLM ساخته شده اما استفاده را اعلام نکرده، اختیار دارید — اما مسئولیتی ندارید — آن را به‌طور یک‌جانبه ببندید.</p>
+<p>پیشنهاد می‌کنیم از این عبارت‌بندی استفاده کنید:</p>
+<pre><code class="language-markdown">This PR appears to be LLM-generated without disclosing use of an LLM, so I am going to close this PR.
+You are welcome to open additional PRs as long as they follow our [policy][forge-page].
+For more information, see [#llm-mentoring] on Zulip.
+
+[#llm-mentoring]: https://rust-lang.zulipchat.com/join/rlfvpemsaacs3pfi6kwqnqjb/
+[forge-page]: https://forge.rust-lang.org/policies/llm-usage.html
+</code></pre>
+<p>نمونه‌هایی از نشانه‌های «آشکار» LLM:</p>
+<ul>
+<li>توضیحات PR که کاملاً اشتباه‌اند/با کد جور نیستند.</li>
+<li>توضیحات PR که دقیقاً تست‌های اجراشده را می‌گویند (مثلاً <code>./x test --stage 1 tests/ui/&lt;the-new-test-name&gt;.rs</code>) یا تست‌های بی‌فایده مثل <code>git diff --check</code>.</li>
+<li>پاسخ به پرسش‌های بازبین که در یکی از دسته‌های بالا قرار می‌گیرند.</li>
+</ul>
+<p>تعهدی ندارید PRهای ساخته‌شده با LLM را تشخیص دهید؛
+لازم نیست کارآگاه بازی کنید.</p>
+<p>قالب‌های PR پرسش «آیا از LLM استفاده کردید؟» را خواهند داشت تا این به‌ندرت پیش بیاید.
+اگر نویسنده پرسش را بدون پاسخ حذف کرده باشد، می‌توانید PR را ببندید، بدون پرسش.</p>
+<h4 id="missing-solicited-reviewer"><a class="header" href="#missing-solicited-reviewer">Missing solicited reviewer</a></h4>
+<p>اگر PR استفاده را اعلام می‌کند اما طبق <a href="https://forge.rust-lang.org/policies/llm-usage.html#experiment-llm-created-code-changes-intended-for-review">رهنمودهای آزمایش</a> بازبین تعیین نمی‌کند، می‌توانید آن را به همین شکل ببندید:</p>
+<pre><code class="language-markdown">You've opened an LLM-generated PR, but it's in the normal review queue, which breaks our [policy][experiment guidelines].
+I am going to close this PR.
+Please do not re-open it until you find a project member who has volunteered to review it.
+For more information, see [#llm-mentoring] on Zulip.
+
+[#llm-mentoring]: https://rust-lang.zulipchat.com/join/rlfvpemsaacs3pfi6kwqnqjb/
+[forge-page]: https://forge.rust-lang.org/policies/llm-usage.html
+</code></pre>
+<h4 id="missing-tests-low-quality-or-not-self-reviewed"><a class="header" href="#missing-tests-low-quality-or-not-self-reviewed">تست ناموجود، کم‌کیفیت، یا بازبینی‌نشده توسط خود نویسنده</a></h4>
+<p>اگر PRای آشکارا برای بازبینی آماده نیست، لازم نیست بازبینی‌اش کنید.
+اشکالی ندارد PR را فقط سرسری بخوانید و به نویسنده بگویید «پیش از اینکه بتوانم این را بازبینی کنم باید تست اضافه کنید».
+اگر در مرور سرسری متوجه شدید PR آشکارا رویکرد اشتباهی دارد، اشکالی ندارد PR را ببندید و به نویسنده بگویید پیش از باز‌کردن PR جدید در کانال <a href="https://rust-lang.zulipchat.com/join/rlfvpemsaacs3pfi6kwqnqjb/">#llm-mentoring</a> با شما صحبت کند.</p><nav class="page-nav"><a href="writing.html">→ نوشتن کد با LLMها</a><a href="../walkthroughs/test.html">گام‌به‌گام: افزودن یک آزمون جدید ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

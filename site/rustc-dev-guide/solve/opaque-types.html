@@ -1,0 +1,109 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>نوع‌های Opaque — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="solve/opaque-types"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="opaque-types-in-the-new-solver"><a class="header" href="#opaque-types-in-the-new-solver">نوع‌های مبهم (opaque) در حل‌گر جدید</a></h1>
+<p>شیوهٔ مدیریت <a href="../opaque-types-type-alias-impl-trait.html">نوع‌های مبهم</a> در حل‌گر جدید با پیاده‌سازی قدیمی تفاوت دارد.
+این باید توضیحی خودبسنده از رفتار حل‌گر جدید باشد.</p>
+<h2 id="non-defining-vs-defining-uses"><a class="header" href="#non-defining-vs-defining-uses">کاربردهای غیرتعریف‌کننده در برابر تعریف‌کننده</a></h2>
+<p>تمایز میان کاربردهای غیرتعریف‌کننده و تعریف‌کننده رفتار استنتاج را تعیین می‌کند و سخت‌گیری انتزاع را کنترل می‌کند. کاربرد تعریف‌کننده نوع پنهان زیرین را آشکار می‌کند، در حالی که کاربرد غیرتعریف‌کننده صلبیت (rigidity) را اِعمال می‌کند و نوع را مانند یک جانگهدار انتزاعی در نظر می‌گیرد.</p>
+<h3 id="non-defining-use"><a class="header" href="#non-defining-use">کاربرد غیرتعریف‌کننده</a></h3>
+<p>همین مفهوم است که یک نوع مبهم را صلب (rigid) می‌کند. حل‌گر با در نظر گرفتن نوع زیرین به‌عنوان ناشناخته، انتزاع را حفظ می‌کند.</p>
+<pre><code class="language-rust">fn foo() -&gt; impl Copy {
+    let x: u32 = 56;
+    x 
+}
+
+fn bar() {
+    let x = foo();
+    // Even though we know 'foo' returns a u32.The solver enforces 
+    // rigidity here and is a NON-DEFINING use.
+}</code></pre>
+<h3 id="defining-use"><a class="header" href="#defining-use">کاربرد تعریف‌کننده</a></h3>
+<p>اینجا جایی است که نوع مبهم واقعاً تعریف می‌شود. کاربرد تعریف‌کننده دقیقاً به کامپایلر می‌گوید نوع مشخص پشت انتزاع چیست.</p>
+<pre><code class="language-rust">fn foo() -&gt; impl Copy {
+    let x: u32 = 56;
+    // The return value x defines the hidden type as u32 and is a DEFINING use.
+    x
+}</code></pre>
+<h2 id="opaques-are-alias-types"><a class="header" href="#opaques-are-alias-types">نوع‌های مبهم همان نوع‌های alias هستند</a></h2>
+<p>نوع‌های مبهم تا جای ممکن مانند aliasهای دیگر، به‌ویژه نوع‌های وابسته، در نظر گرفته می‌شوند.
+باید تا حد امکان کمترین واگرایی در رفتار وجود داشته باشد.</p>
+<p>این مطلوب است، چون آن‌ها بسیار شبیه نوع‌های alias دیگرند: می‌توان آن‌ها را
+به نوع پنهانشان نرمال‌سازی کرد و نیازمندی‌های یکسانی هم برای کامل بودن (completeness) دارند.
+برخورد با آن‌ها به این شکل، با اشتراک کد، پیچیدگی سامانهٔ نوع را هم کاهش می‌دهد.
+اگر مجبور باشیم نوع‌های مبهم را جداگانه مدیریت کنیم، قواعد پیچیده‌تر و انواع تازه
+از تعامل‌ها پدید می‌آیند. از آنجا که باید در حالت implicit-negative با آن‌ها مانند aliasهای دیگر رفتار کنیم،
+وجود تفاوت‌های چشمگیر میان حالت‌ها نیز بر پیچیدگی می‌افزاید.</p>
+<p><em>پرسش باز: آیا در اینجا رویکرد جایگزینی وجود دارد، شاید با برخورد بیشتر شبیه نوع‌های صلب
+با جاهای محدودتر برای نمونه‌سازی آن‌ها؟ آن‌ها همچنان باید در طول coherence
+aliasهای معمولی باشند</em></p>
+<h3 id="normalizes-to-for-opaques"><a class="header" href="#normalizes-to-for-opaques">‏<code>normalizes-to</code> برای نوع‌های مبهم</a></h3>
+<p><a href="https://github.com/rust-lang/rust/blob/384d26fc7e3bdd7687cc17b2662b091f6017ec2a/compiler/rustc_trait_selection/src/solve/normalizes_to/opaque_types.rs#L13">منبع</a></p>
+<p><code>normalizes-to</code> برای تعریف رفتار نرمال‌سازی تک‌گامی aliasها در حل‌گر جدید به کار می‌رود:
+<code>&lt;&lt;T as IdInner&gt;::Assoc as IdOuter&gt;::Assoc</code> ابتدا به <code>&lt;T as IdInner&gt;::Assoc</code> نرمال‌سازی می‌شود
+که سپس به <code>T</code> نرمال‌سازی می‌شود. هم <code>AliasTy</code>ای را که نرمال‌سازی می‌شود و هم
+<code>Term</code> مورد انتظار را می‌گیرد. برای استفاده از <code>normalizes-to</code> در نرمال‌سازی واقعی، جملهٔ مورد انتظار می‌تواند به‌سادگی
+یک متغیر استنتاج بدون قید باشد.</p>
+<p>برای نوع‌های مبهم در دامنهٔ تعریف‌کننده و در حالت coherence از نوع implicit-negative، این کار
+همیشه در دو گام انجام می‌شود. بیرون از دامنهٔ تعریف‌کننده، <code>normalizes-to</code> برای نوع‌های مبهم همیشه
+<code>Err(NoSolution)</code> برمی‌گرداند.</p>
+<p>با تلاش برای تخصیص نوع مورد انتظار به‌عنوان نوع پنهان شروع می‌کنیم.</p>
+<p>در حالت coherence از نوع implicit-negative، این در حال حاضر همیشه بدون تعامل با مخزن نوع‌های مبهم
+به ابهام منجر می‌شود. می‌توانیم در عوض اجازه دهیم همهٔ نوع‌های مبهم «تعریف» شوند،
+و نوع‌های استنتاج‌شدهٔ آن‌ها را در پایان دور بریزیم، که رفتار حالتی را تغییر می‌دهد که یک نوع مبهم
+چندین بار در طول coherence به کار می‌رود: <a href="https://github.com/rust-lang/rust/blob/HEAD/tests/ui/type-alias-impl-trait/coherence/coherence_different_hidden_ty.rs">مثال</a></p>
+<p>درون دامنهٔ تعریف‌کننده با بررسی اینکه آیا آرگومان‌های نوع و ثابت
+نوع مبهم همگی placeholder هستند شروع می‌کنیم: <a href="https://github.com/rust-lang/rust/blob/384d26fc7e3bdd7687cc17b2662b091f6017ec2a/compiler/rustc_trait_selection/src/solve/normalizes_to/opaque_types.rs#L33">منبع</a>. اگر این بررسی مبهم باشد،
+ابهام برمی‌گردانیم، اگر شکست بخورد <code>Err(NoSolution)</code> برمی‌گردانیم. این بررسی ناحیه‌ها را نادیده می‌گیرد، چون
+فقط در پایان borrowck بررسی می‌شوند. اگر موفق شود، ادامه می‌دهیم.</p>
+<p>سپس بررسی می‌کنیم که آیا می‌توانیم آرگومان‌های جنریک نوع مبهم را به‌صورت <em>معنایی</em> با
+آرگومان‌های هر نوع مبهمِ موجود در مخزن نوع‌های مبهم یکی (unify) کنیم. اگر چنین باشد، نوعی را که
+پیش‌تر ذخیره شده با نوع مورد انتظار این فراخوانی <code>normalizes-to</code> یکی می‌کنیم: <a href="https://github.com/rust-lang/rust/blob/384d26fc7e3bdd7687cc17b2662b091f6017ec2a/compiler/rustc_trait_selection/src/solve/normalizes_to/opaque_types.rs#L51-L59">منبع</a><sup class="footnote-reference" id="fr-1-1"><a href="#footnote-1">1</a></sup>.</p>
+<p>اگر نه، نوع مورد انتظار را در مخزن نوع‌های مبهم درج می‌کنیم: <a href="https://github.com/rust-lang/rust/blob/384d26fc7e3bdd7687cc17b2662b091f6017ec2a/compiler/rustc_trait_selection/src/solve/normalizes_to/opaque_types.rs#L68">منبع</a><sup class="footnote-reference" id="fr-2-1"><a href="#footnote-2">2</a></sup>.
+در نهایت بررسی می‌کنیم که آیا قیدهای آیتم نوع مبهم برای نوع مورد انتظار برقرارند:
+<a href="https://github.com/rust-lang/rust/blob/384d26fc7e3bdd7687cc17b2662b091f6017ec2a/compiler/rustc_trait_selection/src/solve/normalizes_to/opaque_types.rs#L69-L74">منبع</a>.</p>
+<h3 id="using-alias-bounds-of-normalizable-aliases"><a class="header" href="#using-alias-bounds-of-normalizable-aliases">استفاده از alias-boundهای aliasهای نرمال‌سازی‌پذیر</a></h3>
+<p>https://github.com/rust-lang/trait-system-refactor-initiative/issues/77</p>
+<p>استفاده از candidate ‏<code>AliasBound</code> برای aliasهای نرمال‌سازی‌پذیر عموماً ممکن نیست، زیرا
+یک نوع وابسته می‌تواند قیدهای قوی‌تری نسبت به نوع حاصل داشته باشد، وقتی از طریق یک
+candidate ‏<code>ParamEnv</code> نرمال‌سازی می‌شود.</p>
+<p>این candidateها راهبرد دقیق نرمال‌سازی ما را به چیزی تبدیل می‌کنند که برای کاربر قابل مشاهده است. در غیر این صورت
+تقریباً غیرقابل مشاهده است که آیا زودهنگام نرمال‌سازی می‌کنیم یا نه. اینکه کجا نرمال‌سازی می‌کنیم چیزی است که احتمالاً
+می‌خواهیم پس از حذف پشتیبانی از حل‌گر قدیمی تغییرش دهیم، پس این نامطلوب خواهد بود.</p>
+<h2 id="opaque-types-can-be-defined-anywhere"><a class="header" href="#opaque-types-can-be-defined-anywhere">نوع‌های مبهم را می‌توان در هر جا تعریف کرد</a></h2>
+<p>نوع‌های مبهم در دامنهٔ تعریف‌کنندهٔ خود را می‌توان در هر جا تعریف کرد، چه هنگام ربط دادن ساده نوع‌ها
+و چه در حل‌گر صفت. این کار وابستگی به ترتیب و ناکامل بودن را از بین می‌برد. بدون آن، نتیجهٔ
+یک goal ممکن است به دلایل ظریفی متفاوت شود، مثلاً اینکه آیا می‌کوشیم goalی را با استفاده از
+نوع مبهم پیش از نخستین کاربرد تعریف‌کنندهٔ آن ارزیابی کنیم.</p>
+<h2 id="higher-ranked-opaque-types-in-their-defining-scope"><a class="header" href="#higher-ranked-opaque-types-in-their-defining-scope">نوع‌های مبهم مرتبهٔ بالاتر در دامنهٔ تعریف‌کنندهٔ خود</a></h2>
+<p>این‌ها پشتیبانی نمی‌شوند و تلاش برای تعریف آن‌ها در حال حاضر باید همیشه خطا بدهد.</p>
+<p>FIXME: چون جست‌وجوی نوع‌های مبهم در مخزن نوع‌های مبهم اکنون می‌تواند ناحیه‌ها را یکی کند،
+باید زودهنگام بررسی کنیم که نوع‌های مبهم به placeholderها ارجاع نمی‌دهند. در غیر این صورت
+placeholderها نشت می‌کنند.</p>
+<h2 id="member-constraints"><a class="header" href="#member-constraints">قیدهای عضویت (member constraints)</a></h2>
+<p>نحوهٔ مدیریت قیدهای عضویت در حل‌گر جدید تغییر نمی‌کند. برای آن
+<a href="../borrow-check/region-inference/member-constraints.html">فصل موجود مرتبط</a> را ببینید.</p>
+<h2 id="calling-methods-on-opaque-types"><a class="header" href="#calling-methods-on-opaque-types">فراخوانی متدها روی نوع‌های مبهم</a></h2>
+<p>FIXME: باید به پشتیبانی از فراخوانی متدها روی نوع‌های مبهمِ هنوز بدون قید
+در دامنهٔ تعریف‌کنندهٔ آن‌ها ادامه دهیم. روشن نیست بهترین راه برای این کار چیست.</p>
+<pre><code class="language-rust">use std::future::Future;
+use futures::FutureExt;
+
+fn go(i: usize) -&gt; impl Future&lt;Output = ()&gt; + Send + 'static {
+    async move {
+        if i != 0 {
+            // This returns `impl Future&lt;Output = ()&gt;` in its defining scope,
+            // we don't know the concrete type of that opaque at this point.
+            // Currently treats the opaque as a known type and succeeds, but
+            // from the perspective of "easiest to soundly implement", it would
+            // be good for this to be ambiguous.
+            go(i - 1).boxed().await;
+        }
+    }
+}</code></pre>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-1">
+<p>FIXME: در حالت ایده‌آل این باید فقط به یک candidate یکتا منجر شود، چون از آرگومان‌ها می‌خواهیم placeholder باشند و ناحیه‌ها همیشه متغیرهای استنتاج‌اند <a href="#fr-1-1">↩</a></p>
+</li>
+<li id="footnote-2">
+<p>FIXME: چرا برای این کار بررسی می‌کنیم که آیا نوع مورد انتظار صلب است یا نه. <a href="#fr-2-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="proof-trees.html">→ درخت‌های اثبات</a><a href="significant-changes.html">تغییرات مهم و نکات عجیب ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

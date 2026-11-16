@@ -1,0 +1,80 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>نوع‌های Opaque — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="opaque-types-type-alias-impl-trait"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="opaque-types-type-alias-impl-trait"><a class="header" href="#opaque-types-type-alias-impl-trait">نوع‌های Opaque (نام مستعار نوع <code>impl Trait</code>)</a></h1>
+<p>نوع‌های Opaque نحوی برای تعریف یک نام مستعار نوعِ مات (opaque) هستند که تنها مجموعه‌ای مشخص از صفت‌ها (trait) را به‌عنوان رابط خود در معرض دید قرار می‌دهد؛ نوع مشخصِ پشت‌صحنه از روی مجموعه‌ای معین از «محل‌های استفاده» از نوع Opaque استنتاج می‌شود.</p>
+<p>این مفهوم با به‌کار بردن <code>impl Trait</code> درون نام‌های مستعار نوع بیان می‌شود، برای مثال:</p>
+<pre><code class="language-rust ignore">type Foo = impl Bar;</code></pre>
+<p>این کد یک نوع Opaque با نام <code>Foo</code> اعلام می‌کند که تنها اطلاعاتی که از آن در دست است این است که <code>Bar</code> را پیاده‌سازی می‌کند.
+بنابراین هر بخشی از رابط <code>Bar</code> را می‌توان روی یک <code>Foo</code> به کار برد،
+اما چیز دیگری را نمی‌توان (صرف‌نظر از اینکه نوع مشخص، صفت‌های دیگری را پیاده‌سازی کند یا نه).</p>
+<p>از آنجا که باید یک نوع مشخصِ پشت‌صحنه وجود داشته باشد،
+می‌توانید (تا <!-- date-check --> مهٔ 2025) آن نوع را
+با به‌کار بردن نوع Opaque در یک «محل استفادهٔ تعریف‌کننده» (defining use site) بیان کنید.</p>
+<pre><code class="language-rust ignore">struct Struct;
+impl Bar for Struct { /* stuff */ }
+#[define_opaque(Foo)]
+fn foo() -&gt; Foo {
+    Struct
+}</code></pre>
+<p>هر «محل استفادهٔ تعریف‌کنندهٔ» دیگر باید دقیقاً همان نوع را تولید کند.</p>
+<p>توجه کنید که تعریف یک نام مستعار نوع برای یک نوع Opaque یک قابلیت ناپایدار است.
+برای استفاده از آن به <code>nightly</code> و حاشیه‌نویسی‌های <code>#![feature(type_alias_impl_trait)]</code> روی فایل و <code>#[define_opaque(Foo)]</code> روی متدی نیاز دارید که نوع Opaque را به نوع مشخص پیوند می‌دهد.
+مثال کامل:</p>
+<pre><code class="language-rust">#![feature(type_alias_impl_trait)]
+
+trait Bar { /* stuff */ }
+
+type Foo = impl Bar;
+
+struct Struct;
+
+impl Bar for Struct { /* stuff */ }
+
+#[define_opaque(Foo)]
+fn foo() -&gt; Foo {
+    Struct
+}</code></pre>
+<h2 id="defining-use-sites"><a class="header" href="#defining-use-sites">محل(های) استفادهٔ تعریف‌کننده</a></h2>
+<p>در حال حاضر تنها مقدار بازگشتی یک تابع می‌تواند محل استفادهٔ تعریف‌کنندهٔ یک نوع Opaque باشد
+(و آن هم فقط اگر نوع بازگشتی آن تابع شامل نوع Opaque باشد).</p>
+<p>استفادهٔ تعریف‌کنندهٔ یک نوع Opaque می‌تواند هر کدی <em>درون</em> والدِ تعریف نوع Opaque باشد.
+این شامل همهٔ هم‌نیاهای (siblings) نوع Opaque و همهٔ فرزندان آن هم‌نیاها می‌شود.</p>
+<p>ابتکار عملِ <em>«جلوگیری از وارد شدن آسیب مغزی مهلک به توسعه‌دهندگان در اثر
+اجرای ناخواستهٔ حلقه‌های بی‌پایان در ذهنشان هنگام تلاش برای
+درک اینکه سامانهٔ نوع چه می‌کند»</em> تصمیم گرفته است که فرزندانِ
+نوع‌های Opaque را از محل استفادهٔ تعریف‌کننده بودن منع کند.</p>
+<h3 id="associated-opaque-types"><a class="header" href="#associated-opaque-types">نوع‌های Opaque وابسته</a></h3>
+<p>نوع‌های Opaque وابسته را می‌توان با هر آیتم وابستهٔ دیگری
+در همان <code>impl</code> صفت، یا فرزندی از آن آیتم‌های وابسته تعریف کرد.
+برای نمونه:</p>
+<pre><code class="language-rust ignore">trait Baz {
+    type Foo;
+    fn foo() -&gt; Self::Foo;
+}
+
+struct Quux;
+
+impl Baz for Quux {
+    type Foo = impl Bar;
+    fn foo() -&gt; Self::Foo { ... }
+}</code></pre>
+<p>برای این کار نیز به <code>nightly</code> و حاشیه‌نویسی (متفاوتِ) <code>#![feature(impl_trait_in_assoc_type)]</code> نیاز دارید.
+توجه کنید که دیگر به <code>#[define_opaque(Foo)]</code> روی متد نیازی ندارید، زیرا نوع Opaque در امضای تابع (پشت نوع وابسته) ذکر شده است.
+مثال کامل:</p>
+<pre><code>#![feature(impl_trait_in_assoc_type)]
+
+trait Bar {}
+struct Zap;
+
+impl Bar for Zap {}
+
+trait Baz {
+    type Foo;
+    fn foo() -&gt; Self::Foo;
+}
+
+struct Quux;
+
+impl Baz for Quux {
+    type Foo = impl Bar;
+    fn foo() -&gt; Self::Foo { Zap }
+}
+</code></pre><nav class="page-nav"><a href="const-generics.html">→ جنریک‌های ثابت</a><a href="opaque-types-impl-trait-inference.html">جزئیات استنتاج ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

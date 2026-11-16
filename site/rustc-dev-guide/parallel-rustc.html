@@ -1,0 +1,115 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>کامپایل موازی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="parallel-rustc"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="parallel-compilation"><a class="header" href="#parallel-compilation">کامپایل موازی</a></h1>
+<div class="warning">
+As of <!-- date-check --> November 2024,
+the parallel front-end is undergoing significant changes,
+so this page contains quite a bit of outdated information.
+<p>Tracking issue: <a href="https://github.com/rust-lang/rust/issues/113349">https://github.com/rust-lang/rust/issues/113349</a></p>
+</div>
+
+<p>در <!-- date-check --> نوامبر ۲۰۲۴، بیشتر بخش‌های کامپایلر Rust موازی‌سازی شده است.</p>
+<ul>
+<li>بخش codegen به‌طور پیش‌فرض هم‌زمان اجرا می‌شود. می‌توانید با گزینه‌ی <code>-C codegen-units=n</code> تعداد وظایف هم‌زمان را کنترل کنید.</li>
+<li>بخش‌های بعد از HIR lowering تا codegen، مانند بررسی نوع، بررسی قرض‌گیری و بهینه‌سازی MIR، در نسخه‌ی nightly موازی شده‌اند. در حال حاضر، این بخش‌ها به‌طور پیش‌فرض به‌صورت سریالی اجرا می‌شوند و موازی‌سازی را کاربر باید به‌صورت دستی با گزینه‌ی <code>-Z threads = n</code> فعال کند.</li>
+<li>بخش‌های دیگر، مانند تجزیه‌ی لغوی، HIR lowering و بسط ماکرو، هنوز در حالت سریالی اجرا می‌شوند.</li>
+</ul>
+<div class="warning">
+بخش‌های زیر فعلاً حفظ شده‌اند، اما کاملاً قدیمی هستند.
+</div>
+
+<hr>
+<h2 id="code-generation"><a class="header" href="#code-generation">تولید کد</a></h2>
+<p>در طول monomorphization، کامپایلر همه‌ی کدی را که باید تولید شود به تکه‌های کوچک‌تری به نام <em>codegen unitها</em> تقسیم می‌کند. سپس این تکه‌ها توسط نمونه‌های مستقلی از LLVM که به‌صورت موازی اجرا می‌شوند تولید می‌شوند. در پایان، linker اجرا می‌شود تا همه‌ی codegen unitها را در یک فایل باینری ترکیب کند. این فرایند در ماژول <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_codegen_ssa/base/index.html"><code>rustc_codegen_ssa::base</code></a> رخ می‌دهد.</p>
+<h2 id="data-structures"><a class="header" href="#data-structures">ساختارهای داده</a></h2>
+<p>ساختارهای داده‌ی ایمن برای نخ که در کامپایلر موازی استفاده می‌شوند در ماژول <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_data_structures/sync/index.html"><code>rustc_data_structures::sync</code></a> یافت می‌شوند. این ساختارهای داده بسته به مقدار <code>parallel-compiler</code> به شکل‌های متفاوتی پیاده‌سازی می‌شوند.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>ساختار داده</th><th>موازی</th><th>غیرموازی</th></tr>
+</thead>
+<tbody>
+<tr><td>Lock\&lt;T&gt;</td><td>(parking_lot::Mutex&lt;T&gt;)</td><td>(std::cell::RefCell)</td></tr>
+<tr><td>RwLock\&lt;T&gt;</td><td>(parking_lot::RwLock&lt;T&gt;)</td><td>(std::cell::RefCell)</td></tr>
+<tr><td>ReadGuard</td><td>parking_lot::RwLockReadGuard</td><td>std::cell::Ref</td></tr>
+<tr><td>MappedReadGuard</td><td>parking_lot::MappedRwLockReadGuard</td><td>std::cell::Ref</td></tr>
+<tr><td>WriteGuard</td><td>parking_lot::RwLockWriteGuard</td><td>std::cell::RefMut</td></tr>
+<tr><td>MappedWriteGuard</td><td>parking_lot::MappedRwLockWriteGuard</td><td>std::cell::RefMut</td></tr>
+<tr><td>LockGuard</td><td>parking_lot::MutexGuard</td><td>std::cell::RefMut</td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li>
+<p>این ساختارهای داده‌ی ایمن برای نخ در سرتاسر فرایند کامپایل پراکنده‌اند و می‌توانند باعث رقابت بر سر قفل (lock contention) شوند و با افزایش تعداد نخ‌ها به بیش از ۴، عملکرد را کاهش دهند. بنابراین استفاده از این ساختارهای داده را بازرسی می‌کنیم که یا به بازآرایی (refactoring) برای کاهش استفاده از حالت مشترک می‌انجامد، یا به نگارش مستنداتی ماندگار درباره‌ی جزئیات ناوردایی‌ها (invariants)، اتمیک بودن و ترتیب قفل‌ها.</p>
+</li>
+<li>
+<p>از سوی دیگر، هنوز باید مشخص کنیم که کدام ناوردایی‌های دیگر در طول کامپایل ممکن است در کامپایل موازی برقرار نباشند.</p>
+</li>
+</ul>
+<h3 id="workerlocal"><a class="header" href="#workerlocal">WorkerLocal</a></h3>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_data_structures/sync/worker_local/struct.WorkerLocal.html"><code>WorkerLocal</code></a> یک ساختار داده‌ی ویژه است که برای کامپایلرهای موازی پیاده‌سازی شده است. این ساختار برای هر نخ در یک thread pool مقداری محلیِ worker نگه می‌دارد. فقط از طریق <code>impl</code> مربوط به <code>Deref</code> روی thread poolی که با آن ساخته شده است می‌توانید به مقدار محلی worker دسترسی پیدا کنید. در غیر این صورت panic رخ می‌دهد.</p>
+<p><code>WorkerLocal</code> برای پیاده‌سازی تخصیص‌دهنده‌ی <code>Arena</code> در محیط موازی استفاده می‌شود که در queryهای موازی حیاتی است. پیاده‌سازی آن در ماژول <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_data_structures/sync/worker_local/index.html"><code>rustc_data_structures::sync::worker_local</code></a> قرار دارد. با این حال، در کامپایلر غیرموازی، به‌صورت <code>(OneThread&lt;T&gt;)</code> پیاده‌سازی شده است که <code>T</code> آن را می‌توان مستقیماً از طریق <code>Deref::deref</code> در دسترس قرار داد.</p>
+<h2 id="parallel-iterator"><a class="header" href="#parallel-iterator">iterator موازی</a></h2>
+<p>iteratorهای موازیِ ارائه‌شده توسط crate با نام <a href="https://crates.io/crates/rayon"><code>rayon</code></a> راه‌های ساده‌ای برای پیاده‌سازی موازی‌سازی هستند. در پیاده‌سازی فعلی کامپایلر موازی، از <a href="https://github.com/rust-lang/rustc-rayon">یک fork سفارشی از <code>rayon</code></a> برای اجرای موازی وظایف استفاده می‌کنیم.</p>
+<p>برخی توابع iterator طوری پیاده‌سازی شده‌اند که وقتی <code>parallel-compiler</code> برابر true باشد، حلقه‌ها را به‌صورت موازی اجرا کنند.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>تابع (بدون <code>Send</code> و <code>Sync</code>)</th><th>معرفی</th><th>ماژول مالک</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>par_iter</strong>&lt;T: IntoParallelIterator&gt;(t: T) -&gt; T::Iter</td><td>یک iterator موازی تولید می‌کند</td><td>rustc_data_structure::sync</td></tr>
+<tr><td><strong>par_for_each_in</strong>&lt;T: IntoParallelIterator&gt;(t: T, for_each: impl Fn(T::Item))</td><td>یک iterator موازی تولید می‌کند و <code>for_each</code> را روی هر عنصر اجرا می‌کند</td><td>rustc_data_structure::sync</td></tr>
+<tr><td><strong>Map::par_body_owners</strong>(self, f: impl Fn(LocalDefId))</td><td><code>f</code> را روی همه‌ی مالکان hir در crate اجرا می‌کند</td><td>rustc_middle::hir::map</td></tr>
+<tr><td><strong>Map::par_for_each_module</strong>(self, f: impl Fn(LocalDefId))</td><td><code>f</code> را روی همه‌ی ماژول‌ها و زیرماژول‌های crate اجرا می‌کند</td><td>rustc_middle::hir::map</td></tr>
+<tr><td><strong>ModuleItems::par_items</strong>(&amp;self, f: impl Fn(ItemId))</td><td><code>f</code> را روی همه‌ی آیتم‌های ماژول اجرا می‌کند</td><td>rustc_middle::hir</td></tr>
+<tr><td><strong>ModuleItems::par_trait_items</strong>(&amp;self, f: impl Fn(TraitItemId))</td><td><code>f</code> را روی همه‌ی آیتم‌های trait در ماژول اجرا می‌کند</td><td>rustc_middle::hir</td></tr>
+<tr><td><strong>ModuleItems::par_impl_items</strong>(&amp;self, f: impl Fn(ImplItemId))</td><td><code>f</code> را روی همه‌ی آیتم‌های impl در ماژول اجرا می‌کند</td><td>rustc_middle::hir</td></tr>
+<tr><td><strong>ModuleItems::par_foreign_items</strong>(&amp;self, f: impl Fn(ForeignItemId))</td><td><code>f</code> را روی همه‌ی آیتم‌های foreign در ماژول اجرا می‌کند</td><td>rustc_middle::hir</td></tr>
+</tbody>
+</table>
+</div>
+<p>حلقه‌های زیادی در کامپایلر وجود دارند که احتمالاً می‌توان با این توابع آن‌ها را موازی کرد. در <!-- date-check--> اوت ۲۰۲۲، سناریوهایی که تابع iterator موازی در آن‌ها استفاده شده است به شرح زیر هستند:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>فراخواننده</th><th>سناریو</th><th>فراخوانده‌شده</th></tr>
+</thead>
+<tbody>
+<tr><td>rustc_metadata::rmeta::encoder::prefetch_mir</td><td>پیش‌واکشی queryهایی که بعداً برای رمزگذاری فراداده لازم خواهند بود</td><td>par_iter</td></tr>
+<tr><td>rustc_monomorphize::collector::collect_crate_mono_items</td><td>جمع‌آوری آیتم‌های monomorphize‌شده‌ی قابل دسترسی از آیتم‌های غیرجنریک</td><td>par_for_each_in</td></tr>
+<tr><td>rustc_interface::passes::analysis</td><td>بررسی اعتبار دستورهای match</td><td>Map::par_body_owners</td></tr>
+<tr><td>rustc_interface::passes::analysis</td><td>بررسی قرض‌گیری MIR</td><td>Map::par_body_owners</td></tr>
+<tr><td>rustc_typeck::check::typeck_item_bodies</td><td>بررسی نوع</td><td>Map::par_body_owners</td></tr>
+<tr><td>rustc_interface::passes::hir_id_validator::check_crate</td><td>بررسی اعتبار hir</td><td>Map::par_for_each_module</td></tr>
+<tr><td>rustc_interface::passes::analysis</td><td>بررسی اعتبار بدنه‌ی حلقه‌ها، attributeها، تابع‌های naked، abi ناپایدار، بدنه‌های const</td><td>Map::par_for_each_module</td></tr>
+<tr><td>rustc_interface::passes::analysis</td><td>بررسی liveness و intrinsic در MIR</td><td>Map::par_for_each_module</td></tr>
+<tr><td>rustc_interface::passes::analysis</td><td>بررسی deathness</td><td>Map::par_for_each_module</td></tr>
+<tr><td>rustc_interface::passes::analysis</td><td>بررسی حریم خصوصی (privacy)</td><td>Map::par_for_each_module</td></tr>
+<tr><td>rustc_lint::late::check_crate</td><td>اجرای lintهای هر ماژول</td><td>Map::par_for_each_module</td></tr>
+<tr><td>rustc_typeck::check_crate</td><td>بررسی well-formedness</td><td>Map::par_for_each_module</td></tr>
+</tbody>
+</table>
+</div>
+<p>هنوز حلقه‌های بسیاری وجود دارند که پتانسیل استفاده از iteratorهای موازی را دارند.</p>
+<h2 id="query-system"><a class="header" href="#query-system">سامانه‌ی query</a></h2>
+<p>مدل query ویژگی‌هایی دارد که ارزیابی هم‌زمان چند query را بدون تلاش زیاد عملاً شدنی می‌کند:</p>
+<ul>
+<li>همه‌ی داده‌هایی که یک provider مربوط به query می‌تواند به آن‌ها دسترسی داشته باشد از طریق query context است، بنابراین query context می‌تواند هماهنگ‌سازی دسترسی را بر عهده بگیرد.</li>
+<li>نتایج query باید تغییرناپذیر (immutable) باشند تا بتوان از آن‌ها با اطمینان به‌صورت هم‌زمان در نخ‌های مختلف استفاده کرد.</li>
+</ul>
+<p>وقتی query با نام <code>foo</code> ارزیابی می‌شود، جدول cache مربوط به <code>foo</code> قفل می‌شود.</p>
+<ul>
+<li>اگر از قبل نتیجه‌ای وجود داشته باشد، می‌توانیم آن را clone کنیم، قفل را آزاد کنیم و کار تمام است.</li>
+<li>اگر هیچ ورودی cache وجود نداشته باشد و هیچ فراخوانی فعال دیگری از query برای محاسبه‌ی همان نتیجه در کار نباشد، کلید را «در حال انجام» علامت می‌زنیم، قفل را آزاد می‌کنیم و ارزیابی را آغاز می‌کنیم.</li>
+<li>اگر فراخوانی دیگری از query برای همان کلید در حال انجام <em>باشد</em>، قفل را آزاد می‌کنیم و نخ را مسدود می‌کنیم تا فراخوانی دیگر نتیجه‌ای را که منتظرش هستیم محاسبه کند. <strong>تشخیص خطای چرخه (cycle error)</strong> در کامپایلر موازی به منطق پیچیده‌تری نسبت به حالت تک‌نخی نیاز دارد. وقتی نخ‌های worker در queryهای موازی به‌دلیل وابستگی متقابل از پیشروی بازمی‌ایستند، کامپایلر از یک نخ اضافی <em>(با نام deadlock handler)</em> برای تشخیص، حذف و گزارش خطای چرخه استفاده می‌کند.</li>
+</ul>
+<p>ویژگی query موازی هنوز بخش‌هایی برای پیاده‌سازی دارد که بیشتر آن‌ها به <code>ساختارهای داده</code> و <code>iteratorهای موازی</code> قبلی مربوط می‌شوند. <a href="https://github.com/rust-lang/rust/issues/48685">این issue باز برای پیگیری ویژگی</a> را ببینید.</p>
+<h2 id="rustdoc"><a class="header" href="#rustdoc">Rustdoc</a></h2>
+<p>در <!-- date-check--> نوامبر ۲۰۲۲، هنوز چند مرحله باید کامل شود تا بتوان رندر <code>rustdoc</code> را موازی کرد (بحث بازی درباره‌ی <a href="https://github.com/rust-lang/rust/issues/82741"><code>rustdoc</code> موازی</a> را ببینید).</p>
+<h2 id="resources"><a class="header" href="#resources">منابع</a></h2>
+<p>در اینجا چند منبع برای یادگیری بیشتر آمده است:</p>
+<ul>
+<li><a href="https://internals.rust-lang.org/t/help-test-parallel-rustc/11503">این رشته‌ی IRLO از alexchricton درباره‌ی عملکرد</a></li>
+<li><a href="https://internals.rust-lang.org/t/parallelizing-rustc-using-rayon/6606">این رشته‌ی IRLO از Zoxc، یکی از پیشگامان این تلاش</a></li>
+<li><a href="https://github.com/nikomatsakis/rustc-parallelization/blob/master/interior-mutability-list.md">این فهرست از interior mutability در کامپایلر توسط nikomatsakis</a></li>
+</ul><nav class="page-nav"><a href="serialization.html">→ سریال‌سازی در rustc</a><a href="rustdoc-internals.html">درونیات Rustdoc ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

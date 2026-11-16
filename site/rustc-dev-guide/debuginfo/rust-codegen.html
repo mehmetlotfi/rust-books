@@ -1,0 +1,156 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>تولید کد در Rust — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="debuginfo/rust-codegen"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="rust-codegen"><a class="header" href="#rust-codegen">تولید کد در Rust</a></h1>
+<p>نخستین فاز تولید اطلاعات اشکال‌زدایی (debug info) ایجاب می‌کند که Rust، MIR برنامه را بررسی کند و
+آن را به LLVM منتقل کند.
+این کار عمدتاً در <a href="https://github.com/rust-lang/rust/tree/main/compiler/rustc_codegen_llvm/src/debuginfo"><code>rustc_codegen_llvm/debuginfo</code></a> انجام می‌شود، هرچند
+مقداری پردازش نام نوع‌ها در <a href="https://github.com/rust-lang/rust/tree/main/compiler/rustc_codegen_ssa/src/debuginfo"><code>rustc_codegen_ssa/debuginfo</code></a> وجود دارد.
+Rust از طریق API ‏<code>DIBuilder</code> با LLVM ارتباط برقرار می‌کند،
+که پوششی باریک دور اجزای داخلی LLVM است و در <a href="https://github.com/rust-lang/rust/tree/main/compiler/rustc_llvm">rustc_llvm</a> قرار دارد.</p>
+<h1 id="type-information"><a class="header" href="#type-information">اطلاعات نوع</a></h1>
+<p>اطلاعات نوع معمولاً شامل نام نوع، اندازه و تراز (alignment) است، و در صورت ارتباط، مواردی مانند
+فیلدها، پارامترهای جنریک و مُغیِّرهای ذخیره‌سازی.
+بخش عمدهٔ این کار در <a href="https://github.com/rust-lang/rust/blob/main/compiler/rustc_codegen_llvm/src/debuginfo/metadata.rs">rustc_codegen_llvm/src/debuginfo/metadata</a> انجام می‌شود.</p>
+<p>مهم است به خاطر داشته باشید که هدف لزوماً «نمایش نوع‌ها دقیقاً به همان شکلی که
+در Rust ظاهر می‌شوند» نیست، بلکه نمایش آن‌ها به شکلی است که به اشکال‌زداها امکان دهد دقیق‌ترین بازسازی
+داده را هنگام اشکال‌زدایی انجام دهند.
+این تمایز برای درک کار اصلی‌ای که
+در این لایه رخ می‌دهد حیاتی است؛ بسیاری از تغییراتی که اینجا انجام می‌شوند برای دور زدن
+محدودیت‌های اشکال‌زداها هستند، آن هم وقتی هیچ گزینهٔ دیگری کار نکند.</p>
+<h2 id="quirks"><a class="header" href="#quirks">ویژگی‌های عجیب</a></h2>
+<p>گره‌های DI تولیدشدهٔ Rust برای رضایت هم CDB و هم LLDB «وانمود می‌کنند» که C/C++ هستند.
+این می‌تواند به اطلاعات اشکال‌زدایی‌ای منجر شود که شهودی نیستند و با سبک رایج همخوانی ندارند.</p>
+<h3 id="pointers-and-references"><a class="header" href="#pointers-and-references">اشاره‌گرها و ارجاع‌ها</a></h3>
+<p>اشاره‌گرها/ارجاع‌ها/<code>Box</code>های پهن (wide) مانند یک struct با ۲ فیلد در نظر گرفته می‌شوند: <code>data_ptr</code> و <code>length</code>.</p>
+<p>همهٔ اشاره‌گرها، ارجاع‌ها و اشاره‌گرهای <code>Box</code> غیرپهن به‌صورت گره‌های اشاره‌گر خروجی داده می‌شوند و
+میان <code>mut</code> و غیر <code>mut</code> تمایزی قائل نمی‌شود.
+چند تلاش برای اصلاح این موضوع انجام شده است،
+اما متأسفانه راه‌حل سرراستی وجود ندارد.
+استفاده از گره‌های DI با نام <code>reference</code> در قالب‌های مربوطه تله‌هایی دارد.
+میان ارجاع‌های C++ و ارجاع‌های Rust تفاوت معنایی‌ای وجود دارد که قابل جمع کردن نیست.</p>
+<blockquote>
+<p>از <a href="https://en.cppreference.com/w/cpp/language/reference.html">cppreference</a>:</p>
+<p>ارجاع‌ها شیء نیستند؛ <strong>لزوماً فضای ذخیره‌سازی اشغال نمی‌کنند</strong>، هرچند کامپایلر ممکن است
+در صورت لزوم برای پیاده‌سازی معناشناسی مطلوب فضا تخصیص دهد (مثلاً عضو داده‌ای غیرایستا
+از نوع ارجاع معمولاً اندازهٔ کلاس را به‌اندازهٔ لازم برای ذخیرهٔ
+یک نشانی حافظه افزایش می‌دهد).</p>
+<p>چون ارجاع‌ها شیء نیستند، <strong>آرایه‌ای از ارجاع‌ها، اشاره‌گری به ارجاع‌ها و ارجاعی به ارجاع‌ها وجود ندارد</strong></p>
+</blockquote>
+<p>راه‌حل پیشنهادی فعلی این است که به‌سادگی <a href="https://github.com/rust-lang/rust/pull/144394">برای گره‌های اشاره‌گر typedef بسازیم</a>.</p>
+<p>استفاده از مُحدِّد <code>const</code> برای نشان دادن غیر <code>mut</code> بودن، به‌دلیل بهینه‌سازی‌های داخلی LLDB
+مشکلات بالقوه‌ای دارد. به‌طور خلاصه، LLDB هنگام گام‌به‌گام اجرا کردن کد سعی می‌کند مقادیر فرزند متغیرها (مثلاً فیلدهای struct،
+عناصر آرایه) را کش کند.
+از یک روش ابتکاری (heuristic) برای تعیین اینکه کدام مقادیر به‌طور ایمن
+قابل کش‌اند استفاده می‌شود و <code>const</code> بخشی از آن روش است.
+دربارهٔ اینکه این با چیزهایی مانند سازه‌های تغییرپذیری درونی (interior mutability) در Rust چگونه
+تعامل می‌کند پژوهشی انجام نشده است.</p>
+<h3 id="dwarf-vs-pdb"><a class="header" href="#dwarf-vs-pdb">DWARF در برابر PDB</a></h3>
+<p>هرچند بیشتر اطلاعات نوع نسبتاً سرراست است، یک مسئلهٔ قابل‌توجه قالب اطلاعات اشکال‌زدایی
+target است.
+هر قالب معناشناسی و محدودیت‌های متفاوتی دارد و به همین دلیل در برخی موارد
+به اطلاعات اشکال‌زدایی کمی متفاوتی نیاز دارند.
+این موضوع با فراخوانی‌های <a href="https://github.com/rust-lang/rust/blob/main/compiler/rustc_codegen_ssa/src/debuginfo/type_names.rs#L813"><code>cpp_like_debuginfo</code></a> کنترل می‌شود.</p>
+<h3 id="naming"><a class="header" href="#naming">نام‌گذاری</a></h3>
+<p>Rust می‌کوشد نام نوع‌ها را تا حد ممکن دقیق منتقل کند، اما اشکال‌زداها و قالب‌های اطلاعات
+اشکال‌زدایی همیشه به آن احترام نمی‌گذارند.</p>
+<p>به‌دلیل محدودیت‌های تجزیه‌گر عبارت MSVC، تبدیل‌های نامی زیر برای اطلاعات اشکال‌زدایی PDB
+انجام می‌شوند:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>نام در Rust</th><th>نام در MSVC</th></tr>
+</thead>
+<tbody>
+<tr><td><code>&amp;str</code>/<code>&amp;mut str</code></td><td><code>ref$&lt;str$&gt;</code>/<code>ref_mut$&lt;str$&gt;</code></td></tr>
+<tr><td><code>&amp;[T]</code>/<code>&amp;mut [T]</code></td><td><code>ref$&lt;slice$&lt;T&gt; &gt;</code>/<code>ref_mut$&lt;slice$&lt;T&gt; &gt;</code><sup class="footnote-reference" id="fr-1-1"><a href="#footnote-1">1</a></sup></td></tr>
+<tr><td><code>[T; N]</code></td><td><code>array$&lt;T, N&gt;</code></td></tr>
+<tr><td><code>RustEnum</code></td><td><code>enum2$&lt;RustEnum&gt;</code></td></tr>
+<tr><td><code>(T1, T2)</code></td><td><code>tuple$&lt;T1, T2&gt;</code></td></tr>
+<tr><td><code>*const T</code></td><td><code>ptr_const$&lt;T&gt;</code></td></tr>
+<tr><td><code>*mut T</code></td><td><code>ptr_mut$&lt;T&gt;</code></td></tr>
+<tr><td><code>usize</code></td><td><code>size_t</code><sup class="footnote-reference" id="fr-2-1"><a href="#footnote-2">2</a></sup></td></tr>
+<tr><td><code>isize</code></td><td><code>ptrdiff_t</code><sup class="footnote-reference" id="fr-2-2"><a href="#footnote-2">2</a></sup></td></tr>
+<tr><td><code>uN</code></td><td><code>unsigned __intN</code><sup class="footnote-reference" id="fr-2-3"><a href="#footnote-2">2</a></sup></td></tr>
+<tr><td><code>iN</code></td><td><code>__intN</code><sup class="footnote-reference" id="fr-2-4"><a href="#footnote-2">2</a></sup></td></tr>
+<tr><td><code>f32</code></td><td><code>float</code><sup class="footnote-reference" id="fr-2-5"><a href="#footnote-2">2</a></sup></td></tr>
+<tr><td><code>f64</code></td><td><code>double</code><sup class="footnote-reference" id="fr-2-6"><a href="#footnote-2">2</a></sup></td></tr>
+<tr><td><code>f128</code></td><td><code>fp128</code><sup class="footnote-reference" id="fr-2-7"><a href="#footnote-2">2</a></sup></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="generics"><a class="header" href="#generics">جنریک‌ها</a></h3>
+<p>Rust اطلاعات <em>نوع</em> جنریک را (<code>T</code> در <code>ArrayVec&lt;T, N: usize&gt;</code>) خروجی می‌دهد، اما اطلاعات <em>مقدار</em>
+جنریک را (<code>N</code> در <code>ArrayVec&lt;T, N: usize&gt;</code>) خروجی نمی‌دهد.</p>
+<p>CodeView گره برگی برای جنریک‌ها/قالب‌های C++ ندارد، بنابراین همهٔ اطلاعات جنریک
+هنگام تولید اطلاعات اشکال‌زدایی PDB از دست می‌رود.
+راه‌های دور زدنی وجود دارد که به اشکال‌زدا اجازه می‌دهد
+آرگومان‌های جنریک را از طریق نام نوع بازیابی کند، اما در بهترین حالت راه‌حلی شکننده است.
+تلاش‌هایی در جریان است تا با مایکروسافت تماس گرفته شود و این کمبود اصلاح شود،
+و/یا یکی از نوع‌های گره استفاده‌نشدهٔ CodeView به‌عنوان معادلی مناسب به کار گرفته شود.</p>
+<h3 id="type-aliases"><a class="header" href="#type-aliases">نام‌های مستعار نوع</a></h3>
+<p>Rust در چند مورد برای کمک به جبران محدودیت‌های اشکال‌زداها گره‌های typedef خروجی می‌دهد، اما در حال حاضر
+برای <a href="../../reference/items/type-aliases.html">نام‌های مستعار نوع در کد منبع</a> گره‌ای خروجی نمی‌دهد.</p>
+<h3 id="enums"><a class="header" href="#enums">enumها</a></h3>
+<p>گره‌های DI مربوط به enum در <a href="https://github.com/rust-lang/rust/tree/main/compiler/rustc_codegen_llvm/src/debuginfo/metadata/enums">rustc_codegen_llvm/src/debuginfo/metadata/enums</a> تولید می‌شوند</p>
+<h4 id="dwarf"><a class="header" href="#dwarf">DWARF</a></h4>
+<p>DWARF گره‌ای اختصاصی برای unionهای متمایزشده (discriminated unions) دارد: <code>DW_TAG_variant</code>.
+این یک ظرف است که به گره‌های <code>DW_TAG_variant_part</code> ارجاع می‌دهد
+که ممکن است مقدار discriminant داشته باشند یا نداشته باشند.
+سلسله‌مراتب به این شکل است:</p>
+<pre><code class="language-txt">DW_TAG_structure_type      (top-level type for the coroutine)
+  DW_TAG_variant_part      (variant part)
+    DW_AT_discr            (reference to discriminant DW_TAG_member)
+    DW_TAG_member          (discriminant member)
+    DW_TAG_variant         (variant 1)
+    DW_TAG_variant         (variant 2)
+    DW_TAG_variant         (variant 3)
+  DW_TAG_structure_type    (type of variant 1)
+  DW_TAG_structure_type    (type of variant 2)
+  DW_TAG_structure_type    (type of variant 3)
+</code></pre>
+<h4 id="pdb"><a class="header" href="#pdb">PDB</a></h4>
+<p>PDB گره اختصاصی ندارد، بنابراین معادل C یک union متمایزشده را تولید می‌کند:</p>
+<pre><code class="language-c">union enum2$&lt;RUST_ENUM_NAME&gt; {
+    enum VariantNames {
+        First,
+        Second
+    };
+    struct Variant0 {
+        struct First {
+            // fields
+        };
+        static const enum2$&lt;RUST_ENUM_NAME&gt;::VariantNames NAME;
+        static const unsigned long DISCR_EXACT;
+        enum2$&lt;RUST_ENUM_NAME&gt;::Variant0::First value;
+    };
+    struct Variant1 {
+        struct Second {
+            // fields
+        };
+        static enum2$&lt;RUST_ENUM_NAME&gt;::VariantNames NAME;
+        static unsigned long DISCR_EXACT;
+        enum2$&lt;RUST_ENUM_NAME&gt;::Variant1::Second value;
+    };
+    enum2$&lt;RUST_ENUM_NAME&gt;::Variant0 variant0;
+    enum2$&lt;RUST_ENUM_NAME&gt;::Variant1 variant1;
+    unsigned long tag;
+}
+</code></pre>
+<p>نکتهٔ مهم این است که به‌دلیل محدودیت‌های LLDB، مقدار <code>DISCR_*</code> تولیدشده همیشه از نوع
+<code>u64</code> است، حتی اگر مقدار <code>#[repr(u64)]</code> نباشد.
+این برای LLDB عمدتاً مشکلی نیست، چون
+مقدار <code>DISCR_*</code> و <code>tag</code> صرف‌نظر از نوعشان در مقادیر <code>uint64_t</code> خوانده می‌شوند.</p>
+<h1 id="source-information"><a class="header" href="#source-information">اطلاعات منبع</a></h1>
+<p>TODO</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-1">
+<p>تجزیه‌گر عبارت MSVC، <code>&gt;&gt;</code> را شیفت به راست در نظر می‌گیرد. لازم است
+<code>&gt;</code>های متوالی در نام نوع‌ها با یک فاصله (<code>&gt; &gt;</code>) از هم جدا شوند. <a href="#fr-1-1">↩</a></p>
+</li>
+<li id="footnote-2">
+<p>هرچند این نام‌های نوع به‌عنوان بخشی از گره اطلاعات اشکال‌زدایی تولید می‌شوند (که سپس در
+یک گره typedef با نام Rust پیچیده می‌شود)، به‌محض تبدیل گره LLVM-IR به گره CodeView، اطلاعات
+نام نوع از دست می‌رود.
+دلیلش این است که CodeView گره‌های مخفف ویژه‌ای برای نوع‌های اولیه دارد
+و آن گره‌های مخفف فیلد «name» ندارند. <a href="#fr-2-1">↩</a> <a href="#fr-2-2">↩2</a> <a href="#fr-2-3">↩3</a> <a href="#fr-2-4">↩4</a> <a href="#fr-2-5">↩5</a> <a href="#fr-2-6">↩6</a> <a href="#fr-2-7">↩7</a></p>
+</li>
+</ol><nav class="page-nav"><a href="intro.html">→ اطلاعات اشکال‌زدایی</a><a href="llvm-codegen.html">تولید کد در LLVM ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

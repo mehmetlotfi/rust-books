@@ -1,0 +1,330 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Rust ناامن (unsafe) — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch20-01-unsafe-rust"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="unsafe-rust"><a class="header" href="#unsafe-rust">Rust ناامن</a></h2>
+<p>تمام کدی که تا به حال بررسی کرده‌ایم دارای تضمین‌های ایمنی حافظه راست بوده است که در زمان کامپایل اعمال می‌شوند. با این حال، راست دارای یک زبان دوم مخفی درون خود است که این تضمین‌های ایمنی حافظه را اعمال نمی‌کند: این زبان <em>Unsafe Rust</em> نامیده می‌شود و درست مانند راست معمولی کار می‌کند، اما به ما قدرت‌های فوق‌العاده‌ای می‌دهد.</p>
+<p>وجود Unsafe Rust به این دلیل است که تحلیل ایستا ذاتاً محافظه‌کارانه است. وقتی کامپایلر سعی می‌کند تعیین کند که آیا کد تضمین‌ها را رعایت می‌کند یا نه، بهتر است برخی از برنامه‌های معتبر را رد کند تا اینکه برخی از برنامه‌های نامعتبر را بپذیرد. اگرچه ممکن است کد <em>درست</em> باشد، اما اگر کامپایلر راست اطلاعات کافی برای اطمینان نداشته باشد، کد را رد خواهد کرد. در این موارد، می‌توانید از کد ناامن برای گفتن به کامپایلر استفاده کنید: «به من اعتماد کن، من می‌دانم چه کار می‌کنم.» اما هشدار داده شود که شما از کد ناامن به مسئولیت خودتان استفاده می‌کنید: اگر از کد ناامن به‌طور نادرست استفاده کنید، مشکلاتی ممکن است به دلیل ناامنی حافظه ایجاد شوند، مانند dereferencing اشاره‌گر (Pointer) null.</p>
+<p>دلیل دیگر وجود یک همزاد ناامن برای راست این است که سخت‌افزار کامپیوتر در ذات خود ناامن است. اگر راست به شما اجازه انجام عملیات ناامن را نمی‌داد، نمی‌توانستید برخی از وظایف را انجام دهید. راست باید به شما اجازه دهد تا برنامه‌نویسی سطح پایین سیستم، مانند تعامل مستقیم با سیستم‌عامل یا حتی نوشتن سیستم‌عامل خودتان را انجام دهید. کار با برنامه‌نویسی سطح پایین سیستم یکی از اهداف این زبان است. بیایید بررسی کنیم که با Unsafe Rust چه می‌توانیم انجام دهیم و چگونه باید این کار را انجام دهیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="unsafe-superpowers"></a></p>
+<h3 id="performing-unsafe-superpowers"><a class="header" href="#performing-unsafe-superpowers">توانایی‌های ویژهٔ ناامن</a></h3>
+<p>برای تغییر به Unsafe Rust، از کلیدواژه <code>unsafe</code> استفاده کنید و سپس یک بلوک جدید که کد ناامن را نگه می‌دارد شروع کنید. در Unsafe Rust می‌توانید پنج عمل را انجام دهید که در راست امن نمی‌توانید، و ما این‌ها را <em>قدرت‌های فوق‌العاده ناامن</em> می‌نامیم. این قدرت‌ها شامل توانایی‌های زیر هستند:</p>
+<ol>
+<li>اشاره‌زدایی یک اشاره‌گر خام</li>
+<li>فراخوانی یک تابع یا متد ناامن</li>
+<li>دسترسی به یک متغیر ایستای تغییرپذیر یا تغییر آن</li>
+<li>پیاده‌سازی یک صفت ناامن</li>
+<li>دسترسی به فیلدهای یک <code>union</code></li>
+</ol>
+<p>مهم است بدانید <code>unsafe</code> بررسی‌کنندهٔ قرض‌گیری را خاموش نمی‌کند و هیچ‌یک از بررسی‌های ایمنی دیگر Rust را نیز غیرفعال نمی‌سازد: اگر در کد ناامن از یک ارجاع استفاده کنید، آن ارجاع همچنان بررسی می‌شود. واژهٔ کلیدی <code>unsafe</code> فقط دسترسی به این پنج قابلیت را ممکن می‌کند؛ قابلیت‌هایی که کامپایلر دیگر ایمنی حافظهٔ آن‌ها را بررسی نمی‌کند. بنابراین حتی درون یک بلوک ناامن نیز همچنان تا حدی از ایمنی برخوردارید.</p>
+<p>همچنین <code>unsafe</code> به این معنا نیست که کد درون بلوک الزاماً خطرناک است یا حتماً با مشکل ایمنی حافظه روبه‌رو خواهد شد؛ مقصود این است که شما در جایگاه برنامه‌نویس تضمین می‌کنید کد درون بلوک <code>unsafe</code> به‌شکلی معتبر به حافظه دسترسی پیدا کند.</p>
+<p>انسان خطاپذیر است و اشتباه رخ می‌دهد، اما الزام قراردادن این پنج عملیات ناامن در بلوک‌های علامت‌خورده با <code>unsafe</code> باعث می‌شود بدانید هر خطای مربوط به ایمنی حافظه باید درون یک بلوک <code>unsafe</code> باشد. بلوک‌های <code>unsafe</code> را کوچک نگه دارید؛ هنگام بررسی خطاهای حافظه از این کار خشنود خواهید بود.</p>
+<p>برای جداسازی هرچه بیشتر کد ناامن (unsafe)، بهتر است چنین کدی را درون یک انتزاع امن محصور کنید و یک API امن ارائه دهید؛ در ادامهٔ همین فصل، هنگام بررسی توابع و متدهای ناامن، دربارهٔ آن صحبت می‌کنیم. بخش‌هایی از کتابخانهٔ استاندارد به‌صورت انتزاع‌های امن روی کد ناامنِ ممیزی‌شده پیاده‌سازی شده‌اند. قراردادن کد ناامن درون یک انتزاع امن مانع از آن می‌شود که کاربرد <code>unsafe</code> به همهٔ جاهایی که شما یا کاربرانتان ممکن است بخواهند از قابلیت پیاده‌سازی‌شده با کد <code>unsafe</code> استفاده کنند نشت کند، زیرا استفاده از یک انتزاع امن، امن است.</p>
+<p>اکنون هر یک از این پنج توانایی ویژهٔ ناامن را به‌ترتیب بررسی می‌کنیم. همچنین بعضی انتزاع‌هایی را می‌بینیم که رابطی امن برای کد ناامن فراهم می‌کنند.</p>
+<h3 id="dereferencing-a-raw-pointer"><a class="header" href="#dereferencing-a-raw-pointer">اشاره‌زدایی یک اشاره‌گر خام</a></h3>
+<p>در فصل ۴ و بخش <a href="ch04-02-references-and-borrowing.html#dangling-references">«ارجاع‌های معلق»</a> گفتیم که کامپایلر تضمین می‌کند ارجاع‌ها همیشه معتبر باشند. Rust ناامن دو نوع تازه به نام <em>اشاره‌گر خام</em> دارد که شبیه ارجاع‌اند. اشاره‌گرهای خام نیز مانند ارجاع‌ها می‌توانند تغییرناپذیر یا تغییرپذیر باشند و به‌ترتیب به‌شکل <code>*const T</code> و <code>*mut T</code> نوشته می‌شوند. ستاره در اینجا عملگر اشاره‌زدایی نیست، بلکه بخشی از نام نوع است. در بافت اشاره‌گر خام، <em>تغییرناپذیر</em> یعنی پس از اشاره‌زدایی نمی‌توان مستقیماً مقداری را از طریق آن اشاره‌گر انتساب داد.</p>
+<p>برخلاف ارجاع‌ها و اشاره‌گرهای هوشمند، اشاره‌گرهای خام:</p>
+<ul>
+<li>مجاز به نادیده گرفتن قوانین borrowing هستند، به این صورت که می‌توانند هم اشاره‌گر (Pointer)های immutable و هم اشاره‌گر (Pointer)های mutable به همان مکان داشته باشند.</li>
+<li>تضمینی برای اشاره به حافظه معتبر ندارند.</li>
+<li>می‌توانند null باشند.</li>
+<li>هیچ پاکسازی خودکاری را پیاده‌سازی نمی‌کنند.</li>
+</ul>
+<p>با صرف‌نظر از تضمین‌های اجباری راست، می‌توانید ایمنی تضمین‌شده را با عملکرد بهتر یا توانایی ارتباط با یک زبان یا سخت‌افزار دیگر که تضمین‌های راست در آن‌ها اعمال نمی‌شود، مبادله کنید.</p>
+<p>فهرست 20-1 نشان می‌دهد که چگونه یک اشاره‌گر (Pointer) خام immutable و یک اشاره‌گر (Pointer) خام mutable ایجاد کنیم.</p>
+<figure class="listing" id="listing-20-1">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let mut num = 5;
+
+    let r1 = &amp;raw const num;
+    let r2 = &amp;raw mut num;
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-20-1">لیست ۲۰-۱</a>: ایجاد اشاره‌گر (Pointer)های خام با عملگرهای raw borrow</figcaption>
+</figure>
+<p>توجه کنید که در این کد واژهٔ کلیدی <code>unsafe</code> وجود ندارد. می‌توانیم در کد امن اشاره‌گر خام بسازیم؛ فقط نمی‌توانیم بیرون از یک بلوک ناامن آن را اشاره‌زدایی کنیم، چنان‌که کمی بعد خواهید دید.</p>
+<p>اشاره‌گرهای خام را با عملگرهای قرض‌گیری خام ساخته‌ایم: <code>&amp;raw const num</code> یک اشاره‌گر خام تغییرناپذیر از نوع <code>*const i32</code> و <code>&amp;raw mut num</code> یک اشاره‌گر خام تغییرپذیر از نوع <code>*mut i32</code> می‌سازد. چون آن‌ها را مستقیماً از یک متغیر محلی ساخته‌ایم، می‌دانیم این اشاره‌گرهای خاص معتبرند؛ اما نمی‌توانیم چنین فرضی را دربارهٔ هر اشاره‌گر خامی داشته باشیم.</p>
+<p>برای نمایش این موضوع، در ادامه به‌جای عملگرهای ارجاع خام، با <code>as</code> مقداری را تبدیل می‌کنیم و اشاره‌گر خامی می‌سازیم که از اعتبارش چندان مطمئن نیستیم. فهرست ۲۰-۲ چگونگی ساخت اشاره‌گر خام به مکانی دلخواه در حافظه را نشان می‌دهد. تلاش برای استفاده از حافظه‌ای دلخواه رفتاری تعریف‌نشده دارد: شاید در آن نشانی داده‌ای وجود داشته باشد یا نداشته باشد؛ شاید کامپایلر کد را چنان بهینه کند که اصلاً دسترسی به حافظه رخ ندهد؛ یا شاید برنامه با خطای قطعه‌بندی متوقف شود. معمولاً دلیل خوبی برای نوشتن چنین کدی وجود ندارد، به‌ویژه جایی که بتوان به‌جای آن از عملگر قرض‌گیری خام استفاده کرد؛ بااین‌حال انجامش ممکن است.</p>
+<figure class="listing" id="listing-20-2">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let address = 0x012345usize;
+    let r = address as *const i32;
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-20-2">لیست ۲۰-۲</a>: ایجاد یک اشاره‌گر (Pointer) خام به یک آدرس حافظه دلخواه</figcaption>
+</figure>
+<p>به یاد داشته باشید که می‌توانیم اشاره‌گر (Pointer)های خام را در کد امن ایجاد کنیم، اما نمی‌توانیم اشاره‌گر (Pointer)های خام را <em>dereference</em> کنیم و داده‌ای که به آن اشاره شده را بخوانیم. در فهرست 20-3، ما از عملگر dereference (<code>*</code>) روی یک اشاره‌گر (Pointer) خام استفاده می‌کنیم که به یک بلوک <code>unsafe</code> نیاز دارد.</p>
+<figure class="listing" id="listing-20-3">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let mut num = 5;
+
+    let r1 = &amp;raw const num;
+    let r2 = &amp;raw mut num;
+
+    unsafe {
+        println!("r1 is: {}", *r1);
+        println!("r2 is: {}", *r2);
+    }
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-20-3">لیست ۲۰-۳</a>: Dereferencing اشاره‌گر (Pointer)های خام درون یک بلوک &lt;code&gt;&lt;/x-listing&gt;unsafe&lt;/code&gt;</figcaption>
+</figure>
+<p>ساختن اشاره‌گر به‌خودی‌خود زیانی ندارد؛ تنها هنگامی که می‌کوشیم به مقدار مورد اشاره دسترسی پیدا کنیم، ممکن است با مقداری نامعتبر روبه‌رو شویم.</p>
+<p>همچنین توجه کنید که در فهرست‌های ۲۰-۱ و ۲۰-۳ دو اشاره‌گر خام <code>*const i32</code> و <code>*mut i32</code> ساختیم که هر دو به یک مکان حافظه، یعنی محل نگهداری <code>num</code>، اشاره داشتند. اگر به‌جای آن می‌کوشیدیم هم‌زمان یک ارجاع تغییرناپذیر و یک ارجاع تغییرپذیر به <code>num</code> بسازیم، کد کامپایل نمی‌شد؛ زیرا قواعد مالکیت Rust اجازه نمی‌دهند ارجاع تغییرپذیر هم‌زمان با ارجاع تغییرناپذیر وجود داشته باشد. با اشاره‌گرهای خام می‌توانیم یک اشاره‌گر تغییرپذیر و یک اشاره‌گر تغییرناپذیر به همان مکان بسازیم و داده را از راه اشاره‌گر تغییرپذیر عوض کنیم؛ کاری که ممکن است رقابت داده ایجاد کند. مراقب باشید!</p>
+<p>با وجود همهٔ این خطرها چرا باید از اشاره‌گر خام استفاده کنیم؟ یکی از کاربردهای اصلی هنگام ارتباط با کد C است که در بخش بعد، «فراخوانی تابع یا متد ناامن»، خواهید دید. کاربرد دیگر ساختن انتزاع‌های امنی است که بررسی‌کنندهٔ قرض‌گیری آن‌ها را درک نمی‌کند. نخست توابع ناامن را معرفی می‌کنیم و سپس نمونه‌ای از یک انتزاع امن مبتنی بر کد ناامن را می‌بینیم.</p>
+<h3 id="calling-an-unsafe-function-or-method"><a class="header" href="#calling-an-unsafe-function-or-method">فراخوانی تابع یا متد ناامن</a></h3>
+<p>دومین عملیاتی که در یک بلوک ناامن می‌توانید انجام دهید، فراخوانی توابع ناامن است. توابع و متدهای ناامن درست مانند نمونه‌های معمولی‌اند، اما پیش از باقی تعریف یک <code>unsafe</code> اضافه دارند. واژهٔ کلیدی <code>unsafe</code> در این بافت نشان می‌دهد تابع الزام‌هایی دارد که هنگام فراخوانی باید رعایت کنیم، زیرا Rust نمی‌تواند رعایت آن‌ها را تضمین کند. با فراخوانی تابع ناامن درون بلوک <code>unsafe</code> اعلام می‌کنیم مستندات تابع را خوانده‌ایم و مسئولیت رعایت قراردادهای آن را می‌پذیریم.</p>
+<p>در ادامه تابع ناامنی به نام <code>dangerous</code> آمده است که در بدنهٔ خود کاری انجام نمی‌دهد:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    unsafe fn dangerous() {}
+
+    unsafe {
+        dangerous();
+    }
+<span class="boring">}</span></code></pre>
+<p>ما باید تابع <code>dangerous</code> را در یک بلوک <code>unsafe</code> جداگانه فراخوانی کنیم. اگر سعی کنیم بدون بلوک <code>unsafe</code> تابع <code>dangerous</code> را فراخوانی کنیم، با خطا مواجه خواهیم شد:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling unsafe-example v0.1.0 (file:///projects/unsafe-example)
+error[E0133]: call to unsafe function `dangerous` is unsafe and requires unsafe block
+ --&gt; src/main.rs:4:5
+  |
+4 |     dangerous();
+  |     ^^^^^^^^^^^ call to unsafe function
+  |
+  = note: consult the function's documentation for information on how to avoid undefined behavior
+
+For more information about this error, try `rustc --explain E0133`.
+error: could not compile `unsafe-example` (bin "unsafe-example") due to 1 previous error
+</code></pre>
+<p>با بلوک <code>unsafe</code> به Rust اطمینان می‌دهیم که مستندات تابع را خوانده‌ایم، شیوهٔ استفادهٔ درست از آن را می‌دانیم و بررسی کرده‌ایم قرارداد تابع رعایت می‌شود.</p>
+<p>برای انجام عملیات ناامن در بدنهٔ یک تابع <code>unsafe</code>، همچنان باید مانند یک تابع معمولی از یک بلوک <code>unsafe</code> استفاده کنید، و اگر فراموش کنید کامپایلر به شما هشدار می‌دهد. این به ما کمک می‌کند بلوک‌های <code>unsafe</code> را تا حد ممکن کوچک نگه داریم، زیرا ممکن است عملیات ناامن در کل بدنهٔ تابع لازم نباشد.</p>
+<h4 id="creating-a-safe-abstraction-over-unsafe-code"><a class="header" href="#creating-a-safe-abstraction-over-unsafe-code">ساختن انتزاعی امن روی کد ناامن</a></h4>
+<p>فقط به این دلیل که یک تابع حاوی کد ناامن است به این معنا نیست که باید کل تابع را به‌عنوان ناامن علامت‌گذاری کنیم. در واقع، محصور کردن کد ناامن در یک تابع ایمن یک انتزاع رایج است. به‌عنوان مثال، بیایید تابع <code>split_at_mut</code> از کتابخانه استاندارد را بررسی کنیم که به کد ناامن نیاز دارد. ما بررسی خواهیم کرد که چگونه ممکن است آن را پیاده‌سازی کنیم. این متد ایمن روی برش‌های قابل تغییر (mutable slices) تعریف شده است: این تابع یک برش را می‌گیرد و آن را به دو قسمت تقسیم می‌کند با تقسیم کردن برش در ایندکسی که به‌عنوان آرگومان داده شده است. فهرست 20-4 نشان می‌دهد که چگونه از <code>split_at_mut</code> استفاده کنیم.</p>
+<figure class="listing" id="listing-20-4">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let mut v = vec![1, 2, 3, 4, 5, 6];
+
+    let r = &amp;mut v[..];
+
+    let (a, b) = r.split_at_mut(3);
+
+    assert_eq!(a, &amp;mut [1, 2, 3]);
+    assert_eq!(b, &amp;mut [4, 5, 6]);
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-20-4">لیست ۲۰-۴</a>: استفاده از تابع ایمن &lt;code&gt;&lt;/x-listing&gt;split_at_mut&lt;/code&gt;</figcaption>
+</figure>
+<p>ما نمی‌توانیم این تابع را فقط با استفاده از راست ایمن پیاده‌سازی کنیم. یک تلاش ممکن است چیزی شبیه به فهرست 20-5 باشد، که کامپایل نخواهد شد. برای سادگی، ما <code>split_at_mut</code> را به‌عنوان یک تابع پیاده‌سازی می‌کنیم نه یک متد، و فقط برای برش‌های <code>i32</code> به‌جای یک نوع generic <code>T</code>.</p>
+<figure class="listing" id="listing-20-5">
+<pre><code class="language-rust ignore does_not_compile">fn split_at_mut(values: &amp;mut [i32], mid: usize) -&gt; (&amp;mut [i32], &amp;mut [i32]) {
+    let len = values.len();
+
+    assert!(mid &lt;= len);
+
+    (&amp;mut values[..mid], &amp;mut values[mid..])
+}
+<span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let mut vector = vec![1, 2, 3, 4, 5, 6];
+</span><span class="boring">    let (left, right) = split_at_mut(&amp;mut vector, 3);
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-20-5">لیست ۲۰-۵</a>: تلاش برای پیاده‌سازی &lt;code&gt;&lt;/x-listing&gt;split_at_mut&lt;/code&gt; فقط با استفاده از راست ایمن</figcaption>
+</figure>
+<p>این تابع ابتدا طول کل برش را می‌گیرد. سپس با بررسی کوچک‌تر یا مساوی بودن اندیس داده‌شده نسبت به طول، اطمینان حاصل می‌کند که اندیس درون برش است. این بررسی یعنی اگر برای تقسیم برش اندیسی بزرگ‌تر از طول بدهیم، تابع پیش از تلاش برای استفاده از آن اندیس پنیک می‌کند.</p>
+<p>سپس دو برش تغییرپذیر را در یک تاپل بازمی‌گردانیم: یکی از ابتدای برش اصلی تا اندیس <code>mid</code> و دیگری از <code>mid</code> تا انتهای برش.</p>
+<p>وقتی کد فهرست ۲۰-۵ را کامپایل کنیم، با خطا روبه‌رو می‌شویم.</p>
+<pre><code class="language-console">$ cargo run
+   Compiling unsafe-example v0.1.0 (file:///projects/unsafe-example)
+error[E0499]: cannot borrow `*values` as mutable more than once at a time
+ --&gt; src/main.rs:6:31
+  |
+1 | fn split_at_mut(values: &amp;mut [i32], mid: usize) -&gt; (&amp;mut [i32], &amp;mut [i32]) {
+  |                         - let's call the lifetime of this reference `'1`
+...
+6 |     (&amp;mut values[..mid], &amp;mut values[mid..])
+  |     --------------------------^^^^^^--------
+  |     |     |                   |
+  |     |     |                   second mutable borrow occurs here
+  |     |     first mutable borrow occurs here
+  |     returning this value requires that `*values` is borrowed for `'1`
+  |
+  = help: use `.split_at_mut(position)` to obtain two mutable non-overlapping sub-slices
+
+For more information about this error, try `rustc --explain E0499`.
+error: could not compile `unsafe-example` (bin "unsafe-example") due to 1 previous error
+</code></pre>
+<p>Rust’s borrow checker نمی‌تواند بفهمد که ما در حال قرض گرفتن قسمت‌های مختلفی از یک برش هستیم؛ تنها چیزی که می‌داند این است که ما دو بار از همان برش قرض گرفته‌ایم. قرض گرفتن قسمت‌های مختلف یک برش اصولاً اشکالی ندارد، زیرا این دو برش با یکدیگر هم‌پوشانی ندارند، اما Rust به‌اندازه کافی هوشمند نیست که این موضوع را بداند. وقتی می‌دانیم کد مشکلی ندارد، اما Rust نمی‌داند، زمان استفاده از کد ناامن فرا می‌رسد.</p>
+<p>فهرست 20-6 نشان می‌دهد که چگونه از یک بلوک <code>unsafe</code>، یک اشاره‌گر (Pointer) خام، و چند فراخوانی به توابع ناامن برای اجرای تابع <code>split_at_mut</code> استفاده کنیم.</p>
+<figure class="listing" id="listing-20-6">
+<pre><code class="language-rust">use std::slice;
+
+fn split_at_mut(values: &amp;mut [i32], mid: usize) -&gt; (&amp;mut [i32], &amp;mut [i32]) {
+    let len = values.len();
+    let ptr = values.as_mut_ptr();
+
+    assert!(mid &lt;= len);
+
+    unsafe {
+        (
+            slice::from_raw_parts_mut(ptr, mid),
+            slice::from_raw_parts_mut(ptr.add(mid), len - mid),
+        )
+    }
+}
+<span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let mut vector = vec![1, 2, 3, 4, 5, 6];
+</span><span class="boring">    let (left, right) = split_at_mut(&amp;mut vector, 3);
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-20-6">لیست ۲۰-۶</a>: استفاده از کد ناامن در پیاده‌سازی تابع &lt;code&gt;&lt;/x-listing&gt;split_at_mut&lt;/code&gt;</figcaption>
+</figure>
+<p>از بخش <a href="ch04-03-slices.html#the-slice-type">«نوع برش»</a> در فصل ۴ به یاد بیاورید که برش از یک اشاره‌گر به داده و طول برش تشکیل می‌شود. با متد <code>len</code> طول برش و با متد <code>as_mut_ptr</code> اشاره‌گر خام آن را می‌گیریم. در اینجا چون یک برش تغییرپذیر از مقادیر <code>i32</code> داریم، <code>as_mut_ptr</code> اشاره‌گر خامی از نوع <code>*mut i32</code> بازمی‌گرداند که آن را در متغیر <code>ptr</code> ذخیره کرده‌ایم.</p>
+<p>بررسی درون‌محدوده‌بودن اندیس <code>mid</code> را نگه می‌داریم. سپس به کد ناامن می‌رسیم: تابع <code>slice::from_raw_parts_mut</code> یک اشاره‌گر خام و یک طول می‌گیرد و برشی می‌سازد. با این تابع برشی می‌سازیم که از <code>ptr</code> آغاز می‌شود و <code>mid</code> عنصر طول دارد. سپس متد <code>add</code> را با آرگومان <code>mid</code> روی <code>ptr</code> فراخوانی می‌کنیم تا اشاره‌گر خامی بگیریم که از <code>mid</code> آغاز می‌شود؛ با آن اشاره‌گر و تعداد عنصرهای باقی‌مانده پس از <code>mid</code> نیز برش دوم را می‌سازیم.</p>
+<p>تابع <code>slice::from_raw_parts_mut</code> ناامن است، زیرا یک اشاره‌گر خام می‌گیرد و باید به معتبر بودن آن اعتماد کند. متد <code>add</code> روی اشاره‌گرهای خام نیز ناامن است، چون باید مطمئن باشد مکانِ دارای آفست هم اشاره‌گری معتبر است. بنابراین برای فراخوانی <code>slice::from_raw_parts_mut</code> و <code>add</code> باید آن‌ها را در یک بلوک <code>unsafe</code> قرار دهیم. با بررسی کد و افزودن شرط کوچک‌تر یا مساوی بودن <code>mid</code> نسبت به <code>len</code>، می‌توانیم بفهمیم همهٔ اشاره‌گرهای خام درون بلوک <code>unsafe</code> به داده‌های درون برش اشاره می‌کنند و معتبرند. این کاربردی پذیرفتنی و درست از <code>unsafe</code> است.</p>
+<p>توجه کنید لازم نیست تابع حاصل، یعنی <code>split_at_mut</code>، را <code>unsafe</code> علامت بزنیم و می‌توانیم آن را از Rust امن فراخوانی کنیم. پیاده‌سازی تابع با استفادهٔ امن از کد <code>unsafe</code>، انتزاعی امن روی کد ناامن ساخته است؛ زیرا فقط از داده‌هایی که تابع به آن‌ها دسترسی دارد، اشاره‌گر معتبر می‌سازد.</p>
+<p>در مقابل، استفاده از <code>slice::from_raw_parts_mut</code> در فهرست ۲۰-۷ احتمالاً هنگام استفاده از برش باعث توقف برنامه می‌شود. این کد مکانی دلخواه از حافظه می‌گیرد و برشی با طول ۱۰٬۰۰۰ عنصر می‌سازد.</p>
+<figure class="listing" id="listing-20-7">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    use std::slice;
+
+    let address = 0x01234usize;
+    let r = address as *mut i32;
+
+    let values: &amp;[i32] = unsafe { slice::from_raw_parts_mut(r, 10000) };
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-20-7">لیست ۲۰-۷</a>: ایجاد یک برش از یک مکان حافظه دلخواه</figcaption>
+</figure>
+<p>ما مالک حافظه در این مکان دلخواه نیستیم و هیچ تضمینی وجود ندارد که برشی که این کد ایجاد می‌کند حاوی مقادیر معتبر <code>i32</code> باشد. تلاش برای استفاده از <code>values</code> به‌عنوان اینکه یک برش معتبر است منجر به رفتار تعریف‌نشده می‌شود.</p>
+<h4 id="using-extern-functions-to-call-external-code"><a class="header" href="#using-extern-functions-to-call-external-code">استفاده از توابع <code>extern</code> برای فراخوانی کد خارجی</a></h4>
+<p>گاهی کد Rust باید با کدی نوشته‌شده به زبانی دیگر تعامل کند. Rust برای این منظور واژهٔ کلیدی <code>extern</code> را دارد که ساخت و استفاده از <em>رابط تابع خارجی (FFI)</em> را آسان می‌کند. FFI راهی است که یک زبان برنامه‌نویسی با آن توابعی تعریف می‌کند و امکان فراخوانی آن‌ها را برای زبانی متفاوت یا «خارجی» فراهم می‌سازد.</p>
+<p>فهرست ۲۰-۸ نشان می‌دهد چگونه ارتباط با تابع <code>abs</code> از کتابخانهٔ استاندارد C را برقرار کنیم. فراخوانی توابعی که درون بلوک‌های <code>extern</code> اعلان شده‌اند از کد Rust معمولاً ناامن است، بنابراین بلوک‌های <code>extern</code> نیز باید با <code>unsafe</code> علامت‌گذاری شوند. دلیلش این است که زبان‌های دیگر قواعد و تضمین‌های Rust را اعمال نمی‌کنند و Rust نمی‌تواند آن‌ها را بررسی کند، پس مسئولیت اطمینان از ایمنی بر عهدهٔ برنامه‌نویس است.</p>
+<figure class="listing" id="listing-20-8">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">unsafe extern "C" {
+    fn abs(input: i32) -&gt; i32;
+}
+
+fn main() {
+    unsafe {
+        println!("Absolute value of -3 according to C: {}", abs(-3));
+    }
+}</code></pre>
+<figcaption><a href="#listing-20-8">لیست ۲۰-۸</a>: اعلام و فراخوانی یک تابع &lt;code&gt;&lt;/x-listing&gt;extern&lt;/code&gt; تعریف‌شده در زبان دیگر</figcaption>
+</figure>
+<p>درون بلوک <code>unsafe extern "C"</code>، نام‌ها و امضاهای توابع خارجی از زبانی دیگر را که می‌خواهیم فراخوانی کنیم فهرست می‌کنیم. بخش <code>"C"</code> مشخص می‌کند تابع خارجی از کدام <em>رابط دودویی برنامه (application binary interface یا ABI)</em> استفاده می‌کند: ABI نحوهٔ فراخوانی تابع را در سطح اسمبلی تعیین می‌کند. ABI با نام <code>"C"</code> رایج‌ترین است و از ABI زبان برنامه‌نویسی C پیروی می‌کند. اطلاعات مربوط به همهٔ ABIهایی که Rust پشتیبانی می‌کند در <a href="../reference/items/external-blocks.html#abi">مرجع Rust</a> موجود است.</p>
+<p>هر مورد اعلان‌شده درون یک بلوک <code>unsafe extern</code> به‌طور ضمنی ناامن است. با این حال، فراخوانی برخی از توابع FFI <em>امن</em> است. برای مثال، تابع <code>abs</code> از کتابخانهٔ استاندارد C هیچ ملاحظهٔ ایمنی حافظه‌ای ندارد و می‌دانیم که می‌توان آن را با هر مقدار <code>i32</code> فراخوانی کرد. در چنین مواردی می‌توانیم با کلیدواژهٔ <code>safe</code> بگوییم که فراخوانی این تابع خاص امن است، با اینکه درون یک بلوک <code>unsafe extern</code> قرار دارد. پس از اعمال این تغییر، همان‌طور که در فهرست ۲۰-۹ نشان داده شده است، فراخوانی آن دیگر به بلوک <code>unsafe</code> نیاز ندارد.</p>
+<figure class="listing" id="listing-20-9">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">unsafe extern "C" {
+    safe fn abs(input: i32) -&gt; i32;
+}
+
+fn main() {
+    println!("Absolute value of -3 according to C: {}", abs(-3));
+}</code></pre>
+<figcaption><a href="#listing-20-9">لیست ۲۰-۹</a>: علامت‌گذاری صریح یک تابع به‌عنوان &lt;code&gt;&lt;/x-listing&gt;safe&lt;/code&gt; درون یک بلوک &lt;code&gt;unsafe extern&lt;/code&gt; و فراخوانی ایمن آن</figcaption>
+</figure>
+<p>علامت‌گذاری تابع با <code>safe</code> ذاتاً آن را امن نمی‌کند! این کار بیشتر شبیه قولی است که به Rust می‌دهید مبنی بر اینکه تابع <em>امن است</em>. مسئولیت وفادارماندن به این قول همچنان با شماست!</p>
+<h4 id="calling-rust-functions-from-other-languages"><a class="header" href="#calling-rust-functions-from-other-languages">فراخوانی توابع Rust از زبان‌های دیگر</a></h4>
+<p>می‌توانیم با <code>extern</code> رابطی بسازیم که به زبان‌های دیگر اجازه دهد توابع Rust را فراخوانی کنند. به‌جای ساختن یک بلوک کامل <code>extern</code>، واژهٔ کلیدی <code>extern</code> و ABI موردنظر را درست پیش از واژهٔ کلیدی <code>fn</code> تابع مربوط می‌نویسیم. همچنین باید حاشیه‌نویسی <code>#[unsafe(no_mangle)]</code> را اضافه کنیم تا به کامپایلر Rust بگوییم نام این تابع را دست‌کاری نکند. <em>دست‌کاری نام</em> فرایندی است که کامپایلر نام داده‌شده به تابع را به نامی دیگر تبدیل می‌کند؛ نام جدید اطلاعات بیشتری برای دیگر بخش‌های فرایند کامپایل دارد، اما برای انسان خوانایی کمتری دارد. کامپایلر هر زبان نام‌ها را کمی متفاوت دست‌کاری می‌کند، پس برای آنکه تابع Rust از زبان‌های دیگر قابل نام‌بردن باشد باید دست‌کاری نام را در کامپایلر Rust غیرفعال کنیم. این کار ناامن است، زیرا بدون دست‌کاری داخلی ممکن است میان نام‌های کتابخانه‌ها برخورد رخ دهد؛ بنابراین مسئولیت اطمینان از امکان صدور امن نام بدون دست‌کاری بر عهدهٔ ماست.</p>
+<p>در نمونهٔ زیر، پس از کامپایل تابع <code>call_from_c</code> در یک کتابخانهٔ اشتراکی و پیوند آن از C، تابع را در دسترس کد C قرار می‌دهیم:</p>
+<pre><code>#[unsafe(no_mangle)]
+pub extern "C" fn call_from_c() {
+    println!("Just called a Rust function from C!");
+}
+</code></pre>
+<p>این کاربرد <code>extern</code> تنها در ویژگی به <code>unsafe</code> نیاز دارد، نه روی بلوک <code>extern</code>.</p>
+<h3 id="accessing-or-modifying-a-mutable-static-variable"><a class="header" href="#accessing-or-modifying-a-mutable-static-variable">دسترسی به متغیر ایستای تغییرپذیر یا تغییر آن</a></h3>
+<p>تا اینجا در کتاب دربارهٔ <em>متغیرهای سراسری</em> صحبت نکرده‌ایم. Rust از آن‌ها پشتیبانی می‌کند، اما ممکن است با قواعد مالکیت Rust مشکل‌ساز شوند. اگر دو نخ به یک متغیر سراسری تغییرپذیر دسترسی داشته باشند، ممکن است رقابت داده رخ دهد.</p>
+<p>در راست، متغیرهای جهانی <em>static</em> نامیده می‌شوند. فهرست 20-10 یک مثال از اعلام و استفاده از یک متغیر static با یک string slice به‌عنوان مقدار را نشان می‌دهد.</p>
+<figure class="listing" id="listing-20-10">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">static HELLO_WORLD: &amp;str = "Hello, world!";
+
+fn main() {
+    println!("value is: {HELLO_WORLD}");
+}</code></pre>
+<figcaption><a href="#listing-20-10">لیست ۲۰-۱۰</a>: تعریف و استفاده از یک متغیر static غیرقابل تغییر</figcaption>
+</figure>
+<p>متغیرهای ایستا شبیه ثابت‌هایی هستند که در بخش <a href="ch03-01-variables-and-mutability.html#declaring-constants">«ثابت‌ها»</a> از فصل ۳ بررسی کردیم. طبق عرف، نام متغیرهای ایستا با قالب <code>SCREAMING_SNAKE_CASE</code> نوشته می‌شود. متغیرهای ایستا فقط می‌توانند ارجاع‌هایی با طول‌عمر <code>'static</code> نگه دارند؛ یعنی کامپایلر Rust می‌تواند طول‌عمر را تشخیص دهد و لازم نیست آن را صریحاً حاشیه‌نویسی کنیم. دسترسی به متغیر ایستای تغییرناپذیر امن است.</p>
+<p>تفاوت ظریفی میان ثابت‌ها و متغیرهای ایستای تغییرناپذیر وجود دارد: مقدار متغیر ایستا نشانی ثابتی در حافظه دارد و استفاده از آن همواره به همان داده دسترسی پیدا می‌کند. در مقابل، ثابت‌ها می‌توانند در هر بار استفاده دادهٔ خود را تکثیر کنند. تفاوت دیگر این است که متغیرهای ایستا می‌توانند تغییرپذیر باشند. دسترسی به متغیر ایستای تغییرپذیر و تغییر آن <em>ناامن</em> است. فهرست ۲۰-۱۱ چگونگی اعلان، دسترسی و تغییر متغیر ایستای تغییرپذیری به نام <code>COUNTER</code> را نشان می‌دهد.</p>
+<figure class="listing" id="listing-20-11">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">static mut COUNTER: u32 = 0;
+
+/// SAFETY: Calling this from more than a single thread at a time is undefined
+/// behavior, so you *must* guarantee you only call it from a single thread at
+/// a time.
+unsafe fn add_to_count(inc: u32) {
+    unsafe {
+        COUNTER += inc;
+    }
+}
+
+fn main() {
+    unsafe {
+        // SAFETY: This is only called from a single thread in `main`.
+        add_to_count(3);
+        println!("COUNTER: {}", *(&amp;raw const COUNTER));
+    }
+}</code></pre>
+<figcaption><a href="#listing-20-11">لیست ۲۰-۱۱</a>: خواندن از متغیر ایستای تغییرپذیر یا نوشتن در آن ناامن است</figcaption>
+</figure>
+<p>مانند متغیرهای معمولی، تغییرپذیری را با واژهٔ کلیدی <code>mut</code> مشخص می‌کنیم. هر کدی که از <code>COUNTER</code> بخواند یا در آن بنویسد باید درون بلوک <code>unsafe</code> باشد. کد فهرست ۲۰-۱۱ کامپایل می‌شود و مطابق انتظار <code>COUNTER: 3</code> را چاپ می‌کند، زیرا تک‌نخی است. دسترسی چند نخ به <code>COUNTER</code> احتمالاً رقابت داده ایجاد می‌کند و بنابراین رفتاری تعریف‌نشده است. ازاین‌رو باید کل تابع را <code>unsafe</code> علامت‌گذاری و محدودیت ایمنی را مستند کنیم تا هر فراخواننده بداند انجام چه کارهایی مجاز و چه کارهایی غیرمجاز است.</p>
+<p>طبق عرف، هرگاه تابع ناامنی می‌نویسیم، توضیحی با آغاز <code>SAFETY</code> اضافه می‌کنیم و شرح می‌دهیم فراخواننده برای فراخوانی امن تابع چه کاری باید انجام دهد. به همین ترتیب، هنگام انجام عملیات ناامن نیز معمول است توضیحی با آغاز <code>SAFETY</code> بنویسیم و روشن کنیم قواعد ایمنی چگونه رعایت شده‌اند.</p>
+<p>افزون بر این، کامپایلر به‌طور پیش‌فرض و از طریق یک lint هر تلاشی برای ساخت ارجاع به یک متغیر ایستای تغییرپذیر را رد می‌کند. یا باید با افزودن حاشیه‌نویسی <code>#[allow(static_mut_refs)]</code> صراحتاً از حفاظت‌های آن lint صرف‌نظر کنید، یا از طریق یک اشاره‌گر خام که با یکی از عملگرهای قرض‌گیری خام ساخته شده است به متغیر ایستای تغییرپذیر دسترسی پیدا کنید. این شامل مواردی هم می‌شود که ارجاع به‌طور نامرئی ساخته می‌شود، مانند زمانی که در <code>println!</code> در این فهرست کد استفاده می‌شود. الزام به ساخت ارجاع به متغیرهای ایستای تغییرپذیر از طریق اشاره‌گرهای خام کمک می‌کند الزامات ایمنی استفاده از آن‌ها آشکارتر شود.</p>
+<p>در دادهٔ تغییرپذیری که به‌صورت سراسری در دسترس است، تضمین نبود رقابت داده دشوار است؛ به همین دلیل Rust متغیرهای ایستای تغییرپذیر را ناامن می‌داند. هر جا ممکن باشد، بهتر است از روش‌های هم‌روندی و اشاره‌گرهای هوشمند امن در برابر نخ که در فصل ۱۶ بررسی کردیم استفاده کنید تا کامپایلر ایمنی دسترسی نخ‌های متفاوت به داده را بررسی کند.</p>
+<h3 id="implementing-an-unsafe-trait"><a class="header" href="#implementing-an-unsafe-trait">پیاده‌سازی یک صفت ناامن</a></h3>
+<p>می‌توانیم از <code>unsafe</code> برای پیاده‌سازی یک trait ناامن استفاده کنیم. یک trait وقتی ناامن است که دست‌کم یکی از متدهای آن یک شرط ثابت (invariant) داشته باشد که کامپایلر نتواند آن را راستی‌آزمایی کند. با افزودن کلیدواژهٔ <code>unsafe</code> پیش از <code>trait</code> اعلام می‌کنیم که یک trait ناامن (<code>unsafe</code>) است و پیاده‌سازی آن trait را نیز <code>unsafe</code> علامت‌گذاری می‌کنیم، همان‌طور که در فهرست ۲۰-۱۲ نشان داده شده است.</p>
+<figure class="listing" id="listing-20-12">
+<pre><code class="language-rust">unsafe trait Foo {
+    // methods go here
+}
+
+unsafe impl Foo for i32 {
+    // method implementations go here
+}
+<span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+<figcaption><a href="#listing-20-12">لیست ۲۰-۱۲</a>: تعریف و پیاده‌سازی یک trait ناامن</figcaption>
+</figure>
+<p>با استفاده از <code>unsafe impl</code> قول می‌دهیم ناورداهایی را که کامپایلر نمی‌تواند بررسی کند رعایت کنیم.</p>
+<p>برای نمونه، صفت‌های نشانگر <code>Sync</code> و <code>Send</code> را به یاد بیاورید که در بخش <a href="ch16-04-extensible-concurrency-sync-and-send.html">«هم‌روندی گسترش‌پذیر با صفت‌های <code>Sync</code> و <code>Send</code>»</a> از فصل ۱۶ بررسی کردیم: اگر نوع‌های ما به‌طور کامل از نوع‌های <code>Send</code> و <code>Sync</code> ساخته شده باشند، کامپایلر این صفت‌ها را خودکار پیاده‌سازی می‌کند. اگر نوعی بسازیم که نوعی غیر از <code>Send</code> یا <code>Sync</code>، مانند اشاره‌گر خام، در خود دارد و بخواهیم آن را <code>Send</code> یا <code>Sync</code> علامت بزنیم، باید از <code>unsafe</code> استفاده کنیم. Rust نمی‌تواند بررسی کند که نوع ما تضمین‌های ارسال امن میان نخ‌ها یا دسترسی امن چند نخ را رعایت می‌کند؛ بنابراین باید این بررسی‌ها را دستی انجام دهیم و با <code>unsafe</code> آن را اعلام کنیم.</p>
+<h3 id="accessing-fields-of-a-union"><a class="header" href="#accessing-fields-of-a-union">دسترسی به فیلدهای یک یونیون</a></h3>
+<p>آخرین عملی که فقط با <code>unsafe</code> کار می‌کند، دسترسی به فیلدهای یک <em>یونیون</em> است. <code>union</code> شبیه <code>struct</code> است، اما در هر نمونه و در هر زمان فقط یکی از فیلدهای اعلان‌شده استفاده می‌شود. یونیون‌ها عمدتاً برای ارتباط با یونیون‌های کد C به کار می‌روند. دسترسی به فیلد یونیون ناامن است، زیرا Rust نمی‌تواند نوع داده‌ای را که اکنون در نمونهٔ یونیون ذخیره شده تضمین کند. در <a href="../reference/items/unions.html">مرجع Rust</a> می‌توانید دربارهٔ یونیون‌ها بیشتر بخوانید.</p>
+<h3 id="using-miri-to-check-unsafe-code"><a class="header" href="#using-miri-to-check-unsafe-code">استفاده از Miri برای بررسی کد ناامن</a></h3>
+<p>هنگام نوشتن کد ناامن، ممکن است بخواهید بررسی کنید آنچه نوشته‌اید واقعاً امن و درست است. یکی از بهترین راه‌ها برای این کار استفاده از Miri است، یک ابزار رسمی Rust برای تشخیص رفتار تعریف‌نشده. در حالی که borrow checker ابزاری <em>ایستا</em> است که در زمان کامپایل کار می‌کند، Miri ابزاری <em>پویا</em> است که در زمان اجرا کار می‌کند. Miri کد شما را با اجرای برنامه یا مجموعه‌آزمون آن بررسی می‌کند و هر جا قواعدی را که دربارهٔ نحوهٔ کار Rust می‌شناسد نقض کنید، تشخیص می‌دهد.</p>
+<p>استفاده از Miri به ساخت شبانهٔ Rust نیاز دارد که در <a href="appendix-07-nightly-rust.html">پیوست G: Rust چگونه ساخته می‌شود و «Rust شبانه»</a> بیشتر درباره‌اش صحبت می‌کنیم. با فرمان <code>rustup +nightly component add miri</code> می‌توانید هم نسخهٔ شبانهٔ Rust و هم ابزار Miri را نصب کنید. این فرمان نسخهٔ Rust مورداستفادهٔ پروژه را تغییر نمی‌دهد؛ فقط ابزار را به سامانه می‌افزاید تا هر زمان خواستید از آن استفاده کنید. برای اجرای Miri روی پروژه، <code>cargo +nightly miri run</code> یا <code>cargo +nightly miri test</code> را وارد کنید.</p>
+<p>برای دیدن سودمندی این ابزار، نتیجهٔ اجرای آن روی فهرست ۲۰-۱۱ را در نظر بگیرید:</p>
+<pre><code class="language-console">$ cargo +nightly miri run
+   Compiling unsafe-example v0.1.0 (file:///projects/unsafe-example)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.17s
+     Running `file:///home/.rustup/toolchains/nightly/bin/cargo-miri runner target/miri/debug/unsafe-example`
+warning: integer-to-pointer cast
+ --&gt; src/main.rs:5:13
+  |
+5 |     let r = address as *mut i32;
+  |             ^^^^^^^^^^^^^^^^^^^ integer-to-pointer cast
+  |
+  = help: this program is using integer-to-pointer casts or (equivalently) `ptr::with_exposed_provenance`, which means that Miri might miss pointer bugs in this program
+  = help: see https://doc.rust-lang.org/nightly/std/ptr/fn.with_exposed_provenance.html for more details on that operation
+  = help: to ensure that Miri does not miss bugs in your program, use Strict Provenance APIs (https://doc.rust-lang.org/nightly/std/ptr/index.html#strict-provenance, https://crates.io/crates/sptr) instead
+  = help: you can then set `MIRIFLAGS=-Zmiri-strict-provenance` to ensure you are not relying on `with_exposed_provenance` semantics
+  = help: alternatively, `MIRIFLAGS=-Zmiri-permissive-provenance` disables this warning
+
+error: Undefined Behavior: constructing invalid value of type &amp;mut [i32]: encountered a dangling reference (0x1234[noalloc] has no provenance)
+ --&gt; src/main.rs:7:35
+  |
+7 |     let values: &amp;[i32] = unsafe { slice::from_raw_parts_mut(r, 10000) };
+  |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Undefined Behavior occurred here
+  |
+  = help: this indicates a bug in the program: it performed an invalid operation, and caused Undefined Behavior
+  = help: see https://doc.rust-lang.org/nightly/reference/behavior-considered-undefined.html for further information
+
+note: some details are omitted, run with `MIRIFLAGS=-Zmiri-backtrace=full` for a verbose backtrace
+
+error: aborting due to 1 previous error; 1 warning emitted
+
+</code></pre>
+<p>Miri به‌درستی به ما هشدار می‌دهد که یک عدد صحیح را به اشاره‌گر تبدیل می‌کنیم که ممکن است مشکل‌ساز باشد، اما Miri نمی‌تواند تعیین کند که مشکلی وجود دارد یا نه، زیرا نمی‌داند اشاره‌گر از کجا آمده است. سپس Miri در جایی که فهرست ۲۰-۷ رفتار تعریف‌نشده دارد، چون یک اشاره‌گر معلق (dangling) داریم، یک خطا برمی‌گرداند. به لطف Miri اکنون می‌دانیم خطر رفتار تعریف‌نشده وجود دارد و می‌توانیم دربارهٔ امن کردن کد فکر کنیم. در برخی موارد Miri حتی می‌تواند برای رفع خطاها پیشنهاد هم بدهد.</p>
+<p>این ابزار به‌درستی متوجه می‌شود که ارجاع‌های اشتراکی به دادهٔ تغییرپذیر داریم و درباره‌اش هشدار می‌دهد. در این مورد شیوهٔ رفع مشکل را نشان نمی‌دهد، اما اکنون می‌دانیم مسئله‌ای احتمالی وجود دارد و می‌توانیم برای تضمین ایمنی آن بیندیشیم. در موارد دیگر ممکن است واقعاً اعلام کند کدی <em>قطعاً</em> نادرست است و برای اصلاح آن پیشنهاد بدهد.</p>
+<p>به بیان دیگر: اگر Miri مشکلی را <em>پیدا کند</em>، می‌دانید که باگ وجود دارد، اما اینکه Miri باگی را پیدا <em>نکند</em> به این معنا نیست که مشکلی وجود ندارد. با این حال، می‌تواند موارد زیادی را پیدا کند. آن را روی دیگر نمونه‌های کد ناامن این فصل اجرا کنید و ببینید چه می‌گوید!</p>
+<p>می‌توانید دربارهٔ Miri در <a href="https://github.com/rust-lang/miri">مخزن گیت‌هاب آن</a> بیشتر بیاموزید.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="when-to-use-unsafe-code"></a></p>
+<h3 id="using-unsafe-code-correctly"><a class="header" href="#using-unsafe-code-correctly">چه زمانی از کد ناامن استفاده کنیم</a></h3>
+<p>استفاده از <code>unsafe</code> برای انجام یکی از پنج عمل یا توانایی ویژه‌ای که بررسی کردیم، نادرست یا نکوهیده نیست. بااین‌حال، درست‌نوشتن کد <code>unsafe</code> دشوارتر است، چون کامپایلر نمی‌تواند در حفظ ایمنی حافظه کمک کند. هرگاه دلیل مناسبی برای استفاده از کد <code>unsafe</code> دارید، می‌توانید چنین کنید؛ وجود حاشیه‌نویسی صریح <code>unsafe</code> نیز یافتن منشأ مشکلات را آسان‌تر می‌کند. هر بار که کد ناامن می‌نویسید، می‌توانید با Miri اطمینان بیشتری پیدا کنید که کد قواعد Rust را رعایت می‌کند.</p>
+<p>برای بررسی بسیار عمیق‌تر نحوهٔ کار مؤثر با Rust ناامن، راهنمای رسمی Rust برای <code>unsafe</code> یعنی <a href="https://doc.rust-lang.org/nomicon/">Rustonomicon</a> را بخوانید.</p><nav class="page-nav"><a href="ch20-00-advanced-features.html">→ ویژگی‌های پیشرفته</a><a href="ch20-02-advanced-traits.html">صفت‌های پیشرفته ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

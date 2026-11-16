@@ -1,0 +1,76 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Streamها: Futureها به‌صورت دنباله‌ای — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch17-04-streams"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><!-- Old headings. Do not remove or links may break. -->
+<p><a id="streams"></a></p>
+<h2 id="streams-futures-in-sequence"><a class="header" href="#streams-futures-in-sequence">Streamها: Futureهایی در یک دنباله</a></h2>
+<p>به یاد بیاورید که پیش‌تر در بخش <a href="ch17-02-concurrency-with-async.html#message-passing">«پیام‌رسانی»</a> همین فصل چگونه از گیرندهٔ کانال async استفاده کردیم. متد async با نام <code>recv</code> در طول زمان دنباله‌ای از آیتم‌ها تولید می‌کند. این نمونه‌ای از الگویی بسیار عمومی‌تر به نام <em>Stream</em> است. بسیاری از مفاهیم به‌طور طبیعی با Stream نمایش داده می‌شوند: آماده‌شدن آیتم‌ها در یک صف، خواندن تدریجی قطعه‌های داده از سامانهٔ فایل وقتی کل مجموعه‌داده برای حافظهٔ رایانه بیش از اندازه بزرگ است، یا رسیدن داده از شبکه در گذر زمان. چون Streamها Future هستند، می‌توانیم آن‌ها را با هر نوع Future دیگری به کار ببریم و به روش‌های جالبی ترکیب کنیم. برای نمونه، می‌توانیم رویدادها را دسته‌بندی کنیم تا فراخوانی‌های شبکه بیش از حد نشوند، برای دنباله‌ای از عملیات طولانی مهلت زمانی تعیین کنیم یا نرخ رویدادهای رابط کاربری را محدود کنیم تا کار بیهوده انجام نشود.</p>
+<p>در فصل ۱۳ و بخش <a href="ch13-02-iterators.html#the-iterator-trait-and-the-next-method">«صفت Iterator و متد <code>next</code>»</a> نیز دنباله‌ای از آیتم‌ها را دیدیم، اما میان تکرارگرها و گیرندهٔ کانال async دو تفاوت وجود دارد. تفاوت نخست زمان است: تکرارگرها همگام‌اند، در حالی که گیرندهٔ کانال ناهمگام است. تفاوت دوم API است. هنگام کار مستقیم با <code>Iterator</code>، متد همگام <code>next</code> آن را فراخوانی می‌کنیم. اما برای Stream از نوع <code>trpl::Receiver</code> متد ناهمگام <code>recv</code> را فراخواندیم. جز این موارد، دو API بسیار شبیه به نظر می‌رسند و این شباهت اتفاقی نیست. Stream مانند شکل ناهمگام تکرار است. <code>trpl::Receiver</code> به‌طور ویژه منتظر دریافت پیام می‌ماند، اما API عمومی Stream بسیار گسترده‌تر است: مانند <code>Iterator</code> آیتم بعدی را فراهم می‌کند، ولی به‌صورت ناهمگام.</p>
+<p>شباهت تکرارگرها و Streamها در Rust یعنی واقعاً می‌توانیم از هر تکرارگری یک Stream بسازیم. درست مانند تکرارگر، می‌توانیم متد <code>next</code> را روی Stream فراخوانی کنیم و سپس منتظر خروجی آن بمانیم؛ همانند فهرست ۱۷-۲۱ که هنوز کامپایل نخواهد شد.</p>
+<figure class="listing" id="listing-17-21">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    trpl::block_on(async {
+</span>        let values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let iter = values.iter().map(|n| n * 2);
+        let mut stream = trpl::stream_from_iter(iter);
+
+        while let Some(value) = stream.next().await {
+            println!("The value was: {value}");
+        }
+<span class="boring">    });
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-17-21">لیست ۱۷-۲۱</a>: ساختن یک Stream از یک تکرارگر و چاپ مقادیر آن</figcaption>
+</figure>
+<p>با آرایه‌ای از اعداد آغاز می‌کنیم، آن را به تکرارگر تبدیل می‌کنیم و سپس <code>map</code> را روی آن فرا می‌خوانیم تا همهٔ مقادیر دو برابر شوند. بعد با تابع <code>trpl::stream_from_iter</code> تکرارگر را به Stream تبدیل می‌کنیم. سرانجام با حلقهٔ <code>while let</code>، هم‌زمان با رسیدن آیتم‌های Stream روی آن‌ها پیمایش می‌کنیم.</p>
+<p>متأسفانه وقتی می‌کوشیم کد را اجرا کنیم، کامپایل نمی‌شود و گزارش می‌دهد که متد <code>next</code> در دسترس نیست:</p>
+<!-- manual-regeneration
+cd listings/ch17-async-await/listing-17-21
+cargo build
+copy only the error output
+-->
+<pre><code class="language-text">error[E0599]: no method named `next` found for struct `tokio_stream::iter::Iter` in the current scope
+  --&gt; src/main.rs:10:40
+   |
+10 |         while let Some(value) = stream.next().await {
+   |                                        ^^^^
+   |
+   = help: items from traits can only be used if the trait is in scope
+help: the following traits which provide `next` are implemented but not in scope; perhaps you want to import one of them
+   |
+1  + use crate::trpl::StreamExt;
+   |
+1  + use futures_util::stream::stream::StreamExt;
+   |
+1  + use std::iter::Iterator;
+   |
+1  + use std::str::pattern::Searcher;
+   |
+help: there is a method `try_next` with a similar name
+   |
+10 |         while let Some(value) = stream.try_next().await {
+   |                                        ~~~~~~~~
+</code></pre>
+<p>همان‌گونه که خروجی توضیح می‌دهد، خطای کامپایلر به این دلیل رخ می‌دهد که برای استفاده از متد <code>next</code> باید صفت درست در حوزه باشد. با توجه به مطالب تا اینجا شاید منطقی باشد انتظار داشته باشید آن صفت <code>Stream</code> باشد، اما در واقع <code>StreamExt</code> است. <code>Ext</code> کوتاه‌شدهٔ <em>extension</em> است و در جامعهٔ Rust الگویی رایج برای گسترش یک صفت با صفتی دیگر به شمار می‌رود.</p>
+<p>صفت <code>Stream</code> رابطی سطح پایین تعریف می‌کند که عملاً صفت‌های <code>Iterator</code> و <code>Future</code> را ترکیب می‌کند. <code>StreamExt</code> مجموعه‌ای سطح بالاتر از APIها را روی <code>Stream</code> فراهم می‌کند؛ از جمله متد <code>next</code> و متدهای کاربردی دیگری شبیه موارد ارائه‌شده با صفت <code>Iterator</code>. <code>Stream</code> و <code>StreamExt</code> هنوز بخشی از کتابخانهٔ استاندارد Rust نیستند، اما بیشتر crateهای زیست‌بوم تعریف‌های مشابهی دارند.</p>
+<p>راه‌حل خطای کامپایلر افزودن دستور <code>use</code> برای <code>trpl::StreamExt</code> است، همانند فهرست ۱۷-۲۲.</p>
+<figure class="listing" id="listing-17-22">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span>use trpl::StreamExt;
+
+fn main() {
+    trpl::block_on(async {
+        let values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        // --snip--
+<span class="boring">        let iter = values.iter().map(|n| n * 2);
+</span><span class="boring">        let mut stream = trpl::stream_from_iter(iter);
+</span><span class="boring">
+</span><span class="boring">        while let Some(value) = stream.next().await {
+</span><span class="boring">            println!("The value was: {value}");
+</span><span class="boring">        }
+</span><span class="boring">    });
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-17-22">لیست ۱۷-۲۲</a>: استفادهٔ موفق از یک تکرارگر به‌عنوان پایهٔ Stream</figcaption>
+</figure>
+<p>با قرارگرفتن همهٔ این بخش‌ها کنار هم، کد همان‌گونه که می‌خواهیم کار می‌کند! افزون بر این، اکنون که <code>StreamExt</code> در حوزه قرار دارد، درست مانند تکرارگرها می‌توانیم از همهٔ متدهای کاربردی آن استفاده کنیم.</p><nav class="page-nav"><a href="ch17-03-more-futures.html">→ کار با هر تعداد future</a><a href="ch17-05-traits-for-async.html">نگاهی دقیق‌تر به صفت‌های async ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

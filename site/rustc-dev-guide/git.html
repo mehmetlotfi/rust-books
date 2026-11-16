@@ -1,0 +1,477 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>استفاده از Git — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="git"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="using-git"><a class="header" href="#using-git">استفاده از Git</a></h1>
+<p>پروژهٔ Rust برای مدیریت کد منبع خود از <a href="https://git-scm.com">Git</a> استفاده می‌کند.
+برای مشارکت، باید کمی با قابلیت‌های آن آشنا باشید تا تغییرات شما
+بتوانند در کامپایلر ادغام شوند.</p>
+<p>هدف این صفحه پوشش برخی از رایج‌ترین پرسش‌ها و
+مشکلاتی است که مشارکت‌کنندگان تازه‌وارد با آن‌ها روبه‌رو می‌شوند.
+هرچند برخی مبانی Git اینجا پوشش داده می‌شود،
+اگر دیدید این هنوز برایتان کمی سریع است، شاید بهتر باشد ابتدا مقدمه‌هایی دربارهٔ Git بخوانید، مثل بخش‌های Beginner و Getting
+started در <a href="https://www.atlassian.com/git/tutorials/what-is-version-control">این آموزش از Atlassian</a>.
+GitHub هم <a href="https://docs.github.com/en/get-started/quickstart/set-up-git">مستندات</a> و <a href="https://guides.github.com/introduction/git-handbook/">راهنماهایی</a> برای مبتدیان دارد، یا می‌توانید
+<a href="https://git-scm.com/book/en/v2/">کتاب Git</a> را که عمیق‌تر است مطالعه کنید.</p>
+<p>این راهنما ناقص است.
+اگر با git مشکلی داشتید که این صفحه کمکی به آن نمی‌کند،
+لطفاً <a href="https://github.com/rust-lang/rustc-dev-guide/issues/new">یک issue باز کنید</a> تا بتوانیم نحوهٔ رفع آن را مستند کنیم.</p>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<p>فرض می‌کنیم Git را نصب کرده‌اید، <a href="https://github.com/rust-lang/rust">rust-lang/rust</a> را fork کرده‌اید و
+مخزن fork‌شده را روی رایانهٔ خود clone کرده‌اید.
+ما از رابط خط فرمان برای کار با Git استفاده می‌کنیم؛ تعدادی GUI و یکپارچگی با IDE هم هست
+که عموماً همان کارها را انجام می‌دهند.</p>
+<p>اگر fork خود را clone کرده‌اید، می‌توانید در مخزن محلی خود با <code>origin</code> به آن ارجاع دهید.
+شاید مفید باشد remote‌ای هم برای مخزن رسمی rust-lang/rust تنظیم کنید با</p>
+<pre><code class="language-console">git remote add upstream https://github.com/rust-lang/rust.git
+</code></pre>
+<p>اگر از HTTPS استفاده می‌کنید، یا</p>
+<pre><code class="language-console">git remote add upstream git@github.com:rust-lang/rust.git
+</code></pre>
+<p>اگر از SSH استفاده می‌کنید.</p>
+<p><strong>نکته:</strong> این صفحه به گردش‌کارهای <code>rust-lang/rust</code> اختصاص دارد، اما احتمالاً
+هنگام مشارکت در مخازن دیگر پروژهٔ Rust هم مفید خواهد بود.</p>
+<h2 id="standard-process"><a class="header" href="#standard-process">Standard Process</a></h2>
+<p>در ادامه روال عادی‌ای آمده که احتمالاً برای بیشتر تغییرات کوچک و PRها به‌کار می‌برید:</p>
+<ol>
+<li>مطمئن شوید تغییرات را روی <code>main</code> اعمال می‌کنید: <code>git checkout main</code>.</li>
+<li>آخرین تغییرات را از مخزن Rust بگیرید: <code>git pull upstream main --ff-only</code>.
+(برای اطلاعات بیشتر دربارهٔ این، <a href="#keeping-things-up-to-date">سیاست No-Merge</a> را ببینید).</li>
+<li>برای تغییر خود یک branch جدید بسازید: <code>git checkout -b issue-12345-fix</code>.</li>
+<li>چند تغییر در مخزن بدهید و آن‌ها را تست کنید.</li>
+<li>تغییرات خود را با <code>git add src/changed/file.rs src/another/change.rs</code> stage کنید
+و سپس با <code>git commit</code> commit کنید.
+البته commitهای میانی هم می‌تواند ایدهٔ خوبی باشد.
+از <code>git add .</code> پرهیز کنید، چون commit کردن ناخواستهٔ تغییراتی که نباید commit شوند،
+مثل به‌روزرسانی زیرماژول‌ها، را بسیار آسان می‌کند.
+می‌توانید با <code>git status</code> بررسی کنید فایلی را stage نکرده‌اید.</li>
+<li>تغییرات خود را به fork خود push کنید: <code>git push --set-upstream origin issue-12345-fix</code>
+(پس از افزودن commitها می‌توانید از <code>git push</code> استفاده کنید و پس از rebase یا
+pull-and-rebase می‌توانید از <code>git push --force-with-lease</code> استفاده کنید).</li>
+<li>از fork خود به شاخهٔ <code>main</code> در <code>rust-lang/rust</code> یک <a href="https://guides.github.com/activities/forking/#making-a-pull-request">PR باز کنید</a>.</li>
+</ol>
+<p>اگر مجبور به rebase شدید و با تعارض‌ها روبه‌رو شدید، <a href="#rebasing">Rebase</a> را ببینید.
+اگر می‌خواهید هنگام کار روی قابلیت/issue طولانی‌مدت بالادست را دنبال کنید، <a href="#keeping-things-up-to-date">به‌روز نگه‌داشتن</a> را ببینید.</p>
+<p>اگر بازبین شما تغییراتی درخواست کند، روال آن تغییرات تقریباً
+همین است، با حذف چند گام:</p>
+<ol>
+<li>مطمئن شوید تغییرات را روی جدیدترین نسخهٔ کد خود می‌دهید:
+<code>git checkout issue-12345-fix</code>.</li>
+<li>تغییرات اضافی خود را مثل قبل بدهید، stage کنید و commit کنید.</li>
+<li>آن تغییرات را به fork خود push کنید: <code>git push</code>.</li>
+</ol>
+<h2 id="troubleshooting-git-issues"><a class="header" href="#troubleshooting-git-issues">Troubleshooting git issues</a></h2>
+<p>اگر <code>rust-lang/rust</code> قدیمی است لازم نیست آن را از ابتدا clone کنید!
+حتی اگر فکر می‌کنید آن را بیش از حد خراب کرده‌اید، راه‌هایی برای رفع
+وضعیت git هست که لازم نیست کل مخزن را دوباره دانلود کنید.
+در ادامه چند مشکل رایج که ممکن است با آن‌ها روبه‌رو شوید آمده است:</p>
+<h3 id="i-made-a-merge-commit-by-accident"><a class="header" href="#i-made-a-merge-commit-by-accident">به‌طور تصادفی یک merge commit ساختم.</a></h3>
+<p>Git دو راه برای به‌روز‌کردن branch شما با جدیدترین تغییرات دارد: merge و rebase.
+Rust <a href="#keeping-things-up-to-date">از rebase استفاده می‌کند</a>.
+اگر merge commit ساخته‌اید، رفعش چندان سخت نیست: <code>git rebase -i upstream/main</code>.</p>
+<p>برای اطلاعات بیشتر دربارهٔ rebase، <a href="#rebasing">Rebase</a> را ببینید.</p>
+<h3 id="i-deleted-my-fork-on-github"><a class="header" href="#i-deleted-my-fork-on-github">fork خود را در GitHub حذف کردم!</a></h3>
+<p>از دید git مشکلی نیست.
+اگر <code>git remote -v</code> را اجرا کنید،
+چیزی شبیه این می‌گوید:</p>
+<pre><code class="language-console">$ git remote -v
+origin  git@github.com:jyn514/rust.git (fetch)
+origin  git@github.com:jyn514/rust.git (push)
+upstream        https://github.com/rust-lang/rust (fetch)
+upstream        https://github.com/rust-lang/rust (fetch)
+</code></pre>
+<p>اگر نام fork خود را تغییر داده‌اید، می‌توانید URL را این‌طور تغییر دهید:</p>
+<pre><code class="language-console">git remote set-url origin &lt;URL&gt;
+</code></pre>
+<p>که در آن <code>&lt;URL&gt;</code> نشانی fork جدید شماست.</p>
+<h3 id="i-changed-a-submodule-by-accident"><a class="header" href="#i-changed-a-submodule-by-accident">به‌طور تصادفی یک زیرماژول را تغییر دادم</a></h3>
+<p>معمولاً افراد وقتی متوجه می‌شوند که rustbot در GitHub کامنتی می‌گذارد که <code>cargo</code> تغییر کرده است:</p>
+<img alt="rustbot submodule comment" src="./img/rustbot-submodules.png">
+<p>ممکن است در رابط وب هم تعارض‌هایی ببینید:</p>
+<img alt="conflict in src/tools/cargo" src="./img/submodule-conflicts.png">
+<p>رایج‌ترین دلیل این است که پس از یک تغییر rebase کرده‌اید و بدون اجرای اولیهٔ
+<code>x</code> برای به‌روز‌کردن زیرماژول‌ها <code>git add .</code> را زده‌اید.
+یا شاید به‌جای <code>x fmt</code> دستور <code>cargo fmt</code> را اجرا کرده‌اید
+و فایل‌های درون زیرماژول را تغییر داده‌اید و سپس تغییرات را commit کرده‌اید.</p>
+<p>برای رفع آن این کارها را بکنید (اگر زیرماژولی غیر از cargo را تغییر داده‌اید،
+مسیر <code>src/tools/cargo</code> را با مسیر آن زیرماژول جایگزین کنید):</p>
+<ol>
+<li>ببینید کدام commit تغییرات تصادفی را دارد: <code>git log --stat -n1 src/tools/cargo</code></li>
+<li>تغییرات آن commit را برگردانید: <code>git checkout &lt;my-commit&gt;~ src/tools/cargo</code>.
+نویسهٔ <code>~</code> را دقیقاً بنویسید اما <code>&lt;my-commit&gt;</code> را با خروجی گام ۱ جایگزین کنید.</li>
+<li>به git بگویید تغییرات را commit کند: <code>git commit --fixup &lt;my-commit&gt;</code></li>
+<li>Repeat steps 1-3 for all the submodules you modified.
+<ul>
+<li>اگر زیرماژول را در چند commit مختلف تغییر داده‌اید، باید گام‌های ۱ تا ۳ را
+برای هر commit که تغییر داده‌اید تکرار کنید.
+وقتی دستور <code>git log</code> commitی را نشان داد
+که نویسنده‌اش شما نیستید، می‌فهمید باید متوقف شوید.</li>
+</ul>
+</li>
+<li>تغییرات خود را در commitهای موجود squash کنید: <code>git rebase --autosquash -i upstream/main</code></li>
+<li><a href="#standard-process">تغییرات خود را push کنید</a>.</li>
+</ol>
+<h3 id="i-see-error-cannot-rebase-when-i-try-to-rebase"><a class="header" href="#i-see-error-cannot-rebase-when-i-try-to-rebase">هنگام rebase پیام «error: cannot rebase» می‌بینم</a></h3>
+<p>این دو خطای رایج هنگام rebase هستند:</p>
+<pre><code class="language-console">error: cannot rebase: Your index contains uncommitted changes.
+error: Please commit or stash them.
+</code></pre>
+<pre><code class="language-console">error: cannot rebase: You have unstaged changes.
+error: Please commit or stash them.
+</code></pre>
+<p>(برای تفاوت این دو <a href="https://git-scm.com/book/en/v2/Getting-Started-What-is-Git%3F#_the_three_states">https://git-scm.com/book/en/v2/Getting-Started-What-is-Git%3F#_the_three_states</a> را ببینید.)</p>
+<p>این یعنی از آخرین باری که commit کرده‌اید تغییراتی داده‌اید.
+برای اینکه بتوانید rebase کنید، یا
+تغییرات خود را commit کنید، یا یک commit موقت به نام «stash» بسازید تا
+هنگام پایان rebase همچنان commit نشده باشند.
+ممکن است بخواهید git را طوری پیکربندی کنید که این «stash» را خودکار بسازد، که
+در تقریباً همهٔ موارد از خطای «cannot rebase» جلوگیری می‌کند:</p>
+<pre><code class="language-console">git config --global rebase.autostash true
+</code></pre>
+<p>برای اطلاعات بیشتر دربارهٔ stash <a href="https://git-scm.com/book/en/v2/Git-Tools-Stashing-and-Cleaning">https://git-scm.com/book/en/v2/Git-Tools-Stashing-and-Cleaning</a> را ببینید.</p>
+<h3 id="i-see-untracked-files-srcstdarch"><a class="header" href="#i-see-untracked-files-srcstdarch">«Untracked Files: src/stdarch» می‌بینم؟</a></h3>
+<p>این باقی‌ماندهٔ انتقال به پوشهٔ <code>library/</code> است.
+متأسفانه <code>git rebase</code> تغییر نام زیرماژول‌ها را دنبال نمی‌کند، پس
+باید پوشه را خودتان حذف کنید:</p>
+<pre><code class="language-console">rm -r src/stdarch
+</code></pre>
+<h3 id="i-see--head"><a class="header" href="#i-see--head">I see <code>&lt;&lt;&lt; HEAD</code>?</a></h3>
+<p>احتمالاً در میانهٔ rebase یا تعارض merge بودید.
+برای رفع تعارض <a href="#rebasing-and-conflicts">تعارض‌ها</a> را ببینید.
+اگر به تغییرات اهمیتی نمی‌دهید
+و فقط می‌خواهید یک نسخهٔ تمیز از مخزن را برگردانید، می‌توانید از <code>git reset</code> استفاده کنید:</p>
+<pre><code class="language-console"># WARNING: this throws out any local changes you've made! Consider resolving the conflicts instead.
+git reset --hard main
+</code></pre>
+<h3 id="failed-to-push-some-refs"><a class="header" href="#failed-to-push-some-refs">failed to push some refs</a></h3>
+<p><code>git push</code> درست کار نمی‌کند و چیزی شبیه این می‌گوید:</p>
+<pre><code class="language-console"> ! [rejected]        issue-xxxxx -&gt; issue-xxxxx (non-fast-forward)
+error: failed to push some refs to 'https://github.com/username/rust.git'
+hint: Updates were rejected because the tip of your current branch is behind
+hint: its remote counterpart. Integrate the remote changes (e.g.
+hint: 'git pull ...') before pushing again.
+hint: See the 'Note about fast-forwards' in 'git push --help' for details.
+</code></pre>
+<p>توصیه‌ای که می‌دهد نادرست است!
+به‌دلیل <a href="#no-merge-policy">سیاست «no-merge»</a> در Rust، merge commit‌ای که <code>git pull</code> می‌سازد
+در PR نهایی مجاز نخواهد بود، علاوه بر اینکه هدف rebase را از بین می‌برد!
+به‌جای آن از <code>git push --force-with-lease</code> استفاده کنید.</p>
+<h3 id="git-is-trying-to-rebase-commits-i-didnt-write"><a class="header" href="#git-is-trying-to-rebase-commits-i-didnt-write">Git سعی دارد commitهایی را rebase کند که من ننوشته‌ام؟</a></h3>
+<p>اگر در فهرست rebase خود commitهای زیادی، یا merge commit، یا commitهایی از افراد دیگر که
+خودتان ننوشته‌اید می‌بینید، احتمالاً سعی می‌کنید روی branch اشتباه rebase کنید.
+برای مثال، ممکن است
+remote با نام <code>upstream</code> برای <code>rust-lang/rust</code> داشته باشید، اما <code>git rebase origin/main</code> را به‌جای <code>git rebase upstream/main</code> اجرا کرده باشید.
+رفع آن لغو rebase و استفاده از branch درست است:</p>
+<pre><code class="language-console">git rebase --abort
+git rebase --interactive upstream/main
+</code></pre>
+<details><summary>برای دیدن مثالی از rebase روی branch اشتباه اینجا کلیک کنید</summary>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="img/other-peoples-commits.png" alt="Interactive rebase over the wrong branch"><span class="img-wrapper"><img src="img/other-peoples-commits.png" alt="Interactive rebase over the wrong branch"></span></label></p>
+</details>
+<h3 id="quick-note-about-submodules"><a class="header" href="#quick-note-about-submodules">نکتهٔ سریع دربارهٔ زیرماژول‌ها</a></h3>
+<p>هنگام به‌روز‌کردن مخزن محلی با <code>git pull</code>، ممکن است گاهی ببینید
+Git می‌گوید فایل‌هایی را تغییر داده‌اید که هرگز ویرایششان نکرده‌اید.
+برای مثال،
+اجرای <code>git status</code> چیزی شبیه این می‌دهد (به اشاره به <code>new commits</code> دقت کنید):</p>
+<pre><code class="language-console">On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add &lt;file&gt;..." to update what will be committed)
+  (use "git restore &lt;file&gt;..." to discard changes in working directory)
+	modified:   src/llvm-project (new commits)
+	modified:   src/tools/cargo (new commits)
+
+no changes added to commit (use "git add" and/or "git commit -a")
+</code></pre>
+<p>این‌ها تغییر در فایل‌ها نیستند: تغییر در زیرماژول‌ها هستند (<a href="#git-submodules">بعداً</a> بیشتر).
+برای خلاص‌شدن از آن‌ها:</p>
+<pre><code class="language-console">git submodule update
+</code></pre>
+<p>برخی زیرماژول‌ها در واقع لازم نیستند؛ برای مثال، اگر از <code>download-ci-llvm</code> استفاده می‌کنید لازم نیست <code>src/llvm-project</code>
+checkout شود.
+برای پرهیز از دریافت مداوم تاریخچهٔ آن، می‌توانید از
+<code>git submodule deinit -f src/llvm-project</code> استفاده کنید که از نمایش دوبارهٔ آن به‌عنوان تغییریافته هم جلوگیری می‌کند.</p>
+<h2 id="rebasing-and-conflicts"><a class="header" href="#rebasing-and-conflicts">Rebase و تعارض‌ها</a></h2>
+<p>وقتی کد خود را به‌صورت محلی ویرایش می‌کنید، تغییرات را روی نسخه‌ای از
+rust-lang/rust می‌دهید که هنگام ساخت branch قابلیت شما وجود داشت.
+بنابراین هنگام ارسال PR ممکن است برخی تغییراتی که از آن زمان در
+rust-lang/rust داده شده با تغییرات شما تعارض داشته باشند.
+وقتی این رخ دهد، باید پیش از merge شدن تغییراتتان تعارض‌ها را رفع کنید.
+برای این باید کار خود را روی rust-lang/rust rebase کنید.</p>
+<h3 id="rebasing"><a class="header" href="#rebasing">Rebasing</a></h3>
+<p>برای rebase کردن branch قابلیت خود روی جدیدترین نسخهٔ branch با نام <code>main</code>
+در rust-lang/rust، branch خود را checkout کنید و سپس این دستور را اجرا کنید:</p>
+<pre><code class="language-console">git pull --rebase https://github.com/rust-lang/rust.git main
+</code></pre>
+<blockquote>
+<p>اگر با خطای زیر روبه‌رو شدید:</p>
+<pre><code class="language-console">error: cannot pull with rebase: Your index contains uncommitted changes.
+error: please commit or stash them.
+</code></pre>
+<p>یعنی کار commit‌نشده‌ای در درخت کاری خود دارید. در آن
+مورد، پیش از rebase دستور <code>git stash</code> را اجرا کنید و پس از
+rebase و رفع همهٔ تعارض‌ها <code>git stash pop</code>.</p>
+</blockquote>
+<p>وقتی branch را روی main rebase می‌کنید، همهٔ تغییرات branch شما
+روی جدیدترین نسخهٔ <code>main</code> دوباره اعمال می‌شوند.
+به عبارت دیگر، Git سعی می‌کند
+وانمود کند تغییراتی که روی نسخهٔ قدیمی <code>main</code> دادید روی نسخهٔ جدید <code>main</code> داده شده‌اند.
+در این فرایند، باید انتظار داشته باشید دست‌کم یک «تعارض rebase» ببینید.
+این وقتی رخ می‌دهد که تلاش Git برای
+اعمال مجدد تغییرات شکست می‌خورد چون تغییرات شما با تغییرات دیگر تعارض داشته است.
+می‌توانید بفهمید این رخ داده چون در خروجی خطوطی شبیه این می‌بینید</p>
+<pre><code class="language-console">CONFLICT (content): Merge conflict in file.rs
+</code></pre>
+<p>وقتی این فایل‌ها را باز کنید، بخش‌هایی به این شکل می‌بینید</p>
+<pre><code class="language-console">&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD
+Original code
+=======
+Your code
+&gt;&gt;&gt;&gt;&gt;&gt;&gt; 8fbf656... Commit fixes 12345
+</code></pre>
+<p>این نشان‌دهندهٔ خطوطی از فایل است که Git نتوانسته بفهمد چگونه rebase کند.
+بخش بین <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</code> و <code>=======</code> کد
+<code>main</code> را دارد، در حالی که طرف دیگر نسخهٔ کد شماست.
+باید تصمیم بگیرید با تعارض چه کنید.
+ممکن است بخواهید تغییرات خود را نگه دارید،
+تغییرات <code>main</code> را نگه دارید، یا هر دو را ترکیب کنید.</p>
+<p>عموماً رفع تعارض دو گام دارد: اول، تعارض مشخص را رفع کنید.
+فایل را ویرایش کنید تا تغییرات دلخواه را بدهید و در این فرایند خطوط
+<code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>، <code>=======</code> و <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> را حذف کنید.
+دوم، کد اطراف را بررسی کنید.
+اگر تعارضی بوده، احتمالاً چند خطای منطقی هم آن اطراف هست!
+ایدهٔ خوبی است اینجا <code>x check</code> را اجرا کنید تا مطمئن شوید خطای آشکاری نیست.</p>
+<p>وقتی رفع همهٔ تعارض‌ها تمام شد، باید فایل‌هایی را که تعارض داشتند با <code>git add</code> stage کنید.
+سپس <code>git rebase --continue</code> را اجرا کنید تا
+به Git بگویید تعارض‌ها را رفع کرده‌اید و باید rebase را تمام کند.</p>
+<p>وقتی rebase موفق شد، می‌خواهید branch متناظر را در
+fork خود با <code>git push --force-with-lease</code> به‌روز کنید.</p>
+<h3 id="keeping-things-up-to-date"><a class="header" href="#keeping-things-up-to-date">به‌روز نگه‌داشتن</a></h3>
+<p><a href="#rebasing">بخش بالا</a> راهنمای مشخصی
+دربارهٔ rebase‌کردن کار و برخورد با تعارض‌های merge است.
+در اینجا نصیحتی عمومی دربارهٔ نگه‌داشتن مخزن محلی به‌روز با تغییرات بالادست آمده است:</p>
+<p>استفادهٔ منظم از <code>git pull upstream main</code> هنگامی که روی branch محلی <code>main</code> هستید آن را به‌روز نگه می‌دارد.
+شما باید branchهای قابلیت خود را هم به‌روز نگه دارید.
+پس از pull می‌توانید branchهای قابلیت را checkout و rebase کنید:</p>
+<pre><code class="language-console">git checkout main
+git pull upstream main --ff-only # to make certain there are no merge commits
+git rebase main feature_branch
+git push --force-with-lease # (set origin to be the same as local)
+</code></pre>
+<p>برای پرهیز از merge طبق <a href="#no-merge-policy">سیاست No-Merge</a>، ممکن است بخواهید از
+<code>git config pull.ff only</code> استفاده کنید (این پیکربندی فقط روی مخزن محلی اعمال می‌شود)
+تا مطمئن شوید Git هنگام <code>git pull</code> هیچ merge commit نمی‌سازد، بدون
+نیاز به دادن <code>--ff-only</code> یا <code>--rebase</code> هر بار.</p>
+<p>می‌توانید از main دستور <code>git push --force-with-lease</code> را هم بزنید تا دوباره بررسی کنید
+branchهای قابلیت شما با وضعیتشان در GitHub همگام‌اند.</p>
+<h2 id="advanced-rebasing"><a class="header" href="#advanced-rebasing">Advanced Rebasing</a></h2>
+<h3 id="squash-your-commits"><a class="header" href="#squash-your-commits">commitهای خود را squash کنید</a></h3>
+<p>«Squash»کردن commitها در یکدیگر باعث می‌شود آن‌ها در یک commit ادغام شوند.
+هم مزیت و هم عیب این کار این است که تاریخچه را ساده می‌کند.
+از یک سو، ردپای گام‌هایی را که تغییرات در آن‌ها داده شد از دست می‌دهید، اما
+کار با تاریخچه آسان‌تر می‌شود.</p>
+<p>ساده‌ترین راه squash کردن commitهای یک PR در مخزن <code>rust-lang/rust</code> استفاده از دستور <code>@bors squash</code> در کامنت روی PR است.
+به‌طور پیش‌فرض، <a href="https://github.com/rust-lang/bors">bors</a> همهٔ پیام‌های commit در PR را در پیام commit ادغام‌شده ترکیب می‌کند.
+برای سفارشی‌کردن پیام commit از <code>@bors squash msg="&lt;commit message&gt;"</code> استفاده کنید.
+برای مثال، <code>@bors squash msg="Improve diagnostics for missing lifetime parameter"</code>.</p>
+<p>اگر می‌خواهید commitها را با عملیات محلی git squash کنید، در ادامه بخوانید.</p>
+<p>اگر تعارضی نیست و فقط برای تمیز‌کردن تاریخچه squash می‌کنید،
+از <code>git rebase --interactive --keep-base main</code> استفاده کنید.
+این نقطهٔ انشعاب PR شما را یکسان نگه می‌دارد و بازبینی diff آنچه در طول rebaseها رخ داده را آسان‌تر می‌کند.</p>
+<p>squash‌کردن می‌تواند به‌عنوان بخشی از رفع تعارض هم مفید باشد.
+اگر branch شما چند بازنویسی متوالی از همان کد دارد، یا اگر
+تعارض‌های rebase بسیار شدیدند، می‌توانید از
+<code>git rebase --interactive main</code> برای کنترل بیشتر بر فرایند استفاده کنید.
+این به شما اجازه می‌دهد commitها را رد کنید، commitهایی را که رد نمی‌کنید ویرایش کنید،
+ترتیب اعمال آن‌ها را تغییر دهید، یا آن‌ها را در هم «squash» کنید.</p>
+<p>یا می‌توانید تاریخچهٔ commit را این‌طور فدا کنید:</p>
+<pre><code class="language-console"># squash all the changes into one commit so you only have to worry about conflicts once
+git rebase --interactive --keep-base main  # and squash all changes along the way
+git rebase main
+# fix all merge conflicts
+git rebase --continue
+</code></pre>
+<p>ممکن است بخواهید فقط چند commit آخر را با هم squash کنید، شاید
+چون فقط «fixup» هستند و تغییر واقعی نیستند.
+برای مثال،
+<code>git rebase --interactive HEAD~2</code> به شما اجازه می‌دهد فقط آن دو commit را ویرایش کنید.</p>
+<h3 id="git-range-diff"><a class="header" href="#git-range-diff"><code>git range-diff</code></a></h3>
+<p>پس از تکمیل rebase و پیش از push تغییرات، ممکن است بخواهید
+تغییرات بین branch قدیمی و جدید خود را بازبینی کنید.
+می‌توانید این کار را با <code>git range-diff main @{upstream} HEAD</code> بکنید.</p>
+<p>اولین آرگومان <code>range-diff</code>، یعنی <code>main</code> در این مورد، revision پایه‌ای است
+که branch قدیمی و جدید را با آن مقایسه می‌کنید.
+آرگومان دوم
+نسخهٔ قدیمی branch شماست؛ در این مورد، <code>@upstream</code> یعنی نسخه‌ای که
+به GitHub push کرده‌اید، که همان چیزی است که افراد در pull request شما می‌بینند.
+در نهایت آرگومان سوم <code>range-diff</code> نسخهٔ <em>جدید</em>
+branch شماست؛ در این مورد <code>HEAD</code> است، یعنی commitی که فعلاً
+در مخزن محلی شما checkout شده است.</p>
+<p>توجه کنید که می‌توانید از شکل کوتاه‌شدهٔ معادل <code>git range-diff main @{u} HEAD</code> هم استفاده کنید.</p>
+<p>برخلاف diffهای عادی Git، در خروجی range-diff می‌بینید <code>-</code> یا <code>+</code> کنار <code>-</code> یا <code>+</code> دیگری هست.
+نشانگر سمت چپ تغییر بین
+branch قدیمی و جدید را نشان می‌دهد، و نشانگر سمت راست تغییری را که commit کرده‌اید.
+پس می‌توانید range-diff را «diff از diffها» ببینید چون
+تفاوت‌های بین diff قدیمی و diff جدید شما را نشان می‌دهد.</p>
+<p>در ادامه مثالی از خروجی <code>git range-diff</code> آمده است (برگرفته از <a href="https://git-scm.com/docs/git-range-diff#_examples">مستندات Git</a>):</p>
+<pre><code class="language-console">-:  ------- &gt; 1:  0ddba11 Prepare for the inevitable!
+1:  c0debee = 2:  cab005e Add a helpful message at the start
+2:  f00dbal ! 3:  decafe1 Describe a bug
+    @@ -1,3 +1,3 @@
+     Author: A U Thor &lt;author@example.com&gt;
+
+    -TODO: Describe a bug
+    +Describe a bug
+    @@ -324,5 +324,6
+      This is expected.
+
+    -+What is unexpected is that it will also crash.
+    ++Unexpectedly, it also crashes. This is a bug, and the jury is
+    ++still out there how to fix it best. See ticket #314 for details.
+
+      Contact
+3:  bedead &lt; -:  ------- TO-UNDO
+</code></pre>
+<p>(توجه کنید که خروجی <code>git range-diff</code> در ترمینال شما احتمالاً از این مثال خواناتر است چون
+رنگ دارد.)</p>
+<p>ویژگی دیگر <code>git range-diff</code> این است که برخلاف <code>git diff</code>، پیام‌های commit را هم diff می‌کند.
+این ویژگی هنگام اصلاح چند پیام commit می‌تواند مفید باشد تا مطمئن شوید بخش‌های درست را تغییر داده‌اید.</p>
+<p><code>git range-diff</code> دستور بسیار مفیدی است، اما توجه کنید ممکن است کمی طول بکشد
+تا به قالب خروجی آن عادت کنید.
+ممکن است مستندات Git دربارهٔ این
+دستور را هم مفید بیابید، به‌ویژه <a href="https://git-scm.com/docs/git-range-diff#_examples">بخش «Examples»</a> آن.</p>
+<h2 id="no-merge-policy"><a class="header" href="#no-merge-policy">No-Merge Policy</a></h2>
+<p>مخزن rust-lang/rust از چیزی استفاده می‌کند که «گردش‌کار rebase» نامیده می‌شود.
+یعنی merge commit در PRها پذیرفته نمی‌شود.
+در نتیجه، اگر به‌صورت محلی
+<code>git merge</code> اجرا می‌کنید، احتمال زیاد باید به‌جای آن rebase کنید.
+البته این همیشه درست نیست؛ اگر merge شما فقط fast-forward باشد،
+مثل mergeهایی که <code>git pull</code> معمولاً انجام می‌دهد، آن‌گاه merge commit
+ساخته نمی‌شود و جای نگرانی نیست.
+اجرای یک‌بارهٔ <code>git config merge.ff only</code> (این پیکربندی روی مخزن محلی اعمال می‌شود)
+تضمین می‌کند همهٔ mergeهایی که انجام می‌دهید از این نوع باشند و
+نتوانید اشتباه کنید.</p>
+<p>دلایل متعددی برای این تصمیم هست، و مثل همهٔ تصمیم‌ها یک بده‌بستان است.
+مزیت اصلی تاریخچهٔ commit عموماً خطی است.
+این bisect‌کردن را بسیار ساده می‌کند و فهم و دنبال‌کردن تاریخچه و لاگ commitها را
+بسیار آسان‌تر می‌کند.</p>
+<h2 id="tips-for-reviewing"><a class="header" href="#tips-for-reviewing">نکاتی برای بازبینی</a></h2>
+<p><strong>نکته</strong>: این بخش برای <em>بازبینی</em> PRهاست، نه نوشتن آن‌ها.</p>
+<h3 id="hiding-whitespace"><a class="header" href="#hiding-whitespace">Hiding whitespace</a></h3>
+<p>GitHub دکمه‌ای برای غیرفعال‌کردن تغییرات فاصله‌گذاری دارد که ممکن است مفید باشد.
+می‌توانید از <code>git diff -w origin/main</code> هم برای دیدن تغییرات به‌صورت محلی استفاده کنید.</p>
+<img alt="hide whitespace" src="./img/github-whitespace-changes.png">
+<h3 id="fetching-prs"><a class="header" href="#fetching-prs">Fetching PRs</a></h3>
+<p>برای checkout کردن PRها به‌صورت محلی می‌توانید از <code>git fetch upstream pull/NNNNN/head &amp;&amp; git checkout FETCH_HEAD</code> استفاده کنید.</p>
+<p>همچنین می‌توانید از ابزار خط فرمان GitHub استفاده کنید.
+GitHub روی PRها دکمه‌ای نشان می‌دهد که می‌توانید دستور checkout محلی را از آن کپی و paste کنید.
+برای اطلاعات بیشتر <a href="https://cli.github.com/">https://cli.github.com/</a> را ببینید.</p>
+<img alt="gh suggestion" src="./img/github-cli.png">
+<h3 id="using-github-dev"><a class="header" href="#using-github-dev">استفاده از GitHub dev</a></h3>
+<p>به‌عنوان جایگزین رابط وب GitHub، GitHub Dev ویرایشگر مبتنی بر وب برای مرور
+مخزن و PRها فراهم می‌کند.
+می‌توان آن را با جایگزین‌کردن <code>github.com</code> با <code>github.dev</code> در URL
+یا با زدن <code>.</code> در یک صفحهٔ GitHub باز کرد.
+برای جزئیات بیشتر <a href="https://docs.github.com/en/codespaces/the-githubdev-web-based-editor">مستندات ویرایشگر github.dev</a> را ببینید.</p>
+<h3 id="moving-large-sections-of-code"><a class="header" href="#moving-large-sections-of-code">جابه‌جایی بخش‌های بزرگ کد</a></h3>
+<p>نمای diff پیش‌فرض Git و GitHub برای جابه‌جایی‌های بزرگ <em>درون</em> یک فایل بسیار ضعیف است؛ هر
+خط را حذف‌شده و هر خط را اضافه‌شده نشان می‌دهد و شما را مجبور می‌کند هر خط را خودتان مقایسه کنید.
+Git گزینه‌ای دارد که خطوط جابه‌جاشده را با رنگ دیگری نشان می‌دهد:</p>
+<pre><code class="language-console">git log -p --color-moved=dimmed-zebra --color-moved-ws=allow-indentation-change
+</code></pre>
+<p>برای اطلاعات بیشتر <a href="https://git-scm.com/docs/git-diff#Documentation/git-diff.txt---color-movedltmodegt">مستندات <code>--color-moved</code></a> را ببینید.</p>
+<h3 id="range-diff"><a class="header" href="#range-diff">range-diff</a></h3>
+<p><a href="#git-range-diff">بخش مربوطه برای نویسندگان PR</a> را ببینید.
+این می‌تواند برای مقایسهٔ کدی که force-push شده مفید باشد تا مطمئن شوید
+تغییرات غیرمنتظره‌ای نیست.</p>
+<h3 id="ignoring-changes-to-specific-files"><a class="header" href="#ignoring-changes-to-specific-files">نادیده‌گرفتن تغییرات فایل‌های مشخص</a></h3>
+<p>بسیاری از فایل‌های بزرگ در مخزن خودکار تولید می‌شوند.
+برای دیدن diffی که تغییرات آن فایل‌ها را نادیده می‌گیرد،
+می‌توانید از نحو زیر استفاده کنید (مثلاً Cargo.lock):</p>
+<pre><code class="language-console">git log -p ':!Cargo.lock'
+</code></pre>
+<p>الگوهای دلخواه پشتیبانی می‌شوند (مثلاً <code>:!compiler/*</code>). الگوها همان نحو
+<code>.gitignore</code> را دارند، با <code>:</code> در ابتدا برای نشان‌دادن الگو.</p>
+<h2 id="git-submodules"><a class="header" href="#git-submodules">Git submodules</a></h2>
+<p><strong>نکته</strong>: دانستن زیرماژول‌ها چیز خوبی است، اما پیش‌نیاز مطلق
+مشارکت در <code>rustc</code> <em>نیست</em>.
+اگر برای اولین بار از Git استفاده می‌کنید،
+شاید بخواهید پیش از خواندن این بخش با مفاهیم اصلی Git آشنا شوید.</p>
+<p>مخزن <code>rust-lang/rust</code> از <a href="https://git-scm.com/book/en/v2/Git-Tools-Submodules">زیرماژول‌های Git</a> برای استفاده از پروژه‌های دیگر Rust
+درون مخزن <code>rust</code> بهره می‌گیرد.
+نمونه‌ها شامل fork مربوط به Rust از
+<code>llvm-project</code>، <code>cargo</code> و کتابخانه‌هایی مثل <code>stdarch</code> و <code>backtrace</code> است.</p>
+<p>آن پروژه‌ها در مخزن Git (و GitHub) جداگانه‌ای توسعه و نگه‌داری می‌شوند و
+تاریخچه/commitها، issue tracker و PRهای خودشان را دارند.
+زیرماژول‌ها به ما اجازه می‌دهند نوعی زیرمخزن تعبیه‌شده درون مخزن
+<code>rust</code> بسازیم و آن‌ها را مثل پوشه‌هایی در مخزن <code>rust</code> به‌کار ببریم.</p>
+<p><code>llvm-project</code> را مثال بزنید.
+<code>llvm-project</code> در مخزن <a href="https://github.com/rust-lang/llvm-project"><code>rust-lang/llvm-project</code></a> نگه‌داری می‌شود،
+اما در <code>rust-lang/rust</code> توسط کامپایلر برای تولید کد و بهینه‌سازی استفاده می‌شود.
+ما آن را به‌عنوان زیرماژول در پوشهٔ <code>src/llvm-project</code> به <code>rust</code> می‌آوریم.</p>
+<p>محتوای زیرماژول‌ها توسط Git نادیده گرفته می‌شود: زیرماژول‌ها از نظر معنایی از بقیهٔ مخزن ایزوله‌اند.
+اما اگر <code>cd src/llvm-project</code> کنید و سپس <code>git status</code> را اجرا کنید:</p>
+<pre><code class="language-console">HEAD detached at 9567f08afc943
+nothing to commit, working tree clean
+</code></pre>
+<p>تا جایی که git مطلع است، دیگر در مخزن <code>rust</code> نیستید، بلکه در مخزن <code>llvm-project</code> هستید.
+متوجه می‌شوید در وضعیت «detached HEAD» هستیم، یعنی روی یک branch نیستیم بلکه روی
+commit مشخصی هستیم.</p>
+<p>دلیلش این است که مثل هر وابستگی، می‌خواهیم بتوانیم کنترل کنیم از کدام نسخه استفاده می‌شود.
+زیرماژول‌ها دقیقاً همین را ممکن می‌کنند: هر زیرماژول به یک commit مشخص «سنجاق» شده است
+و تغییر نمی‌کند مگر دستی تغییر داده شود.
+اگر در پوشهٔ <code>llvm-project</code> از <code>git checkout &lt;commit&gt;</code> استفاده کنید
+و به پوشهٔ <code>rust</code> برگردید، می‌توانید این
+تغییر را مثل هر تغییر دیگری stage کنید، مثلاً با <code>git add src/llvm-project</code>. (توجه کنید اگر
+تغییر را برای commit <em>stage نکنید</em>، خطر این هست که اجرای
+<code>x</code> با بازگرداندن به commit قبلی هنگام «به‌روزرسانی» خودکار زیرماژول‌ها تغییر شما را خنثی کند.)</p>
+<p>این انتخاب نسخه معمولاً توسط نگه‌دارندگان پروژه انجام می‌شود و
+شبیه <a href="https://github.com/rust-lang/rust/pull/99464/files">این</a> است.</p>
+<p>عادت‌کردن به زیرماژول‌های Git کمی زمان می‌برد، پس اگر هنوز کاملاً روشن نیست نگران نباشید.
+به‌ندرت مجبور می‌شوید مستقیماً از آن‌ها استفاده کنید و باز هم، لازم نیست
+همه‌چیز را دربارهٔ زیرماژول‌ها بدانید تا در Rust مشارکت کنید.
+فقط بدانید که وجود دارند و با نوعی وابستگی زیرمخزن تعبیه‌شده متناظرند
+که Git می‌تواند به‌خوبی و نسبتاً راحت برایمان مدیریت کند.</p>
+<h3 id="hard-resetting-submodules"><a class="header" href="#hard-resetting-submodules">Hard-resetting submodules</a></h3>
+<p>گاهی ممکن است (هنگام اجرای <code>git status</code>) با این روبه‌رو شوید</p>
+<pre><code class="language-console">Changes not staged for commit:
+  (use "git add &lt;file&gt;..." to update what will be committed)
+  (use "git restore &lt;file&gt;..." to discard changes in working directory)
+  (commit or discard the untracked or modified content in submodules)
+        modified:   src/llvm-project (new commits, modified content)
+</code></pre>
+<p>و وقتی سعی می‌کنید <code>git submodule update</code> را اجرا کنید با خطاهایی مثل این به‌شدت می‌شکند</p>
+<pre><code class="language-console">error: RPC failed; curl 92 HTTP/2 stream 7 was not closed cleanly: CANCEL (err 8)
+error: 2782 bytes of body are still expected
+fetch-pack: unexpected disconnect while reading sideband packet
+fatal: early EOF
+fatal: fetch-pack: invalid index-pack output
+fatal: Fetched in submodule path 'src/llvm-project', but it did not contain 5a5152f653959d14d68613a3a8a033fb65eec021. Direct fetching of that commit failed.
+</code></pre>
+<p>اگر <code>(new commits, modified content)</code> دیدید می‌توانید اجرا کنید</p>
+<pre><code class="language-console">git submodule foreach git reset --hard
+</code></pre>
+<p>و سپس دوباره <code>git submodule update</code> را امتحان کنید.</p>
+<h3 id="deinit-git-submodules"><a class="header" href="#deinit-git-submodules">Deinit git submodules</a></h3>
+<p>اگر آن هم کار نکرد، می‌توانید همهٔ زیرماژول‌های git را deinit کنید…</p>
+<pre><code class="language-console">git submodule deinit -f --all
+</code></pre>
+<p>متأسفانه گاهی پیکربندی زیرماژول‌های git محلی شما به هر دلیلی کاملاً به‌هم می‌ریزد.</p>
+<h3 id="overcoming-fatal-not-a-git-repository-submodulegitmodulessubmodule"><a class="header" href="#overcoming-fatal-not-a-git-repository-submodulegitmodulessubmodule">Overcoming <code>fatal: not a git repository: &lt;submodule&gt;/../../.git/modules/&lt;submodule&gt;</code></a></h3>
+<p>گاهی، به دلیلی نامعلوم، ممکن است با این روبه‌رو شوید</p>
+<pre><code class="language-console">fatal: not a git repository: src/gcc/../../.git/modules/src/gcc
+</code></pre>
+<p>در این وضعیت، برای مسیر زیرماژول داده‌شده، یعنی <code>&lt;submodule_path&gt; = src/gcc</code> در این مثال، باید:</p>
+<ol>
+<li><code>rm -rf &lt;submodule_path&gt;/.git</code></li>
+<li><code>rm -rf .git/modules/&lt;submodule_path&gt;/config</code></li>
+<li>اگر به‌نحوی قفل <code>.gitconfig</code> یتیم مانده <code>rm -rf .gitconfig.lock</code> را اجرا کنید.</li>
+</ol>
+<p>سپس کاری مثل <code>./x fmt</code> را انجام دهید تا bootstrap checkout زیرماژول‌ها را برایتان مدیریت کند.</p>
+<h2 id="ignoring-commits-during-git-blame"><a class="header" href="#ignoring-commits-during-git-blame">Ignoring commits during <code>git blame</code></a></h2>
+<p>برخی commitها تغییرات بزرگ قالب‌بندی دارند که در غیر این صورت عملکرد را تغییر نمی‌دهند.
+می‌توان از طریق
+<a href="https://github.com/rust-lang/rust/blob/HEAD/.git-blame-ignore-revs"><code>.git-blame-ignore-revs</code></a> به <code>git blame</code> دستور داد آن‌ها را نادیده بگیرد:</p>
+<ol>
+<li><code>git blame</code> را طوری پیکربندی کنید که از <code>.git-blame-ignore-revs</code> به‌عنوان فهرست commitهای نادیده‌گرفته‌شده استفاده کند: <code>git config blame.ignorerevsfile .git-blame-ignore-revs</code></li>
+<li>commitهای مناسبی را که می‌خواهید <code>git blame</code> نادیده بگیرد اضافه کنید.</li>
+</ol>
+<p>لطفاً برای commitی که به <code>.git-blame-ignore-revs</code> اضافه می‌کنید کامنتی بگذارید تا افراد
+به‌آسانی بفهمند <em>چرا</em> commit نادیده گرفته می‌شود.</p><nav class="page-nav"><a href="compiler-team.html">→ دربارهٔ تیم کامپایلر</a><a href="rustbot.html">تسلط بر @rustbot ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

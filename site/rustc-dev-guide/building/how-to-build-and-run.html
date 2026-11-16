@@ -1,0 +1,204 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>نحوهٔ ساخت و اجرای کامپایلر — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="building/how-to-build-and-run"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="how-to-build-and-run-the-compiler"><a class="header" href="#how-to-build-and-run-the-compiler">نحوهٔ ساخت و اجرای کامپایلر</a></h1>
+<div class="warning">
+<p>برای کاربران <code>profile = "library"</code> یا کاربرانی که از <code>download-rustc = true | "if-unchanged"</code> استفاده می‌کنند، توجه داشته باشید که
+جریان <code>./x test library/std</code> وقتی <code>download-rustc</code> فعال است (یعنی هیچ تغییری در کامپایلر نیست) فعلاً خراب است.
+این موضوع در <a href="https://github.com/rust-lang/rust/issues/142505">https://github.com/rust-lang/rust/issues/142505</a> پیگیری می‌شود.
+در این حالت فقط جریان <code>./x test</code> تحت‌تأثیر است؛
+<code>./x {check,build} library/std</code> همچنان باید کار کند.</p>
+<p>در کوتاه‌مدت ممکن است لازم باشد برای <code>./x test library/std</code> گزینهٔ <code>download-rustc</code> را غیرفعال کنید.
+این کار را می‌توان به یکی از این دو روش انجام داد:</p>
+<ol>
+<li><code>./x test library/std --set rust.download-rustc=false</code></li>
+<li>یا <code>rust.download-rustc = false</code> را در <code>bootstrap.toml</code> تنظیم کنید.</li>
+</ol>
+<p>متأسفانه این کار نیازمند ساخت کامپایلر stage 1 است.
+تیم bootstrap روی این موضوع کار می‌کند، اما
+پیاده‌سازی یک راه‌حل قابل‌نگهداری زمان می‌برد.</p>
+</div>
+
+<p>کامپایلر با ابزاری به نام <code>bootstrap</code> ساخته می‌شود. برای اجرای آن باید Python نصب شده باشد.</p>
+<h2 id="quick-start"><a class="header" href="#quick-start">شروع سریع</a></h2>
+<p>برای راهنمایی کوتاه‌تر در مورد راه‌اندازی کامپایلر، <a href="./quickstart.html">شروع سریع</a> را ببینید.</p>
+<h2 id="get-the-source-code"><a class="header" href="#get-the-source-code">دریافت کد منبع</a></h2>
+<p>مخزن اصلی <a href="https://github.com/rust-lang/rust"><code>rust-lang/rust</code></a> است. این مخزن شامل کامپایلر، کتابخانهٔ استاندارد (از جمله <code>core</code>، <code>alloc</code>، <code>test</code>، <code>proc_macro</code> و غیره)، و مجموعه‌ای از ابزارهاست (مانند <code>rustdoc</code>، زیرساخت bootstrap و غیره).</p>
+<p>اولین قدم برای کار روی <code>rustc</code> کلون کردن مخزن است:</p>
+<pre><code class="language-bash">git clone https://github.com/rust-lang/rust.git
+cd rust
+</code></pre>
+<blockquote>
+<p><strong>توجه</strong>: در ویندوز، اسکن آنتی‌ویروس می‌تواند اجرای Git و دستورهای ساخت را در یک checkout بزرگ به‌طور محسوسی کند کند. اگر چنین شد، پیشنهاد می‌شود فقط پوشهٔ checkout مربوط به Rust را به <a href="https://support.microsoft.com/windows/add-an-exclusion-to-windows-security-811816c0-4dfd-af4a-47e4-c301afe13b26">فهرست استثناهای Windows Security</a> اضافه کنید. از افزودن استثناهای گسترده‌تر از حد لازم خودداری کنید.</p>
+</blockquote>
+<h3 id="partial-clone-the-repository"><a class="header" href="#partial-clone-the-repository">کلون جزئی مخزن</a></h3>
+<p>به دلیل حجم مخزن، کلون کردن با اینترنت کند می‌تواند زمان زیادی ببرد، و برای ذخیرهٔ تاریخچهٔ کامل هر فایل و پوشه به فضای دیسک نیاز دارد. در عوض می‌توان به git گفت که یک <em>کلون جزئی</em> (partial clone) انجام دهد؛ در این حالت فقط محتوای فعلی فایل‌ها به‌طور کامل دریافت می‌شود، و محتوای بقیهٔ فایل‌ها وقتی لازم شود، مثلاً وقتی به عقب در تاریخچه می‌روید، به‌طور خودکار دریافت می‌شود. همهٔ دستورهای git مثل همیشه کار می‌کنند، با این هزینه که برای مشاهدهٔ نقاطی از تاریخچه که هنوز بارگذاری نشده‌اند به اتصال اینترنت نیاز دارید.</p>
+<pre><code class="language-bash">git clone --filter='blob:none' https://github.com/rust-lang/rust.git
+cd rust
+</code></pre>
+<blockquote>
+<p><strong>توجه</strong>: <a href="https://github.blog/open-source/git/get-up-to-speed-with-partial-clone-and-shallow-clone/">این پیوند</a> این نوع checkout را با جزئیات بیشتر توضیح می‌دهد و آن را با حالت‌های دیگر، مانند کلون سطحی (shallow clone)، مقایسه می‌کند.</p>
+</blockquote>
+<h3 id="shallow-clone-the-repository"><a class="header" href="#shallow-clone-the-repository">کلون سطحی مخزن</a></h3>
+<p>یک جایگزین قدیمی‌تر برای کلون جزئی، کلون سطحی مخزن است. برای این کار می‌توانید از گزینهٔ <code>--depth N</code> همراه با دستور <code>git clone</code> استفاده کنید. این گزینه به <code>git</code> می‌گوید یک «کلون سطحی» انجام دهد، یعنی مخزن را کلون کند اما آن را به <code>N</code> کامیت آخر محدود کند.</p>
+<p>گذاشتن <code>--depth 1</code> به <code>git</code> می‌گوید مخزن را کلون کند اما تاریخچه را به آخرین کامیتی که روی شاخهٔ <code>main</code> است محدود کند؛ این برای مرور کد منبع یا ساخت کامپایلر معمولاً کافی است.</p>
+<pre><code class="language-bash">git clone --depth 1 https://github.com/rust-lang/rust.git
+cd rust
+</code></pre>
+<blockquote>
+<p><strong>توجه</strong>: کلون سطحی محدود می‌کند که کدام دستورهای <code>git</code> قابل اجرا هستند. اگر قصد دارید روی کامپایلر کار کنید و در آن مشارکت کنید، معمولاً توصیه می‌شود مخزن را به‌طور کامل کلون کنید <a href="#get-the-source-code">همان‌طور که در بالا نشان داده شد</a>، یا به جای آن یک <a href="#partial-clone-the-repository">کلون جزئی</a> انجام دهید.</p>
+<p>برای مثال، <code>git bisect</code> و <code>git blame</code> به تاریخچهٔ کامیت‌ها نیاز دارند، بنابراین اگر مخزن با <code>--depth 1</code> کلون شده باشد کار نمی‌کنند.</p>
+</blockquote>
+<h2 id="what-is-bootstrap"><a class="header" href="#what-is-bootstrap">bootstrap چیست؟</a></h2>
+<p>Bootstrap ابزار ساخت مخزن <code>rust</code> است. این ابزار می‌تواند مستندات را بسازد، آزمون‌ها را اجرا کند، و کامپایلر و کتابخانهٔ استاندارد را بسازد.</p>
+<p>این فصل بر مبانی لازم برای کار مؤثر تمرکز دارد، اما اگر می‌خواهید دربارهٔ bootstrap بیشتر بدانید، <a href="./bootstrapping/intro.html">این فصل را بخوانید</a>.</p>
+<h3 id="running-bootstrap"><a class="header" href="#running-bootstrap">اجرای bootstrap</a></h3>
+<p>Bootstrap را می‌توان در بیشتر سیستم‌ها (یونیکس، و ویندوز در صورت پیکربندی) به این صورت اجرا کرد:</p>
+<pre><code class="language-sh">./x &lt;subcommand&gt; [flags]
+</code></pre>
+<p>مستندات و مثال‌ها فرض می‌کنند که bootstrap را به این شکل اجرا می‌کنید. برخی روش‌های جایگزین عبارت‌اند از:</p>
+<pre><code class="language-sh"># In Windows PowerShell (if PowerShell is configured to run scripts)
+./x &lt;subcommand&gt; [flags]
+# In NuShell (if PowerShell is configured to run scripts). `./x` does not work in NuShell if `.py` files are not configured to run Python.
+./x.ps1 &lt;subcommand&gt; [flags]
+
+# On the Windows Command Prompt (if .py files are configured to run Python)
+x.py &lt;subcommand&gt; [flags]
+
+# You can also run Python yourself, e.g.:
+python x.py &lt;subcommand&gt; [flags]
+
+# On a Unix shell if you have `python3` but an `sh` that doesn't support `local`, e.g. on Solaris
+./x.py &lt;subcommand&gt; [flags]
+</code></pre>
+<p>در ویندوز، دستورهای PowerShell ممکن است خطایی شبیه این بدهند:</p>
+<pre><code>PS C:\Users\vboxuser\rust&gt; ./x
+./x : File C:\Users\vboxuser\rust\x.ps1 cannot be loaded because running scripts is disabled on this system. For more
+information, see about_Execution_Policies at https://go.microsoft.com/fwlink/?LinkID=135170.
+At line:1 char:1
++ ./x
++ ~~~
+    + CategoryInfo          : SecurityError: (:) [], PSSecurityException
+    + FullyQualifiedErrorId : UnauthorizedAccess
+</code></pre>
+<p>می‌توانید با اجازه دادن به PowerShell برای اجرای اسکریپت‌های محلی از این خطا جلوگیری کنید:</p>
+<pre><code>Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+</code></pre>
+<h4 id="running-bootstrap-slightly-more-conveniently"><a class="header" href="#running-bootstrap-slightly-more-conveniently">اجرای راحت‌تر bootstrap</a></h4>
+<p>یک فایل باینری وجود دارد که bootstrap را پوشش می‌دهد و <code>x</code> نام دارد. این باینری <code>./x</code> را اجرا می‌کند، و می‌تواند در سطح سیستم نصب شود و از هر زیرپوشه‌ای از یک checkout اجرا شود. همچنین نسخهٔ مناسب Python را برای استفاده پیدا می‌کند و به این بستگی ندارد که اکنون از کدام shell استفاده می‌کنید.</p>
+<p>می‌توانید آن را با <code>cargo install --locked --path src/tools/x</code> نصب کنید.</p>
+<h2 id="create-a-bootstraptoml"><a class="header" href="#create-a-bootstraptoml">ساخت یک <code>bootstrap.toml</code></a></h2>
+<p>برای شروع، <code>./x setup</code> را اجرا کنید و پیش‌فرض‌های <code>compiler</code> را انتخاب کنید. این کار مقداری مقداردهی اولیه انجام می‌دهد و یک <code>bootstrap.toml</code> با مقادیر پیش‌فرض معقول برای شما می‌سازد. اگر پیش‌فرض دیگری را انتخاب کنید (که احتمالاً اگر بخواهید در بخشی از rust غیر از کامپایلر، مثلاً rustdoc، مشارکت کنید چنین خواهید کرد)، حتماً اطلاعات مربوط به آن پیش‌فرض (در <code>src/bootstrap/defaults</code>) را بخوانید چون فرایند ساخت ممکن است برای پیش‌فرض‌های دیگر متفاوت باشد.</p>
+<p>به‌طور جایگزین، می‌توانید <code>bootstrap.toml</code> را دستی بنویسید. برای همهٔ تنظیمات موجود و کاربرد هر یک به <code>bootstrap.example.toml</code> نگاه کنید. برای تنظیمات متداولی که ممکن است بخواهید تغییر دهید به <code>src/bootstrap/defaults</code> نگاه کنید.</p>
+<p>اگر پیش‌تر <code>rustc</code> را ساخته‌اید و تنظیمات مربوط به LLVM را تغییر می‌دهید، ممکن است لازم باشد <code>./x clean --all</code> را اجرا کنید تا تغییرات بعدی پیکربندی اعمال شوند. توجه کنید که <code>./x clean</code> باعث ساخت مجدد LLVM نمی‌شود.</p>
+<h2 id="common-x-commands"><a class="header" href="#common-x-commands">دستورهای متداول <code>x</code></a></h2>
+<p>در اینجا فراخوانی‌های پایهٔ دستورهای <code>x</code> که بیشتر هنگام کار روی <code>rustc</code>، <code>std</code>، <code>rustdoc</code> و ابزارهای دیگر استفاده می‌شوند آمده است.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>دستور</th><th>زمان استفاده</th></tr>
+</thead>
+<tbody>
+<tr><td><code>./x check</code></td><td>بررسی سریع برای اینکه ببینید بیشتر بخش‌ها کامپایل می‌شوند یا نه؛ <a href="suggested.html#configuring-rust-analyzer-for-rustc">rust-analyzer می‌تواند این را به‌طور خودکار برای شما اجرا کند</a></td></tr>
+<tr><td><code>./x build</code></td><td><code>rustc</code>، <code>std</code> و <code>rustdoc</code> را می‌سازد</td></tr>
+<tr><td><code>./x test</code></td><td>همهٔ آزمون‌ها را اجرا می‌کند</td></tr>
+<tr><td><code>./x fmt</code></td><td>همهٔ کد را قالب‌بندی می‌کند</td></tr>
+</tbody>
+</table>
+</div>
+<p>به همین شکل، این دستورها نقاط شروع مناسبی هستند. با این حال، برای هر یک گزینه‌ها و آرگومان‌های بیشتری وجود دارد که برای توسعهٔ جدی ارزش یادگیری دارند. به‌ویژه <code>./x build</code> و <code>./x test</code> راه‌های زیادی برای کامپایل یا آزمودن زیرمجموعه‌ای از کد فراهم می‌کنند که می‌تواند زمان زیادی صرفه‌جویی کند.</p>
+<p>همچنین توجه کنید که <code>x</code> از انواع پسوندهای مسیر برای پوشه‌های <code>compiler</code>، <code>library</code> و <code>src/tools</code> پشتیبانی می‌کند. بنابراین می‌توانید به‌جای <code>x test src/tools/tidy</code> به‌سادگی <code>x test tidy</code> را اجرا کنید. یا <code>x build std</code> را به‌جای <code>x build library/std</code>.</p>
+<p>برای جزئیات بیشتر، فصل‌های <a href="../tests/running.html">آزمون‌ها</a> و <a href="../rustdoc.html">rustdoc</a> را ببینید.</p>
+<h3 id="building-the-compiler"><a class="header" href="#building-the-compiler">ساخت کامپایلر</a></h3>
+<p>توجه کنید که ساخت به مقدار نسبتاً زیادی فضای ذخیره‌سازی نیاز دارد. ممکن است لازم باشد بیش از ۱۰ یا ۱۵ گیگابایت فضای آزاد برای ساخت کامپایلر داشته باشید.</p>
+<p>پس از ساخت <code>bootstrap.toml</code>، اکنون آمادهٔ اجرای <code>x</code> هستید. گزینه‌های زیادی وجود دارد، اما بیایید با دستوری شروع کنیم که احتمالاً بهترین دستور «اصلی» برای ساخت یک کامپایلر محلی است:</p>
+<pre><code class="language-console">./x build library
+</code></pre>
+<p>کاری که این دستور انجام می‌دهد:</p>
+<ul>
+<li><code>rustc</code> را با کامپایلر stage0 و <code>std</code> مربوط به stage0 می‌سازد.</li>
+<li><code>library</code> (کتابخانه‌های استاندارد) را با کامپایلر stage1 که همین الان ساخته شد می‌سازد.</li>
+<li>یک sysroot کارکن stage1 را که شامل کامپایلر stage1 و کتابخانه‌های استاندارد stage1 است، مونتاژ می‌کند.</li>
+</ul>
+<p>این محصول نهایی (کامپایلر stage1 به‌علاوهٔ کتابخانه‌هایی که با آن کامپایلر ساخته شده‌اند) چیزی است که برای ساخت دیگر برنامه‌های Rust لازم دارید (مگر اینکه از <code>#![no_std]</code> یا <code>#![no_core]</code> استفاده کنید).</p>
+<p>احتمالاً متوجه می‌شوید که ساخت <code>std</code> مربوط به stage1 گلوگاه کار شماست، اما نگران نباشید، یک راه‌حل (نه‌چندان تمیز) وجود دارد… <a href="./suggested.html#faster-rebuilds-with---keep-stage-std">بخش اجتناب از ساخت مجدد std</a> را ببینید.</p>
+<p>گاهی به ساخت کامل نیازی ندارید. وقتی نوعی «بازآرایی مبتنی بر نوع» انجام می‌دهید، مثل تغییر نام یک متد یا تغییر امضای یک تابع، می‌توانید به‌جای آن از <code>./x check</code> برای ساختی بسیار سریع‌تر استفاده کنید.</p>
+<p>توجه کنید که کل این دستور فقط زیرمجموعه‌ای از ساخت کامل <code>rustc</code> را به شما می‌دهد. ساخت <strong>کامل</strong> <code>rustc</code> (آنچه با <code>./x build --stage 2 rustc</code> به دست می‌آید) مراحل بیشتری دارد:</p>
+<ul>
+<li><code>rustc</code> را با کامپایلر stage1 بسازید.
+<ul>
+<li>کامپایلر حاصل در اینجا کامپایلر «stage2» نامیده می‌شود که از <code>std</code> مربوط به stage1 از دستور قبلی استفاده می‌کند.</li>
+</ul>
+</li>
+<li><code>librustdoc</code> و چند چیز دیگر را با کامپایلر stage2 بسازید.</li>
+</ul>
+<p>تقریباً هرگز نیازی به این کار ندارید.</p>
+<h3 id="build-specific-components"><a class="header" href="#build-specific-components">ساخت مؤلفه‌های مشخص</a></h3>
+<p>اگر روی کتابخانهٔ استاندارد کار می‌کنید، احتمالاً نیازی ندارید هر مؤلفهٔ پیش‌فرض دیگری را بسازید. در عوض می‌توانید با ارائهٔ نام یک مؤلفهٔ مشخص آن را بسازید، به این شکل:</p>
+<pre><code class="language-bash">./x build --stage 1 library
+</code></pre>
+<p>اگر هنگام اجرای <code>x setup</code> پروفایل <code>library</code> را انتخاب کنید، می‌توانید <code>--stage 1</code> را حذف کنید (این مقدار پیش‌فرض است).</p>
+<p>اگر می‌خواهید یک ابزار را بسازید، می‌توانید از این دستور استفاده کنید:</p>
+<pre><code class="language-bash">./x build src/tools/cargo
+</code></pre>
+<p>همچنین می‌توانید <a href="../tests/intro.html#tool-tests">بخش آزمون ابزارها</a> را ببینید.</p>
+<h2 id="creating-a-rustup-toolchain"><a class="header" href="#creating-a-rustup-toolchain">ساخت یک toolchain برای rustup</a></h2>
+<p>پس از اینکه <code>rustc</code> را با موفقیت ساختید، تعدادی فایل در پوشهٔ <code>build</code> شما ایجاد شده است. برای اینکه <code>rustc</code> حاصل را واقعاً اجرا کنید، توصیه می‌کنیم toolchainهای rustup بسازید. اولین دستور زیر toolchain مربوط به stage1 را که در مراحل بالا ساخته شد، با نام <code>stage1</code> می‌سازد. دستور دوم toolchain مربوط به stage2 را با استفاده از کامپایلر stage1 می‌سازد. این در آینده در صورت اجرای کل مجموعهٔ آزمون لازم خواهد بود، اما در این صفحه ساخته نمی‌شود. ساخت stage2 با همان دستور <code>./x build</code> که برای stage1 استفاده شد انجام می‌شود، با این تفاوت که مرحله 2 مشخص می‌شود.</p>
+<pre><code class="language-bash">rustup toolchain link stage1 build/host/stage1
+rustup toolchain link stage2 build/host/stage2
+</code></pre>
+<p>اکنون می‌توانید <code>rustc</code> ساخته‌شده را از طریق toolchain اجرا کنید. اگر با <code>-vV</code> اجرا کنید، باید شمارهٔ نسخه‌ای ببینید که به <code>-dev</code> ختم می‌شود و نشان می‌دهد این نسخه از محیط محلی شما ساخته شده است:</p>
+<pre><code class="language-bash">$ rustc +stage1 -vV
+rustc 1.48.0-dev
+binary: rustc
+commit-hash: unknown
+commit-date: unknown
+host: x86_64-unknown-linux-gnu
+release: 1.48.0-dev
+LLVM version: 11.0
+</code></pre>
+<p>toolchain مربوط به rustup به toolchain مشخص‌شده‌ای که در پوشهٔ <code>build</code> شما کامپایل شده اشاره می‌کند، بنابراین هر زمان <code>x build</code> یا <code>x test</code> برای آن toolchain/stage اجرا شود، toolchain مربوط به rustup به‌روز می‌شود.</p>
+<p><strong>توجه:</strong> toolchain ساخته‌شده شامل <code>cargo</code> نیست. در این حالت، <code>rustup</code> به استفاده از <code>cargo</code> موجود در toolchain نصب‌شدهٔ <code>nightly</code>، <code>beta</code> یا <code>stable</code> (به همین ترتیب) بازمی‌گردد. اگر باید از flagهای ناپایدار <code>cargo</code> استفاده کنید، حتماً <code>rustup install nightly</code> را اجرا کنید، در صورتی که هنوز این کار را نکرده‌اید. <a href="https://rust-lang.github.io/rustup/concepts/toolchains.html#custom-toolchains">مستندات rustup دربارهٔ toolchainهای سفارشی</a> را ببینید.</p>
+<p><strong>توجه:</strong> rust-analyzer و افزونهٔ IntelliJ Rust برای کار با proc macroها از مؤلفه‌ای به نام <code>rust-analyzer-proc-macro-srv</code> استفاده می‌کنند. اگر قصد دارید برای یک پروژه از یک toolchain سفارشی استفاده کنید (مثلاً با <code>rustup override set stage1</code>)، ممکن است بخواهید این مؤلفه را بسازید:</p>
+<pre><code class="language-bash">./x build proc-macro-srv-cli
+</code></pre>
+<h2 id="building-targets-for-cross-compilation"><a class="header" href="#building-targets-for-cross-compilation">ساخت هدف‌ها برای کامپایل متقابل</a></h2>
+<p>برای تولید کامپایلری که بتواند برای هدف‌های دیگر کامپایل متقابل (cross-compile) انجام دهد، هر تعداد flag از نوع <code>target</code> را به <code>x build</code> بدهید. برای مثال، اگر پلتفرم میزبان شما <code>x86_64-unknown-linux-gnu</code> است و هدف کامپایل متقابل شما <code>wasm32-wasip1</code> است، می‌توانید این‌طور بسازید:</p>
+<pre><code class="language-bash">./x build --target x86_64-unknown-linux-gnu,wasm32-wasip1
+</code></pre>
+<p>توجه کنید که اگر می‌خواهید کامپایلر حاصل بتواند crateهایی را بسازد که شامل proc macro یا build script هستند، باید حتماً پشتیبانی هدف را برای پلتفرم میزبان (در این مثال <code>x86_64-unknown-linux-gnu</code>) نیز به‌طور صریح بسازید.</p>
+<p>اگر می‌خواهید همیشه برای هدف‌های دیگر ساخت انجام شود بدون اینکه لازم باشد به <code>x build</code> flag بدهید، می‌توانید این را در بخش <code>[build]</code> فایل <code>bootstrap.toml</code> خود به این شکل پیکربندی کنید:</p>
+<pre><code class="language-toml">build.target = ["x86_64-unknown-linux-gnu", "wasm32-wasip1"]
+</code></pre>
+<p>توجه کنید که ساخت برای برخی هدف‌ها مستلزم نصب بودن وابستگی‌های خارجی است (مثلاً ساخت هدف‌های musl به یک نسخهٔ محلی از musl نیاز دارد). هر پیکربندی خاص هدف (مثلاً مسیر نسخهٔ محلی musl) باید در <code>bootstrap.toml</code> شما ارائه شود. برای اطلاعات دربارهٔ کلیدهای پیکربندی خاص هدف، <code>bootstrap.example.toml</code> را ببینید.</p>
+<p>برای نمونه‌هایی از پیکربندی کامل لازم برای ساخت یک هدف، لطفاً از <a href="../../rustc/platform-support.html">کتاب rustc</a> دیدن کنید، هر هدفی را در زیر عنوان «Platform Support» در سمت چپ انتخاب کنید، و به بخش مربوط به ساخت کامپایلر برای آن هدف نگاه کنید. برای هدف‌هایی که صفحهٔ متناظری در کتاب rustc ندارند، ممکن است <a href="../tests/docker.html">بررسی Dockerfileها</a> مفید باشد؛ این فایل‌ها را خود زیرساخت Rust برای راه‌اندازی و پیکربندی کامپایل متقابل به کار می‌برد.</p>
+<p>اگر دستورالعمل‌های بخش قبلی دربارهٔ ساخت toolchain برای rustup را دنبال کرده باشید، پس از ساخت کامپایلر می‌توانید از آن برای کامپایل متقابل به این شکل استفاده کنید:</p>
+<pre><code class="language-bash">cargo +stage1 build --target wasm32-wasip1
+</code></pre>
+<h2 id="other-x-commands"><a class="header" href="#other-x-commands">دیگر دستورهای <code>x</code></a></h2>
+<p>در اینجا چند دستور مفید دیگر <code>x</code> آمده است. برخی از آنها را در بخش‌های دیگر به تفصیل بررسی خواهیم کرد:</p>
+<ul>
+<li>ساخت چیزها:
+<ul>
+<li><code>./x build</code> – همه‌چیز را با کامپایلر stage 1 می‌سازد، نه فقط تا <code>std</code></li>
+<li><code>./x build --stage 2</code> – همه‌چیز را از جمله <code>rustdoc</code> با کامپایلر stage 2 می‌سازد</li>
+</ul>
+</li>
+<li>اجرای آزمون‌ها (برای جزئیات بیشتر <a href="../tests/running.html">بخش اجرای آزمون‌ها</a> را ببینید):
+<ul>
+<li><code>./x test library/std</code> – آزمون‌های واحد و آزمون‌های یکپارچگی <code>std</code> را اجرا می‌کند</li>
+<li><code>./x test tests/ui</code> – مجموعه آزمون <code>ui</code> را اجرا می‌کند</li>
+<li><code>./x test tests/ui/const-generics</code> - همهٔ آزمون‌های زیرپوشهٔ <code>const-generics/</code> از مجموعه آزمون <code>ui</code> را اجرا می‌کند</li>
+<li><code>./x test tests/ui/const-generics/const-types.rs</code> - فقط آزمون <code>const-types.rs</code> را از مجموعه آزمون <code>ui</code> اجرا می‌کند</li>
+</ul>
+</li>
+</ul>
+<h3 id="cleaning-out-build-directories"><a class="header" href="#cleaning-out-build-directories">پاک کردن پوشه‌های ساخت</a></h3>
+<p>گاهی لازم است از صفر شروع کنید، اما معمولاً این‌طور نیست. اگر باید این کار را بکنید، به احتمال زیاد bootstrap درست کار نمی‌کند و باید دربارهٔ مشکل پیش‌آمده یک باگ گزارش کنید. اگر واقعاً لازم است همه‌چیز را پاک کنید، فقط یک دستور کافی است!</p>
+<pre><code class="language-bash">./x clean
+</code></pre>
+<p><code>rm -rf build</code> هم کار می‌کند، اما در این صورت باید LLVM را دوباره بسازید که حتی روی کامپیوترهای سریع هم می‌تواند زمان زیادی ببرد.</p>
+<h2 id="remarks-on-disk-space"><a class="header" href="#remarks-on-disk-space">نکاتی دربارهٔ فضای دیسک</a></h2>
+<p>ساخت کامپایلر (به‌ویژه فراتر از stage 1) می‌تواند به مقدار قابل‌توجهی فضای خالی دیسک نیاز داشته باشد، احتمالاً حدود ۱۰۰ گیگابایت. اگر یک پوشهٔ ساخت جداگانه برای rust-analyzer داشته باشید (مثلاً <code>build-rust-analyzer</code>) این مقدار بیشتر هم می‌شود. رسیدن به این حد در dev-desktopها که برای هر کاربر یک <a href="https://github.com/rust-lang/simpleinfra/blob/8a59e4faeb75a09b072671c74a7cb70160ebef50/ansible/roles/dev-desktop/defaults/main.yml#L7">سهمیهٔ دیسک مشخص</a> دارند آسان است، اما این موضوع در توسعهٔ محلی هم صدق می‌کند. گاهی ممکن است لازم باشد:</p>
+<ul>
+<li>پوشهٔ <code>build/</code> را حذف کنید.</li>
+<li>پوشهٔ <code>build-rust-analyzer/</code> را حذف کنید (اگر یک پوشهٔ ساخت جداگانه برای rust-analyzer دارید).</li>
+<li>toolchainهای غیرضروری را حذف کنید اگر از <code>cargo-bisect-rustc</code> استفاده می‌کنید. با <code>rustup toolchain list</code> می‌توانید ببینید کدام toolchainها نصب شده‌اند.</li>
+</ul><nav class="page-nav"><a href="../about-this-guide.html">→ دربارهٔ این راهنما</a><a href="quickstart.html">شروع سریع ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,121 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Rc&lt;T&gt;، اشاره‌گر هوشمند با شمارش ارجاع — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch15-04-rc"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="rct-the-reference-counted-smart-pointer"><a class="header" href="#rct-the-reference-counted-smart-pointer"><code>Rc&lt;T&gt;</code>، اشاره‌گر (Pointer) هوشمند با شمارش مرجع</a></h2>
+<p>در بیشتر موارد، مالکیت واضح است: شما دقیقاً می‌دانید که کدام متغیر مالک یک مقدار مشخص است. با این حال، در مواردی ممکن است یک مقدار چندین مالک داشته باشد. برای مثال، در ساختارهای داده گراف، چندین یال ممکن است به یک گره اشاره کنند و آن گره از نظر مفهومی متعلق به تمام یال‌هایی است که به آن اشاره دارند. یک گره نباید پاکسازی شود مگر اینکه هیچ یالی به آن اشاره نکند و در نتیجه مالکیتی نداشته باشد.</p>
+<p>برای فعال‌سازی مالکیت چندگانه باید به صورت صریح از نوع <code>Rc&lt;T&gt;</code> در Rust استفاده کنید که مخفف <em>reference counting</em> یا شمارش مرجع است. نوع <code>Rc&lt;T&gt;</code> تعداد مراجعات به یک مقدار را دنبال می‌کند تا مشخص کند که آیا آن مقدار هنوز در حال استفاده است یا خیر. اگر هیچ مرجعی به یک مقدار وجود نداشته باشد، مقدار می‌تواند بدون اینکه هیچ مرجعی نامعتبر شود، پاکسازی شود.</p>
+<p>تصور کنید <code>Rc&lt;T&gt;</code> مانند یک تلویزیون در اتاق نشیمن است. وقتی یک نفر وارد اتاق می‌شود تا تلویزیون تماشا کند، آن را روشن می‌کند. افراد دیگری هم می‌توانند وارد اتاق شوند و تلویزیون تماشا کنند. وقتی آخرین نفر اتاق را ترک می‌کند، تلویزیون را خاموش می‌کند زیرا دیگر استفاده نمی‌شود. اگر کسی تلویزیون را در حالی که دیگران هنوز در حال تماشای آن هستند خاموش کند، اعتراض تماشاگران باقی‌مانده بلند خواهد شد!</p>
+<p>ما از نوع <code>Rc&lt;T&gt;</code> استفاده می‌کنیم وقتی می‌خواهیم مقداری را در هیپ تخصیص دهیم که توسط چندین بخش از برنامه ما خوانده شود و نمی‌توانیم در زمان کامپایل تعیین کنیم که کدام بخش استفاده از داده را زودتر به پایان می‌رساند. اگر می‌دانستیم کدام بخش زودتر تمام می‌شود، می‌توانستیم آن بخش را مالک داده کنیم و قوانین معمول مالکیت که در زمان کامپایل اعمال می‌شود، اعمال می‌شد.</p>
+<p>توجه داشته باشید که <code>Rc&lt;T&gt;</code> فقط برای استفاده در سناریوهای تک‌ریسمانی است. هنگامی که در فصل 16 در مورد هم‌زمانی بحث می‌کنیم، نحوه انجام شمارش مرجع در برنامه‌های چندریسمانی را پوشش خواهیم داد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="using-rct-to-share-data"></a></p>
+<h3 id="sharing-data"><a class="header" href="#sharing-data">اشتراک‌گذاری داده‌ها</a></h3>
+<p>بیایید به مثال لیست cons که در لیست 15-5 دیدیم برگردیم. به خاطر دارید که این لیست را با استفاده از <code>Box&lt;T&gt;</code> تعریف کرده بودیم. این بار، قصد داریم دو لیست ایجاد کنیم که هر دو مالکیت مشترکی از یک لیست سوم داشته باشند. از نظر مفهومی، این ساختار شبیه به تصویر 15-3 است.</p>
+<img alt="A linked list with the label &#39;a&#39; pointing to three elements: the first element contains the integer 5 and points to the second element. The second element contains the integer 10 and points to the third element. The third element contains the value &#39;Nil&#39; that signifies the end of the list; it does not point anywhere. A linked list with the label &#39;b&#39; points to an element that contains the integer 3 and points to the first element of list &#39;a&#39;. A linked list with the label &#39;c&#39; points to an element that contains the integer 4 and also points to the first element of list &#39;a&#39;, so that the tail of lists &#39;b&#39; and &#39;c&#39; are both list &#39;a&#39;" src="img/trpl15-03.svg" class="center">
+<p><span class="caption">شکل 15-3: دو لیست، <code>b</code> و <code>c</code>، که مالکیت یک لیست سوم، <code>a</code> را به اشتراک می‌گذارند</span></p>
+<p>لیست <code>a</code> را می‌سازیم که شامل <code>5</code> و سپس <code>10</code> است. بعد دو لیست دیگر می‌سازیم: <code>b</code> که با <code>3</code> شروع می‌شود و <code>c</code> که با <code>4</code> شروع می‌شود. سپس هر دو لیست <code>b</code> و <code>c</code> به لیست اول <code>a</code> که شامل <code>5</code> و <code>10</code> است ادامه پیدا می‌کنند. به عبارت دیگر، هر دو لیست، لیست اول را که شامل <code>5</code> و <code>10</code> است به اشتراک می‌گذارند.</p>
+<p>تلاش برای پیاده‌سازی این سناریو با استفاده از تعریف فعلی <code>List</code> که از <code>Box&lt;T&gt;</code> استفاده می‌کند، امکان‌پذیر نیست؛ همان‌طور که در لیست 15-17 نشان داده شده است.</p>
+<figure class="listing" id="listing-15-17">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">enum List {
+    Cons(i32, Box&lt;List&gt;),
+    Nil,
+}
+
+use crate::List::{Cons, Nil};
+
+fn main() {
+    let a = Cons(5, Box::new(Cons(10, Box::new(Nil))));
+    let b = Cons(3, Box::new(a));
+    let c = Cons(4, Box::new(a));
+}</code></pre>
+<figcaption><a href="#listing-15-17">لیست ۱۵-۱۷</a>: تلاش برای ساخت دو لیست با &lt;code&gt;&lt;/x-listing&gt;Box&lt;T&gt;&lt;/code&gt; که مالکیت لیست سومی را به اشتراک می‌گذارند</figcaption>
+</figure>
+<p>هنگامی که این کد را کامپایل می‌کنیم، با این خطا مواجه می‌شویم:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling cons-list v0.1.0 (file:///projects/cons-list)
+error[E0382]: use of moved value: `a`
+  --&gt; src/main.rs:11:30
+   |
+ 9 |     let a = Cons(5, Box::new(Cons(10, Box::new(Nil))));
+   |         - move occurs because `a` has type `List`, which does not implement the `Copy` trait
+10 |     let b = Cons(3, Box::new(a));
+   |                              - value moved here
+11 |     let c = Cons(4, Box::new(a));
+   |                              ^ value used here after move
+   |
+note: if `List` implemented `Clone`, you could clone the value
+  --&gt; src/main.rs:1:1
+   |
+ 1 | enum List {
+   | ^^^^^^^^^ consider implementing `Clone` for this type
+...
+10 |     let b = Cons(3, Box::new(a));
+   |                              - you could clone this value
+
+For more information about this error, try `rustc --explain E0382`.
+error: could not compile `cons-list` (bin "cons-list") due to 1 previous error
+</code></pre>
+<p>متغیرهای <code>Cons</code> مالک داده‌هایی هستند که در خود نگه می‌دارند. بنابراین، هنگامی که لیست <code>b</code> را ایجاد می‌کنیم، <code>a</code> به <code>b</code> منتقل می‌شود و <code>b</code> مالک <code>a</code> می‌شود. سپس، هنگامی که سعی می‌کنیم دوباره از <code>a</code> برای ایجاد <code>c</code> استفاده کنیم، این کار مجاز نیست زیرا <code>a</code> قبلاً منتقل شده است.</p>
+<p>ما می‌توانیم تعریف <code>Cons</code> را به گونه‌ای تغییر دهیم که به جای نگهداری داده‌ها، ارجاع به آنها را نگه دارد. اما در این صورت باید پارامترهای طول عمر (lifetime parameters) را مشخص کنیم. با مشخص کردن پارامترهای طول عمر، مشخص می‌کنیم که هر عنصر در لیست حداقل به اندازه کل لیست زنده خواهد بود. این موضوع در مورد عناصر و لیست‌های موجود در لیست 15-17 صدق می‌کند، اما در همه سناریوها چنین نیست.</p>
+<p>در عوض، تعریف <code>List</code> خود را تغییر می‌دهیم تا به جای <code>Box&lt;T&gt;</code> از <code>Rc&lt;T&gt;</code> استفاده کند، همان‌طور که در لیست 15-18 نشان داده شده است. هر متغیر <code>Cons</code> اکنون یک مقدار و یک <code>Rc&lt;T&gt;</code> اشاره‌کننده به یک <code>List</code> را نگه می‌دارد. وقتی <code>b</code> را ایجاد می‌کنیم، به جای تصاحب مالکیت <code>a</code>، <code>Rc&lt;List&gt;</code> که <code>a</code> نگه می‌دارد را کلون می‌کنیم، بنابراین تعداد ارجاعات از یک به دو افزایش می‌یابد و به <code>a</code> و <code>b</code> اجازه می‌دهیم مالکیت داده‌های موجود در آن <code>Rc&lt;List&gt;</code> را به اشتراک بگذارند. همچنین هنگام ایجاد <code>c</code>، <code>a</code> را کلون می‌کنیم و تعداد ارجاعات از دو به سه افزایش می‌یابد. هر بار که <code>Rc::clone</code> را فراخوانی می‌کنیم، تعداد ارجاعات به داده‌های موجود در <code>Rc&lt;List&gt;</code> افزایش می‌یابد و داده‌ها تا زمانی که هیچ ارجاعی به آنها باقی نماند پاک نمی‌شوند.</p>
+<figure class="listing" id="listing-15-18">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">enum List {
+    Cons(i32, Rc&lt;List&gt;),
+    Nil,
+}
+
+use crate::List::{Cons, Nil};
+use std::rc::Rc;
+
+fn main() {
+    let a = Rc::new(Cons(5, Rc::new(Cons(10, Rc::new(Nil)))));
+    let b = Cons(3, Rc::clone(&amp;a));
+    let c = Cons(4, Rc::clone(&amp;a));
+}</code></pre>
+<figcaption><a href="#listing-15-18">لیست ۱۵-۱۸</a>: تعریفی از &lt;code&gt;&lt;/x-listing&gt;List&lt;/code&gt; که از &lt;code&gt;Rc&lt;T&gt;&lt;/code&gt; استفاده می‌کند</figcaption>
+</figure>
+<p>ما نیاز داریم یک دستور <code>use</code> اضافه کنیم تا <code>Rc&lt;T&gt;</code> را وارد دامنه کنیم، زیرا این نوع در prelude قرار ندارد. در تابع <code>main</code>، یک لیست که مقادیر <code>5</code> و <code>10</code> را نگه می‌دارد ایجاد می‌کنیم و آن را در یک <code>Rc&lt;List&gt;</code> جدید به نام <code>a</code> ذخیره می‌کنیم. سپس، زمانی که <code>b</code> و <code>c</code> را می‌سازیم، تابع <code>Rc::clone</code> را فراخوانی می‌کنیم و یک رفرنس به <code>Rc&lt;List&gt;</code> موجود در <code>a</code> را به عنوان آرگومان به آن پاس می‌دهیم.</p>
+<p>می‌توانستیم <code>a.clone()</code> را به جای <code>Rc::clone(&amp;a)</code> فراخوانی کنیم، اما طبق قرارداد Rust در این موارد از <code>Rc::clone</code> استفاده می‌شود. پیاده‌سازی <code>Rc::clone</code> یک کپی عمیق از تمام داده‌ها ایجاد نمی‌کند، همان‌طور که پیاده‌سازی اکثر انواع دیگر <code>clone</code> این کار را انجام می‌دهد. فراخوانی <code>Rc::clone</code> فقط تعداد ارجاعات را افزایش می‌دهد، که زمان زیادی نمی‌برد. کپی عمیق داده‌ها ممکن است زمان زیادی ببرد. با استفاده از <code>Rc::clone</code> برای شمارش مرجع، می‌توانیم بین کپی‌های عمیق و کپی‌هایی که تعداد ارجاعات را افزایش می‌دهند تمایز بصری قائل شویم. هنگام جستجوی مشکلات عملکرد در کد، فقط لازم است به کپی‌های عمیق توجه کنیم و می‌توانیم فراخوانی‌های <code>Rc::clone</code> را نادیده بگیریم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="cloning-an-rct-increases-the-reference-count"></a></p>
+<h3 id="cloning-to-increase-the-reference-count"><a class="header" href="#cloning-to-increase-the-reference-count">کلون کردن برای افزایش شمارندهٔ ارجاع</a></h3>
+<p>اجازه دهید مثال کاری خود را در لیست 15-18 تغییر دهیم تا بتوانیم تغییرات تعداد ارجاعات را هنگام ایجاد و حذف ارجاعات به <code>Rc&lt;List&gt;</code> در <code>a</code> مشاهده کنیم.</p>
+<p>در لیست 15-19، <code>main</code> را تغییر خواهیم داد تا یک محدوده داخلی (inner scope) در اطراف لیست <code>c</code> داشته باشد؛ سپس می‌توانیم ببینیم که چگونه تعداد ارجاعات زمانی که <code>c</code> از محدوده خارج می‌شود تغییر می‌کند.</p>
+<figure class="listing" id="listing-15-19">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">enum List {
+</span><span class="boring">    Cons(i32, Rc&lt;List&gt;),
+</span><span class="boring">    Nil,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">use crate::List::{Cons, Nil};
+</span><span class="boring">use std::rc::Rc;
+</span><span class="boring">
+</span>// --snip--
+
+fn main() {
+    let a = Rc::new(Cons(5, Rc::new(Cons(10, Rc::new(Nil)))));
+    println!("count after creating a = {}", Rc::strong_count(&amp;a));
+    let b = Cons(3, Rc::clone(&amp;a));
+    println!("count after creating b = {}", Rc::strong_count(&amp;a));
+    {
+        let c = Cons(4, Rc::clone(&amp;a));
+        println!("count after creating c = {}", Rc::strong_count(&amp;a));
+    }
+    println!("count after c goes out of scope = {}", Rc::strong_count(&amp;a));
+}</code></pre>
+<figcaption><a href="#listing-15-19">لیست ۱۵-۱۹</a>: چاپ تعداد ارجاعات</figcaption>
+</figure>
+<p>در هر نقطه از برنامه که تعداد ارجاعات تغییر می‌کند، تعداد ارجاعات را چاپ می‌کنیم که از طریق فراخوانی تابع <code>Rc::strong_count</code> دریافت می‌شود. این تابع به جای <code>count</code>، <code>strong_count</code> نام‌گذاری شده است زیرا نوع <code>Rc&lt;T&gt;</code> همچنین دارای <code>weak_count</code> است؛ در بخش <a href="ch15-06-reference-cycles.html#preventing-reference-cycles-turning-an-rct-into-a-weakt">“جلوگیری از چرخه‌های مرجع: تبدیل یک <code>Rc&lt;T&gt;</code> به یک <code>Weak&lt;T&gt;</code>”</a><!-- ignore --> با کاربرد <code>weak_count</code> آشنا خواهیم شد.</p>
+<p>این کد خروجی زیر را تولید می‌کند:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling cons-list v0.1.0 (file:///projects/cons-list)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.45s
+     Running `target/debug/cons-list`
+count after creating a = 1
+count after creating b = 2
+count after creating c = 3
+count after c goes out of scope = 2
+</code></pre>
+<p>می‌بینیم که <code>Rc&lt;List&gt;</code> در <code>a</code> تعداد ارجاع اولیه برابر با 1 دارد؛ سپس هر بار که <code>clone</code> را فراخوانی می‌کنیم، تعداد ارجاعات 1 واحد افزایش می‌یابد. هنگامی که <code>c</code> از محدوده خارج می‌شود، تعداد ارجاعات 1 واحد کاهش می‌یابد. لازم نیست تابعی برای کاهش تعداد ارجاعات فراخوانی کنیم، همان‌طور که باید <code>Rc::clone</code> را برای افزایش تعداد ارجاعات فراخوانی کنیم: پیاده‌سازی ویژگی <code>Drop</code> تعداد ارجاعات را به طور خودکار کاهش می‌دهد وقتی که یک مقدار <code>Rc&lt;T&gt;</code> از محدوده خارج می‌شود.</p>
+<p>آنچه در این مثال نمی‌توانیم ببینیم این است که وقتی <code>b</code> و سپس <code>a</code> در انتهای <code>main</code> از محدوده خارج می‌شوند، تعداد ارجاعات به 0 می‌رسد و <code>Rc&lt;List&gt;</code> به طور کامل پاک‌سازی می‌شود. استفاده از <code>Rc&lt;T&gt;</code> به یک مقدار اجازه می‌دهد که چندین مالک داشته باشد، و تعداد ارجاعات تضمین می‌کند که مقدار تا زمانی که هر یک از مالکان هنوز وجود دارند، معتبر باقی می‌ماند.</p>
+<p>از طریق ارجاعات غیرقابل تغییر، <code>Rc&lt;T&gt;</code> به شما اجازه می‌دهد داده‌ها را بین بخش‌های مختلف برنامه خود برای خواندن به اشتراک بگذارید. اگر <code>Rc&lt;T&gt;</code> به شما اجازه می‌داد که چندین ارجاع قابل تغییر نیز داشته باشید، ممکن بود یکی از قوانین قرض‌گیری که در فصل 4 بحث شد را نقض کنید: چندین قرض قابل تغییر به یک مکان می‌تواند باعث ایجاد تناقضات و مسابقه داده‌ها شود. اما توانایی تغییر داده‌ها بسیار مفید است! در بخش بعدی، به الگوی تغییر‌پذیری داخلی (interior mutability) و نوع <code>RefCell&lt;T&gt;</code> که می‌توانید همراه با <code>Rc&lt;T&gt;</code> برای کار با این محدودیت عدم تغییر‌پذیری استفاده کنید، خواهیم پرداخت.</p><nav class="page-nav"><a href="ch15-03-drop.html">→ اجرای کد هنگام پاک‌سازی با صفت Drop</a><a href="ch15-05-interior-mutability.html">RefCell&lt;T&gt; و الگوی تغییرپذیری درونی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

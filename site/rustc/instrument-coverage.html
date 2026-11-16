@@ -1,0 +1,245 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>پوشش کد مبتنی بر ابزارگذاری — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="instrument-coverage"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="instrumentation-based-code-coverage"><a class="header" href="#instrumentation-based-code-coverage">پوشش کد مبتنی بر ابزارگذاری</a></h1>
+<h2 id="introduction"><a class="header" href="#introduction">مقدمه</a></h2>
+<p>این سند توضیح می‌دهد که چگونه می‌توان پوشش کد مبتنی بر ابزارگذاری (instrumentation) در LLVM را با استفاده از فلگ کامپایلر <code>-C instrument-coverage</code> فعال کرد و به کار برد.</p>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">نحوهٔ کار</a></h2>
+<p>وقتی <code>-C instrument-coverage</code> فعال باشد، کامپایلر Rust کتابخانه‌ها و فایل‌های باینری مبتنی بر Rust را به این صورت بهبود می‌دهد:</p>
+<ul>
+<li>فراخوانی‌های یک intrinsic در LLVM (<a href="https://llvm.org/docs/LangRef.html#llvm-instrprof-increment-intrinsic"><code>llvm.instrprof.increment</code></a>) را به‌طور خودکار در تابع‌ها و شاخه‌های کد کامپایل‌شده درج می‌کند تا هنگام اجرای بخش‌های شرطی کد، شمارنده‌ها افزایش یابند.</li>
+<li>اطلاعات اضافی را در بخش داده (data section) هر کتابخانه و فایل باینری جاسازی می‌کند (با استفاده از <a href="https://llvm.org/docs/CoverageMappingFormat.html">قالب نگاشت پوشش کد LLVM</a> <em>نسخهٔ 5</em>، در صورت کامپایل با LLVM 12، یا <em>نسخهٔ 6</em>، در صورت کامپایل با LLVM 13 یا بالاتر) تا ناحیه‌های کدی (موقعیت‌های آغاز و پایان در کد منبع) را که شمرده می‌شوند تعریف کند.</li>
+</ul>
+<p>وقتی برنامه‌ای که ابزارگذاری پوشش در آن انجام شده اجرا می‌شود، مقادیر شمارنده‌ها هنگام پایان برنامه در یک فایل <code>profraw</code> نوشته می‌شوند. LLVM ابزارهایی را همراه خود ارائه می‌کند که نتایج شمارنده‌ها را می‌خوانند، آن‌ها را با نگاشت پوشش (که در فایل باینری برنامه جاسازی شده است) ترکیب می‌کنند و گزارش‌های پوشش را در قالب‌های گوناگون تولید می‌کنند.</p>
+<blockquote>
+<p><strong>نکته</strong>: <code>-C instrument-coverage</code> همچنین <code>-C symbol-mangling-version=v0</code> را به‌طور خودکار فعال می‌کند (issue پیگیری <a href="https://github.com/rust-lang/rust/issues/60705">#60705</a>). استفاده از mangler نمادهای <code>v0</code> قویاً توصیه می‌شود. demangler نسخهٔ <code>v0</code> را می‌توان با افزودن صریح <code>-Z unstable-options -C symbol-mangling-version=legacy</code> بازنویسی (override) کرد.</p>
+</blockquote>
+<h2 id="enable-coverage-profiling-in-the-rust-compiler"><a class="header" href="#enable-coverage-profiling-in-the-rust-compiler">فعال‌سازی پروفایل‌گیری پوشش در کامپایلر Rust</a></h2>
+<p>پوشش کد مبتنی بر منبع در Rust به «زمان‌اجرای profiler» (profiler runtime) در Rust نیاز دارد. بدون آن، کامپایل با <code>-C instrument-coverage</code> خطایی مبنی بر نبودن زمان‌اجرای profiler تولید می‌کند.</p>
+<p>کانال توزیع <code>nightly</code> در Rust به‌طور پیش‌فرض شامل زمان‌اجرای profiler است.</p>
+<blockquote>
+<p><strong>مهم</strong>: اگر کامپایلر Rust را از توزیع سورس می‌سازید، زمان‌اجرای profiler در فایل پیش‌فرض <code>bootstrap.example.toml</code> فعال <em>نیست</em>. فایل <code>bootstrap.toml</code> خود را ویرایش کنید و مطمئن شوید که feature با نام <code>profiler</code> روی <code>true</code> تنظیم شده است (چه در بخش <code>[build]</code> و چه در تنظیمات یک <code>[target.&lt;triple&gt;]</code> مشخص):</p>
+<pre><code class="language-toml"># Build the profiler runtime (required when compiling with options that depend
+# on this runtime, such as `-C profile-generate` or `-C instrument-coverage`).
+profiler = true
+</code></pre>
+</blockquote>
+<h3 id="building-the-demangler"><a class="header" href="#building-the-demangler">ساخت demangler</a></h3>
+<p>ابزارهای گزارش‌گیری پوشش LLVM نتایجی تولید می‌کنند که می‌توانند شامل نام تابع‌ها و سایر ارجاع‌های نمادین باشند، و نتایج خام پوشش نمادها را با نسخهٔ «mangled» نام نمادهای کامپایلر گزارش می‌کنند که تفسیر آن می‌تواند دشوار باشد. برای دور زدن این مشکل، ابزارهای پوشش LLVM از یک demangler نام نماد مشخص‌شده توسط کاربر نیز پشتیبانی می‌کنند.</p>
+<p>یکی از گزینه‌ها برای demangler مخصوص Rust، <a href="https://crates.io/crates/rustfilt"><code>rustfilt</code></a> است که می‌توان آن را با این دستور نصب کرد:</p>
+<pre><code class="language-shell">cargo install --locked rustfilt
+</code></pre>
+<h2 id="compiling-with-coverage-enabled"><a class="header" href="#compiling-with-coverage-enabled">کامپایل با پوشش فعال</a></h2>
+<p>برای فعال کردن پروفایل‌گیری پوشش کد مبتنی بر منبع در LLVM، فلگ کامپایلر <code>-C instrument-coverage</code> را تنظیم کنید.</p>
+<p>گزینهٔ پیش‌فرض برای همهٔ تابع‌ها پوشش تولید می‌کند، از جمله تابع‌های استفاده‌نشده (که هرگز فراخوانی نمی‌شوند) و جنریک‌ها. این فلگ کامپایلر یک مقدار اختیاری می‌پذیرد تا این رفتار را تنظیم کند. (به <a href="#-c-instrument-coverageoptions"><code>-C instrument-coverage=&lt;options&gt;</code></a> در ادامه مراجعه کنید.)</p>
+<p>با <code>cargo</code> می‌توانید فایل باینری برنامهٔ خود <em>و</em> وابستگی‌ها را هم‌زمان ابزارگذاری کنید.</p>
+<p>برای مثال (اگر Cargo.toml پروژهٔ شما به‌طور پیش‌فرض یک فایل باینری می‌سازد):</p>
+<pre><code class="language-shell">$ cd your-project
+$ cargo clean
+$ RUSTFLAGS="-C instrument-coverage" cargo build
+</code></pre>
+<p>اگر <code>cargo</code> طوری پیکربندی نشده باشد که از نسخهٔ <code>rustc</code> شما که <code>profiler</code> در آن فعال است استفاده کند، مسیر را به‌صورت صریح از طریق متغیر محیطی <code>RUSTC</code> تنظیم کنید. در اینجا مثال دیگری آمده است که از یک ساخت <code>stage1</code> از <code>rustc</code> برای کامپایل یک فایل باینری <code>example</code> (از crate با نام <a href="https://crates.io/crates/json5format"><code>json5format</code></a>) استفاده می‌کند:</p>
+<pre><code class="language-shell">$ RUSTC=$HOME/rust/build/x86_64-unknown-linux-gnu/stage1/bin/rustc \
+    RUSTFLAGS="-C instrument-coverage" \
+    cargo build --example formatjson5
+</code></pre>
+<blockquote>
+<p><strong>نکته</strong>: توجه داشته باشید که برخی گزینه‌های کامپایلر، در ترکیب با <code>-C instrument-coverage</code>، می‌توانند LLVM IR و/یا فایل‌های باینری لینک‌شده‌ای تولید کنند که با نگاشت‌های پوشش LLVM سازگار نیستند. برای مثال، پوشش به ارجاع‌هایی به تابع‌های واقعی در LLVM IR نیاز دارد. اگر هر تابعِ تحت پوشش بهینه‌سازی شده و حذف شود، ممکن است ابزارهای پوشش نتوانند نتایج پوشش را پردازش کنند. اگر لازم است گزینه‌های اضافی را همراه با فعال بودن پوشش ارسال کنید، آن‌ها را زود آزمایش کنید تا مطمئن شوید نتایج پوششی را که انتظار دارید دریافت خواهید کرد.</p>
+</blockquote>
+<h2 id="running-the-instrumented-binary-to-generate-raw-coverage-profiling-data"><a class="header" href="#running-the-instrumented-binary-to-generate-raw-coverage-profiling-data">اجرای فایل باینری ابزارگذاری‌شده برای تولید داده‌های خام پروفایل‌گیری پوشش</a></h2>
+<p>در مثال قبل، <code>cargo</code> فایل باینری ابزارگذاری‌شدهٔ <code>formatjson5</code> را برای پوشش تولید کرد:</p>
+<pre><code class="language-shell">$ echo "{some: 'thing'}" | target/debug/examples/formatjson5 -
+</code></pre>
+<pre><code class="language-json5">{
+    some: "thing",
+}
+</code></pre>
+<p>پس از اجرای این برنامه، باید فایل جدیدی با نامی شبیه <code>default_11699812450447639123_0_20944</code> در دایرکتوری کاری فعلی وجود داشته باشد. هر بار که برنامه اجرا شود، یک نام فایل جدید و یکتا تولید می‌شود تا داده‌های قبلی بازنویسی نشوند.</p>
+<pre><code class="language-shell">$ echo "{some: 'thing'}" | target/debug/examples/formatjson5 -
+...
+$ ls default_*.profraw
+default_11699812450447639123_0_20944.profraw
+</code></pre>
+<p>همچنین می‌توانید با استفاده از متغیر محیطی <code>LLVM_PROFILE_FILE</code> نام یا مسیر مشخصی برای فایل‌های <code>.profraw</code> تولیدشده تعیین کنید:</p>
+<pre><code class="language-shell">$ echo "{some: 'thing'}" \
+    | LLVM_PROFILE_FILE="formatjson5.profraw" target/debug/examples/formatjson5 -
+...
+$ ls formatjson5.profraw
+formatjson5.profraw
+</code></pre>
+<p>اگر <code>LLVM_PROFILE_FILE</code> شامل مسیری به یک دایرکتوری ناموجود باشد، ساختار دایرکتوری گم‌شده ایجاد می‌شود. افزون بر این، رشته‌های الگوی ویژهٔ زیر بازنویسی می‌شوند:</p>
+<ul>
+<li><code>%p</code> - شناسهٔ فرایند (process ID).</li>
+<li><code>%h</code> - نام میزبان (hostname) ماشینی که برنامه را اجرا می‌کند.</li>
+<li><code>%t</code> - مقدار متغیر محیطی TMPDIR.</li>
+<li><code>%Nm</code> - امضای فایل باینری ابزارگذاری‌شده: زمان‌اجرا مجموعه‌ای (pool) از N پروفایل خام ایجاد می‌کند که برای ادغام برخط پروفایل‌ها استفاده می‌شود. زمان‌اجرا پیش از خروج برنامه، انتخاب یک پروفایل خام از این مجموعه، قفل کردن آن و به‌روزرسانی آن را بر عهده می‌گیرد. <code>N</code> باید بین <code>1</code> و <code>9</code> باشد و در صورت حذف (یعنی فقط <code>%m</code>) پیش‌فرض آن <code>1</code> است.</li>
+<li><code>%c</code> - چیزی به نام فایل اضافه نمی‌کند، اما حالتی را فعال می‌کند (در برخی پلتفرم‌ها، از جمله Darwin) که در آن به‌روزرسانی‌های شمارندهٔ پروفایل به‌طور پیوسته با یک فایل همگام می‌شوند. این یعنی اگر برنامهٔ ابزارگذاری‌شده از کار بیفتد یا با یک سیگنال کشته شود، همچنان می‌توان اطلاعات پوشش کامل را بازیابی کرد.</li>
+</ul>
+<p>در مثال اول بالا، مقدار <code>11699812450447639123_0</code> در نام فایل تولیدشده، امضای فایل باینری ابزارگذاری‌شده است که جایگزین الگوی <code>%m</code> شده است، و مقدار <code>20944</code> شناسهٔ فرایند فایل باینری در حال اجراست.</p>
+<h2 id="installing-llvm-coverage-tools"><a class="header" href="#installing-llvm-coverage-tools">نصب ابزارهای پوشش LLVM</a></h2>
+<p>LLVM دو ابزار به نام‌های <code>llvm-profdata</code> و <code>llvm-cov</code> ارائه می‌کند که داده‌های پوشش را پردازش می‌کنند و گزارش تولید می‌کنند. راه‌های متعددی برای یافتن و/یا نصب این ابزارها وجود دارد، اما توجه داشته باشید که داده‌های نگاشت پوشش تولیدشده توسط کامپایلر Rust به LLVM نسخهٔ 12 یا بالاتر نیاز دارد، و پردازش داده‌های <em>خام</em> ممکن است دقیقاً به همان نسخهٔ LLVM مورد استفادهٔ کامپایلر نیاز داشته باشد. (دستور <code>llvm-cov --version</code> معمولاً شمارهٔ نسخهٔ LLVM ابزار را نشان می‌دهد و <code>rustc --verbose --version</code> نسخهٔ LLVM مورد استفادهٔ کامپایلر Rust را نشان می‌دهد.)</p>
+<ul>
+<li>می‌توانید نسخه‌های سازگار این ابزارها را از طریق مؤلفهٔ <code>llvm-tools-preview</code> در <code>rustup</code> نصب کنید. این مؤلفه مسیر توصیه‌شده است، هرچند ابزارهای مشخص در دسترس و رابط آن‌ها در حال حاضر مشمول تضمین‌های پایداری معمول Rust نیستند. در این حالت ممکن است <code>cargo-binutils</code> را نیز به‌عنوان پوششی (wrapper) روی این ابزارها مفید بیابید.</li>
+<li>می‌توانید نسخهٔ سازگاری از ابزارهای LLVM را از توزیع سیستم‌عامل خود یا از توزیع LLVM خود نصب کنید.</li>
+<li>اگر کامپایلر Rust را از سورس می‌سازید، می‌توانید به‌صورت اختیاری از ابزارهای LLVM همراه آن استفاده کنید که از سورس ساخته شده‌اند. فایل‌های باینری این ابزارها را معمولاً می‌توان در دایرکتوری پلتفرم ساخت خود در مسیری شبیه این یافت: <code>rust/build/x86_64-unknown-linux-gnu/llvm/bin/llvm-*</code>.</li>
+</ul>
+<p>مثال‌های این سند نشان می‌دهند که چگونه می‌توان از ابزارهای llvm به‌طور مستقیم استفاده کرد.</p>
+<h2 id="creating-coverage-reports"><a class="header" href="#creating-coverage-reports">ایجاد گزارش‌های پوشش</a></h2>
+<p>پروفایل‌های خام باید پیش از آنکه برای تولید گزارش‌های پوشش استفاده شوند، ایندکس شوند. این کار با <a href="https://llvm.org/docs/CommandGuide/llvm-profdata.html#profdata-merge"><code>llvm-profdata merge</code></a> انجام می‌شود که می‌تواند چندین پروفایل خام را ترکیب کند و هم‌زمان آن‌ها را ایندکس کند:</p>
+<pre><code class="language-shell">$ llvm-profdata merge -sparse formatjson5.profraw -o formatjson5.profdata
+</code></pre>
+<p>سرانجام، فایل <code>.profdata</code> در ترکیب با نگاشت پوشش (از فایل باینری برنامه) برای تولید گزارش‌های پوشش استفاده می‌شود: با <a href="https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-report"><code>llvm-cov report</code></a> برای خلاصه‌های پوشش، و با <a href="https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-show"><code>llvm-cov show</code></a> برای دیدن پوشش دقیق خطوط و ناحیه‌ها (بازه‌های نویسه) که روی کد منبع اصلی نمایش داده می‌شوند.</p>
+<p>این دستورها گزینه‌های متعددی برای نمایش و فیلتر کردن دارند. برای مثال:</p>
+<pre><code class="language-shell">$ llvm-cov show -Xdemangler=rustfilt target/debug/examples/formatjson5 \
+    -instr-profile=formatjson5.profdata \
+    -show-line-counts-or-regions \
+    -show-instantiations \
+    -name=add_quoted_string
+</code></pre>
+<img alt="تصویر صفحه از نمونه‌ای از نتیجهٔ llvm-cov show برای تابع add_quoted_string" src="images/llvm-cov-show-01.png" class="center" />
+<br />
+<br />
+<p>برخی از گزینه‌های مهم‌تر در این مثال عبارتند از:</p>
+<ul>
+<li><code>--Xdemangler=rustfilt</code> - نام دستور یا مسیری که برای demangle کردن نمادهای Rust استفاده می‌شود (در این مثال <code>rustfilt</code>)</li>
+<li><code>target/debug/examples/formatjson5</code> - فایل باینری ابزارگذاری‌شده (که نگاشت پوشش از آن استخراج می‌شود)</li>
+<li><code>--instr-profile=&lt;path-to-file&gt;.profdata</code> - مکان فایل <code>.profdata</code> ایجادشده توسط <code>llvm-profdata merge</code> (از فایل <code>.profraw</code> تولیدشده توسط فایل باینری ابزارگذاری‌شده)</li>
+<li><code>--name=&lt;exact-function-name&gt;</code> - برای نمایش پوشش یک تابع مشخص (یا استفاده از یک گزینهٔ فیلتر دیگر، مانند <code>--name-regex=&lt;pattern&gt;</code>)</li>
+</ul>
+<blockquote>
+<p><strong>نکته</strong>: پوشش را می‌توان روی یک تابع مشخص نیز با حاشیه‌نویسی تابع با [attribute ‏<code>coverage(off)</code>] غیرفعال کرد (که به فلگ feature با نام <code>#![feature(coverage)]</code> نیاز دارد).</p>
+</blockquote>
+<h2 id="interpreting-reports"><a class="header" href="#interpreting-reports">تفسیر گزارش‌ها</a></h2>
+<p>در خلاصهٔ پوشش، چهار آمار دنبال می‌شود:</p>
+<ul>
+<li>پوشش تابع (Function coverage) درصد تابع‌هایی است که دست‌کم یک بار اجرا شده‌اند. اگر هر یک از نمونه‌سازی‌های یک تابع اجرا شود، آن تابع اجراشده در نظر گرفته می‌شود.</li>
+<li>پوشش نمونه‌سازی (Instantiation coverage) درصد نمونه‌سازی‌های تابع است که دست‌کم یک بار اجرا شده‌اند. تابع‌های جنریک و تابع‌های تولیدشده از ماکروها دو نوع تابع هستند که ممکن است چندین نمونه‌سازی داشته باشند.</li>
+<li>پوشش خط (Line coverage) درصد خطوط کد است که دست‌کم یک بار اجرا شده‌اند. فقط خطوط اجرایی درون بدنهٔ تابع‌ها خطوط کد در نظر گرفته می‌شوند.</li>
+<li>پوشش ناحیه (Region coverage) درصد ناحیه‌های کد است که دست‌کم یک بار اجرا شده‌اند. یک ناحیهٔ کد ممکن است چند خط را دربر بگیرد: برای مثال، در بدنهٔ یک تابع بزرگ بدون جریان کنترل. در موارد دیگر، یک خط می‌تواند چندین ناحیهٔ کد داشته باشد: <code>return x || (y &amp;&amp; z)</code> ناحیه‌های کد قابل‌شمارشی برای <code>x</code> (که ممکن است عبارت را حل کند، اگر <code>x</code> برابر <code>true</code> باشد)، <code>|| (y &amp;&amp; z)</code> (که فقط در صورتی اجرا می‌شود که <code>x</code> برابر <code>false</code> بوده باشد) و <code>return</code> (که در هر دو وضعیت اجرا می‌شود) دارد.</li>
+</ul>
+<p>از میان این چهار آمار، پوشش تابع معمولاً کم‌جزئیات‌ترین و پوشش ناحیه جزئی‌ترین است. مجموع‌های کل پروژه برای هر آمار در خلاصه فهرست شده‌اند.</p>
+<h2 id="test-coverage"><a class="header" href="#test-coverage">پوشش آزمون</a></h2>
+<p>یکی از کاربردهای معمول تحلیل پوشش، پوشش آزمون است. ابزارهای پوشش مبتنی بر منبع در Rust هم می‌توانند پوشش کد آزمون‌های شما را به‌صورت درصد اندازه بگیرند و هم تابع‌ها و شاخه‌هایی را که آزمون نشده‌اند مشخص کنند.</p>
+<p>مثال زیر (با استفاده از crate با نام <a href="https://crates.io/crates/json5format"><code>json5format</code></a>، برای نمایش) نشان می‌دهد که چگونه می‌توان نتایج پوشش را برای همهٔ آزمون‌های یک crate تولید و تحلیل کرد.</p>
+<p>از آنجا که <code>cargo test</code> هم آزمون‌ها را می‌سازد و هم اجرا می‌کند، <code>RUSTFLAGS</code> اضافی را تنظیم می‌کنیم تا فلگ <code>-C instrument-coverage</code> را اضافه کند.</p>
+<pre><code class="language-shell">$ RUSTFLAGS="-C instrument-coverage" \
+    cargo test --tests
+</code></pre>
+<blockquote>
+<p><strong>نکته</strong>: مقدار پیش‌فرض <code>LLVM_PROFILE_FILE</code> برابر <code>default_%m_%p.profraw</code> است. نسخه‌های پیش از 1.65 مقدار پیش‌فرض <code>default.profraw</code> داشتند، بنابراین اگر از آن نسخه‌های قدیمی‌تر استفاده می‌کنید، توصیه می‌شود <code>LLVM_PROFILE_FILE="default_%m_%p.profraw"</code> را به‌صورت صریح تنظیم کنید تا از بازنویسی فایل‌های <code>.profraw</code> توسط چندین آزمون جلوگیری شود.</p>
+</blockquote>
+<p>مسیرهای فایل باینری آزمون را که در خروجی آزمون پس از کلمهٔ «<code>Running</code>» نمایش داده می‌شوند یادداشت کنید:</p>
+<pre><code class="language-text">   ...
+   Compiling json5format v0.1.3 ($HOME/json5format)
+    Finished test [unoptimized + debuginfo] target(s) in 14.60s
+
+     Running target/debug/deps/json5format-fececd4653271682
+running 25 tests
+...
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+     Running target/debug/deps/lib-30768f9c53506dc5
+running 31 tests
+...
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+</code></pre>
+<p>اکنون باید یک یا چند فایل <code>.profraw</code> داشته باشید، یکی برای هر فایل باینری آزمون. برای ادغام آن‌ها ابزار <code>profdata</code> را اجرا کنید:</p>
+<pre><code class="language-shell">$ llvm-profdata merge -sparse default_*.profraw -o json5format.profdata
+</code></pre>
+<p>سپس ابزار <code>cov</code> را با فایل <code>profdata</code> و همهٔ فایل‌های باینری آزمون اجرا کنید:</p>
+<pre><code class="language-shell">$ llvm-cov report \
+    --use-color --ignore-filename-regex='/.cargo/registry' \
+    --instr-profile=json5format.profdata \
+    --object target/debug/deps/lib-30768f9c53506dc5 \
+    --object target/debug/deps/json5format-fececd4653271682
+$ llvm-cov show \
+    --use-color --ignore-filename-regex='/.cargo/registry' \
+    --instr-profile=json5format.profdata \
+    --object target/debug/deps/lib-30768f9c53506dc5 \
+    --object target/debug/deps/json5format-fececd4653271682 \
+    --show-instantiations --show-line-counts-or-regions \
+    --Xdemangler=rustfilt | less -R
+</code></pre>
+<blockquote>
+<p><strong>نکته</strong>: اگر نام پیش‌فرض فایل <code>profraw</code> را از طریق متغیر محیطی <code>LLVM_PROFILE_FILE</code> بازنویسی می‌کنید، قویاً توصیه می‌شود از رشته‌های الگوی ویژهٔ <code>%m</code> و <code>%p</code> استفاده کنید تا در صورتی که بیش از یک فایل باینری آزمون اجرا می‌شود، نام‌های فایل یکتا تولید شوند.</p>
+</blockquote>
+<blockquote>
+<p><strong>نکته</strong>: گزینهٔ خط فرمان <code>--ignore-filename-regex=/.cargo/registry</code> سورس وابستگی‌ها را از نتایج پوشش حذف می‌کند._</p>
+</blockquote>
+<h3 id="tips-for-listing-the-binaries-automatically"><a class="header" href="#tips-for-listing-the-binaries-automatically">نکاتی برای فهرست کردن خودکار فایل‌های باینری</a></h3>
+<p>برای کاربران <code>bash</code>، یک روش پیشنهادی برای تکمیل خودکار دستور <code>cov</code> با فهرست فایل‌های باینری، استفاده از دستوری مانند این است:</p>
+<pre><code class="language-bash">$ llvm-cov report \
+    $( \
+      for file in \
+        $( \
+          RUSTFLAGS="-C instrument-coverage" \
+            cargo test --tests --no-run --message-format=json \
+              | jq -r "select(.profile.test == true) | .filenames[]" \
+              | grep -v dSYM - \
+        ); \
+      do \
+        printf "%s %s " -object $file; \
+      done \
+    ) \
+  --instr-profile=json5format.profdata --summary-only # and/or other options
+</code></pre>
+<p>افزودن <code>--no-run --message-format=json</code> به همان دستور <code>cargo test</code> که برای اجرای آزمون‌ها استفاده شده است (از جمله همان متغیرهای محیطی و فلگ‌ها)، خروجی‌ای در قالب JSON تولید می‌کند که <code>jq</code> به‌راحتی می‌تواند آن را پرس‌وجو کند.</p>
+<p>دستور <code>printf</code> این فهرست را می‌گیرد و آرگومان‌های <code>--object &lt;binary&gt;</code> را برای هر فایل باینری آزمونِ فهرست‌شده تولید می‌کند.</p>
+<h3 id="including-doc-tests"><a class="header" href="#including-doc-tests">شامل کردن آزمون‌های مستندات</a></h3>
+<p>مثال‌های قبلی <code>cargo test</code> را با <code>--tests</code> اجرا می‌کنند که آزمون‌های مستندات (doc test) را کنار می‌گذارد.<sup class="footnote-reference" id="fr-79417-1"><a href="#footnote-79417">1</a></sup></p>
+<p>برای شامل کردن آزمون‌های مستندات در نتایج پوشش، فلگ <code>--tests</code> را حذف کنید، و فلگ <code>-C instrument-coverage</code> و برخی گزینه‌های مخصوص آزمون‌های مستندات را در متغیر محیطی <code>RUSTDOCFLAGS</code> اعمال کنید. (دستور <code>llvm-profdata</code> تغییری نمی‌کند.)</p>
+<pre><code class="language-bash">$ RUSTFLAGS="-C instrument-coverage" \
+  RUSTDOCFLAGS="-C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins" \
+    cargo test
+$ llvm-profdata merge -sparse default_*.profraw -o json5format.profdata
+</code></pre>
+<p>فلگ <code>-Z unstable-options --persist-doctests</code> برای ذخیرهٔ فایل‌های باینری آزمون (همراه با نگاشت‌های پوششی آن‌ها) برای <code>llvm-cov</code> لازم است.</p>
+<pre><code class="language-bash">$ llvm-cov report \
+    $( \
+      for file in \
+        $( \
+          RUSTFLAGS="-C instrument-coverage" \
+          RUSTDOCFLAGS="-C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins" \
+            cargo test --no-run --message-format=json \
+              | jq -r "select(.profile.test == true) | .filenames[]" \
+              | grep -v dSYM - \
+        ) \
+        target/debug/doctestbins/*/rust_out; \
+      do \
+        [[ -x $file ]] &amp;&amp; printf "%s %s " -object $file; \
+      done \
+    ) \
+  --instr-profile=json5format.profdata --summary-only # and/or other options
+</code></pre>
+<blockquote>
+<p><strong>نکته</strong>: تفاوت‌های این فراخوانی <code>llvm-cov</code> در مقایسه با نسخهٔ بدون آزمون‌های مستندات عبارتند از:</p>
+</blockquote>
+<ul>
+<li>دستور <code>cargo test ... --no-run</code> با همان متغیرهای محیطی و فلگ‌هایی که برای <em>ساخت</em> آزمون‌ها، <em>از جمله</em> آزمون‌های مستندات، استفاده شده‌اند به‌روزرسانی می‌شود.</li>
+<li>الگوی glob فایل <code>target/debug/doctestbins/*/rust_out</code> فایل‌های باینری <code>rust_out</code> تولیدشده برای آزمون‌های مستندات را اضافه می‌کند (البته توجه داشته باشید که برخی از فایل‌های <code>rust_out</code> ممکن است فایل باینری اجرایی نباشند).</li>
+<li><code>[[ -x $file ]] &amp;&amp;</code> فایل‌هایی را که به <code>printf</code> منتقل می‌شوند فیلتر می‌کند تا فقط فایل‌های باینری اجرایی را شامل شود.</li>
+</ul>
+<h2 id="-c-instrument-coverageoptions"><a class="header" href="#-c-instrument-coverageoptions"><code>-C instrument-coverage=&lt;options&gt;</code></a></h2>
+<ul>
+<li><code>-C instrument-coverage=no</code> (یا <code>n</code>/<code>off</code>/<code>false</code>): ابزارگذاری پوشش را فعال نکن. هیچ تابعی برای پوشش ابزارگذاری نمی‌شود.
+<ul>
+<li>این معادل استفاده نکردن از فلگ <code>-C instrument-coverage</code> است.</li>
+</ul>
+</li>
+<li><code>-C instrument-coverage=yes</code> (یا <code>y</code>/<code>on</code>/<code>true</code>): ابزارگذاری پوشش را با رفتار پیش‌فرض فعال کن. در حال حاضر همهٔ تابع‌ها، از جمله تابع‌های استفاده‌نشده و جنریک‌های استفاده‌نشده، ابزارگذاری می‌شوند.
+<ul>
+<li>این معادل <code>-C instrument-coverage</code> بدون مقدار است.</li>
+</ul>
+</li>
+</ul>
+<h3 id="other-values"><a class="header" href="#other-values">سایر مقادیر</a></h3>
+<ul>
+<li><code>-C instrument-coverage=all</code>: در حال حاضر نام مستعاری برای <code>yes</code> است، اما اگر گزینه‌های پوشش ریزدانه‌تری اضافه شوند، ممکن است در آینده رفتار متفاوتی داشته باشد. استفاده از این مقدار در حال حاضر توصیه نمی‌شود.</li>
+</ul>
+<h2 id="-z-coverage-optionsoptions"><a class="header" href="#-z-coverage-optionsoptions"><code>-Z coverage-options=&lt;options&gt;</code></a></h2>
+<p><a href="../unstable/compiler-flags/coverage-options.html">این گزینهٔ ناپایدار در کتاب قابلیت‌های ناپایدار توضیح داده شده است.</a></p>
+<h2 id="other-references"><a class="header" href="#other-references">سایر منابع</a></h2>
+<p>پیاده‌سازی و گردش‌کار پوشش کد مبتنی بر منبع در Rust بر پایهٔ همان کتابخانه و ابزارهایی است که برای پیاده‌سازی <a href="https://clang.llvm.org/docs/SourceBasedCodeCoverage.html">پوشش کد مبتنی بر منبع در Clang</a> استفاده می‌شوند. (این سند تا حدی بر اساس راهنمای Clang نوشته شده است.)</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-79417">
+<p>کار در حال انجامی برای رفع یک مشکل شناخته‌شده <a href="https://github.com/rust-lang/rust/issues/79417">(#79417)</a> وجود دارد که طبق آن پوشش آزمون‌های مستندات در نتایج <code>llvm-cov show</code> شمارهٔ خط‌های نادرست منبع تولید می‌کند. <a href="#fr-79417-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="profile-guided-optimization.html">→ بهینه‌سازی مبتنی بر پروفایل</a><a href="linker-plugin-lto.html">LTO مبتنی بر افزونهٔ پیونددهنده ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

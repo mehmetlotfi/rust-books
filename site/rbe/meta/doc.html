@@ -1,0 +1,80 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>مستندسازی — Rust با مثال</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="meta/doc"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../rbe/index.html" style="color:inherit;text-decoration:none">Rust با مثال</a><small class="en-title" dir="ltr">Rust By Example</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="documentation"><a class="header" href="#documentation">مستندسازی</a></h1>
+<p>با <code>cargo doc</code> مستندات را در <code>target/doc</code> بسازید؛ <code>cargo doc --open</code> آن را خودکار در مرورگر باز می‌کند.</p>
+<p>برای اجرای همهٔ آزمون‌ها، از جمله آزمون مستندات، <code>cargo test</code> و فقط برای آزمون مستندات <code>cargo test --doc</code> را اجرا کنید.</p>
+<p>این فرمان‌ها در صورت نیاز <code>rustdoc</code> (و <code>rustc</code>) را به‌درستی فراخوانی می‌کنند.</p>
+<h2 id="doc-comments"><a class="header" href="#doc-comments">توضیحات مستندات</a></h2>
+<p>توضیحات مستندات برای پروژه‌های بزرگ بسیار سودمندند. هنگام اجرای <code>rustdoc</code> همین توضیحات به مستندات کامپایل می‌شوند. با <code>///</code> مشخص می‌شوند و از <a href="https://en.wikipedia.org/wiki/Markdown">Markdown</a> پشتیبانی می‌کنند.</p>
+<pre><code class="language-rust editable ignore">#![crate_name = "doc"]
+
+/// A human being is represented here
+pub struct Person {
+    /// A person must have a name, no matter how much Juliet may hate it
+    name: String,
+}
+
+impl Person {
+    /// Creates a person with the given name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // You can have rust code between fences inside the comments
+    /// // If you pass --test to `rustdoc`, it will even test it for you!
+    /// use doc::Person;
+    /// let person = Person::new("name");
+    /// ```
+    pub fn new(name: &amp;str) -&gt; Person {
+        Person {
+            name: name.to_string(),
+        }
+    }
+
+    /// Gives a friendly hello!
+    ///
+    /// Says "Hello, [name](Person::name)" to the `Person` it is called on.
+    pub fn hello(&amp;self) {
+        println!("Hello, {}!", self.name);
+    }
+}
+
+fn main() {
+    let john = Person::new("John");
+
+    john.hello();
+}</code></pre>
+<p>برای اجرای آزمون‌ها، ابتدا کد را به‌صورت کتابخانه بسازید و سپس محل کتابخانه را به <code>rustdoc</code> بگویید تا آن را به هر برنامهٔ doctest پیوند دهد:</p>
+<pre><code class="language-shell">$ rustc doc.rs --crate-type lib
+$ rustdoc --test --extern doc="libdoc.rlib" doc.rs
+</code></pre>
+<h2 id="doc-attributes"><a class="header" href="#doc-attributes">ویژگی‌های مستندات</a></h2>
+<p>در ادامه چند نمونه از رایج‌ترین ویژگی‌های <code>#[doc]</code> در <code>rustdoc</code> آمده است.</p>
+<h3 id="inline"><a class="header" href="#inline"><code>inline</code></a></h3>
+<p>مستندات را به‌جای پیوند به صفحه‌ای جدا، درجا قرار می‌دهد.</p>
+<pre><code class="language-rust ignore">#[doc(inline)]
+pub use bar::Bar;
+
+/// bar docs
+pub mod bar {
+    /// the docs for Bar
+    pub struct Bar;
+}</code></pre>
+<h3 id="no_inline"><a class="header" href="#no_inline"><code>no_inline</code></a></h3>
+<p>از پیوند دادن به صفحه‌ای جدا یا هر جای دیگر جلوگیری می‌کند.</p>
+<pre><code class="language-rust ignore">// Example from libcore/prelude
+#[doc(no_inline)]
+pub use crate::mem::drop;</code></pre>
+<h3 id="hidden"><a class="header" href="#hidden"><code>hidden</code></a></h3>
+<p>به <code>rustdoc</code> می‌گوید این مورد را در مستندات نیاورد:</p>
+<pre><code class="language-rust editable ignore">// Example from the futures-rs library
+#[doc(hidden)]
+pub use self::async_await::*;</code></pre>
+<p>جامعه به‌طور گسترده از <code>rustdoc</code> استفاده می‌کند و <a href="https://doc.rust-lang.org/std/">مستندات کتابخانهٔ std</a> نیز با آن تولید می‌شود.</p>
+<h3 id="see-also"><a class="header" href="#see-also">همچنین ببینید</a></h3>
+<ul>
+<li><a href="../../book/ch14-02-publishing-to-crates-io.html#making-useful-documentation-comments">کتاب راست: نوشتن توضیحات مستندسازی مفید</a></li>
+<li><a href="https://doc.rust-lang.org/rustdoc/index.html">کتاب rustdoc</a></li>
+<li><a href="../../reference/comments.html#doc-comments">مرجع: توضیحات مستندسازی</a></li>
+<li><a href="https://rust-lang.github.io/rfcs/1574-more-api-documentation-conventions.html#appendix-a-full-conventions-text">RFC 1574: قراردادهای مستندسازی API</a></li>
+<li><a href="https://rust-lang.github.io/rfcs/1946-intra-rustdoc-links.html">RFC 1946: پیوندهای نسبی به موارد دیگر از درون توضیحات مستندسازی (پیوندهای intra-rustdoc)</a></li>
+<li><a href="https://www.reddit.com/r/rust/comments/ahb50s/is_there_any_documentation_style_guide_for/">آیا برای توضیحات، راهنمای سبک مستندسازی وجود دارد؟ (reddit)</a></li>
+</ul><nav class="page-nav"><a href="../../rbe/meta.html">→ فرامباحث (Meta)</a><a href="../../rbe/meta/playground.html">محیط آزمایش (Playground) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rbe/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

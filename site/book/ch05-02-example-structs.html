@@ -1,0 +1,201 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>یک برنامهٔ نمونه با استفاده از ساختارها — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch05-02-example-structs"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="an-example-program-using-structs"><a class="header" href="#an-example-program-using-structs">یک برنامه نمونه با استفاده از ساختارها</a></h2>
+<p>برای اینکه بفهمیم چه زمانی ممکن است بخواهیم از ساختارها استفاده کنیم، برنامه‌ای می‌نویسیم که مساحت یک مستطیل را محاسبه می‌کند. کار را با استفاده از متغیرهای جداگانه شروع می‌کنیم و سپس برنامه را بازآرایی (refactor) می‌کنیم تا در نهایت به‌جای آن‌ها از ساختارها استفاده کنیم.</p>
+<p>بیایید با Cargo یک پروژه باینری جدید به نام <em>rectangles</em> بسازیم که عرض و ارتفاع یک مستطیل را بر حسب پیکسل دریافت کند و مساحت آن را محاسبه کند. لیست ۵-۸ برنامه‌ای کوتاه را نشان می‌دهد که دقیقاً همین کار را به یک روش در فایل <em>src/main.rs</em> پروژه ما انجام می‌دهد.</p>
+<figure class="listing" id="listing-5-8">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let width1 = 30;
+    let height1 = 50;
+
+    println!(
+        "The area of the rectangle is {} square pixels.",
+        area(width1, height1)
+    );
+}
+
+fn area(width: u32, height: u32) -&gt; u32 {
+    width * height
+}</code></pre>
+<figcaption><a href="#listing-5-8">لیست ۵-۸</a>: محاسبه مساحت یک مستطیل که با متغیرهای جداگانه‌ی عرض و ارتفاع مشخص شده است</figcaption>
+</figure>
+<p>حالا این برنامه را با <code>cargo run</code> اجرا کنید:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling rectangles v0.1.0 (file:///projects/rectangles)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.42s
+     Running `target/debug/rectangles`
+The area of the rectangle is 1500 square pixels.
+</code></pre>
+<p>این کد با فراخوانی تابع <code>area</code> برای هر یک از ابعاد، با موفقیت مساحت مستطیل را به دست می‌آورد، اما می‌توانیم کارهای بیشتری انجام دهیم تا این کد واضح‌تر و خواناتر شود.</p>
+<p>مشکل این کد در امضای تابع <code>area</code> آشکار است:</p>
+<pre><code class="language-rust ignore"><span class="boring">fn main() {
+</span><span class="boring">    let width1 = 30;
+</span><span class="boring">    let height1 = 50;
+</span><span class="boring">
+</span><span class="boring">    println!(
+</span><span class="boring">        "The area of the rectangle is {} square pixels.",
+</span><span class="boring">        area(width1, height1)
+</span><span class="boring">    );
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn area(width: u32, height: u32) -&gt; u32 {
+<span class="boring">    width * height
+</span><span class="boring">}</span></code></pre>
+<p>تابع <code>area</code> قرار است مساحت یک مستطیل را محاسبه کند، اما تابعی که نوشتیم دو پارامتر دارد و در هیچ جای برنامه‌ی ما روشن نیست که این پارامترها به هم مرتبط هستند. گروه‌بندی عرض و ارتفاع در کنار یکدیگر، هم خواناتر و هم قابل‌مدیریت‌تر خواهد بود. پیش‌تر در بخش <a href="ch03-02-data-types.html#the-tuple-type">«نوع تاپل»</a><!-- ignore --> از فصل ۳ یک راه برای انجام این کار را بررسی کردیم: استفاده از تاپل‌ها.</p>
+<h3 id="refactoring-with-tuples"><a class="header" href="#refactoring-with-tuples">بازآرایی با تاپل‌ها</a></h3>
+<p>لیست ۵-۹ نسخه‌ی دیگری از برنامه‌ی ما را نشان می‌دهد که از تاپل‌ها استفاده می‌کند.</p>
+<figure class="listing" id="listing-5-9">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let rect1 = (30, 50);
+
+    println!(
+        "The area of the rectangle is {} square pixels.",
+        area(rect1)
+    );
+}
+
+fn area(dimensions: (u32, u32)) -&gt; u32 {
+    dimensions.0 * dimensions.1
+}</code></pre>
+<figcaption><a href="#listing-5-9">لیست ۵-۹</a>: مشخص کردن عرض و ارتفاع مستطیل با یک تاپل</figcaption>
+</figure>
+<p>از یک جهت، این برنامه بهتر است. تاپل‌ها به ما اجازه می‌دهند کمی ساختار اضافه کنیم و اکنون فقط یک آرگومان ارسال می‌کنیم. اما از جهت دیگر، این نسخه واضح‌تر نیست: تاپل‌ها برای عناصر خود نام تعیین نمی‌کنند، بنابراین باید با اندیس به بخش‌های تاپل دسترسی پیدا کنیم و همین باعث می‌شود محاسبه‌ی ما کمتر آشکار باشد.</p>
+<p>جابه‌جا کردن عرض و ارتفاع برای محاسبه‌ی مساحت اهمیتی ندارد، اما اگر بخواهیم مستطیل را روی صفحه رسم کنیم، اهمیت پیدا می‌کند! باید به خاطر داشته باشیم که <code>width</code> همان اندیس <code>0</code> تاپل و <code>height</code> همان اندیس <code>1</code> است. اگر شخص دیگری از کد ما استفاده کند، فهمیدن و به خاطر سپردن این موضوع برای او حتی دشوارتر خواهد بود. چون معنای داده‌هایمان را در کد منتقل نکرده‌ایم، اکنون ایجاد خطا آسان‌تر است.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="refactoring-with-structs-adding-more-meaning"></a></p>
+<h3 id="refactoring-with-structs"><a class="header" href="#refactoring-with-structs">بازآرایی با ساختارها</a></h3>
+<p>ما از ساختارها استفاده می‌کنیم تا با برچسب‌گذاری داده‌ها به آن‌ها معنا ببخشیم. می‌توانیم تاپلی را که استفاده می‌کنیم به یک ساختار تبدیل کنیم که هم برای کل مجموعه نامی دارد و هم برای اجزای آن، همان‌طور که در لیست ۵-۱۰ نشان داده شده است.</p>
+<figure class="listing" id="listing-5-10">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+fn main() {
+    let rect1 = Rectangle {
+        width: 30,
+        height: 50,
+    };
+
+    println!(
+        "The area of the rectangle is {} square pixels.",
+        area(&amp;rect1)
+    );
+}
+
+fn area(rectangle: &amp;Rectangle) -&gt; u32 {
+    rectangle.width * rectangle.height
+}</code></pre>
+<figcaption><a href="#listing-5-10">لیست ۵-۱۰</a>: تعریف ساختار &lt;code&gt;&lt;/x-listing&gt;Rectangle&lt;/code&gt;</figcaption>
+</figure>
+<p>در اینجا یک ساختار تعریف کرده و نام آن را <code>Rectangle</code> گذاشته‌ایم. داخل آکولادها، فیلدها را با نام‌های <code>width</code> و <code>height</code> تعریف کرده‌ایم که هر دو از نوع <code>u32</code> هستند. سپس در <code>main</code> یک نمونه‌ی مشخص از <code>Rectangle</code> ساخته‌ایم که عرض آن <code>30</code> و ارتفاع آن <code>50</code> است.</p>
+<p>تابع <code>area</code> ما اکنون با یک پارامتر تعریف شده است که نام آن را <code>rectangle</code> گذاشته‌ایم و نوع آن یک قرض‌گیری تغییرناپذیر از یک نمونه‌ی ساختار <code>Rectangle</code> است. همان‌طور که در فصل ۴ گفته شد، می‌خواهیم به‌جای گرفتن مالکیت ساختار، آن را قرض بگیریم. به این ترتیب <code>main</code> مالکیت خود را حفظ می‌کند و می‌تواند به استفاده از <code>rect1</code> ادامه دهد؛ و به همین دلیل است که از <code>&amp;</code> هم در امضای تابع و هم در محل فراخوانی آن استفاده می‌کنیم.</p>
+<p>تابع <code>area</code> به فیلدهای <code>width</code> و <code>height</code> نمونه‌ی <code>Rectangle</code> دسترسی پیدا می‌کند (توجه کنید که دسترسی به فیلدهای یک نمونه‌ی قرض‌گرفته‌شده‌ی ساختار، مقادیر فیلدها را move نمی‌کند، و به همین دلیل است که اغلب قرض‌گیری از ساختارها را می‌بینید). امضای تابع <code>area</code> ما اکنون دقیقاً همان چیزی را می‌گوید که منظورمان است: مساحت <code>Rectangle</code> را با استفاده از فیلدهای <code>width</code> و <code>height</code> آن محاسبه کن. این امضا نشان می‌دهد که عرض و ارتفاع به هم مرتبط هستند و به‌جای استفاده از اندیس‌های <code>0</code> و <code>1</code> تاپل، نام‌هایی توصیفی به مقادیر می‌دهد. این یک پیروزی برای وضوح است.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="adding-useful-functionality-with-derived-traits"></a></p>
+<h3 id="adding-functionality-with-derived-traits"><a class="header" href="#adding-functionality-with-derived-traits">افزودن قابلیت با صفت‌های مشتق‌شده</a></h3>
+<p>مفید است که هنگام اشکال‌زدایی برنامه بتوانیم یک نمونه از <code>Rectangle</code> را چاپ کنیم و مقادیر همه‌ی فیلدهای آن را ببینیم. لیست ۵-۱۱ تلاش می‌کند همان‌طور که در فصل‌های قبل استفاده کرده‌ایم، از <a href="https://doc.rust-lang.org/std/macro.println.html">ماکروی <code>println!</code></a><!-- ignore --> استفاده کند. اما این کار جواب نمی‌دهد.</p>
+<figure class="listing" id="listing-5-11">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+fn main() {
+    let rect1 = Rectangle {
+        width: 30,
+        height: 50,
+    };
+
+    println!("rect1 is {rect1}");
+}</code></pre>
+<figcaption><a href="#listing-5-11">لیست ۵-۱۱</a>: تلاش برای چاپ یک نمونه از &lt;code&gt;&lt;/x-listing&gt;Rectangle&lt;/code&gt;</figcaption>
+</figure>
+<p>وقتی این کد را کامپایل می‌کنیم، خطایی با این پیام اصلی دریافت می‌کنیم:</p>
+<pre><code class="language-text">error[E0277]: `Rectangle` doesn't implement `std::fmt::Display`
+</code></pre>
+<p>ماکروی <code>println!</code> می‌تواند انواع مختلفی از قالب‌بندی را انجام دهد و به‌طور پیش‌فرض، آکولادها به <code>println!</code> می‌گویند از قالب‌بندی‌ای به نام <code>Display</code> استفاده کند: خروجی‌ای که برای مصرف مستقیم کاربر نهایی در نظر گرفته شده است. نوع‌های اولیه‌ای که تاکنون دیده‌ایم به‌طور پیش‌فرض <code>Display</code> را پیاده‌سازی می‌کنند، زیرا فقط یک راه وجود دارد که بخواهید <code>1</code> یا هر نوع اولیه‌ی دیگری را به کاربر نشان دهید. اما در مورد ساختارها، نحوه‌ی قالب‌بندی خروجی توسط <code>println!</code> کمتر روشن است، چون امکانات نمایش بیشتری وجود دارد: آیا ویرگول می‌خواهید یا نه؟ آیا می‌خواهید آکولادها چاپ شوند؟ آیا باید همه‌ی فیلدها نشان داده شوند؟ به دلیل همین ابهام، Rust سعی نمی‌کند حدس بزند ما چه می‌خواهیم، و ساختارها پیاده‌سازی پیش‌فرضی از <code>Display</code> برای استفاده با <code>println!</code> و جای‌نگهدار <code>{}</code> ندارند.</p>
+<p>اگر خواندن خطاها را ادامه دهیم، این یادداشت مفید را پیدا می‌کنیم:</p>
+<pre><code class="language-text">help: the trait `std::fmt::Display` is not implemented for `Rectangle`
+  --&gt; src/main.rs:1:1
+</code></pre>
+<p>بیایید امتحانش کنیم! فراخوانی ماکروی <code>println!</code> اکنون به این شکل خواهد بود: <code>println!("rect1 is {rect1:?}");</code>. قرار دادن مشخص‌کننده‌ی <code>:?</code> داخل آکولادها به <code>println!</code> می‌گوید که می‌خواهیم از قالب خروجی‌ای به نام <code>Debug</code> استفاده کنیم. صفت <code>Debug</code> به ما امکان می‌دهد ساختارمان را به شیوه‌ای چاپ کنیم که برای توسعه‌دهندگان مفید است تا هنگام اشکال‌زدایی کد، مقدار آن را ببینیم.</p>
+<p>کد را با این تغییر کامپایل کنید. افسوس! هنوز هم خطا می‌گیریم:</p>
+<pre><code class="language-text">error[E0277]: `Rectangle` doesn't implement `Debug`
+</code></pre>
+<p>اما باز هم کامپایلر یک یادداشت مفید به ما می‌دهد:</p>
+<pre><code class="language-text">   |                        required by this formatting parameter
+   |
+</code></pre>
+<p>Rust <em>در واقع</em> قابلیت چاپ اطلاعات اشکال‌زدایی را دارد، اما باید صراحتاً آن را برای ساختارمان فعال کنیم. برای این کار، درست قبل از تعریف ساختار، ویژگی بیرونی (outer attribute) به نام <code>#[derive(Debug)]</code> را اضافه می‌کنیم، همان‌طور که در لیست ۵-۱۲ نشان داده شده است.</p>
+<figure class="listing" id="listing-5-12">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">#[derive(Debug)]
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+fn main() {
+    let rect1 = Rectangle {
+        width: 30,
+        height: 50,
+    };
+
+    println!("rect1 is {rect1:?}");
+}</code></pre>
+<figcaption><a href="#listing-5-12">لیست ۵-۱۲</a>: افزودن attribute برای مشتق کردن صفت &lt;code&gt;&lt;/x-listing&gt;Debug&lt;/code&gt; و چاپ نمونه‌ی &lt;code&gt;Rectangle&lt;/code&gt; با قالب‌بندی اشکال‌زدایی</figcaption>
+</figure>
+<p>اکنون وقتی برنامه را اجرا می‌کنیم، هیچ خطایی دریافت نمی‌کنیم و خروجی زیر را می‌بینیم:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling rectangles v0.1.0 (file:///projects/rectangles)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.48s
+     Running `target/debug/rectangles`
+rect1 is Rectangle { width: 30, height: 50 }
+</code></pre>
+<p>عالی! این زیباترین خروجی نیست، اما مقادیر همه‌ی فیلدهای این نمونه را نشان می‌دهد که قطعاً در اشکال‌زدایی کمک می‌کند. وقتی ساختارهای بزرگ‌تری داریم، مفید است که خروجی کمی خواناتر باشد؛ در چنین مواردی می‌توانیم در رشته‌ی <code>println!</code> به‌جای <code>{:?}</code> از <code>{:#?}</code> استفاده کنیم. در این مثال، استفاده از سبک <code>{:#?}</code> خروجی زیر را تولید می‌کند:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling rectangles v0.1.0 (file:///projects/rectangles)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.48s
+     Running `target/debug/rectangles`
+rect1 is Rectangle {
+    width: 30,
+    height: 50,
+}
+</code></pre>
+<p>راه دیگر برای چاپ یک مقدار با قالب <code>Debug</code> استفاده از <a href="https://doc.rust-lang.org/std/macro.dbg.html">ماکروی <code>dbg!</code></a><!-- ignore --> است که مالکیت یک عبارت را می‌گیرد (برخلاف <code>println!</code> که یک ارجاع می‌گیرد)، نام فایل و شماره‌ی خطی را که فراخوانی ماکروی <code>dbg!</code> در کد شما در آن رخ می‌دهد همراه با مقدار حاصل از آن عبارت چاپ می‌کند و مالکیت مقدار را برمی‌گرداند.</p>
+<blockquote>
+<p>نکته: فراخوانی ماکروی <code>dbg!</code> در جریان کنسول خطای استاندارد (<code>stderr</code>) چاپ می‌کند، برخلاف <code>println!</code> که در جریان کنسول خروجی استاندارد (<code>stdout</code>) چاپ می‌کند. در <a href="ch12-06-writing-to-stderr-instead-of-stdout.html">بخش «هدایت خطاها به خطای استاندارد» در فصل ۱۲</a><!-- ignore --> درباره‌ی <code>stderr</code> و <code>stdout</code> بیشتر صحبت خواهیم کرد.</p>
+</blockquote>
+<p>در اینجا مثالی داریم که در آن به مقداری که به فیلد <code>width</code> اختصاص داده می‌شود و همچنین به مقدار کل ساختار در <code>rect1</code> علاقه‌مندیم:</p>
+<pre><code class="language-rust">#[derive(Debug)]
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+fn main() {
+    let scale = 2;
+    let rect1 = Rectangle {
+        width: dbg!(30 * scale),
+        height: 50,
+    };
+
+    dbg!(&amp;rect1);
+}</code></pre>
+<p>می‌توانیم <code>dbg!</code> را دور عبارت <code>30 * scale</code> قرار دهیم و چون <code>dbg!</code> مالکیت مقدار عبارت را برمی‌گرداند، فیلد <code>width</code> همان مقداری را می‌گیرد که اگر فراخوانی <code>dbg!</code> آنجا نبود می‌گرفت. نمی‌خواهیم <code>dbg!</code> مالکیت <code>rect1</code> را بگیرد، بنابراین در فراخوانی بعدی از یک ارجاع به <code>rect1</code> استفاده می‌کنیم. خروجی این مثال به این شکل است:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling rectangles v0.1.0 (file:///projects/rectangles)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.61s
+     Running `target/debug/rectangles`
+[src/main.rs:10:16] 30 * scale = 60
+[src/main.rs:14:5] &amp;rect1 = Rectangle {
+    width: 60,
+    height: 50,
+}
+</code></pre>
+<p>می‌بینیم که اولین بخش خروجی از خط ۱۰ فایل <em>src/main.rs</em> آمده است، جایی که عبارت <code>30 * scale</code> را اشکال‌زدایی می‌کنیم، و مقدار حاصل از آن <code>60</code> است (قالب‌بندی <code>Debug</code> که برای اعداد صحیح پیاده‌سازی شده فقط مقدار آن‌ها را چاپ می‌کند). فراخوانی <code>dbg!</code> در خط ۱۴ فایل <em>src/main.rs</em> مقدار <code>&amp;rect1</code> را که همان ساختار <code>Rectangle</code> است، خروجی می‌دهد. این خروجی از قالب‌بندی زیبای <code>Debug</code> نوع <code>Rectangle</code> استفاده می‌کند. ماکروی <code>dbg!</code> می‌تواند واقعاً مفید باشد، وقتی می‌خواهید بفهمید کدتان چه کاری انجام می‌دهد!</p>
+<p>علاوه بر صفت <code>Debug</code>، Rust تعدادی صفت دیگر برای استفاده با attribute به نام <code>derive</code> در اختیار ما گذاشته است که می‌توانند رفتارهای مفیدی به نوع‌های سفارشی ما اضافه کنند. این صفت‌ها و رفتارهای آن‌ها در <a href="appendix-03-derivable-traits.html">پیوست ج</a><!-- ignore --> فهرست شده‌اند. در فصل ۱۰ توضیح خواهیم داد که چگونه این صفت‌ها را با رفتار سفارشی پیاده‌سازی کنیم و چگونه صفت‌های خودمان را بسازیم. علاوه بر <code>derive</code>، attributeهای بسیار دیگری هم وجود دارند؛ برای اطلاعات بیشتر به <a href="../reference/attributes.html">بخش «Attributes» در مرجع Rust</a> مراجعه کنید.</p>
+<p>تابع <code>area</code> ما بسیار اختصاصی است: فقط مساحت مستطیل‌ها را محاسبه می‌کند. خوب است که این رفتار را نزدیک‌تر به ساختار <code>Rectangle</code> خود پیوند دهیم، چون با هیچ نوع دیگری کار نمی‌کند. بیایید ببینیم چگونه می‌توانیم با تبدیل تابع <code>area</code> به یک متد <code>area</code> که روی نوع <code>Rectangle</code> تعریف می‌شود، بازآرایی این کد را ادامه دهیم.</p><nav class="page-nav"><a href="ch05-01-defining-structs.html">→ تعریف و نمونه‌سازی ساختارها</a><a href="ch05-03-method-syntax.html">متدها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

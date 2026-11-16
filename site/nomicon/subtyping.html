@@ -1,0 +1,242 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>زیرنوع‌سازی و واریانس — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="subtyping"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="subtyping-and-variance"><a class="header" href="#subtyping-and-variance">زیرنوع‌سازی و وردایی</a></h1>
+<p>Rust از طول عمرها برای ردیابی روابط میان قرض‌گیری و مالکیت استفاده می‌کند. با این حال، پیاده‌سازی ساده‌لوحانهٔ طول عمرها یا بیش از حد محدودکننده خواهد بود یا اجازهٔ رفتار تعریف‌نشده را می‌دهد.</p>
+<p>برای اینکه استفادهٔ انعطاف‌پذیر از طول عمرها ممکن شود و در عین حال از سوءاستفاده از آن‌ها جلوگیری شود، Rust از <strong>زیرنوع‌سازی (subtyping)</strong> و <strong>وردایی (variance)</strong> استفاده می‌کند.</p>
+<p>بیایید با یک مثال شروع کنیم.</p>
+<pre><code class="language-rust">// Note: debug expects two parameters with the *same* lifetime
+fn debug&lt;'a&gt;(a: &amp;'a str, b: &amp;'a str) {
+    println!("a = {a:?} b = {b:?}");
+}
+
+fn main() {
+    let hello: &amp;'static str = "hello";
+    {
+        let world = String::from("world");
+        let world = &amp;world; // 'world has a shorter lifetime than 'static
+        debug(hello, world);
+    }
+}</code></pre>
+<p>در یک پیاده‌سازی محافظه‌کارانهٔ طول عمرها، چون <code>hello</code> و <code>world</code> طول عمرهای متفاوتی دارند، ممکن است خطای زیر را ببینیم:</p>
+<pre><code class="language-text">error[E0308]: mismatched types
+ --&gt; src/main.rs:10:16
+   |
+10 |         debug(hello, world);
+   |                      ^
+   |                      |
+   |                      expected `&amp;'static str`, found struct `&amp;'world str`
+</code></pre>
+<p>این نسبتاً ناخوشایند خواهد بود. در این مورد، چیزی که می‌خواهیم این است که هر نوعی را بپذیریم که <em>دست‌کم به اندازهٔ</em> <code>'world</code> عمر می‌کند. بیایید زیرنوع‌سازی را با طول عمرهایمان امتحان کنیم.</p>
+<h2 id="subtyping"><a class="header" href="#subtyping">زیرنوع‌سازی</a></h2>
+<p>زیرنوع‌سازی ایده‌ای است که طبق آن یک نوع می‌تواند به‌جای نوع دیگر به کار رود.</p>
+<p>فرض کنیم <code>Sub</code> زیرنوعی از <code>Super</code> است (در سراسر این فصل از نماد <code>Sub &lt;: Super</code> استفاده خواهیم کرد).</p>
+<p>این به ما می‌گوید که مجموعهٔ <em>الزاماتی</em> که <code>Super</code> تعریف می‌کند به‌طور کامل توسط <code>Sub</code> برآورده می‌شود. <code>Sub</code> ممکن است الزامات بیشتری هم داشته باشد.</p>
+<p>اکنون، برای اینکه بتوانیم زیرنوع‌سازی را با طول عمرها به کار ببریم، باید الزام یک طول عمر را تعریف کنیم:</p>
+<blockquote>
+<p><code>'a</code> یک ناحیه از کد را تعریف می‌کند.</p>
+</blockquote>
+<p>حالا که مجموعهٔ مشخصی از الزامات برای طول عمرها داریم، می‌توانیم تعریف کنیم که آن‌ها چگونه به یکدیگر مربوط می‌شوند:</p>
+<blockquote>
+<p><code>'long &lt;: 'short</code> اگر و فقط اگر <code>'long</code> ناحیه‌ای از کد را تعریف کند که <code>'short</code> را <strong>به‌طور کامل در بر می‌گیرد</strong>.</p>
+</blockquote>
+<p><code>'long</code> ممکن است ناحیه‌ای بزرگ‌تر از <code>'short</code> تعریف کند، اما این هنوز با تعریف ما سازگار است.</p>
+<blockquote>
+<p>همان‌طور که در ادامهٔ این فصل خواهیم دید، زیرنوع‌سازی بسیار پیچیده‌تر و ظریف‌تر از این است، اما این قاعدهٔ ساده شهودی بسیار خوب برای ۹۹٪ موارد است. و مگر اینکه کد ناایمن بنویسید، کامپایلر همهٔ حالت‌های خاص را خودکار برای شما مدیریت می‌کند.</p>
+</blockquote>
+<blockquote>
+<p>اما اینجا Rustonomicon است. ما داریم کد ناایمن می‌نویسیم، پس باید بفهمیم این چیزها واقعاً چگونه کار می‌کنند و چگونه می‌توانیم آن‌ها را خراب کنیم.</p>
+</blockquote>
+<p>با بازگشت به مثال بالا، می‌توانیم بگوییم <code>'static &lt;: 'world</code>. فعلاً بیایید این ایده را هم بپذیریم که زیرنوع‌های طول عمرها می‌توانند از طریق ارجاع‌ها منتقل شوند (توضیح بیشتر در <a href="#variance">وردایی</a>)، <em>مثلاً</em> <code>&amp;'static str</code> زیرنوعی از <code>&amp;'world str</code> است، پس می‌توانیم <code>&amp;'static str</code> را به یک <code>&amp;'world str</code> «تنزل» دهیم. با این کار، مثال بالا کامپایل می‌شود:</p>
+<pre><code class="language-rust">fn debug&lt;'a&gt;(a: &amp;'a str, b: &amp;'a str) {
+    println!("a = {a:?} b = {b:?}");
+}
+
+fn main() {
+    let hello: &amp;'static str = "hello";
+    {
+        let world = String::from("world");
+        let world = &amp;world; // 'world has a shorter lifetime than 'static
+        debug(hello, world); // hello silently downgrades from `&amp;'static str` into `&amp;'world str`
+    }
+}</code></pre>
+<h2 id="variance"><a class="header" href="#variance">وردایی</a></h2>
+<p>در بالا از این واقعیت چشم‌پوشی کردیم که <code>'static &lt;: 'b</code> نتیجه می‌دهد <code>&amp;'static T &lt;: &amp;'b T</code>. این از ویژگی‌ای استفاده می‌کند که با نام <em>وردایی (variance)</em> شناخته می‌شود. اما همیشه به‌سادگی این مثال نیست. برای فهمیدن آن، بیایید این مثال را کمی گسترش دهیم:</p>
+<pre><code class="language-rust compile_fail E0597">fn assign&lt;T&gt;(input: &amp;mut T, val: T) {
+    *input = val;
+}
+
+fn main() {
+    let mut hello: &amp;'static str = "hello";
+    {
+        let world = String::from("world");
+        assign(&amp;mut hello, &amp;world);
+    }
+    println!("{hello}"); // use after free 😿
+}</code></pre>
+<p>در <code>assign</code>، ارجاع <code>hello</code> را طوری تنظیم می‌کنیم که به <code>world</code> اشاره کند. اما سپس <code>world</code> از حوزه خارج می‌شود، پیش از آنکه <code>hello</code> بعداً در println! استفاده شود.</p>
+<p>این یک باگ کلاسیک use-after-free است!</p>
+<p>اولین غریزهٔ ما شاید مقصر دانستن پیاده‌سازی <code>assign</code> باشد، اما واقعاً هیچ ایرادی اینجا وجود ندارد. جای تعجب نیست که بخواهیم یک <code>T</code> را در یک <code>T</code> بریزیم.</p>
+<p>مشکل این است که نمی‌توانیم فرض کنیم <code>&amp;'static str</code> هنوز هم می‌تواند به <code>&amp;'world str</code> تنزل یابد تا <code>T</code> را برآورده کند، آن هم وقتی پشت یک ارجاع <code>&amp;mut</code> قرار گرفته است. این یعنی <code>&amp;mut &amp;'static str</code> <strong>نمی‌تواند</strong> <em>زیرنوعی</em> از <code>&amp;mut &amp;'world str</code> باشد، حتی اگر <code>'static</code> زیرنوعی از <code>'world</code> باشد.</p>
+<p>وردایی مفهومی است که Rust قرض می‌گیرد تا روابط مربوط به زیرنوع‌ها را از طریق پارامترهای جنریک‌شان تعریف کند.</p>
+<blockquote>
+<p>نکته: برای سهولت، یک نوع جنریک <code>F&lt;T&gt;</code> تعریف می‌کنیم تا بتوانیم به‌راحتی دربارهٔ <code>T</code> صحبت کنیم. امیدواریم در متن روشن باشد.</p>
+</blockquote>
+<p><em>وردایی</em> نوع <code>F</code> این است که زیرنوع‌سازیِ ورودی‌هایش چگونه روی زیرنوع‌سازیِ خروجی‌هایش اثر می‌گذارد. در Rust سه نوع وردایی وجود دارد. با فرض دو نوع <code>Sub</code> و <code>Super</code> که در آن <code>Sub</code> زیرنوعی از <code>Super</code> است:</p>
+<ul>
+<li><code>F</code> <strong>هم‌وردا (covariant)</strong> است اگر <code>F&lt;Sub&gt;</code> زیرنوعی از <code>F&lt;Super&gt;</code> باشد (ویژگی زیرنوع بودن منتقل می‌شود)</li>
+<li><code>F</code> <strong>پادوردا (contravariant)</strong> است اگر <code>F&lt;Super&gt;</code> زیرنوعی از <code>F&lt;Sub&gt;</code> باشد (ویژگی زیرنوع بودن «وارونه» می‌شود)</li>
+<li>در غیر این صورت <code>F</code> <strong>ناوردا (invariant)</strong> است (هیچ رابطهٔ زیرنوعی وجود ندارد)</li>
+</ul>
+<p>اگر از مثال‌های بالا به یاد داشته باشیم، می‌توانستیم <code>&amp;'a T</code> را در صورتی که <code>'a &lt;: 'b</code> باشد زیرنوعی از <code>&amp;'b T</code> بدانیم، بنابراین می‌توانیم بگوییم <code>&amp;'a T</code> نسبت به <code>'a</code> <em>هم‌وردا</em> است.</p>
+<p>همچنین دیدیم که نمی‌توانستیم <code>&amp;mut &amp;'a T</code> را زیرنوعی از <code>&amp;mut &amp;'b T</code> بدانیم، بنابراین می‌توانیم بگوییم <code>&amp;mut T</code> نسبت به <code>T</code> <em>ناوردا</em> است.</p>
+<p>در اینجا جدولی از چند نوع جنریک دیگر و وردایی‌های آن‌ها آمده است:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th style="text-align: center">’a</th><th style="text-align: center">T</th><th style="text-align: center">U</th></tr>
+</thead>
+<tbody>
+<tr><td><code>&amp;'a T </code></td><td style="text-align: center">هم‌وردا</td><td style="text-align: center">هم‌وردا</td><td style="text-align: center"></td></tr>
+<tr><td><code>&amp;'a mut T</code></td><td style="text-align: center">هم‌وردا</td><td style="text-align: center">ناوردا</td><td style="text-align: center"></td></tr>
+<tr><td><code>Box&lt;T&gt;</code></td><td style="text-align: center"></td><td style="text-align: center">هم‌وردا</td><td style="text-align: center"></td></tr>
+<tr><td><code>Vec&lt;T&gt;</code></td><td style="text-align: center"></td><td style="text-align: center">هم‌وردا</td><td style="text-align: center"></td></tr>
+<tr><td><code>UnsafeCell&lt;T&gt;</code></td><td style="text-align: center"></td><td style="text-align: center">ناوردا</td><td style="text-align: center"></td></tr>
+<tr><td><code>Cell&lt;T&gt;</code></td><td style="text-align: center"></td><td style="text-align: center">ناوردا</td><td style="text-align: center"></td></tr>
+<tr><td><code>fn(T) -&gt; U</code></td><td style="text-align: center"></td><td style="text-align: center"><strong>پاد</strong>وردا</td><td style="text-align: center">هم‌وردا</td></tr>
+<tr><td><code>*const T</code></td><td style="text-align: center"></td><td style="text-align: center">هم‌وردا</td><td style="text-align: center"></td></tr>
+<tr><td><code>*mut T</code></td><td style="text-align: center"></td><td style="text-align: center">ناوردا</td><td style="text-align: center"></td></tr>
+</tbody>
+</table>
+</div>
+<p>برخی از این‌ها را می‌توان به‌سادگی در ارتباط با بقیه توضیح داد:</p>
+<ul>
+<li><code>Vec&lt;T&gt;</code> و همهٔ اشاره‌گرها و مجموعه‌های مالک دیگر از همان منطق <code>Box&lt;T&gt;</code> پیروی می‌کنند</li>
+<li><code>Cell&lt;T&gt;</code> و همهٔ نوع‌های تغییرپذیری درونی دیگر از همان منطق <code>UnsafeCell&lt;T&gt;</code> پیروی می‌کنند</li>
+<li>تغییرپذیری درونیِ <code>UnsafeCell&lt;T&gt;</code> همان ویژگی‌های وردایی <code>&amp;mut T</code> را به آن می‌دهد</li>
+<li><code>*const T</code> از منطق <code>&amp;T</code> پیروی می‌کند</li>
+<li><code>*mut T</code> از منطق <code>&amp;mut T</code> (یا <code>UnsafeCell&lt;T&gt;</code>) پیروی می‌کند</li>
+</ul>
+<p>برای نوع‌های بیشتر، به <a href="../reference/subtyping.html#variance">بخش «وردایی»</a> در مرجع نگاه کنید.</p>
+<blockquote>
+<p>نکته: <em>تنها</em> منبع پادوردایی در زبان، آرگومان‌های یک تابع است، که دلیل اینکه در عمل چندان پیش نمی‌آید همین است. به کار انداختن پادوردایی شامل برنامه‌نویسی مرتبهٔ بالاتر با اشاره‌گرهای تابع است که ارجاع‌هایی با طول عمرهای مشخص می‌گیرند (در مقابل حالت معمول «هر طول عمری»، که به طول عمرهای مرتبهٔ بالاتر می‌رسد و مستقل از زیرنوع‌سازی کار می‌کند).</p>
+</blockquote>
+<p>اکنون که درک رسمی‌تری از وردایی داریم، بیایید چند مثال دیگر را با جزئیات بیشتری مرور کنیم.</p>
+<pre><code class="language-rust compile_fail E0597">fn assign&lt;T&gt;(input: &amp;mut T, val: T) {
+    *input = val;
+}
+
+fn main() {
+    let mut hello: &amp;'static str = "hello";
+    {
+        let world = String::from("world");
+        assign(&amp;mut hello, &amp;world);
+    }
+    println!("{hello}");
+}</code></pre>
+<p>و وقتی این را اجرا کنیم چه می‌گیریم؟</p>
+<pre><code class="language-text">error[E0597]: `world` does not live long enough
+  --&gt; src/main.rs:9:28
+   |
+6  |     let mut hello: &amp;'static str = "hello";
+   |                    ------------ type annotation requires that `world` is borrowed for `'static`
+...
+9  |         assign(&amp;mut hello, &amp;world);
+   |                            ^^^^^^ borrowed value does not live long enough
+10 |     }
+   |     - `world` dropped here while still borrowed
+</code></pre>
+<p>خوب است، کامپایل نمی‌شود! بیایید جزئیات آنچه اینجا اتفاق می‌افتد را بررسی کنیم.</p>
+<p>ابتدا به تابع <code>assign</code> نگاه می‌کنیم:</p>
+<pre><code class="language-rust">fn assign&lt;T&gt;(input: &amp;mut T, val: T) {
+    *input = val;
+}</code></pre>
+<p>تنها کاری که می‌کند این است که یک ارجاع تغییرپذیر و یک مقدار می‌گیرد و مقدار مرجع را با آن بازنویسی می‌کند. نکتهٔ مهم دربارهٔ این تابع این است که یک محدودیت برابری نوع ایجاد می‌کند. در امضایش به‌روشنی می‌گوید که مرجع و مقدار باید <em>دقیقاً همان</em> نوع باشند.</p>
+<p>در همین حال، در فراخواننده <code>&amp;mut &amp;'static str</code> و <code>&amp;'world str</code> را می‌دهیم.</p>
+<p>از آنجا که <code>&amp;mut T</code> نسبت به <code>T</code> ناوردا است، کامپایلر نتیجه می‌گیرد که نمی‌تواند هیچ زیرنوع‌سازی‌ای را روی آرگومان اول اعمال کند، و بنابراین <code>T</code> باید دقیقاً <code>&amp;'static str</code> باشد.</p>
+<p>این برخلاف حالت <code>&amp;T</code> است:</p>
+<pre><code class="language-rust">fn debug&lt;T: std::fmt::Debug&gt;(a: T, b: T) {
+    println!("a = {a:?} b = {b:?}");
+}</code></pre>
+<p>که در آن نیز به همین ترتیب <code>a</code> و <code>b</code> باید نوع یکسان <code>T</code> را داشته باشند. اما چون <code>&amp;'a T</code> نسبت به <code>'a</code> هم‌وردا <em>است</em>، مجاز به انجام زیرنوع‌سازی هستیم. پس کامپایلر تصمیم می‌گیرد که <code>&amp;'static str</code> فقط و فقط وقتی می‌تواند به <code>&amp;'b str</code> تبدیل شود که <code>&amp;'static str</code> زیرنوعی از <code>&amp;'b str</code> باشد، که در صورتی برقرار است که <code>'static &lt;: 'b</code>. این درست است، پس کامپایلر با خوشحالی به کامپایل این کد ادامه می‌دهد.</p>
+<p>معلوم می‌شود استدلال اینکه چرا هم‌وردا بودن Box (و Vec، HashMap و غیره) اشکالی ندارد کاملاً شبیه استدلال اینکه چرا هم‌وردا بودن طول عمرها اشکالی ندارد است: به محض اینکه سعی کنید آن‌ها را درون چیزی مثل یک ارجاع تغییرپذیر بگذارید، ناوردایی را به ارث می‌برند و از انجام هر کار بدی بازداشته می‌شوید.</p>
+<p>با این حال Box تمرکز بر جنبهٔ «با مقدار» (by-value) ارجاع‌ها را که تا حدی از آن چشم‌پوشی کردیم آسان‌تر می‌کند.</p>
+<p>برخلاف بسیاری از زبان‌ها که اجازه می‌دهند مقادیر همیشه آزادانه alias شوند، Rust قاعدهٔ بسیار سخت‌گیرانه‌ای دارد: اگر مجاز باشید مقداری را تغییر دهید یا جابه‌جا کنید، تضمین می‌شود که تنها کسی هستید که به آن دسترسی دارد.</p>
+<p>کد زیر را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">let hello: Box&lt;&amp;'static str&gt; = Box::new("hello");
+
+let mut world: Box&lt;&amp;'b str&gt;;
+world = hello;</code></pre>
+<p>اینکه فراموش کرده‌ایم <code>hello</code> برای <code>'static</code> زنده بود اصلاً مشکلی ندارد، زیرا به محض اینکه <code>hello</code> را به متغیری منتقل کردیم که فقط می‌دانست برای <code>'b</code> زنده است، <strong>تنها چیزی را در جهان که به یاد داشت بیشتر عمر می‌کند نابود کردیم</strong>!</p>
+<p>فقط یک چیز برای توضیح باقی مانده است: اشاره‌گرهای تابع.</p>
+<p>برای اینکه ببینیم چرا <code>fn(T) -&gt; U</code> باید نسبت به <code>U</code> هم‌وردا باشد، امضای زیر را در نظر بگیرید:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">fn get_str() -&gt; &amp;'a str;</code></pre>
+<p>این تابع ادعا می‌کند یک <code>str</code> تولید می‌کند که به یک طول عمر <code>'a</code> محدود است. به همین دلیل، کاملاً معتبر است که به‌جای آن تابعی با امضای زیر ارائه شود:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">fn get_static() -&gt; &amp;'static str;</code></pre>
+<p>پس وقتی تابع فراخوانی می‌شود، تنها چیزی که فراخواننده‌اش انتظار دارد یک <code>&amp;str</code> است که دست‌کم به اندازهٔ طول عمر <code>'a</code> عمر کند، و مهم نیست که مقدار واقعاً بیشتر عمر کند.</p>
+<p>با این حال، همین منطق دربارهٔ <em>آرگومان‌ها</em> صدق نمی‌کند. سعی کنید این را برآورده کنید:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">fn store_ref(&amp;'a str);</code></pre>
+<p>با این:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">fn store_static(&amp;'static str);</code></pre>
+<p>تابع اول می‌تواند هر ارجاع رشته‌ای را بپذیرد به شرط آنکه دست‌کم برای <code>'a</code> عمر کند، اما تابع دوم نمی‌تواند ارجاع رشته‌ای را بپذیرد که برای مدتی کمتر از <code>'static</code> عمر می‌کند، که باعث تعارض می‌شود. هم‌وردایی اینجا کار نمی‌کند. اما اگر آن را برعکس کنیم، در واقع <em>کار می‌کند</em>! اگر به تابعی نیاز داریم که بتواند <code>&amp;'static str</code> را مدیریت کند، تابعی که بتواند ارجاع <em>با هر طول عمری</em> را مدیریت کند قطعاً درست کار خواهد کرد.</p>
+<p>بیایید این را در عمل ببینیم</p>
+<pre><code class="language-rust compile_fail"><span class="boring">use std::cell::RefCell;
+</span>thread_local! {
+    pub static StaticVecs: RefCell&lt;Vec&lt;&amp;'static str&gt;&gt; = RefCell::new(Vec::new());
+}
+
+/// saves the input given into a thread local `Vec&lt;&amp;'static str&gt;`
+fn store(input: &amp;'static str) {
+    StaticVecs.with_borrow_mut(|v| v.push(input));
+}
+
+/// Calls the function with it's input (must have the same lifetime!)
+fn demo&lt;'a&gt;(input: &amp;'a str, f: fn(&amp;'a str)) {
+    f(input);
+}
+
+fn main() {
+    demo("hello", store); // "hello" is 'static. Can call `store` fine
+
+    {
+        let smuggle = String::from("smuggle");
+
+        // `&amp;smuggle` is not static. If we were to call `store` with `&amp;smuggle`,
+        // we would have pushed an invalid lifetime into the `StaticVecs`.
+        // Therefore, `fn(&amp;'static str)` cannot be a subtype of `fn(&amp;'a str)`
+        demo(&amp;smuggle, store);
+    }
+
+    // use after free 😿
+    StaticVecs.with_borrow(|v| println!("{v:?}"));
+}</code></pre>
+<p>و به همین دلیل است که نوع‌های تابع، برخلاف هر چیز دیگری در زبان، نسبت به آرگومان‌هایشان <strong>پاد</strong>وردا هستند.</p>
+<p>اکنون، همهٔ این‌ها برای نوع‌هایی که کتابخانهٔ استاندارد فراهم می‌کند خوب است، اما وردایی برای نوع‌هایی که <em>شما</em> تعریف می‌کنید چگونه تعیین می‌شود؟ به‌طور غیررسمی، یک ساختار وردایی فیلدهایش را به ارث می‌برد. اگر ساختار <code>MyType</code> یک آرگومان جنریک <code>A</code> داشته باشد که در فیلد <code>a</code> استفاده شده است، آنگاه وردایی MyType نسبت به <code>A</code> دقیقاً همان وردایی <code>a</code> نسبت به <code>A</code> است.</p>
+<p>با این حال اگر <code>A</code> در چند فیلد استفاده شده باشد:</p>
+<ul>
+<li>اگر همهٔ استفاده‌ها از <code>A</code> هم‌وردا باشند، MyType نسبت به <code>A</code> هم‌وردا است</li>
+<li>اگر همهٔ استفاده‌ها از <code>A</code> پادوردا باشند، MyType نسبت به <code>A</code> پادوردا است</li>
+<li>در غیر این صورت، MyType نسبت به <code>A</code> ناوردا است</li>
+</ul>
+<pre><code class="language-rust">use std::cell::Cell;
+
+struct MyType&lt;'a, 'b, A: 'a, B: 'b, C, D, E, F, G, H, In, Out, Mixed&gt; {
+    a: &amp;'a A,     // covariant over 'a and A
+    b: &amp;'b mut B, // covariant over 'b and invariant over B
+
+    c: *const C,  // covariant over C
+    d: *mut D,    // invariant over D
+
+    e: E,         // covariant over E
+    f: Vec&lt;F&gt;,    // covariant over F
+    g: Cell&lt;G&gt;,   // invariant over G
+
+    h1: H,        // would also be covariant over H except...
+    h2: Cell&lt;H&gt;,  // invariant over H, because invariance wins all conflicts
+
+    i: fn(In) -&gt; Out,       // contravariant over In, covariant over Out
+
+    k1: fn(Mixed) -&gt; usize, // would be contravariant over Mixed except..
+    k2: Mixed,              // invariant over Mixed, because invariance wins all conflicts
+}</code></pre><nav class="page-nav"><a href="hrtb.html">→ کران‌های صفت با رتبهٔ بالاتر</a><a href="dropck.html">بررسی Drop ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

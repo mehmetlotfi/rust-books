@@ -1,0 +1,231 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>سخت‌افزار — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="start/hardware"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="hardware"><a class="header" href="#hardware">سخت‌افزار</a></h1>
+<p>تا اینجا باید با ابزارها و فرایند توسعه تا حدی آشنا شده باشید. در این بخش به سخت‌افزار واقعی می‌رویم؛ فرایند کار تقریباً همان می‌ماند. بیایید شروع کنیم.</p>
+<h2 id="know-your-hardware"><a class="header" href="#know-your-hardware">سخت‌افزار خود را بشناسید</a></h2>
+<p>پیش از شروع، باید چند ویژگی دستگاه هدف را مشخص کنید، چون از آن‌ها برای پیکربندی پروژه استفاده می‌شود:</p>
+<ul>
+<li>
+<p>هستهٔ ARM، مثلاً Cortex-M3.</p>
+</li>
+<li>
+<p>آیا هستهٔ ARM شامل FPU است؟ هسته‌های Cortex-M4<strong>F</strong> و Cortex-M7<strong>F</strong> دارند.</p>
+</li>
+<li>
+<p>دستگاه هدف چقدر حافظهٔ Flash و RAM دارد؟ مثلاً 256 KiB حافظهٔ Flash و 32 KiB حافظهٔ RAM.</p>
+</li>
+<li>
+<p>حافظهٔ Flash و RAM در کجای فضای آدرس نگاشت شده‌اند؟ مثلاً RAM معمولاً در آدرس <code>0x2000_0000</code> قرار دارد.</p>
+</li>
+</ul>
+<p>این اطلاعات را در برگهٔ داده (data sheet) یا راهنمای مرجع (reference manual) دستگاه خود پیدا می‌کنید.</p>
+<p>در این بخش از سخت‌افزار مرجع خودمان، یعنی STM32F3DISCOVERY، استفاده می‌کنیم. این برد یک میکروکنترلر STM32F303VCT6 دارد. این میکروکنترلر این مشخصات را دارد:</p>
+<ul>
+<li>
+<p>یک هستهٔ Cortex-M4F که شامل یک FPU با دقت یگانه (single precision) است</p>
+</li>
+<li>
+<p>256 KiB حافظهٔ Flash در آدرس 0x0800_0000.</p>
+</li>
+<li>
+<p>40 KiB حافظهٔ RAM در آدرس 0x2000_0000. (ناحیهٔ RAM دیگری هم هست، اما برای سادگی آن را نادیده می‌گیریم.)</p>
+</li>
+</ul>
+<h2 id="configuring"><a class="header" href="#configuring">پیکربندی</a></h2>
+<p>کار را از صفر و با یک نمونهٔ تازه از قالب شروع می‌کنیم. برای مرور این‌که چطور بدون <code>cargo-generate</code> این کار را انجام دهید، به <a href="qemu.html">بخش قبلی دربارهٔ QEMU</a> مراجعه کنید.</p>
+<pre><code class="language-text">$ cargo generate --git https://github.com/rust-embedded/cortex-m-quickstart
+ Project Name: app
+ Creating project called `app`...
+ Done! New project created /tmp/app
+
+$ cd app
+</code></pre>
+<p>گام اول، تعیین یک هدف کامپایل پیش‌فرض در <code>.cargo/config.toml</code> است.</p>
+<pre><code class="language-console">tail -n5 .cargo/config.toml
+</code></pre>
+<pre><code class="language-toml"># Pick ONE of these compilation targets
+# target = "thumbv6m-none-eabi"    # Cortex-M0 and Cortex-M0+
+# target = "thumbv7m-none-eabi"    # Cortex-M3
+# target = "thumbv7em-none-eabi"   # Cortex-M4 and Cortex-M7 (no FPU)
+target = "thumbv7em-none-eabihf" # Cortex-M4F and Cortex-M7F (with FPU)
+</code></pre>
+<p>ما از <code>thumbv7em-none-eabihf</code> استفاده می‌کنیم، چون هستهٔ Cortex-M4F را پوشش می‌دهد.</p>
+<blockquote>
+<p><strong>توجه</strong>: همان‌طور که شاید از فصل قبل به یاد داشته باشید، باید همهٔ هدف‌ها را نصب کنیم و این یکی جدید است. پس فراموش نکنید که برای این هدف فرایند نصب <code>rustup target add thumbv7em-none-eabihf</code> را اجرا کنید.</p>
+</blockquote>
+<p>گام دوم، وارد کردن اطلاعات ناحیهٔ حافظه در فایل <code>memory.x</code> است.</p>
+<pre><code class="language-text">$ cat memory.x
+/* Linker script for the STM32F303VCT6 */
+MEMORY
+{
+  /* NOTE 1 K = 1 KiBi = 1024 bytes */
+  FLASH : ORIGIN = 0x08000000, LENGTH = 256K
+  RAM : ORIGIN = 0x20000000, LENGTH = 40K
+}
+</code></pre>
+<blockquote>
+<p><strong>توجه</strong>: اگر به هر دلیلی فایل <code>memory.x</code> را بعد از اولین ساخت برای یک هدف ساخت مشخص تغییر دادید، پیش از <code>cargo build</code> دستور <code>cargo clean</code> را اجرا کنید، چون ممکن است <code>cargo build</code> تغییرات <code>memory.x</code> را دنبال نکند.</p>
+</blockquote>
+<p>دوباره با مثال hello شروع می‌کنیم، اما ابتدا باید یک تغییر کوچک بدهیم.</p>
+<p>در <code>examples/hello.rs</code>، مطمئن شوید فراخوانی <code>debug::exit()</code> به‌صورت توضیح درآمده یا حذف شده باشد. این فراخوانی فقط برای اجرا روی QEMU به کار می‌رود.</p>
+<pre><code class="language-rust ignore">#[entry]
+fn main() -&gt; ! {
+    hprintln!("Hello, world!").unwrap();
+
+    // exit QEMU
+    // NOTE do not run this on hardware; it can corrupt OpenOCD state
+    // debug::exit(debug::EXIT_SUCCESS);
+
+    loop {}
+}</code></pre>
+<p>اکنون می‌توانید برنامه‌ها را با <code>cargo build</code> برای معماری دیگر کامپایل متقابل (cross compile) کنید و مثل قبل با <code>cargo-binutils</code> فایل‌های دودویی را بررسی کنید. crate با نام <code>cortex-m-rt</code> همهٔ جادوی لازم برای راه‌اندازی تراشهٔ شما را انجام می‌دهد، چون تقریباً همهٔ پردازنده‌های Cortex-M به یک شیوه بوت می‌شوند.</p>
+<pre><code class="language-console">cargo build --example hello
+</code></pre>
+<h2 id="debugging"><a class="header" href="#debugging">اشکال‌زدایی</a></h2>
+<p>اشکال‌زدایی کمی متفاوت به نظر می‌رسد. در واقع گام‌های اول هم بسته به دستگاه هدف می‌توانند متفاوت باشند. در این بخش گام‌های لازم برای اشکال‌زدایی برنامه‌ای را که روی STM32F3DISCOVERY اجرا می‌شود نشان می‌دهیم. این بخش فقط به‌عنوان مرجع در نظر گرفته شده است؛ برای اطلاعات مختص دستگاه دربارهٔ اشکال‌زدایی، <a href="https://github.com/rust-embedded/debugonomicon">Debugonomicon</a> را ببینید.</p>
+<p>مثل قبل اشکال‌زدایی از راه دور انجام می‌دهیم و کلاینت یک فرایند GDB خواهد بود. اما این بار سرور OpenOCD است.</p>
+<p>همان‌طور که در بخش <a href="../intro/install/verify.html">تأیید نصب</a> انجام دادید، برد discovery را به لپ‌تاپ / رایانهٔ خود وصل کنید و بررسی کنید که هدر ST-LINK لحیم شده باشد.</p>
+<p>در یک ترمینال <code>openocd</code> را اجرا کنید تا به ST-LINK روی برد discovery وصل شود. این دستور را از ریشهٔ قالب اجرا کنید؛ <code>openocd</code> فایل <code>openocd.cfg</code> را برمی‌دارد که مشخص می‌کند از کدام فایل interface و کدام فایل target استفاده شود.</p>
+<pre><code class="language-console">cat openocd.cfg
+</code></pre>
+<pre><code class="language-text"># Sample OpenOCD configuration for the STM32F3DISCOVERY development board
+
+# Depending on the hardware revision you got you'll have to pick ONE of these
+# interfaces. At any time only one interface should be commented out.
+
+# Revision C (newer revision)
+source [find interface/stlink.cfg]
+
+# Revision A and B (older revisions)
+# source [find interface/stlink-v2.cfg]
+
+source [find target/stm32f3x.cfg]
+</code></pre>
+<blockquote>
+<p><strong>توجه</strong>: اگر در بخش <a href="../intro/install/verify.html">تأیید نصب</a> متوجه شدید که برد discovery شما نسخهٔ قدیمی‌تری است، باید در این مرحله فایل <code>openocd.cfg</code> را تغییر دهید تا از <code>interface/stlink-v2.cfg</code> استفاده کند.</p>
+</blockquote>
+<pre><code class="language-text">$ openocd
+Open On-Chip Debugger 0.10.0
+Licensed under GNU GPL v2
+For bug reports, read
+        http://openocd.org/doc/doxygen/bugs.html
+Info : auto-selecting first available session transport "hla_swd". To override use 'transport select &lt;transport&gt;'.
+adapter speed: 1000 kHz
+adapter_nsrst_delay: 100
+Info : The selected transport took over low-level target control. The results might differ compared to plain JTAG/SWD
+none separate
+Info : Unable to match requested speed 1000 kHz, using 950 kHz
+Info : Unable to match requested speed 1000 kHz, using 950 kHz
+Info : clock speed 950 kHz
+Info : STLINK v2 JTAG v27 API v2 SWIM v15 VID 0x0483 PID 0x374B
+Info : using stlink api v2
+Info : Target voltage: 2.913879
+Info : stm32f3x.cpu: hardware has 6 breakpoints, 4 watchpoints
+</code></pre>
+<p>در ترمینال دیگری GDB را اجرا کنید، آن هم از ریشهٔ قالب.</p>
+<pre><code class="language-text">gdb-multiarch -q target/thumbv7em-none-eabihf/debug/examples/hello
+</code></pre>
+<p><strong>توجه</strong>: مثل قبل، بسته به این‌که در فصل نصب کدام نسخهٔ gdb را نصب کرده‌اید، ممکن است به‌جای <code>gdb-multiarch</code> به نسخهٔ دیگری از gdb نیاز داشته باشید. این نسخه می‌تواند <code>arm-none-eabi-gdb</code> یا فقط <code>gdb</code> هم باشد.</p>
+<p>سپس GDB را به OpenOCD وصل کنید؛ OpenOCD روی پورت 3333 منتظر یک اتصال TCP است.</p>
+<pre><code class="language-console">(gdb) target remote :3333
+Remote debugging using :3333
+0x00000000 in ?? ()
+</code></pre>
+<p>حالا با دستور <code>load</code> برنامه را روی میکروکنترلر <em>فلش</em> (بارگذاری) کنید.</p>
+<pre><code class="language-console">(gdb) load
+Loading section .vector_table, size 0x400 lma 0x8000000
+Loading section .text, size 0x1518 lma 0x8000400
+Loading section .rodata, size 0x414 lma 0x8001918
+Start address 0x08000400, load size 7468
+Transfer rate: 13 KB/sec, 2489 bytes/write.
+</code></pre>
+<p>برنامه اکنون بارگذاری شده است. این برنامه از semihosting استفاده می‌کند، بنابراین پیش از هر فراخوانی semihosting باید به OpenOCD بگوییم semihosting را فعال کند. با دستور <code>monitor</code> می‌توانید به OpenOCD دستور بفرستید.</p>
+<pre><code class="language-console">(gdb) monitor arm semihosting enable
+semihosting is enabled
+</code></pre>
+<blockquote>
+<p>با اجرای دستور <code>monitor help</code> می‌توانید همهٔ دستورهای OpenOCD را ببینید.</p>
+</blockquote>
+<p>مثل قبل می‌توانیم با یک breakpoint و دستور <code>continue</code> مستقیم به <code>main</code> برویم.</p>
+<pre><code class="language-console">(gdb) break main
+Breakpoint 1 at 0x8000490: file examples/hello.rs, line 11.
+Note: automatically using hardware breakpoints for read-only addresses.
+
+(gdb) continue
+Continuing.
+
+Breakpoint 1, hello::__cortex_m_rt_main_trampoline () at examples/hello.rs:11
+11      #[entry]
+</code></pre>
+<blockquote>
+<p><strong>توجه</strong>: اگر پس از اجرای دستور <code>continue</code> بالا، GDB به‌جای رسیدن به breakpoint ترمینال را مسدود کرد، بهتر است دوباره بررسی کنید که اطلاعات ناحیهٔ حافظه در فایل <code>memory.x</code> برای دستگاه شما درست تنظیم شده باشد (هم آغاز <em>و</em> هم طول ناحیه‌ها).</p>
+</blockquote>
+<p>با <code>step</code> وارد تابع main شوید.</p>
+<pre><code class="language-console">(gdb) step
+halted: PC: 0x08000496
+hello::__cortex_m_rt_main () at examples/hello.rs:13
+13          hprintln!("Hello, world!").unwrap();
+</code></pre>
+<p>پس از پیش بردن برنامه با <code>next</code>، باید پیام “Hello, world!” را، در میان چیزهای دیگر، در کنسول OpenOCD ببینید.</p>
+<pre><code class="language-console">$ openocd
+(..)
+Info : halted: PC: 0x08000502
+Hello, world!
+Info : halted: PC: 0x080004ac
+Info : halted: PC: 0x080004ae
+Info : halted: PC: 0x080004b0
+Info : halted: PC: 0x080004b4
+Info : halted: PC: 0x080004b8
+Info : halted: PC: 0x080004bc
+</code></pre>
+<p>پیام فقط یک بار نمایش داده می‌شود، چون برنامه در شرف ورود به حلقهٔ بی‌نهایتی است که در خط 19 تعریف شده است: <code>loop {}</code></p>
+<p>اکنون می‌توانید با دستور <code>quit</code> از GDB خارج شوید.</p>
+<pre><code class="language-console">(gdb) quit
+A debugging session is active.
+
+        Inferior 1 [Remote target] will be detached.
+
+Quit anyway? (y or n)
+</code></pre>
+<p>اشکال‌زدایی اکنون به چند گام بیشتر نیاز دارد، به همین دلیل همهٔ آن گام‌ها را در یک اسکریپت GDB به نام <code>openocd.gdb</code> گردآوری کرده‌ایم. این فایل در مرحلهٔ <code>cargo generate</code> ساخته شده است و باید بدون هیچ تغییری کار کند. بیایید نگاهی به آن بیندازیم:</p>
+<pre><code class="language-console">cat openocd.gdb
+</code></pre>
+<pre><code class="language-text">target extended-remote :3333
+
+# print demangled symbols
+set print asm-demangle on
+
+# detect unhandled exceptions, hard faults and panics
+break DefaultHandler
+break HardFault
+break rust_begin_unwind
+
+monitor arm semihosting enable
+
+load
+
+# start the process but immediately halt the processor
+stepi
+</code></pre>
+<p>اکنون اجرای <code>&lt;gdb&gt; -x openocd.gdb target/thumbv7em-none-eabihf/debug/examples/hello</code> بلافاصله GDB را به OpenOCD وصل می‌کند، semihosting را فعال می‌کند، برنامه را بارگذاری می‌کند و فرایند را شروع می‌کند.</p>
+<p>از طرف دیگر، می‌توانید <code>&lt;gdb&gt; -x openocd.gdb</code> را به یک runner سفارشی تبدیل کنید تا <code>cargo run</code> هم برنامه را بسازد <em>و</em> هم یک نشست GDB را شروع کند. این runner در <code>.cargo/config.toml</code> گنجانده شده است، اما به‌صورت توضیح درآمده است.</p>
+<pre><code class="language-console">head -n10 .cargo/config.toml
+</code></pre>
+<pre><code class="language-toml">[target.thumbv7m-none-eabi]
+# uncomment this to make `cargo run` execute programs on QEMU
+# runner = "qemu-system-arm -cpu cortex-m3 -machine lm3s6965evb -nographic -semihosting-config enable=on,target=native -kernel"
+
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+# uncomment ONE of these three option to make `cargo run` start a GDB session
+# which option to pick depends on your system
+runner = "arm-none-eabi-gdb -x openocd.gdb"
+# runner = "gdb-multiarch -x openocd.gdb"
+# runner = "gdb -x openocd.gdb"
+</code></pre>
+<pre><code class="language-text">$ cargo run --example hello
+(..)
+Loading section .vector_table, size 0x400 lma 0x8000000
+Loading section .text, size 0x1e70 lma 0x8000400
+Loading section .rodata, size 0x61c lma 0x8002270
+Start address 0x800144e, load size 10380
+Transfer rate: 17 KB/sec, 3460 bytes/write.
+(gdb)
+</code></pre><nav class="page-nav"><a href="../../embedded/start/qemu.html">→ QEMU</a><a href="../../embedded/start/registers.html">ثبات‌های نگاشت‌شده به حافظه ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

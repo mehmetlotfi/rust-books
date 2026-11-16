@@ -1,0 +1,108 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>نخستین تلاش در Rust — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="peripherals/a-first-attempt"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="a-first-attempt"><a class="header" href="#a-first-attempt">نخستین تلاش</a></h1>
+<h2 id="the-registers"><a class="header" href="#the-registers">ثبات‌ها</a></h2>
+<p>بیایید به دستگاه جانبی «SysTick» نگاه کنیم، یک زمان‌سنج ساده که همراه هر هستهٔ پردازندهٔ Cortex-M عرضه می‌شود. معمولاً این اطلاعات را در برگهٔ داده (data sheet) یا <em>راهنمای مرجع فنی</em> (Technical Reference Manual) سازندهٔ تراشه جست‌وجو می‌کنید، اما این مثال برای همهٔ هسته‌های ARM Cortex-M مشترک است، پس به <a href="http://infocenter.arm.com/help/topic/com.arm.doc.dui0553a/Babieigh.html">راهنمای مرجع ARM</a> نگاه می‌کنیم. می‌بینیم چهار ثبات وجود دارد:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>آفست</th><th>نام</th><th>توضیح</th><th>عرض</th></tr>
+</thead>
+<tbody>
+<tr><td>0x00</td><td>SYST_CSR</td><td>ثبات کنترل و وضعیت</td><td>32 بیت</td></tr>
+<tr><td>0x04</td><td>SYST_RVR</td><td>ثبات مقدار بازنشانی</td><td>32 بیت</td></tr>
+<tr><td>0x08</td><td>SYST_CVR</td><td>ثبات مقدار فعلی</td><td>32 بیت</td></tr>
+<tr><td>0x0C</td><td>SYST_CALIB</td><td>ثبات مقدار کالیبراسیون</td><td>32 بیت</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="the-c-approach"><a class="header" href="#the-c-approach">رویکرد C</a></h2>
+<p>در Rust می‌توانیم مجموعه‌ای از ثبات‌ها را دقیقاً مثل C نمایش دهیم، یعنی با یک <code>struct</code>.</p>
+<pre><code class="language-rust ignore">#[repr(C)]
+struct SysTick {
+    pub csr: u32,
+    pub rvr: u32,
+    pub cvr: u32,
+    pub calib: u32,
+}</code></pre>
+<p>مشخص‌کنندهٔ <code>#[repr(C)]</code> به کامپایلر Rust می‌گوید این ساختار را همان‌طور که کامپایلر C می‌چیند در حافظه بچیند. این موضوع بسیار مهم است، چون Rust اجازه می‌دهد ترتیب فیلدهای ساختار تغییر کند، اما C چنین اجازه‌ای نمی‌دهد. می‌توانید تصور کنید اگر کامپایلر بی‌سروصدا این فیلدها را جابه‌جا می‌کرد، چه اشکال‌زدایی‌ای در انتظارمان بود! با این مشخص‌کننده، چهار فیلد 32 بیتی داریم که با جدول بالا متناظرند. اما البته این <code>struct</code> به‌تنهایی فایده‌ای ندارد؛ به یک متغیر نیاز داریم.</p>
+<pre><code class="language-rust ignore">let systick = 0xE000_E010 as *mut SysTick;
+let time = unsafe { (*systick).cvr };</code></pre>
+<h2 id="volatile-accesses"><a class="header" href="#volatile-accesses">دسترسی‌های volatile</a></h2>
+<p>حالا رویکرد بالا چند مشکل دارد.</p>
+<ol>
+<li>هر بار که بخواهیم به دستگاه جانبی دسترسی پیدا کنیم باید از unsafe استفاده کنیم.</li>
+<li>راهی نداریم که مشخص کنیم کدام ثبات‌ها فقط‌خواندنی و کدام‌ها خواندنی-نوشتنی‌اند.</li>
+<li>هر تکه کدی در هر جای برنامهٔ شما می‌تواند از طریق این ساختار به سخت‌افزار دسترسی پیدا کند.</li>
+<li>از همه مهم‌تر اینکه این رویکرد در واقع کار نمی‌کند…</li>
+</ol>
+<p>مشکل این است که کامپایلرها باهوش‌اند. اگر دو بار پشت سر هم در یک نقطهٔ RAM بنویسید، کامپایلر می‌تواند این را تشخیص دهد و نوشتن اول را کاملاً نادیده بگیرد. در C می‌توانیم متغیرها را <code>volatile</code> علامت بزنیم تا مطمئن شویم هر خواندن یا نوشتن دقیقاً همان‌طور که مقصود بوده انجام می‌شود. در Rust، به‌جای آن، <em>دسترسی‌ها</em> را volatile علامت می‌زنیم و نه خود متغیر را.</p>
+<pre><code class="language-rust ignore">let systick = unsafe { &amp;mut *(0xE000_E010 as *mut SysTick) };
+let time = unsafe { core::ptr::read_volatile(&amp;mut systick.cvr) };</code></pre>
+<p>پس یکی از چهار مشکلمان را برطرف کرده‌ایم، اما حالا کد <code>unsafe</code> حتی بیشتری داریم! خوشبختانه یک crate شخص ثالث وجود دارد که می‌تواند کمک کند: <a href="https://crates.io/crates/volatile_register"><code>volatile_register</code></a>.</p>
+<pre><code class="language-rust ignore">use volatile_register::{RW, RO};
+
+#[repr(C)]
+struct SysTick {
+    pub csr: RW&lt;u32&gt;,
+    pub rvr: RW&lt;u32&gt;,
+    pub cvr: RW&lt;u32&gt;,
+    pub calib: RO&lt;u32&gt;,
+}
+
+fn get_systick() -&gt; &amp;'static mut SysTick {
+    unsafe { &amp;mut *(0xE000_E010 as *mut SysTick) }
+}
+
+fn get_time() -&gt; u32 {
+    let systick = get_systick();
+    systick.cvr.read()
+}</code></pre>
+<p>اکنون دسترسی‌های volatile به‌طور خودکار از طریق متدهای <code>read</code> و <code>write</code> انجام می‌شوند. نوشتن همچنان <code>unsafe</code> است، اما انصافاً سخت‌افزار مجموعه‌ای از وضعیت تغییرپذیر است و کامپایلر راهی ندارد بفهمد این نوشتن‌ها واقعاً ایمن‌اند یا نه، پس این یک موضع پیش‌فرض خوب است.</p>
+<h2 id="the-rusty-wrapper"><a class="header" href="#the-rusty-wrapper">پوششی به سبک Rust</a></h2>
+<p>باید این <code>struct</code> را در یک API سطح بالاتر بپیچیم که فراخوانی آن برای کاربران ما ایمن باشد. ما به‌عنوان نویسندهٔ درایور، درستی کد unsafe را به‌صورت دستی بررسی می‌کنیم و سپس یک API ایمن به کاربران عرضه می‌کنیم تا لازم نباشد نگران آن باشند (البته به شرطی که به ما اعتماد کنند که کار را درست انجام داده‌ایم!).</p>
+<p>یک نمونه می‌تواند این باشد:</p>
+<pre><code class="language-rust ignore">use volatile_register::{RW, RO};
+
+pub struct SystemTimer {
+    p: &amp;'static mut RegisterBlock
+}
+
+#[repr(C)]
+struct RegisterBlock {
+    pub csr: RW&lt;u32&gt;,
+    pub rvr: RW&lt;u32&gt;,
+    pub cvr: RW&lt;u32&gt;,
+    pub calib: RO&lt;u32&gt;,
+}
+
+impl SystemTimer {
+    pub fn new() -&gt; SystemTimer {
+        SystemTimer {
+            p: unsafe { &amp;mut *(0xE000_E010 as *mut RegisterBlock) }
+        }
+    }
+
+    pub fn get_time(&amp;self) -&gt; u32 {
+        self.p.cvr.read()
+    }
+
+    pub fn set_reload(&amp;mut self, reload_value: u32) {
+        unsafe { self.p.rvr.write(reload_value) }
+    }
+}
+
+pub fn example_usage() -&gt; String {
+    let mut st = SystemTimer::new();
+    st.set_reload(0x00FF_FFFF);
+    format!("Time is now 0x{:08x}", st.get_time())
+}</code></pre>
+<p>مشکل این رویکرد این است که کد زیر از نظر کامپایلر کاملاً قابل قبول است:</p>
+<pre><code class="language-rust ignore">fn thread1() {
+    let mut st = SystemTimer::new();
+    st.set_reload(2000);
+}
+
+fn thread2() {
+    let mut st = SystemTimer::new();
+    st.set_reload(1000);
+}</code></pre>
+<p>آرگومان <code>&amp;mut self</code> در تابع <code>set_reload</code> بررسی می‌کند که هیچ ارجاع دیگری به <em>همان</em> ساختار <code>SystemTimer</code> وجود نداشته باشد، اما جلوی کاربر را نمی‌گیرد که <code>SystemTimer</code> دومی بسازد که دقیقاً به همان دستگاه جانبی اشاره می‌کند! کدی که به این شیوه نوشته شده باشد، اگر نویسنده آن‌قدر دقیق باشد که همهٔ این نمونه‌های «تکراری» درایور را شناسایی کند، کار می‌کند؛ اما وقتی کد روی چند ماژول، درایور، توسعه‌دهنده و روز پخش شود، ارتکاب این نوع اشتباهات هر چه بیشتر آسان می‌شود.</p><nav class="page-nav"><a href="../../embedded/peripherals/index.html">→ پیرامونی‌ها</a><a href="../../embedded/peripherals/borrowck.html">بررسی‌گر قرض ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,172 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>Salsa — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="queries/salsa"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="how-salsa-works"><a class="header" href="#how-salsa-works">Salsa چگونه کار می‌کند</a></h1>
+<p>این فصل بر اساس توضیحی است که نیکو ماتساکیس در این
+<a href="https://www.youtube.com/watch?v=_muY4HjSqVw">ویدیو</a> دربارهٔ
+<a href="https://github.com/salsa-rs/salsa">Salsa</a> ارائه داده است.
+برای اطلاع بیشتر ممکن است بخواهید <a href="https://www.youtube.com/watch?v=i_IhACacPRY">Salsa In More
+Depth</a> را هم ببینید، که آن هم از نیکو ماتساکیس است.</p>
+<blockquote>
+<p>تا <!-- date-check --> نوامبر 2022، هرچند Salsa (از جمله) از سامانهٔ کوئری rustc الهام گرفته،
+مستقیماً در rustc استفاده نمی‌شود.
+<em>در</em> <a href="https://rust-lang.github.io/chalk/book/what_is_chalk.html">chalk</a> استفاده می‌شود، که پیاده‌سازی سامانهٔ trait در Rust است، و به‌طور گسترده در
+<a href="https://rust-analyzer.github.io/"><code>rust-analyzer</code></a>، پیاده‌سازی رسمی پروتکل language server برای Rust،
+اما هیچ برنامهٔ مشخص میان‌مدت یا بلندمدتی برای یکپارچه‌کردن آن در کامپایلر نیست.</p>
+</blockquote>
+<h2 id="what-is-salsa"><a class="header" href="#what-is-salsa">Salsa چیست؟</a></h2>
+<p>Salsa کتابخانه‌ای برای محاسبهٔ مجدد افزایشی است.
+یعنی اجازه می‌دهد محاسباتی را که در گذشته انجام شده‌اند دوباره استفاده کنیم
+تا کارایی محاسبات آینده افزایش یابد.</p>
+<p>اهداف Salsa این‌هاست:</p>
+<ul>
+<li>فراهم‌کردن این قابلیت به شکل خودکار، به‌طوری که استفادهٔ مجدد از محاسبات قدیمی
+خودکار توسط کتابخانه انجام شود.</li>
+<li>انجام این کار به شکل «sound» یا «درست»، یعنی منجر به همان
+نتایجی شود که اگر از ابتدا انجام شده بود.</li>
+</ul>
+<p>مدل واقعی Salsa بسیار غنی‌تر است و انواع ورودی‌ها و خروجی‌های متفاوت را مجاز می‌کند.
+برای مثال، یکپارچه‌کردن Salsa با یک IDE می‌تواند یعنی
+ورودی‌ها می‌توانند manifestها (<code>Cargo.toml</code>، <code>rust-toolchain.toml</code>)،
+فایل‌های منبع کامل (<code>foo.rs</code>)، تکه‌کدها و غیره باشند.
+خروجی‌های چنین یکپارچگی می‌تواند از فایل اجرایی دودویی
+تا lintها، نوع‌ها (مثلاً اگر کاربر متغیر مشخصی را انتخاب کند و بخواهد نوع آن را ببیند)،
+تکمیل‌های خودکار و غیره متغیر باشد.</p>
+<h2 id="how-does-it-work"><a class="header" href="#how-does-it-work">چگونه کار می‌کند؟</a></h2>
+<p>اولین کاری که Salsa باید بکند شناسایی «ورودی‌های پایه» است
+که چیزی محاسبه‌شده نیستند بلکه به‌عنوان ورودی داده می‌شوند.</p>
+<p>سپس Salsa باید مقادیر میانی «مشتق‌شده» را هم شناسایی کند، که
+چیزی هستند که کتابخانه تولید می‌کند، اما برای هر مقدار مشتق‌شده یک
+تابع «خالص» هست که آن را محاسبه می‌کند.</p>
+<p>برای مثال ممکن است تابعی مثل <code>ast(x: Path) -&gt; AST</code> باشد.
+درخت نحو انتزاعی (<code>AST</code>) تولیدشده مقدار نهایی نیست؛
+مقدار میانی‌ای است که کتابخانه برای محاسبه از آن استفاده می‌کند.</p>
+<p>یعنی وقتی با کتابخانه محاسبه می‌کنید، Salsa
+مقادیر مشتق‌شدهٔ مختلفی را محاسبه می‌کند و در نهایت ورودی را می‌خواند و
+نتیجهٔ محاسبهٔ درخواست‌شده را تولید می‌کند.</p>
+<p>در جریان محاسبه، Salsa ردیابی می‌کند کدام ورودی‌ها دسترسی شدند و کدام مقادیر مشتق‌شده‌اند.
+این اطلاعات برای تعیین اینکه با تغییر ورودی‌ها چه می‌شود
+به‌کار می‌رود: آیا مقادیر مشتق‌شده هنوز معتبرند؟</p>
+<p>این لزوماً یعنی هر محاسبهٔ پایین‌دست ورودی بررسی می‌شود، که می‌تواند پرهزینه باشد.
+Salsa فقط باید هر محاسبهٔ پایین‌دست را تا یافتن محاسبه‌ای که تغییر نکرده بررسی کند.
+در آن نقطه، محاسبات مشتق‌شدهٔ دیگر را بررسی نمی‌کند چون نیازی به تغییر ندارند.</p>
+<p>مفید است به این به‌صورت گرافی با گره‌ها فکر کنیم.
+هر مقدار مشتق‌شده به مقادیر دیگر وابستگی دارد، که خودشان می‌توانند پایه یا
+مشتق‌شده باشند.
+مقادیر پایه وابستگی ندارند.</p>
+<pre><code class="language-ignore">I &lt;- A &lt;- C ...
+          |
+J &lt;- B &lt;--+
+</code></pre>
+<p>وقتی ورودی <code>I</code> تغییر می‌کند، مقدار مشتق‌شدهٔ <code>A</code> می‌تواند تغییر کند.
+مقدار مشتق‌شدهٔ <code>B</code>، که به <code>I</code>، <code>A</code> یا هر مقدار مشتق‌شده از <code>A</code> یا
+<code>I</code> وابسته نیست، در معرض تغییر نیست.
+بنابراین Salsa می‌تواند محاسبه‌ای را که در گذشته برای <code>B</code> انجام شده دوباره استفاده کند،
+بدون اینکه مجبور به محاسبهٔ دوبارهٔ آن باشد.</p>
+<p>محاسبه می‌تواند زودتر هم تمام شود.
+با حفظ همان گراف قبلی،
+فرض کنید ورودی <code>I</code> به نحوی تغییر کرده است (و ورودی <code>J</code> نه)، اما هنگام محاسبهٔ دوبارهٔ <code>A</code>،
+معلوم می‌شود <code>A</code> نسبت به محاسبهٔ قبلی تغییر نکرده است.
+این به «خاتمهٔ زودهنگام» می‌انجامد، چون نیازی نیست بررسی کنیم آیا <code>C</code> باید تغییر کند،
+چون هر دو ورودی مستقیم <code>C</code>، یعنی <code>A</code> و <code>B</code>،
+تغییر نکرده‌اند.</p>
+<h2 id="key-salsa-concepts"><a class="header" href="#key-salsa-concepts">Key Salsa concepts</a></h2>
+<h3 id="query"><a class="header" href="#query">Query</a></h3>
+<p>کوئری مقداری است که Salsa در جریان محاسبه می‌تواند به آن دسترسی داشته باشد.
+هر کوئری می‌تواند تعدادی کلید داشته باشد (از ۰ تا چند)، و همهٔ کوئری‌ها نتیجه دارند، شبیه
+توابع.
+کوئری‌های <code>0-key</code> «کوئری ورودی (input)» نامیده می‌شوند.</p>
+<h3 id="database"><a class="header" href="#database">Database</a></h3>
+<p>پایگاه‌داده اساساً زمینهٔ کل محاسبه است، قرار است
+حالت داخلی Salsa، همهٔ مقادیر میانی هر کوئری و
+هر چیز دیگری را که محاسبه ممکن است لازم داشته باشد ذخیره کند.
+پایگاه‌داده باید همهٔ کوئری‌هایی را که کتابخانه قرار است انجام دهد پیش از ساخته‌شدن بشناسد،
+اما لازم نیست
+در یک جا مشخص شوند.</p>
+<p>پس از تشکیل پایگاه‌داده، می‌توان با کوئری‌هایی بسیار شبیه توابع به آن دسترسی داشت.
+چون نتیجهٔ هر کوئری در پایگاه‌داده ذخیره می‌شود، وقتی کوئری <code>N</code> بار فراخوانی شود،
+<code>N</code> نتیجهٔ <strong>clone‌شده</strong> برمی‌گرداند، بدون اینکه
+مجبور به محاسبهٔ دوبارهٔ کوئری باشد (مگر اینکه ورودی به شکلی تغییر کرده باشد که محاسبهٔ مجدد را توجیه کند).</p>
+<p>برای هر کوئری ورودی (<code>0-key</code>)، یک متد «set» تولید می‌شود که به کاربر اجازه می‌دهد
+خروجی چنین کوئری را تغییر دهد و باعث شود مقادیر memoize‌شدهٔ قبلی به‌طور بالقوه باطل شوند.</p>
+<h3 id="query-groups"><a class="header" href="#query-groups">Query Groups</a></h3>
+<p>گروه کوئری مجموعه‌ای از کوئری‌هاست که با هم به‌عنوان یک واحد تعریف شده‌اند.
+پایگاه‌داده با ترکیب گروه‌های کوئری تشکیل می‌شود.
+گروه‌های کوئری شبیه «ماژول‌های Salsa» هستند.</p>
+<p>مجموعهٔ کوئری‌ها در یک گروه کوئری فقط مجموعه‌ای از متدها در یک trait هستند.</p>
+<p>برای ساخت گروه کوئری باید traitی ساخته شود که با attribute مشخصی
+(<code>#[salsa::query_group(...)]</code>) annotate شده باشد.</p>
+<p>همچنین باید آرگومانی به آن attribute داده شود چون Salsa از آن برای
+ساخت <code>struct</code>ی استفاده می‌کند که بعداً هنگام ساخت پایگاه‌داده به‌کار می‌رود.</p>
+<p>مثال گروه کوئری ورودی:</p>
+<pre><code class="language-rust ignore">/// This attribute will process this tree, produce this tree as output, and produce
+/// a bunch of intermediate stuff that Salsa also uses. One of these things is a
+/// "StorageStruct", whose name we have specified in the attribute.
+///
+/// This query group is a bunch of **input** queries, that do not rely on any
+/// derived input.
+#[salsa::query_group(InputsStorage)]
+pub trait Inputs {
+    /// This attribute (`#[salsa::input]`) indicates that this query is a base
+    /// input, therefore `set_manifest` is going to be auto-generated
+    #[salsa::input]
+    fn manifest(&amp;self) -&gt; Manifest;
+
+    #[salsa::input]
+    fn source_text(&amp;self, name: String) -&gt; String;
+}</code></pre>
+<p>برای ساخت گروه کوئری <strong>مشتق‌شده</strong>، باید مشخص کنیم این گروه به کدام گروه‌های کوئری دیگر
+وابسته است، با تعیین آن‌ها به‌صورت supertrait، همان‌طور که در مثال زیر دیده می‌شود:</p>
+<pre><code class="language-rust ignore">/// This query group is going to contain queries that depend on derived values.
+/// A query group can access another query group's queries by specifying the
+/// dependency as a supertrait. Query groups can be stacked as much as needed using
+/// that pattern.
+#[salsa::query_group(ParserStorage)]
+pub trait Parser: Inputs {
+    /// This query `ast` is not an input query, it's a derived query this means
+    /// that a definition is necessary.
+    fn ast(&amp;self, name: String) -&gt; String;
+}</code></pre>
+<p>هنگام ساخت کوئری مشتق‌شده، پیاده‌سازی آن کوئری باید بیرون از trait تعریف شود.
+تعریف باید پارامتر پایگاه‌داده را به‌صورت <code>impl Trait</code> (یا <code>dyn Trait</code>) بگیرد،
+که trait همان گروه کوئری‌ای است که تعریف
+به آن تعلق دارد، علاوه بر کلیدهای دیگر.</p>
+<pre><code class="language-rust ignore">/// This is going to be the definition of the `ast` query in the `Parser` trait.
+/// So, when the query `ast` is invoked, and it needs to be recomputed, Salsa is
+/// going to call this function and it's going to give it the database as `impl
+/// Parser`. The function doesn't need to be aware of all the queries of all the
+/// query groups
+fn ast(db: &amp;impl Parser, name: String) -&gt; String {
+    //! Note, `impl Parser` is used here but `dyn Parser` works just as well
+    /* code */
+    ///By passing an `impl Parser`, this is allowed
+    let source_text = db.input_file(name);
+    /* do the actual parsing */
+    return ast;
+}</code></pre>
+<p>در نهایت، پس از تعریف همهٔ گروه‌های کوئری، می‌توان پایگاه‌داده را
+با اعلان یک <code>struct</code> ساخت.</p>
+<p>برای مشخص‌کردن اینکه کدام گروه‌های کوئری بخشی از پایگاه‌داده خواهند بود باید یک <code>attribute</code>
+(<code>#[salsa::database(...)]</code>) اضافه شود.
+آرگومان آن <code>attribute</code> فهرستی از <code>identifier</code>هاست که
+<strong>ذخیره‌گاه‌های (storages)</strong> گروه‌های کوئری را مشخص می‌کند.</p>
+<pre><code class="language-rust ignore">///This attribute specifies which query groups are going to be in the database
+#[salsa::database(InputsStorage, ParserStorage)]
+#[derive(Default)] //optional!
+struct MyDatabase {
+    ///You also need this one field
+    runtime : salsa::Runtime&lt;MyDatabase&gt;,
+}
+///And this trait has to be implemented
+impl salsa::Database for MyDatabase {
+    fn salsa_runtime(&amp;self) -&gt; &amp;salsa::Runtime&lt;MyDatabase&gt; {
+        &amp;self.runtime
+    }
+}</code></pre>
+<p>Example usage:</p>
+<pre><code class="language-rust ignore">fn main() {
+    let db = MyDatabase::default();
+    db.set_manifest(...);
+    db.set_source_text(...);
+    loop {
+        db.ast(...); //will reuse results
+        db.set_source_text(...);
+    }
+}</code></pre><nav class="page-nav"><a href="../incrcomp-debugging.html">→ اشکال‌زدایی و آزمودن</a><a href="../memory.html">مدیریت حافظه در rustc ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

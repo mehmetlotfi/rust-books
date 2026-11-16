@@ -1,0 +1,208 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>خوش‌ساختی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="analysis/well-formed"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="well-formedness"><a class="header" href="#well-formedness">خوش‌ساختی (Well-formedness)</a></h1>
+<h2 id="what-is-well-formedness"><a class="header" href="#what-is-well-formedness">خوش‌ساختی چیست؟</a></h2>
+<p>«خوش‌ساخت» (well-formed) یعنی «درست ساخته‌شده»<sup class="footnote-reference" id="fr-wf-history-1"><a href="#footnote-wf-history">1</a></sup>. چیزی <em>خوش‌ساخت</em> است که ساختارش از قواعدی پیروی کند. وقتی در کامپایلر Rust از این اصطلاح استفاده می‌کنیم، به برقراری نوعی <em>سازگاری درونی</em> توجه داریم.</p>
+<h2 id="well-formedness-in-rust"><a class="header" href="#well-formedness-in-rust">خوش‌ساختی در Rust</a></h2>
+<p>بررسی خوش‌ساخت بودن یک چیز یعنی انجام یک «بررسی خوش‌ساختی».</p>
+<p>در کامپایلر Rust دو شکل متفاوت از بررسی خوش‌ساختی وجود دارد:</p>
+<ul>
+<li>بررسی خوش‌ساختی <strong>عبارت‌های سطح نوع</strong> (Type-Level Term)<sup class="footnote-reference" id="fr-terms-1"><a href="#footnote-terms">2</a></sup> <sup class="footnote-reference" id="fr-terms-abbreviated-1"><a href="#footnote-terms-abbreviated">3</a></sup>.
+<ul>
+<li>«خوش‌ساختی term» یا «بررسی خوش‌ساختی term» نیز نامیده می‌شود.</li>
+<li>مرحلهٔ تحلیل جداگانه‌ای نیست و در سراسر تحلیل انجام می‌شود.</li>
+</ul>
+</li>
+<li>بررسی خوش‌ساختی <strong>آیتم‌ها</strong> (Item)<sup class="footnote-reference" id="fr-items-1"><a href="#footnote-items">4</a></sup> (item-wfck.)
+<ul>
+<li>«Item-wfck» اغلب به خوش‌ساخت بودن Termها نیاز پیدا می‌کند، اما برخی بخش‌ها را رد می‌کند.</li>
+<li>Termهای درونی ممکن است (به‌اشتباه) ابتدا نرمال‌سازی شوند.</li>
+<li>به‌عنوان یک مرحله در کامپایلر منسجم‌تر از «خوش‌ساختی term» است (که در جاهای زیادی انجام می‌شود.)</li>
+</ul>
+</li>
+</ul>
+<p>ببینید: <a href="#what-well-formedness-isnt">خوش‌ساختی چه چیزی نیست</a>.</p>
+<h2 id="well-formedness-of-type-level-terms"><a class="header" href="#well-formedness-of-type-level-terms">خوش‌ساختی عبارت‌های سطح نوع</a></h2>
+<p>بررسی خوش‌ساختی term با ساختن فهرستی از چیزهایی شروع می‌شود که باید درست باشند تا یک term خوش‌ساخت باشد. این‌ها را «تعهدها» (Obligations)<sup class="footnote-reference" id="fr-obligations-1"><a href="#footnote-obligations">5</a></sup> می‌نامیم.</p>
+<p>عبارت‌های سطح نوع زمانی خوش‌ساخت در نظر گرفته می‌شوند که تعهدهای مرتبط با آن‌ها توسط حل‌کنندهٔ صفت (trait solver) برآورده شوند.</p>
+<h3 id="obligations-for-well-formedness"><a class="header" href="#obligations-for-well-formedness">تعهدها برای خوش‌ساختی</a></h3>
+<p>تعهدهای مشخص چیزهایی مانند <code>String: Clone</code>، <code>A: usize</code> یا <code>&lt;T as Iterator&gt;::Item: Debug</code> هستند.</p>
+<p>در این صفحه جداسازی میان تعهدها و termها/آیتم‌ها را این‌گونه نشان می‌دهیم:</p>
+<pre><code class="language-rust ignore">&lt;terms or items&gt;
+---
+&lt;obligations&gt;</code></pre>
+<p>این یک نمونه از یک عبارت سطح نوع خوش‌ساخت است:</p>
+<pre><code class="language-rust ignore">Vec&lt;String&gt;
+---
+// Obligations to fulfill
+Vec&lt;T&gt; where T: Sized
+// Trait solver says `String: Sized` is true, so this is well-formed.
+Vec&lt;String&gt; where String: Sized</code></pre>
+<p>وقتی تعهدهای <code>Vec&lt;String&gt;</code> را محاسبه می‌کنیم، درمی‌یابیم که <code>Vec&lt;T&gt;</code> تعهد <code>T: Sized</code> را تولید می‌کند. در <code>Vec&lt;String&gt;</code> به‌جای <code>T</code> مقدار <code>String</code> را جایگزین می‌کنیم، بنابراین به تعهد <code>String: Sized</code> می‌رسیم که حل‌کنندهٔ صفت برآورده‌بودنش را تشخیص می‌دهد.</p>
+<p>مورد زیر خوش‌ساخت <strong>نیست</strong>:</p>
+<pre><code class="language-rust ignore">Vec&lt;str&gt;
+---
+// Obligations to fulfill
+Vec&lt;T&gt; where T: Sized
+// Trait solver says `str: Sized` is not true, so this is not well-formed.
+Vec&lt;str&gt; where str: Sized</code></pre>
+<p>مورد بالا مانند قبل تعهد <code>T: Sized</code> را محاسبه می‌کند، اما در نمونهٔ <code>Vec&lt;str&gt;</code> به‌جای <code>T</code> مقدار <code>str</code> را جایگزین می‌کنیم و به تعهد <code>str: sized</code> می‌رسیم. حل‌کنندهٔ صفت تشخیص می‌دهد که این تعهد <em>برآورده نشده است</em>.</p>
+<h4 id="determining-obligations"><a class="header" href="#determining-obligations">تعیین تعهدها</a></h4>
+<p>در کامپایلر، تعهدهای termها از طریق تابع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/traits/wf/fn.obligations.html"><code>obligations</code></a> در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/traits/wf/index.html">ماژول خوش‌ساختی term</a> پیدا می‌شوند.</p>
+<h4 id="other-obligations"><a class="header" href="#other-obligations">تعهدهای دیگر</a></h4>
+<p>تعهدها چیزی فراتر از کران‌های صفت و جنریک ثابت هستند، اما تاکنون فقط همین تعهدهای خاص را ذکر کرده‌ایم، چون هنگام «بررسی خوش‌ساختی» termها همین‌ها برایمان مهم‌اند. برای فهرست کامل تعهدها ببینید: <a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_type_ir/predicate_kind/enum.PredicateKind.html"><code>PredicateKind</code></a> و <a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_type_ir/predicate_kind/enum.ClauseKind.html"><code>ClauseKind</code></a>.</p>
+<h3 id="we-dont-need-normalization-yet"><a class="header" href="#we-dont-need-normalization-yet">(فعلاً) به نرمال‌سازی نیازی نداریم</a></h3>
+<p><a href="../normalization.html">نرمال‌سازی</a> فرایند تفکیک <a href="../normalization.html#aliases">نام‌های مستعار نوع</a> به نوع زیرین آن‌هاست.</p>
+<p>یک نام مستعار نوع در صورتی خوش‌ساخت در نظر گرفته می‌شود که عبارت‌های where آن برآورده شوند. نوع زیرین در بیشتر محل‌های تعریف و نمونه‌سازی تحت بررسی خوش‌ساختی قرار می‌گیرد، اما استثناهایی وجود دارد.</p>
+<h3 id="const-generic-arguments"><a class="header" href="#const-generic-arguments">آرگومان‌های جنریک ثابت</a></h3>
+<p>خوش‌ساختی term مسئول به‌دست‌آوردن تعهدهای «بررسی نوع» برای termهای جنریک ثابت است<sup class="footnote-reference" id="fr-tyck-const-generics-1"><a href="#footnote-tyck-const-generics">6</a></sup>. به این استفاده از جنریک‌های ثابت نگاه کنید:</p>
+<pre><code class="language-rust ignore">fn use_const_generics&lt;const U: usize&gt;() { /* ... */ }
+// call site
+use_const_generics::&lt;6&gt;();
+---
+// call site wfck obligations
+const 6: usize</code></pre>
+<p>محل فراخوانی در حین بررسی خوش‌ساختی تعهد <code>6: usize</code> را در اختیار ما می‌گذارد. این تعهد درست مانند هر تعهد از نوع صفت به حل‌کنندهٔ صفت سپرده می‌شود، چون حل‌کنندهٔ صفت مسئولیت‌هایی بیش از آنچه نامش نشان می‌دهد دارد.</p>
+<h2 id="well-formedness-of-items"><a class="header" href="#well-formedness-of-items">خوش‌ساختی آیتم‌ها</a></h2>
+<p>آیتم‌ها، به‌طور کلی، «چیزهایی هستند که تعریف می‌شوند». Item-wfck در سطح امضا برای نوع‌ها و تابع‌ها، متدها و تعریف‌ها/پیاده‌سازی‌های صفت‌ها انجام می‌شود.</p>
+<pre><code class="language-rust ignore">// The `Vec&lt;str&gt;` is checked during item wfck
+fn foo(_: Vec&lt;str&gt;) {
+    // The `Vec&lt;[u8]&gt;` is not handled by item wfck as it's not in the signature
+    let _: Vec&lt;[u8]&gt;
+}
+---
+Vec&lt;str&gt;: Sized // Generated
+Vec&lt;[u8]&gt;: Sized // Not done at item-wfck. Done elsewhere.</code></pre>
+<p>Item-wfck مسئولیت‌هایی بیش از جمع‌آوری تعهدهای termهای سطح نوع درونی خود و ارسال آن‌ها به حل‌کنندهٔ صفت دارد. همهٔ این‌ها را اینجا بحث نمی‌کنیم، اما در تابع‌های <code>check_*</code> جداگانه در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_analysis/check/wfcheck/index.html"><strong>ماژول item-wfck</strong></a> قابل‌یافتن‌اند.</p>
+<!-- FIXME: Expand more on item well-formedness that isn't const generic / trait bound obligation based. These are not special cases, but important points! -->
+<h3 id="global-and-trivial-bounds"><a class="header" href="#global-and-trivial-bounds">کران‌های سراسری و بدیهی</a></h3>
+<!-- TODO later: Cut this into its own page -->
+<p>کران‌های صفت یک تعهد رایج هستند. کران‌های صفت سراسری (Global) و بدیهی (Trivial) نوعی از کران‌های صفت هستند که از قبل اطلاعات کافی برای تعیین درست یا نادرست بودنشان داریم. Item-wfck مسئول یافتن و بررسی این کران‌هاست.</p>
+<ul>
+<li><strong>کران‌های سراسری</strong> در حل‌کنندهٔ قدیمی، کران‌های پس از نرمال‌سازی هستند که هیچ پارامتر جنریکی (مانند <code>&lt;T&gt;</code> یا <code>'a</code>) و هیچ متغیر مقید (مانند <code>for&lt;'b&gt;</code>) ندارند.</li>
+<li><strong>کران‌های بدیهی</strong> کران‌هایی هستند که برای تعیین خوش‌ساخت بودن یا نبودنشان به نرمال‌سازی بیشتری نیاز نیست. <!-- TODO: check with lcnr if this is genuinely what a trivial bound is. --></li>
+</ul>
+<p>این تعریف تابع را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">fn apartment_complex&lt;T&gt;(block: T, name: String) where String: Clone { /* ... */ }
+---
+String: Clone // Trivial &amp; Global bound! There's no aliases to resolve.
+// There could be bligations on T but we don't care about them here.</code></pre>
+<p>این تعریف یک تعهد کران صفت <code>String: Clone</code> تولید می‌کند که <em>سراسری</em> است (پارامتر جنریک ندارد) و <em>بدیهی</em> است (برای بررسی خوش‌ساختی به نرمال‌سازی نیاز نداشت). لازم نیست هیچ اطلاعات اضافه‌ای به حل‌کنندهٔ صفت داده شود تا بتواند دربارهٔ خوش‌ساختی <code>String: Clone</code> قضاوت کند.</p>
+<p>کران‌های بدیهی نادرست صرفاً کران‌های بدیهی‌ای هستند که برقرار نیستند. مثال ساده زیر یکی از آن‌هاست:</p>
+<pre><code class="language-rust ignore">fn apartment_simple&lt;T&gt;(block: T, name: String) where String: Copy { /* ... */ }
+---
+String: Copy // Trivial bound again, but this one is false!</code></pre>
+<p>اینجا یک کران بدیهی داریم که برقرار نیست، چون <code>String</code> نوع <code>Copy</code> نیست.</p>
+<h4 id="trivial-bounds-are-not-always-global"><a class="header" href="#trivial-bounds-are-not-always-global">کران‌های بدیهی همیشه سراسری نیستند</a></h4>
+<p>کران‌های بدیهی زیرمجموعه‌ای از کران‌های سراسری نیستند. یک کران بدیهی که سراسری نیست <code>for&lt;'a&gt; String: Clone</code> است (بدیهی درست است، متغیر مقید دارد) یا <code>&amp;'a str: Copy</code> (بدیهی نادرست است، پارامتر جنریک دارد).</p>
+<h4 id="item-wfck-and-trivialglobal-bounds"><a class="header" href="#item-wfck-and-trivialglobal-bounds">Item-wfck و کران‌های بدیهی/سراسری</a></h4>
+<!-- When cutting out the subsection on global/trivial bounds, keep this part on the well-formedness page. -->
+<p>هنگام بررسی خوش‌ساخت بودن آیتم‌ها، بررسی می‌کنیم که هیچ کران سراسری بدیهی نادرستی وجود نداشته باشد.</p>
+<h2 id="when-we-dont-fully-do-well-formedness-checking"><a class="header" href="#when-we-dont-fully-do-well-formedness-checking">وقتی بررسی خوش‌ساختی را کامل انجام نمی‌دهیم</a></h2>
+<p>بررسی خوش‌ساختی یک «مرحلهٔ» منسجم از بررسی نوع نیست. جاهای زیادی هست که بررسی خوش‌ساختی در آن‌ها انجام می‌شود، و برخی جاها هم هست که به‌دلیل محدودیت در انواع تحلیلی که فعلاً می‌توانیم انجام دهیم، بررسی خوش‌ساختی را رد می‌کنیم. در حالت ایده‌آل، هرگز بررسی خوش‌ساختی را رد یا به تعویق نمی‌اندازیم.</p>
+<h3 id="we-sometimes-need-normalization"><a class="header" href="#we-sometimes-need-normalization">(گاهی) به نرمال‌سازی نیاز داریم</a></h3>
+<p>جاهایی هست که نرمال‌سازی یک آیتم پیش از آن انجام می‌شود که Termهایش بررسی خوش‌ساختی را پشت سر بگذارند. این مشکل‌ساز تلقی می‌شود، چون به برخی termها اجازه می‌دهد <a href="https://github.com/rust-lang/rust/issues/100041">کلاً از بررسی خوش‌ساختی term عبور کنند</a>.</p>
+<h3 id="trait-objects"><a class="header" href="#trait-objects">شیء‌های صفت</a></h3>
+<p>هنگام تعیین خوش‌ساخت بودن یک شیء صفت، لازم نمی‌دانیم عبارت‌های where آن شیء صفت خوش‌ساخت باشند. این عبارت‌های where هنگام تبدیل (coercion) به یک شیء صفت اثبات می‌شوند، اما این همچنان یک حفره در بررسی خوش‌ساختی است.</p>
+<p>برای نمونه، مورد زیر کامپایل می‌شود، چون نقطه‌ای نداریم که در آن شیء صفت را از یک نوع مشخص بسازیم:</p>
+<pre><code class="language-rust ignore">trait Trait
+where
+    for&lt;'a&gt; [u8]: Sized {}
+
+fn foo(_: &amp;dyn Trait) {}
+---
+// This doesn't end up being generated, because it happens within a trait object.
+[u8]: Sized</code></pre>
+<p>مورد بالا نباید کامپایل شود، چون <code>[u8]: Sized</code>، اما این تا زمان استفادهٔ واقعی بررسی نمی‌شود:</p>
+<pre><code class="language-rust">trait Trait
+where
+    for&lt;'a&gt; [u8]: Sized {}
+
+fn foo(_: &amp;dyn Trait) {}
+
+// We still need to specify the bound here, otherwise `[u8]: Sized` _is_
+// checked as an obligation.
+impl Trait for u8 where for&lt;'a&gt; [u8]: Sized {}
+
+fn main() {
+    // No matter what we do, this boundary between concrete type and trait
+    // object will produce the obligation `[u8]: Sized`, which will fail when
+    // handed over to the trait solver.
+    let object: Box&lt;dyn Trait&gt; = Box::new(42u8);
+    foo(&amp;object);
+}</code></pre>
+<p>این استثنا دربارهٔ آرگومان‌های جنریک ثابت در شیء‌های صفت صدق نمی‌کند:</p>
+<pre><code class="language-rust ignore">trait Trait&lt;const N: usize&gt; {}
+fn foo&lt;const B: bool&gt;(_: &amp;dyn Trait&lt;B&gt;) {}
+---
+const N: usize
+const B: bool
+N = B // Substitution
+const B: usize + bool</code></pre>
+<p>مورد بالا، برخلاف مثال قبلی، کامپایل نمی‌شود. در مورد آرگومان‌های جنریک ثابت، اینجا <em>مقداری</em> بررسی خوش‌ساختی انجام می‌دهیم.</p>
+<h3 id="binders--higher-ranked-types"><a class="header" href="#binders--higher-ranked-types">Binderها / نوع‌های رتبه‌بالاتر</a></h3>
+<p>Binderها / نوع‌های رتبه‌بالاتر (Higher-Ranked Types) مقدار بررسی خوش‌ساختی‌ای را که روی یک term انجام می‌دهیم کاهش می‌دهند و بررسی خوش‌ساختی را به زمانی موکول می‌کنند که کران نمونه‌سازی می‌شود:</p>
+<pre><code class="language-rust ignore">let _: for&lt;'a&gt; fn(Vec&lt;[&amp;'a ()]&gt;);
+---
+// This doesn't end up being generated, because it happens within a HRB
+[&amp;'a ()]: Sized // slices aren't sized, this would fail!</code></pre>
+<p>به‌طور مشخص، تعهدهای مربوط به متغیرهای binderها (<code>for&lt;'a&gt;</code>) فقط زمانی بررسی می‌شوند که binder نمونه‌سازی شود. برخی چیزها هنوز زیر <code>for&lt;'a&gt;</code> بررسی می‌شوند، اما همچنان بسیاری چیزها را رد می‌کنیم.</p>
+<p>بسیاری از ناسازگاری‌های ایمنی (unsoundness) پیرامون این رفتار است. ببینید: <a href="https://github.com/rust-lang/rust/issues/25860">#25860</a>، <a href="https://github.com/rust-lang/rust/issues/84591">#84591</a>.</p>
+<p>این را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">for&lt;'a, 'b&gt; fn(&amp;'a &amp;'b ())</code></pre>
+<p>HRB بالا به‌جای دو طول عمر کاملاً جدا، <code>'b: 'a</code> (یک کران طول عمر) را نتیجه می‌دهد. این رفتار عادی طول عمر است، اما در حین بررسی خوش‌ساختی نمی‌توانیم اثبات کنیم که این کران به‌طور کلی درست است<sup class="footnote-reference" id="fr-horrible-1"><a href="#footnote-horrible">7</a></sup>، پس آن را رد می‌کنیم.</p>
+<h3 id="free-type-aliases"><a class="header" href="#free-type-aliases">نام‌های مستعار نوع آزاد</a></h3>
+<p>سمت راست نام‌های مستعار نوع آزاد (Free Type Aliases)<sup class="footnote-reference" id="fr-fta-1"><a href="#footnote-fta">8</a></sup> در محل تعریف به‌طور کامل از نظر خوش‌ساخت بودن بررسی نمی‌شود؛ فقط نوع‌های آرگومان‌های جنریک ثابت در سمت راست بررسی می‌شوند.</p>
+<p>نام مستعار نوع آزاد زیر، در زمان نگارش، از بررسی نوع عبور می‌کند:</p>
+<pre><code class="language-rust ignore">type WorksButShouldNot = Vec&lt;str&gt;;
+---
+// This should fail! But we skip the RHS of free type aliases
+str: Sized // Not generated</code></pre>
+<p>این نباید کار کند، چون هم <code>T: Sized</code> و هم <code>str: Sized</code> از <code>Vec&lt;T&gt;</code> نتیجه می‌شوند. این مورد از item-wfck «عبور می‌کند» چون سمت راست یک نام مستعار نوع آزاد <em>تا زمان استفاده شدن</em> بررسی خوش‌ساختی نمی‌شود. Item-wfck برای این مورد خاص <strong>تا زمان استفاده به تعویق می‌افتد</strong>.</p>
+<p>برای جنریک‌های ثابت، همچنان مقدار کمی بررسی خوش‌ساختی در محل تعریف نام مستعار نوع آزاد انجام می‌دهیم. این با مورد خاص بودن فعلی بررسی خوش‌ساختی جنریک ثابت سازگار است، در حالی که چیزهایی مانند کران‌های where را رد می‌کنیم.</p>
+<p>یعنی مورد زیر، با اینکه شکلی مشابه مثال بالا دارد، همان‌طور که باید شکست می‌خورد:</p>
+<pre><code class="language-rust ignore">pub struct Consty&lt;const A: bool&gt;;
+type Alias = Consty&lt;42&gt;;
+---
+// This *is* generated as an obligation, so this (correctly) fails.
+42: bool // This is generated!</code></pre>
+<!-- TODO: Link to something explaining the underlying "why" of the difference between const and trait well-formedness checking in FTAs, or eliminate that difference. Whatever comes first. -->
+<h2 id="well-formed-or-wellformed"><a class="header" href="#well-formed-or-wellformed">“well-formed” or “wellformed”?</a></h2>
+<p>«well-formed» را بر «wellformed» ترجیح دهید، چون با ادبیات منطق سازگار است. این اصطلاح در بخش‌های دیگر راهنمای توسعه / مستندات نیز به WF اختصار داده می‌شود.</p>
+<h2 id="informal-usage"><a class="header" href="#informal-usage">کاربرد غیررسمی</a></h2>
+<p>در گفتگوها، مشارکت‌کنندگان ممکن است چیزی را «well-formed» بنامند و لزوماً منظورشان همان چیزی نباشد که اینجا پوشش می‌دهیم، چون «خوش‌ساختی» عبارتی عمومی است که با درستی ساختارهای صوری مرتبط است. این لزوماً اشتباه نیست، اما باید مراقبش بود.</p>
+<h2 id="what-well-formedness-isnt"><a class="header" href="#what-well-formedness-isnt">خوش‌ساختی چه چیزی نیست</a></h2>
+<p>بررسی خوش‌ساختی «تعداد پارامترها» یا بررسی «نوع پارامتر» نیست<sup class="footnote-reference" id="fr-kind-checking-1"><a href="#footnote-kind-checking">9</a></sup>. نه بررسی خوش‌ساختی term و نه item-wfck هیچ‌کدام به این توجه ندارند که آیا به نوعی با ۲ پارامتر، ۱ یا ۳ نوع اعمال شده است (با فرض نبود مقدار پیش‌فرض)، یا اینکه آیا به یک پارامتر جنریک ثابت یک نوع اعمال شده است. این‌گونه مشکلات در حین پایین‌آوری HIR-ty<sup class="footnote-reference" id="fr-hir-ty-lower-1"><a href="#footnote-hir-ty-lower">10</a></sup> مدیریت می‌شوند، نه توسط wfck.</p>
+<p>خوش‌ساختی طول عمرها را بررسی یا اعتبارسنجی نمی‌کند؛ این کار در <a href="../borrow-check.html">MIR</a> انجام می‌شود.</p>
+<p>خوش‌ساختی در کامپایلر Rust، آن‌طور که در منطق هست، با «نحو صحیح» متناظر نیست. این اصطلاح سابقهٔ کاربرد عمومی در بافت ریاضی به معنای «از مجموعه‌ای از قواعد داده‌شده پیروی می‌کند» دارد. در Rust، کاربرد اولیهٔ ما در جاهایی مانند <a href="https://github.com/rust-lang/rfcs/blob/master/text/1214-projections-lifetimes-and-wf.md">RFC روشن‌سازی دربارهٔ projectionها و خوش‌ساختی</a> نزدیک‌تر به «این چیز از نظر درونی سازگار است» با توجه به کران‌های روی یک نوع بود.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-wf-history">
+<p>این‌ها در مستندات Obligations، Requirements یا Constraints نامیده می‌شوند. اصطلاح ترجیحی «obligations» است، چون با پسوند نوع و نام تابع‌های مرتبط مطابقت دارد. در آینده ممکن است اصطلاح «Goal» در حل‌کنندهٔ جدید جای آن را بگیرد. <a href="#fr-wf-history-1">↩</a></p>
+</li>
+<li id="footnote-terms">
+<p>در زبان‌شناسی این «از نظر دستوری درست» است، در منطق «از نظر نحوی درست» است، و در کاربرد غیررسمی ریاضی‌دانان می‌توان آن را به‌صورت عام‌تر «از قواعدی که برای این حوزه تعیین کرده‌ایم پیروی می‌کند» خواند. <a href="#fr-terms-1">↩</a></p>
+</li>
+<li id="footnote-terms-abbreviated">
+<p>در عوض، این کران در «borrowck روی MIR» و هنگام نمونه‌سازی طول عمرها بررسی می‌شود. <a href="#fr-terms-abbreviated-1">↩</a></p>
+</li>
+<li id="footnote-items">
+<p>نام‌های مستعار نوعی که به چیزی وابسته نیستند، یعنی <code>type Alias = Vec&lt;u8&gt;;</code> در سطح ماژول. <a href="#fr-items-1">↩</a></p>
+</li>
+<li id="footnote-obligations">
+<p>These get referred to as Obligations, Requirements, or Constraints in the documentation. Preferred term is “obligations”, as this matches the suffix of the type and the names of relevant functions. In future, this may be superseded by the new solver’s term “Goal”. <a href="#fr-obligations-1">↩</a></p>
+</li>
+<li id="footnote-tyck-const-generics">
+<p>چیزهای «تعریفی» در rust، <a href="../appendix/glossary.html">واژه‌نامه</a> را ببینید. <a href="#fr-tyck-const-generics-1">↩</a></p>
+</li>
+<li id="footnote-horrible">
+<p>به عبارت دیگر عبارت‌ها و زیرعبارت‌های نوع به معنای کلی، نه یک struct یا enum مشخص در کامپایلر rust. <a href="../appendix/glossary.html">واژه‌نامه</a> را ببینید. <a href="#fr-horrible-1">↩</a></p>
+</li>
+<li id="footnote-fta">
+<p>در برخی بخش‌های این صفحه به‌اختصار «Terms» نامیده می‌شود. <a href="#fr-fta-1">↩</a></p>
+</li>
+<li id="footnote-kind-checking">
+<p>به عبارت دیگر «kind checking»، همان‌طور که در زبان‌هایی مانند Haskell می‌بینیم. <a href="#fr-kind-checking-1">↩</a></p>
+</li>
+<li id="footnote-hir-ty-lower">
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_analysis/hir_ty_lowering/index.html">https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_analysis/hir_ty_lowering/index.html</a> <a href="#fr-hir-ty-lower-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="../traits/separate-projection-bounds.html">→ داشتن کران‌های جداگانهٔ Trait و Projection</a><a href="../variance.html">واریانس ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

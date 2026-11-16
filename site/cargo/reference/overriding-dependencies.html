@@ -1,0 +1,171 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>بازنویسی وابستگی‌ها — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/overriding-dependencies"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="overriding-dependencies"><a class="header" href="#overriding-dependencies">بازنویسی وابستگی‌ها</a></h1>
+<p>نیاز به بازنویسی (override) یک وابستگی می‌تواند در سناریوهای متعددی پیش بیاید. اما بیشتر آن‌ها در نهایت به توانایی کار با یک crate پیش از انتشار آن در <a href="https://crates.io/">crates.io</a> برمی‌گردند. برای مثال:</p>
+<ul>
+<li>crateای که روی آن کار می‌کنید در یک برنامهٔ بسیار بزرگ‌تر هم که روی آن کار می‌کنید استفاده می‌شود و می‌خواهید یک رفع اشکال در کتابخانه را درون برنامهٔ بزرگ‌تر آزمایش کنید.</li>
+<li>یک crate بالادستی که روی آن کار نمی‌کنید در شاخهٔ master مخزن git خود یک ویژگی جدید یا یک رفع اشکال دارد و می‌خواهید آن را امتحان کنید.</li>
+<li>می‌خواهید یک نسخهٔ major جدید از crate خود را منتشر کنید، اما می‌خواهید آزمون یکپارچگی را روی کل یک بسته انجام دهید تا مطمئن شوید نسخهٔ major جدید کار می‌کند.</li>
+<li>برای اشکالی که پیدا کرده‌اید، یک رفع اشکال به یک crate بالادستی ارسال کرده‌اید، اما می‌خواهید برنامه‌تان فوراً به نسخهٔ اصلاح‌شدهٔ crate وابسته شود تا منتظر ادغام شدن رفع اشکال نمانید.</li>
+</ul>
+<p>این سناریوها را می‌توان با <a href="#the-patch-section">بخش مانیفست <code>[patch]</code></a> حل کرد.</p>
+<p>این فصل چند مورد کاربرد مختلف را مرور می‌کند و جزئیات راه‌های مختلف بازنویسی یک وابستگی را شامل می‌شود.</p>
+<ul>
+<li>نمونه‌های کاربرد
+<ul>
+<li><a href="#testing-a-bugfix">آزمایش یک رفع اشکال</a></li>
+<li><a href="#working-with-an-unpublished-minor-version">کار با یک نسخهٔ minor منتشرنشده</a>
+<ul>
+<li><a href="#overriding-repository-url">بازنویسی URL مخزن</a></li>
+</ul>
+</li>
+<li><a href="#prepublishing-a-breaking-change">پیش‌انتشار یک تغییر ناسازگار</a></li>
+<li><a href="#using-patch-with-multiple-versions">استفاده از <code>[patch]</code> با چند نسخه</a></li>
+</ul>
+</li>
+<li>Reference
+<ul>
+<li><a href="#the-patch-section">بخش <code>[patch]</code></a></li>
+<li><a href="#the-replace-section">بخش <code>[replace]</code></a></li>
+<li><a href="#paths-overrides">بازنویسی‌های <code>paths</code></a></li>
+</ul>
+</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>همچنین مشخص‌کردن یک وابستگی با <a href="specifying-dependencies.html#multiple-locations">چند مکان</a> را ببینید، که می‌توان از آن برای بازنویسی منبع یک تعریف وابستگی واحد در یک بستهٔ محلی استفاده کرد.</p>
+</blockquote>
+<h2 id="testing-a-bugfix"><a class="header" href="#testing-a-bugfix">آزمایش یک رفع اشکال</a></h2>
+<p>فرض کنید با crate <code>uuid</code> کار می‌کنید، اما هنگام کار با آن اشکالی کشف می‌کنید. شما بسیار پرتلاش هستید، پس تصمیم می‌گیرید سعی کنید اشکال را هم رفع کنید! در ابتدا مانیفست شما چنین به نظر می‌رسد:</p>
+<pre><code class="language-toml">[package]
+name = "my-library"
+version = "0.1.0"
+
+[dependencies]
+uuid = "1.0"
+</code></pre>
+<p>اولین کاری که می‌کنیم این است که <a href="https://github.com/uuid-rs/uuid">مخزن <code>uuid</code></a> را به‌صورت محلی clone کنیم:</p>
+<pre><code class="language-console">$ git clone https://github.com/uuid-rs/uuid.git
+</code></pre>
+<p>سپس مانیفست <code>my-library</code> را ویرایش می‌کنیم تا شامل این باشد:</p>
+<pre><code class="language-toml">[patch.crates-io]
+uuid = { path = "../path/to/uuid" }
+</code></pre>
+<p>در اینجا اعلام می‌کنیم که منبع <code>crates-io</code> را با یک وابستگی جدید <em>وصله</em> (patch) می‌کنیم. این کار عملاً نسخهٔ checkout‌شدهٔ محلی <code>uuid</code> را به رجیستری crates.io برای بستهٔ محلی ما اضافه می‌کند.</p>
+<p>در مرحلهٔ بعد باید مطمئن شویم فایل قفل ما به‌روز شده تا از این نسخهٔ جدید <code>uuid</code> استفاده کند، تا بستهٔ ما به‌جای نسخهٔ crates.io از نسخهٔ checkout‌شدهٔ محلی استفاده کند. <code>[patch]</code> به این شکل کار می‌کند که وابستگی را در <code>../path/to/uuid</code> بارگذاری می‌کند و سپس هرگاه از crates.io دربارهٔ نسخه‌های <code>uuid</code> پرس‌وجو شود، نسخهٔ محلی را <em>نیز</em> برمی‌گرداند.</p>
+<p>این یعنی شمارهٔ نسخهٔ checkout محلی اهمیت دارد و بر اینکه patch استفاده شود یا نه اثر می‌گذارد. مانیفست ما <code>uuid = "1.0"</code> را اعلام کرده است که یعنی فقط به <code>&gt;= 1.0.0, &lt; 2.0.0</code> حل می‌شود و الگوریتم حل حریصانهٔ Cargo هم یعنی به بیشترین نسخه در آن بازه حل می‌شود. معمولاً این مهم نیست، چون نسخهٔ مخزن git از قبل بزرگ‌تر یا برابر با بیشترین نسخهٔ منتشرشده در crates.io است، اما مهم است که این را در نظر داشته باشید!</p>
+<p>به هر حال، معمولاً تنها کاری که اکنون باید بکنید این است:</p>
+<pre><code class="language-console">$ cargo build
+   Compiling uuid v1.0.0 (.../uuid)
+   Compiling my-library v0.1.0 (.../my-library)
+    Finished dev [unoptimized + debuginfo] target(s) in 0.32 secs
+</code></pre>
+<p>و تمام! اکنون با نسخهٔ محلی <code>uuid</code> ساخت می‌گیرید (به مسیر داخل پرانتز در خروجی ساخت توجه کنید). اگر نمی‌بینید که نسخهٔ مسیر محلی ساخته می‌شود، ممکن است لازم باشد <code>cargo update uuid --precise $version</code> را اجرا کنید که <code>$version</code> نسخهٔ کپی checkout‌شدهٔ محلی <code>uuid</code> است.</p>
+<p>پس از رفع اشکالی که در ابتدا پیدا کردید، کار بعدی که احتمالاً می‌خواهید بکنید این است که آن را به‌صورت یک pull request به خود crate <code>uuid</code> ارسال کنید. وقتی این کار را کردید، می‌توانید بخش <code>[patch]</code> را هم به‌روز کنید. فهرست درون <code>[patch]</code> درست مانند بخش <code>[dependencies]</code> است، پس وقتی pull request شما ادغام شد، می‌توانید وابستگی <code>path</code> خود را به این تغییر دهید:</p>
+<pre><code class="language-toml">[patch.crates-io]
+uuid = { git = 'https://github.com/uuid-rs/uuid.git' }
+</code></pre>
+<h2 id="working-with-an-unpublished-minor-version"><a class="header" href="#working-with-an-unpublished-minor-version">کار با یک نسخهٔ minor منتشرنشده</a></h2>
+<p>حالا از رفع اشکال به افزودن ویژگی برویم. هنگام کار روی <code>my-library</code> کشف می‌کنید که یک ویژگی کاملاً جدید در crate <code>uuid</code> لازم است. این ویژگی را پیاده‌سازی کرده‌اید، در بالا با <code>[patch]</code> به‌صورت محلی آزمایش کرده‌اید و یک pull request ارسال کرده‌اید. ببینیم چگونه می‌توانید پیش از انتشار واقعی آن را به کار ببرید و آزمایش کنید.</p>
+<p>فرض کنیم نسخهٔ فعلی <code>uuid</code> در crates.io برابر <code>1.0.0</code> است، اما از آن زمان شاخهٔ master مخزن git به <code>1.0.1</code> به‌روز شده است. این شاخه شامل ویژگی جدیدی است که قبلاً ارسال کرده‌اید. برای استفاده از این مخزن، <code>Cargo.toml</code> خود را طوری ویرایش می‌کنیم که چنین باشد</p>
+<pre><code class="language-toml">[package]
+name = "my-library"
+version = "0.1.0"
+
+[dependencies]
+uuid = "1.0.1"
+
+[patch.crates-io]
+uuid = { git = 'https://github.com/uuid-rs/uuid.git' }
+</code></pre>
+<p>توجه کنید که وابستگی محلی ما به <code>uuid</code> به <code>1.0.1</code> به‌روز شده است، زیرا پس از انتشار crate همین را واقعاً لازم خواهیم داشت. اما این نسخه در crates.io وجود ندارد، پس آن را با بخش <code>[patch]</code> مانیفست فراهم می‌کنیم.</p>
+<p>حالا وقتی کتابخانهٔ ما ساخته شود، <code>uuid</code> را از مخزن git واکشی می‌کند و به‌جای تلاش برای دانلود یک نسخه از crates.io، به 1.0.1 درون مخزن حل می‌شود. وقتی 1.0.1 در crates.io منتشر شد، می‌توان بخش <code>[patch]</code> را حذف کرد.</p>
+<p>همچنین شایان ذکر است که <code>[patch]</code> <em>به‌صورت تعدی‌یافته</em> اعمال می‌شود. فرض کنید از <code>my-library</code> در یک بستهٔ بزرگ‌تر استفاده می‌کنید، مثلاً:</p>
+<pre><code class="language-toml">[package]
+name = "my-binary"
+version = "0.1.0"
+
+[dependencies]
+my-library = { git = 'https://example.com/git/my-library' }
+uuid = "1.0"
+
+[patch.crates-io]
+uuid = { git = 'https://github.com/uuid-rs/uuid.git' }
+</code></pre>
+<p>به یاد داشته باشید که <code>[patch]</code> به‌صورت <em>تعدی‌یافته</em> قابل اعمال است اما فقط می‌تواند در <em>سطح بالا</em> تعریف شود، پس مصرف‌کنندگان <code>my-library</code> در صورت لزوم باید بخش <code>[patch]</code> را تکرار کنند. اما در اینجا crate جدید <code>uuid</code> هم برای وابستگی ما به <code>uuid</code> و هم برای وابستگی <code>my-library -&gt; uuid</code> اعمال می‌شود. crate <code>uuid</code> برای کل این گراف crate به یک نسخه حل می‌شود، یعنی 1.0.1، و از مخزن git گرفته می‌شود.</p>
+<h3 id="overriding-repository-url"><a class="header" href="#overriding-repository-url">بازنویسی URL مخزن</a></h3>
+<p>اگر وابستگی‌ای که می‌خواهید بازنویسی کنید از <code>crates.io</code> بارگذاری نمی‌شود، باید نحوهٔ استفاده از <code>[patch]</code> را کمی تغییر دهید. برای مثال، اگر وابستگی یک وابستگی git باشد، می‌توانید آن را با این به یک مسیر محلی بازنویسی کنید:</p>
+<pre><code class="language-toml">[patch."https://github.com/your/repository"]
+my-library = { path = "../my-library/path" }
+</code></pre>
+<p>و تمام!</p>
+<h2 id="prepublishing-a-breaking-change"><a class="header" href="#prepublishing-a-breaking-change">پیش‌انتشار یک تغییر ناسازگار</a></h2>
+<p>ببینیم چگونه با یک نسخهٔ major جدید از یک crate کار کنیم که معمولاً با تغییرات ناسازگار همراه است. با ادامهٔ همان crateهای قبلی، یعنی می‌خواهیم نسخهٔ 2.0.0 از crate <code>uuid</code> را ایجاد کنیم. پس از ارسال همهٔ تغییرات به بالادست، می‌توانیم مانیفست <code>my-library</code> را طوری به‌روز کنیم که چنین باشد:</p>
+<pre><code class="language-toml">[dependencies]
+uuid = "2.0"
+
+[patch.crates-io]
+uuid = { git = "https://github.com/uuid-rs/uuid.git", branch = "2.0.0" }
+</code></pre>
+<p>و تمام! مانند مثال قبلی، نسخهٔ 2.0.0 واقعاً در crates.io وجود ندارد، اما با استفاده از بخش <code>[patch]</code> همچنان می‌توانیم آن را از طریق یک وابستگی git وارد کنیم. به‌عنوان یک تمرین فکری، بیایید دوباره به مانیفست <code>my-binary</code> از بالا نیز نگاهی بیندازیم:</p>
+<pre><code class="language-toml">[package]
+name = "my-binary"
+version = "0.1.0"
+
+[dependencies]
+my-library = { git = 'https://example.com/git/my-library' }
+uuid = "1.0"
+
+[patch.crates-io]
+uuid = { git = 'https://github.com/uuid-rs/uuid.git', branch = '2.0.0' }
+</code></pre>
+<p>توجه کنید که این در واقع به دو نسخه از crate <code>uuid</code> حل می‌شود. crate <code>my-binary</code> همچنان از سری 1.x.y مربوط به crate <code>uuid</code> استفاده می‌کند، اما crate <code>my-library</code> از نسخهٔ <code>2.0.0</code> مربوط به <code>uuid</code> استفاده خواهد کرد. این کار به شما امکان می‌دهد تغییرات ناسازگار یک crate را به‌تدریج در یک گراف وابستگی پیاده کنید، بدون آنکه مجبور باشید همه‌چیز را یک‌جا به‌روز کنید.</p>
+<h2 id="using-patch-with-multiple-versions"><a class="header" href="#using-patch-with-multiple-versions">استفاده از <code>[patch]</code> با چند نسخه</a></h2>
+<p>می‌توانید چند نسخه از یک crate را با کلید <code>package</code> که برای تغییر نام وابستگی‌ها به کار می‌رود، وصله کنید. برای مثال فرض کنید crate <code>serde</code> یک رفع اشکال دارد که می‌خواهیم در سری <code>1.*</code> آن استفاده کنیم، اما می‌خواهیم نمونه‌سازی با نسخهٔ <code>2.0.0</code> از serde را هم که در مخزن git خود داریم امتحان کنیم. برای پیکربندی این کار چنین می‌کنیم:</p>
+<pre><code class="language-toml">[patch.crates-io]
+serde = { git = 'https://github.com/serde-rs/serde.git' }
+serde2 = { git = 'https://github.com/example/serde.git', package = 'serde', branch = 'v2' }
+</code></pre>
+<p>دستور اول <code>serde = ...</code> نشان می‌دهد که serde <code>1.*</code> باید از مخزن git استفاده شود (و رفع اشکال موردنیاز ما را وارد کند) و دستور دوم <code>serde2 = ...</code> نشان می‌دهد که بستهٔ <code>serde</code> باید از شاخهٔ <code>v2</code> مخزن <code>https://github.com/example/serde</code> نیز گرفته شود. در اینجا فرض می‌کنیم که <code>Cargo.toml</code> در آن شاخه نسخهٔ <code>2.0.0</code> را ذکر می‌کند.</p>
+<p>توجه کنید که هنگام استفاده از کلید <code>package</code>، شناسهٔ <code>serde2</code> در اینجا در واقع نادیده گرفته می‌شود. ما فقط به یک نام یکتا نیاز داریم که با crateهای وصله‌شدهٔ دیگر تداخل نداشته باشد.</p>
+<h2 id="the-patch-section"><a class="header" href="#the-patch-section">بخش <code>[patch]</code></a></h2>
+<p>بخش <code>[patch]</code> در <code>Cargo.toml</code> را می‌توان برای بازنویسی وابستگی‌ها با نسخه‌های دیگر به کار برد. نحو آن شبیه بخش <a href="specifying-dependencies.html"><code>[dependencies]</code></a> است:</p>
+<pre><code class="language-toml">[patch.crates-io]
+foo = { git = 'https://github.com/example/foo.git' }
+bar = { path = 'my/local/bar' }
+
+[dependencies.baz]
+git = 'https://github.com/example/baz.git'
+
+[patch.'https://github.com/example/baz']
+baz = { git = 'https://github.com/example/patched-baz.git', branch = 'my-branch' }
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>جدول <code>[patch]</code> را می‌توان به‌صورت یک <a href="config.html">گزینهٔ پیکربندی</a> نیز مشخص کرد، مثلاً در فایل <code>.cargo/config.toml</code> یا یک گزینهٔ CLI مانند <code>--config 'patch.crates-io.rand.path="rand"'</code>. این می‌تواند برای تغییرات صرفاً محلی که نمی‌خواهید commit کنید، یا آزمایش موقت یک patch مفید باشد.</p>
+</blockquote>
+<p>جدول <code>[patch]</code> از زیرجدول‌های شبیه وابستگی تشکیل شده است. هر کلید پس از <code>[patch]</code> یا URL منبعی است که وصله می‌شود، یا نام یک رجیستری. از نام <code>crates-io</code> می‌توان برای بازنویسی رجیستری پیش‌فرض <a href="https://crates.io/">crates.io</a> استفاده کرد. نخستین <code>[patch]</code> در مثال بالا بازنویسی <a href="https://crates.io/">crates.io</a> را نشان می‌دهد و <code>[patch]</code> دوم بازنویسی یک منبع git را.</p>
+<p>هر ورودی در این جدول‌ها یک مشخصهٔ وابستگی عادی است، مانند آنچه در بخش <code>[dependencies]</code> مانیفست می‌آید. وابستگی‌های فهرست‌شده در بخش <code>[patch]</code> حل می‌شوند و برای وصله‌کردن منبع در URL مشخص‌شده به کار می‌روند. قطعهٔ مانیفست بالا منبع <code>crates-io</code> (یعنی خود crates.io) را با crateهای <code>foo</code> و <code>bar</code> وصله می‌کند. همچنین منبع <code>https://github.com/example/baz</code> را با شاخهٔ <code>my-branch</code> که از جای دیگری می‌آید وصله می‌کند.</p>
+<p>منابع را می‌توان با نسخه‌هایی از crateها که وجود ندارند وصله کرد و همچنین با نسخه‌هایی که از قبل وجود دارند. اگر یک منبع با نسخه‌ای از crate که از قبل در منبع وجود دارد وصله شود، crate اصلی منبع جایگزین می‌شود.</p>
+<p>Cargo فقط به تنظیمات patch در مانیفست <code>Cargo.toml</code> در ریشهٔ workspace نگاه می‌کند. تنظیمات patch تعریف‌شده در وابستگی‌ها نادیده گرفته می‌شوند.</p>
+<h2 id="the-replace-section"><a class="header" href="#the-replace-section">بخش <code>[replace]</code></a></h2>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p><code>[replace]</code> منسوخ شده است. باید به‌جای آن از جدول <a href="#the-patch-section"><code>[patch]</code></a> استفاده کنید.</p>
+</blockquote>
+<p>این بخش از Cargo.toml را می‌توان برای بازنویسی وابستگی‌ها با نسخه‌های دیگر به کار برد. نحو آن شبیه بخش <code>[dependencies]</code> است:</p>
+<pre><code class="language-toml">[replace]
+"foo:0.1.0" = { git = 'https://github.com/example/foo.git' }
+"bar:1.0.2" = { path = 'my/local/bar' }
+</code></pre>
+<p>هر کلید در جدول <code>[replace]</code> یک <a href="pkgid-spec.html">مشخصهٔ شناسهٔ بسته</a> است که امکان انتخاب دلخواه یک گره در گراف وابستگی برای بازنویسی را می‌دهد (شمارهٔ نسخهٔ ۳ بخشی لازم است). مقدار هر کلید همان نحو <code>[dependencies]</code> برای مشخص‌کردن وابستگی‌هاست، با این تفاوت که نمی‌توانید feature مشخص کنید. توجه کنید که وقتی یک crate بازنویسی می‌شود، نسخه‌ای که با آن بازنویسی می‌شود باید هم نام و هم نسخهٔ یکسان داشته باشد، اما می‌تواند از منبع دیگری (مثلاً git یا یک مسیر محلی) بیاید.</p>
+<p>Cargo فقط به تنظیمات replace در مانیفست <code>Cargo.toml</code> در ریشهٔ workspace نگاه می‌کند. تنظیمات replace تعریف‌شده در وابستگی‌ها نادیده گرفته می‌شوند.</p>
+<h2 id="paths-overrides"><a class="header" href="#paths-overrides">بازنویسی‌های <code>paths</code></a></h2>
+<p>گاهی فقط موقتاً روی یک crate کار می‌کنید و نمی‌خواهید مثل بخش <code>[patch]</code> بالا <code>Cargo.toml</code> را تغییر دهید. برای این مورد Cargo نسخهٔ بسیار محدودتری از بازنویسی ارائه می‌دهد به نام <strong>بازنویسی مسیر</strong> (path override).</p>
+<p>بازنویسی‌های مسیر به‌جای <code>Cargo.toml</code> از طریق <a href="config.html"><code>.cargo/config.toml</code></a> مشخص می‌شوند. درون <code>.cargo/config.toml</code> کلیدی به نام <code>paths</code> مشخص می‌کنید:</p>
+<pre><code class="language-toml">paths = ["/path/to/uuid"]
+</code></pre>
+<p>این آرایه باید با دایرکتوری‌هایی پر شود که شامل <code>Cargo.toml</code> هستند. در این نمونه فقط <code>uuid</code> را اضافه می‌کنیم، پس تنها همان بازنویسی می‌شود. این مسیر می‌تواند مطلق یا نسبی به دایرکتوری‌ای باشد که پوشهٔ <code>.cargo</code> را در بر دارد.</p>
+<p>بازنویسی‌های مسیر محدودتر از بخش <code>[patch]</code> هستند، از این جهت که نمی‌توانند ساختار گراف وابستگی را تغییر دهند. وقتی جایگزینی مسیر استفاده می‌شود، مجموعهٔ قبلی وابستگی‌ها باید دقیقاً با مشخصات جدید <code>Cargo.toml</code> مطابقت داشته باشد. برای مثال این یعنی نمی‌توان از بازنویسی مسیر برای آزمودن افزودن یک وابستگی به یک crate استفاده کرد. در آن موقعیت باید از <code>[patch]</code> استفاده کرد. در نتیجه، استفاده از بازنویسی مسیر معمولاً به رفع اشکال‌های سریع محدود می‌شود، نه تغییرات بزرگ‌تر.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>استفاده از پیکربندی محلی برای بازنویسی مسیرها فقط برای crateهایی کار می‌کند که در <a href="https://crates.io/">crates.io</a> منتشر شده‌اند. نمی‌توانید از این قابلیت برای نشان‌دادن محل crateهای محلی منتشرنشده به Cargo استفاده کنید.</p>
+</blockquote><nav class="page-nav"><a href="specifying-dependencies.html">→ مشخص‌کردن وابستگی‌ها</a><a href="source-replacement.html">جایگزینی منبع ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,40 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>Lint Passes — کتاب Clippy</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="development/lint_passes"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Clippy</a><small class="en-title" dir="ltr">The Clippy Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="lint-passes"><a class="header" href="#lint-passes">Lint passها</a></h1>
+<p>پیش از آنکه سراغ منطق یک lint جدید بروید، هر توسعه‌دهندهٔ Clippy باید تصمیمی مهم بگیرد: استفاده از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.EarlyLintPass.html"><code>EarlyLintPass</code></a> یا <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.LateLintPass.html"><code>LateLintPass</code></a>.</p>
+<p>به‌طور خلاصه، <code>LateLintPass</code> به اطلاعات نوع و نماد (symbol) دسترسی دارد، اما <code>EarlyLintPass</code> ندارد. اگر به اطلاعات نوع نیاز ندارید، از <code>EarlyLintPass</code> استفاده کنید.</p>
+<p>در ادامه این دو صفت را بیشتر توضیح می‌دهیم.</p>
+<h2 id="earlylintpass"><a class="header" href="#earlylintpass"><code>EarlyLintPass</code></a></h2>
+<p>اگر مستندات <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.EarlyLintPass.html"><code>EarlyLintPass</code></a> را با دقت بررسی کنید، می‌بینید که هر متدی که برای این صفت تعریف شده است از یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/context/struct.EarlyContext.html"><code>EarlyContext</code></a> استفاده می‌کند. در مستندات <code>EarlyContext</code> آمده است:</p>
+<blockquote>
+<p>زمینه‌ای (context) برای بررسی lint روی AST، پس از گسترش ماکروها و پیش از پایین‌آوری (lowering) به HIR.</p>
+</blockquote>
+<p>همین است. <code>EarlyLintPass</code> فقط در سطح درخت نحو انتزاعی (AST) کار می‌کند. و AST در مرحلهٔ <a href="https://rustc-dev-guide.rust-lang.org/overview.html#lexing-and-parsing">تحلیل واژگانی و تجزیه (lexing and parsing)</a> از کامپایل کد تولید می‌شود. بنابراین نمی‌داند یک نماد چه معنایی دارد و از اطلاعات نوع‌ها خبر ندارد، و اگر lint فقط با مسائل مربوط به نحو سروکار دارد، باید صفت انتخابی ما برای یک lint جدید باشد.</p>
+<p>اگرچه سرعت lint کردن تاکنون دغدغهٔ Clippy نبوده است، <code>EarlyLintPass</code> سریع‌تر است و اگر مطمئن هستید که یک lint به اطلاعات نوع نیاز ندارد، باید انتخاب شما باشد.</p>
+<p>برای یادآوری، دستور زیر را اجرا کنید تا کد اولیهٔ lintهایی که از <code>EarlyLintPass</code> استفاده می‌کنند تولید شود:</p>
+<pre><code class="language-sh">$ cargo dev new_lint --name=&lt;your_new_lint&gt; --pass=early --category=&lt;your_category_choice&gt;
+</code></pre>
+<h3 id="example-for-earlylintpass"><a class="header" href="#example-for-earlylintpass">مثالی برای <code>EarlyLintPass</code></a></h3>
+<p>به کد زیر نگاه کنید:</p>
+<pre><code class="language-rust">let x = OurUndefinedType;
+x.non_existing_method();</code></pre>
+<p>از دید AST، هر دو خط از نظر «دستوری» درست هستند. انتساب با <code>let</code> شروع می‌شود و با نقطه‌ویرگول پایان می‌یابد. فراخوانی یک متد هم درست به نظر می‌رسد. ما به‌عنوان برنامه‌نویس ممکن است همین حالا چند پرسش داشته باشیم، اما تجزیه‌گر (parser) مشکلی با آن ندارد. منظور ما از این جمله که <code>EarlyLintPass</code> فقط با نحو در سطح AST سروکار دارد، همین است.</p>
+<p>یا به lint ‏<code>foo_functions</code> فکر کنید که در فصل <a href="defining_lints.html">تعریف lintهای جدید</a> به آن اشاره کردیم.</p>
+<p>می‌خواهیم lint ‏<code>foo_functions</code> تابع‌هایی را که نامشان <code>foo</code> است شناسایی کند. نوشتن lintی که فقط نام یک تابع را بررسی می‌کند یعنی فقط با AST کار می‌کنیم و اصلاً لازم نیست به سامانهٔ نوع‌ها دسترسی داشته باشیم (سامانهٔ نوع‌ها جایی است که <code>LateLintPass</code> وارد صحنه می‌شود).</p>
+<h2 id="latelintpass"><a class="header" href="#latelintpass"><code>LateLintPass</code></a></h2>
+<p>برخلاف <code>EarlyLintPass</code>، ‏<code>LateLintPass</code> اطلاعات نوع را در اختیار دارد.</p>
+<p>اگر مستندات <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.LateLintPass.html"><code>LateLintPass</code></a> را با دقت بررسی کنید، می‌بینید که هر متدی که در این صفت تعریف شده است از یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/context/struct.LateContext.html"><code>LateContext</code></a> استفاده می‌کند.</p>
+<p>در مستندات <code>LateContext</code> متدهایی پیدا می‌کنیم که به بررسی نوع (type-checking) مربوط هستند و در <code>EarlyContext</code> وجود ندارند، مانند:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/context/struct.LateContext.html#method.maybe_typeck_results"><code>maybe_typeck_results</code></a></li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/context/struct.LateContext.html#method.typeck_results"><code>typeck_results</code></a></li>
+</ul>
+<h3 id="example-for-latelintpass"><a class="header" href="#example-for-latelintpass">مثالی برای <code>LateLintPass</code></a></h3>
+<p>بیایید با مثال زیر آن را بررسی کنیم:</p>
+<pre><code class="language-rust">let x = OurUndefinedType;
+x.non_existing_method();</code></pre>
+<p>این دو خط کد از دید AST از نظر نحوی درست هستند. یک انتساب داریم و روی متغیری که از یک نوع است متدی را فراخوانی می‌کنیم. از نظر دستوری، برای parser همه‌چیز مرتب است.</p>
+<p>اما اگر یک سطح پایین‌تر برویم و اطلاعات نوع را بررسی کنیم، کامپایلر متوجه می‌شود که هم <code>OurUndefinedType</code> و هم <code>non_existing_method()</code> <strong>تعریف نشده‌اند</strong>.</p>
+<p>ما به‌عنوان توسعه‌دهندگان Clippy، برای دسترسی به چنین اطلاعات نوعی باید <code>LateLintPass</code> را برای lint خود پیاده‌سازی کنیم. وقتی lintهای Clippy را مرور می‌کنید، متوجه می‌شوید که تقریباً هر lint در یک <code>LateLintPass</code> پیاده‌سازی شده است، دقیقاً به این دلیل که اغلب نه‌فقط مسائل نحوی، بلکه اطلاعات نوع را هم باید بررسی کنیم.</p>
+<p>محدودیت دیگر <code>EarlyLintPass</code> این است که گره‌ها فقط با موقعیتشان در AST شناسایی می‌شوند. یعنی نمی‌توانید فقط یک <code>id</code> بگیرید و گره‌ای مشخص را درخواست کنید. برای بیشتر lintها این مشکلی ندارد، اما برخی lintها نیاز دارند گره‌های دیگر را بررسی کنند، که در سطح HIR آسان‌تر است. در این موارد، <code>LateLintPass</code> انتخاب بهتری است.</p>
+<p>برای یادآوری، دستور زیر را اجرا کنید تا کد اولیهٔ lintهایی که از <code>LateLintPass</code> استفاده می‌کنند تولید شود:</p>
+<pre><code class="language-sh">$ cargo dev new_lint --name=&lt;your_new_lint&gt; --pass=late --category=&lt;your_category_choice&gt;
+</code></pre><nav class="page-nav"><a href="writing_tests.html">→ نوشتن آزمون</a><a href="emitting_lints.html">صدور lint ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../clippy/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,241 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>قراردادهای طراحی — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="static-guarantees/design-contracts"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="design-contracts"><a class="header" href="#design-contracts">قراردادهای طراحی</a></h1>
+<p>در فصل قبل، رابطی نوشتیم که قراردادهای طراحی را <em>اعمال نمی‌کرد</em>. بیایید دوباره نگاهی به رجیستر پیکربندی GPIO فرضی خود بیندازیم:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: right">نام</th><th style="text-align: right">شمارهٔ بیت‌ها</th><th style="text-align: right">مقدار</th><th style="text-align: right">معنا</th><th style="text-align: right">توضیحات</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: right">enable</td><td style="text-align: right">0</td><td style="text-align: right">0</td><td style="text-align: right">disabled</td><td style="text-align: right">GPIO را غیرفعال می‌کند</td></tr>
+<tr><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right">1</td><td style="text-align: right">enabled</td><td style="text-align: right">GPIO را فعال می‌کند</td></tr>
+<tr><td style="text-align: right">direction</td><td style="text-align: right">1</td><td style="text-align: right">0</td><td style="text-align: right">input</td><td style="text-align: right">جهت را روی ورودی (Input) تنظیم می‌کند</td></tr>
+<tr><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right">1</td><td style="text-align: right">output</td><td style="text-align: right">جهت را روی خروجی (Output) تنظیم می‌کند</td></tr>
+<tr><td style="text-align: right">input_mode</td><td style="text-align: right">2..3</td><td style="text-align: right">00</td><td style="text-align: right">hi-z</td><td style="text-align: right">ورودی را روی مقاومت بالا تنظیم می‌کند</td></tr>
+<tr><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right">01</td><td style="text-align: right">pull-low</td><td style="text-align: right">پایهٔ ورودی به پایین کشیده می‌شود</td></tr>
+<tr><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right">10</td><td style="text-align: right">pull-high</td><td style="text-align: right">پایهٔ ورودی به بالا کشیده می‌شود</td></tr>
+<tr><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right">11</td><td style="text-align: right">ندارد</td><td style="text-align: right">حالت نامعتبر. تنظیم نکنید</td></tr>
+<tr><td style="text-align: right">output_mode</td><td style="text-align: right">4</td><td style="text-align: right">0</td><td style="text-align: right">set-low</td><td style="text-align: right">پایهٔ خروجی در سطح پایین رانده می‌شود</td></tr>
+<tr><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right">1</td><td style="text-align: right">set-high</td><td style="text-align: right">پایهٔ خروجی در سطح بالا رانده می‌شود</td></tr>
+<tr><td style="text-align: right">input_status</td><td style="text-align: right">5</td><td style="text-align: right">x</td><td style="text-align: right">in-val</td><td style="text-align: right">اگر ورودی کمتر از 1.5v باشد 0 و اگر ورودی بزرگ‌تر یا مساوی 1.5v باشد 1</td></tr>
+</tbody>
+</table>
+</div>
+<p>اگر به‌جای آن، پیش از استفاده از سخت‌افزار زیرین وضعیت را بررسی کنیم و قراردادهای طراحی را در زمان اجرا اعمال کنیم، ممکن است کدی بنویسیم که شبیه این باشد:</p>
+<pre><code class="language-rust ignore">/// GPIO interface
+struct GpioConfig {
+    /// GPIO Configuration structure generated by svd2rust
+    periph: GPIO_CONFIG,
+}
+
+impl GpioConfig {
+    pub fn set_enable(&amp;mut self, is_enabled: bool) {
+        self.periph.modify(|_r, w| {
+            w.enable().set_bit(is_enabled)
+        });
+    }
+
+    pub fn set_direction(&amp;mut self, is_output: bool) -&gt; Result&lt;(), ()&gt; {
+        if self.periph.read().enable().bit_is_clear() {
+            // Must be enabled to set direction
+            return Err(());
+        }
+
+        self.periph.modify(|r, w| {
+            w.direction().set_bit(is_output)
+        });
+
+        Ok(())
+    }
+
+    pub fn set_input_mode(&amp;mut self, variant: InputMode) -&gt; Result&lt;(), ()&gt; {
+        if self.periph.read().enable().bit_is_clear() {
+            // Must be enabled to set input mode
+            return Err(());
+        }
+
+        if self.periph.read().direction().bit_is_set() {
+            // Direction must be input
+            return Err(());
+        }
+
+        self.periph.modify(|_r, w| {
+            w.input_mode().variant(variant)
+        });
+
+        Ok(())
+    }
+
+    pub fn set_output_status(&amp;mut self, is_high: bool) -&gt; Result&lt;(), ()&gt; {
+        if self.periph.read().enable().bit_is_clear() {
+            // Must be enabled to set output status
+            return Err(());
+        }
+
+        if self.periph.read().direction().bit_is_clear() {
+            // Direction must be output
+            return Err(());
+        }
+
+        self.periph.modify(|_r, w| {
+            w.output_mode.set_bit(is_high)
+        });
+
+        Ok(())
+    }
+
+    pub fn get_input_status(&amp;self) -&gt; Result&lt;bool, ()&gt; {
+        if self.periph.read().enable().bit_is_clear() {
+            // Must be enabled to get status
+            return Err(());
+        }
+
+        if self.periph.read().direction().bit_is_set() {
+            // Direction must be input
+            return Err(());
+        }
+
+        Ok(self.periph.read().input_status().bit_is_set())
+    }
+}</code></pre>
+<p>از آنجا که باید محدودیت‌های سخت‌افزار را اعمال کنیم، در نهایت مقدار زیادی بررسی در زمان اجرا انجام می‌دهیم که زمان و منابع را هدر می‌دهد، و استفاده از این کد برای توسعه‌دهنده بسیار ناخوشایندتر خواهد بود.</p>
+<h2 id="type-states"><a class="header" href="#type-states">حالت‌های نوع (Type States)</a></h2>
+<p>اما اگر به‌جای آن، از سیستم نوع Rust برای اعمال قواعد انتقال بین حالت‌ها استفاده کنیم چه؟ این مثال را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">/// GPIO interface
+struct GpioConfig&lt;ENABLED, DIRECTION, MODE&gt; {
+    /// GPIO Configuration structure generated by svd2rust
+    periph: GPIO_CONFIG,
+    enabled: ENABLED,
+    direction: DIRECTION,
+    mode: MODE,
+}
+
+// Type states for MODE in GpioConfig
+struct Disabled;
+struct Enabled;
+struct Output;
+struct Input;
+struct PulledLow;
+struct PulledHigh;
+struct HighZ;
+struct DontCare;
+
+/// These functions may be used on any GPIO Pin
+impl&lt;EN, DIR, IN_MODE&gt; GpioConfig&lt;EN, DIR, IN_MODE&gt; {
+    pub fn into_disabled(self) -&gt; GpioConfig&lt;Disabled, DontCare, DontCare&gt; {
+        self.periph.modify(|_r, w| w.enable.disabled());
+        GpioConfig {
+            periph: self.periph,
+            enabled: Disabled,
+            direction: DontCare,
+            mode: DontCare,
+        }
+    }
+
+    pub fn into_enabled_input(self) -&gt; GpioConfig&lt;Enabled, Input, HighZ&gt; {
+        self.periph.modify(|_r, w| {
+            w.enable.enabled()
+             .direction.input()
+             .input_mode.high_z()
+        });
+        GpioConfig {
+            periph: self.periph,
+            enabled: Enabled,
+            direction: Input,
+            mode: HighZ,
+        }
+    }
+
+    pub fn into_enabled_output(self) -&gt; GpioConfig&lt;Enabled, Output, DontCare&gt; {
+        self.periph.modify(|_r, w| {
+            w.enable.enabled()
+             .direction.output()
+             .input_mode.set_high()
+        });
+        GpioConfig {
+            periph: self.periph,
+            enabled: Enabled,
+            direction: Output,
+            mode: DontCare,
+        }
+    }
+}
+
+/// This function may be used on an Output Pin
+impl GpioConfig&lt;Enabled, Output, DontCare&gt; {
+    pub fn set_bit(&amp;mut self, set_high: bool) {
+        self.periph.modify(|_r, w| w.output_mode.set_bit(set_high));
+    }
+}
+
+/// These methods may be used on any enabled input GPIO
+impl&lt;IN_MODE&gt; GpioConfig&lt;Enabled, Input, IN_MODE&gt; {
+    pub fn bit_is_set(&amp;self) -&gt; bool {
+        self.periph.read().input_status.bit_is_set()
+    }
+
+    pub fn into_input_high_z(self) -&gt; GpioConfig&lt;Enabled, Input, HighZ&gt; {
+        self.periph.modify(|_r, w| w.input_mode().high_z());
+        GpioConfig {
+            periph: self.periph,
+            enabled: Enabled,
+            direction: Input,
+            mode: HighZ,
+        }
+    }
+
+    pub fn into_input_pull_down(self) -&gt; GpioConfig&lt;Enabled, Input, PulledLow&gt; {
+        self.periph.modify(|_r, w| w.input_mode().pull_low());
+        GpioConfig {
+            periph: self.periph,
+            enabled: Enabled,
+            direction: Input,
+            mode: PulledLow,
+        }
+    }
+
+    pub fn into_input_pull_up(self) -&gt; GpioConfig&lt;Enabled, Input, PulledHigh&gt; {
+        self.periph.modify(|_r, w| w.input_mode().pull_high());
+        GpioConfig {
+            periph: self.periph,
+            enabled: Enabled,
+            direction: Input,
+            mode: PulledHigh,
+        }
+    }
+}</code></pre>
+<p>حالا ببینیم کدی که از این استفاده می‌کند چه شکلی خواهد بود:</p>
+<pre><code class="language-rust ignore">/*
+ * Example 1: Unconfigured to High-Z input
+ */
+let pin: GpioConfig&lt;Disabled, _, _&gt; = get_gpio();
+
+// Can't do this, pin isn't enabled!
+// pin.into_input_pull_down();
+
+// Now turn the pin from unconfigured to a high-z input
+let input_pin = pin.into_enabled_input();
+
+// Read from the pin
+let pin_state = input_pin.bit_is_set();
+
+// Can't do this, input pins don't have this interface!
+// input_pin.set_bit(true);
+
+/*
+ * Example 2: High-Z input to Pulled Low input
+ */
+let pulled_low = input_pin.into_input_pull_down();
+let pin_state = pulled_low.bit_is_set();
+
+/*
+ * Example 3: Pulled Low input to Output, set high
+ */
+let output_pin = pulled_low.into_enabled_output();
+output_pin.set_bit(true);
+
+// Can't do this, output pins don't have this interface!
+// output_pin.into_input_pull_down();</code></pre>
+<p>این قطعاً روشی راحت برای ذخیرهٔ وضعیت پایه است، اما چرا این‌طور انجامش دهیم؟ چرا این روش بهتر از ذخیرهٔ وضعیت به‌صورت یک <code>enum</code> درون ساختار <code>GpioConfig</code> ماست؟</p>
+<h2 id="compile-time-functional-safety"><a class="header" href="#compile-time-functional-safety">ایمنی کارکردی در زمان کامپایل</a></h2>
+<p>از آنجا که محدودیت‌های طراحی خود را کاملاً در زمان کامپایل اعمال می‌کنیم، این کار هیچ هزینهٔ زمان اجرایی ندارد. وقتی پایه‌ای در حالت ورودی است، تنظیم حالت خروجی برای آن غیرممکن است. در عوض، باید با تبدیل آن به یک پایهٔ خروجی و سپس تنظیم حالت خروجی، از میان حالت‌ها عبور کنید. به همین دلیل، پیش از اجرای یک تابع هیچ جریمهٔ زمان اجرایی بابت بررسی وضعیت فعلی وجود ندارد.</p>
+<p>همچنین، چون این حالت‌ها توسط سیستم نوع اعمال می‌شوند، دیگر جایی برای خطای مصرف‌کنندگان این رابط باقی نمی‌ماند. اگر آن‌ها سعی کنند یک انتقال حالت غیرمجاز انجام دهند، کد کامپایل نخواهد شد!</p><nav class="page-nav"><a href="../../embedded/static-guarantees/state-machines.html">→ پیرامونی‌ها به‌عنوان ماشین‌های حالت</a><a href="../../embedded/static-guarantees/zero-cost-abstractions.html">انتزاع‌های بدون هزینه ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

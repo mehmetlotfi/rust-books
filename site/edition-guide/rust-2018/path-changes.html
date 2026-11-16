@@ -1,0 +1,244 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>تغییرات مسیر و سیستم ماژول — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2018/path-changes"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="path-and-module-system-changes"><a class="header" href="#path-and-module-system-changes">تغییرات در مسیرها و سامانهٔ ماژول</a></h1>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="https://img.shields.io/badge/Minimum%20Rust%20Version-1.31-brightgreen.svg" alt="حداقل نسخهٔ Rust: 1.31"><span class="img-wrapper"><img src="https://img.shields.io/badge/Minimum%20Rust%20Version-1.31-brightgreen.svg" alt="حداقل نسخهٔ Rust: 1.31"></span></label></p>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<ul>
+<li>مسیرها در اعلان‌های <code>use</code> اکنون مانند سایر مسیرها عمل می‌کنند.</li>
+<li>مسیرهایی که با <code>::</code> شروع می‌شوند اکنون باید به یک crate خارجی ارجاع دهند.</li>
+<li>مسیرها در اصلاح‌کننده‌های دید <code>pub(in path)</code> اکنون باید با <code>crate</code>، <code>self</code> یا <code>super</code> شروع شوند.</li>
+</ul>
+<h2 id="motivation"><a class="header" href="#motivation">انگیزه</a></h2>
+<p>سامانهٔ ماژول اغلب یکی از دشوارترین بخش‌ها برای تازه‌واردان Rust است. البته هر کسی چیزهایی دارد که تسلط بر آن‌ها زمان می‌برد، اما برای گیج‌کننده بودن آن برای بسیاری از افراد یک علت ریشه‌ای وجود دارد: با اینکه قواعد ساده و یکدستی سامانهٔ ماژول را تعریف می‌کنند، پیامدهای این قواعد می‌توانند ناهماهنگ، خلاف شهود و مرموز به نظر برسند.</p>
+<p>به همین دلیل، ویرایش 2018 زبان Rust چند ویژگی تازه برای سامانهٔ ماژول معرفی می‌کند، اما در نهایت این ویژگی‌ها سامانهٔ ماژول را <em>ساده‌تر</em> می‌کنند تا روشن‌تر باشد که چه اتفاقی در جریان است.</p>
+<p>خلاصهٔ کوتاه آن‌ها از این قرار است:</p>
+<ul>
+<li><code>extern crate</code> در ۹۹٪ موارد دیگر لازم نیست.</li>
+<li>کلیدواژهٔ <code>crate</code> به crate فعلی اشاره می‌کند.</li>
+<li>مسیرها می‌توانند با نام یک crate شروع شوند، حتی در زیرماژول‌ها.</li>
+<li>مسیرهایی که با <code>::</code> شروع می‌شوند باید به یک crate خارجی ارجاع دهند.</li>
+<li>یک فایل <code>foo.rs</code> و یک زیردایرکتوری <code>foo/</code> می‌توانند هم‌زمان وجود داشته باشند؛ هنگام قرار دادن زیرماژول‌ها در یک زیردایرکتوری دیگر به <code>mod.rs</code> نیازی نیست.</li>
+<li>مسیرها در اعلان‌های <code>use</code> مانند سایر مسیرها عمل می‌کنند.</li>
+</ul>
+<p>وقتی به این شکل بیان شوند ممکن است قواعدی جدید و دلبخواهی به نظر برسند، اما مدل ذهنی در مجموع به‌طور قابل‌توجهی ساده‌تر شده است. برای جزئیات بیشتر ادامه را بخوانید!</p>
+<h2 id="more-details"><a class="header" href="#more-details">جزئیات بیشتر</a></h2>
+<p>بیایید هر ویژگی تازه را به‌ترتیب بررسی کنیم.</p>
+<h3 id="no-more-extern-crate"><a class="header" href="#no-more-extern-crate">دیگر نیازی به <code>extern crate</code> نیست</a></h3>
+<p>این یکی کاملاً سر راست است: دیگر لازم نیست برای وارد کردن یک crate به پروژه‌تان <code>extern crate</code> بنویسید. پیش از این:</p>
+<pre><code class="language-rust ignore">// Rust 2015
+
+extern crate futures;
+
+mod submodule {
+    use futures::Future;
+}</code></pre>
+<p>پس از آن:</p>
+<pre><code class="language-rust ignore">// Rust 2018
+
+mod submodule {
+    use futures::Future;
+}</code></pre>
+<p>اکنون برای افزودن یک crate تازه به پروژه، کافی است آن را به فایل <code>Cargo.toml</code> اضافه کنید و مرحلهٔ دومی وجود ندارد. اگر از Cargo استفاده نمی‌کنید، از پیش مجبور بودید پرچم‌های <code>--extern</code> را به <code>rustc</code> بدهید تا مکان crateهای خارجی را بداند، پس در این مورد هم همان کاری را که می‌کردید ادامه می‌دهید.</p>
+<h4 id="an-exception"><a class="header" href="#an-exception">یک استثنا</a></h4>
+<p>یک استثنا برای این قاعده وجود دارد و آن crateهای «sysroot» هستند. اینها crateهایی هستند که همراه خود Rust توزیع می‌شوند.</p>
+<p>معمولاً فقط در موقعیت‌های بسیار تخصصی به این crateها نیاز است. از نسخهٔ 1.41 به بعد، <code>rustc</code> پرچم <code>--extern=CRATE_NAME</code> را می‌پذیرد که نام crate داده‌شده را به شیوه‌ای شبیه به <code>extern crate</code> به‌طور خودکار اضافه می‌کند. ابزارهای ساخت می‌توانند از این قابلیت برای تزریق crateهای sysroot به prelude آن crate استفاده کنند. Cargo راه عمومی‌ای برای بیان این کار ندارد، هرچند آن را برای crateهای <code>proc_macro</code> به کار می‌برد.</p>
+<p>نمونه‌هایی از مواردی که در آن‌ها باید crateهای sysroot را صریحاً وارد کرد:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/std/index.html"><code>std</code></a>: معمولاً این کار لازم نیست، چون <code>std</code> به‌طور خودکار وارد می‌شود، مگر اینکه crate با <a href="../../reference/names/preludes.html#the-no_std-attribute"><code>#![no_std]</code></a> علامت‌گذاری شده باشد.</li>
+<li><a href="https://doc.rust-lang.org/core/index.html"><code>core</code></a>: معمولاً این کار لازم نیست، چون <code>core</code> به‌طور خودکار وارد می‌شود، مگر اینکه crate با <a href="https://github.com/rust-lang/rust/issues/29639"><code>#![no_core]</code></a> علامت‌گذاری شده باشد. برای مثال، برخی از crateهای داخلی که خود کتابخانهٔ استاندارد از آن‌ها استفاده می‌کند به این نیاز دارند.</li>
+<li><a href="https://doc.rust-lang.org/proc_macro/index.html"><code>proc_macro</code></a>: از نسخهٔ 1.42 به بعد، اگر crate یک proc-macro باشد، Cargo آن را به‌طور خودکار وارد می‌کند. اگر بخواهید از نسخه‌های قدیمی‌تر پشتیبانی کنید، یا از ابزار ساخت دیگری استفاده کنید که پرچم‌های <code>--extern</code> مناسب را به <code>rustc</code> نمی‌دهد، به <code>extern crate proc_macro;</code> نیاز خواهید داشت.</li>
+<li><a href="https://doc.rust-lang.org/alloc/index.html"><code>alloc</code></a>: آیتم‌های crate با نام <code>alloc</code> معمولاً از طریق re-exportها در crate با نام <code>std</code> در دسترس‌اند. اگر با یک crate از نوع <code>no_std</code> کار می‌کنید که از تخصیص حافظه پشتیبانی می‌کند، ممکن است لازم باشد <code>alloc</code> را صریحاً وارد کنید.</li>
+<li><a href="https://doc.rust-lang.org/test/index.html"><code>test</code></a>: این فقط در <a href="../../book/appendix-07-nightly-rust.html">کانال nightly</a> در دسترس است و معمولاً تنها برای پشتیبانی ناپایدار از benchmark استفاده می‌شود.</li>
+</ul>
+<h4 id="macros"><a class="header" href="#macros">ماکروها</a></h4>
+<p>یکی دیگر از کاربردهای <code>extern crate</code> وارد کردن ماکروها بود؛ این دیگر لازم نیست. ماکروها را می‌توان مانند هر آیتم دیگری با <code>use</code> وارد کرد. برای مثال، این کاربرد <code>extern crate</code>:</p>
+<pre><code class="language-rust ignore">#[macro_use]
+extern crate bar;
+
+fn main() {
+    baz!();
+}</code></pre>
+<p>را می‌توان به چیزی شبیه زیر تغییر داد:</p>
+<pre><code class="language-rust ignore">use bar::baz;
+
+fn main() {
+    baz!();
+}</code></pre>
+<h4 id="renaming-crates"><a class="header" href="#renaming-crates">تغییر نام crateها</a></h4>
+<p>اگر از <code>as</code> برای تغییر نام crate خود به این شکل استفاده کرده‌اید:</p>
+<pre><code class="language-rust ignore">extern crate futures as f;
+
+use f::Future;</code></pre>
+<p>آنگاه حذف تنهای خط <code>extern crate</code> کار نمی‌کند. باید این کار را انجام دهید:</p>
+<pre><code class="language-rust ignore">use futures as f;
+
+use self::f::Future;</code></pre>
+<p>این تغییر باید در هر ماژولی که از <code>f</code> استفاده می‌کند انجام شود.</p>
+<h3 id="the-crate-keyword-refers-to-the-current-crate"><a class="header" href="#the-crate-keyword-refers-to-the-current-crate">کلیدواژهٔ <code>crate</code> به crate فعلی اشاره می‌کند</a></h3>
+<p>در اعلان‌های <code>use</code> و در سایر کدها می‌توانید با پیشوند <code>crate::</code> به ریشهٔ crate فعلی اشاره کنید. برای مثال، <code>crate::foo::bar</code> از هر جای دیگر همان crate، همیشه به نام <code>bar</code> درون ماژول <code>foo</code> اشاره می‌کند.</p>
+<p>پیشوند <code>::</code> پیش از این یا به ریشهٔ crate اشاره می‌کرد یا به یک crate خارجی؛ اکنون بدون ابهام به یک crate خارجی اشاره می‌کند. برای مثال، <code>::foo::bar</code> همیشه به نام <code>bar</code> درون crate خارجی <code>foo</code> اشاره می‌کند.</p>
+<h3 id="extern-crate-paths"><a class="header" href="#extern-crate-paths">مسیرهای crate خارجی</a></h3>
+<p>پیش‌تر، برای استفاده از یک crate خارجی در یک ماژول بدون import با <code>use</code>، لازم بود مسیر با <code>::</code> شروع شود.</p>
+<pre><code class="language-rust ignore">// Rust 2015
+
+extern crate chrono;
+
+fn foo() {
+    // this works in the crate root
+    let x = chrono::Utc::now();
+}
+
+mod submodule {
+    fn function() {
+        // but in a submodule it requires a leading :: if not imported with `use`
+        let x = ::chrono::Utc::now();
+    }
+}</code></pre>
+<p>اکنون نام crateهای خارجی در کل crate، از جمله زیرماژول‌ها، در scope قرار دارند.</p>
+<pre><code class="language-rust ignore">// Rust 2018
+
+fn foo() {
+    // this works in the crate root
+    let x = chrono::Utc::now();
+}
+
+mod submodule {
+    fn function() {
+        // crates may be referenced directly, even in submodules
+        let x = chrono::Utc::now();
+    }
+}</code></pre>
+<p>اگر یک ماژول یا آیتم محلی با همان نام یک crate خارجی داشته باشید، مسیری که با آن نام شروع شود به ماژول یا آیتم محلی اشاره می‌کند. برای ارجاع صریح به crate خارجی، از شکل <code>::name</code> استفاده کنید.</p>
+<h3 id="no-more-modrs"><a class="header" href="#no-more-modrs">دیگر نیازی به <code>mod.rs</code> نیست</a></h3>
+<p>در Rust 2015، اگر یک زیرماژول داشته باشید:</p>
+<pre><code class="language-rust ignore">// This `mod` declaration looks for the `foo` module in
+// `foo.rs` or `foo/mod.rs`.
+mod foo;</code></pre>
+<p>می‌تواند در <code>foo.rs</code> یا <code>foo/mod.rs</code> قرار بگیرد. اگر خودش زیرماژول داشته باشد، <em>باید</em> <code>foo/mod.rs</code> باشد. بنابراین زیرماژول <code>bar</code> از <code>foo</code> در <code>foo/bar.rs</code> قرار می‌گیرد.</p>
+<p>در Rust 2018 این محدودیت که ماژولی دارای زیرماژول باید <code>mod.rs</code> نام داشته باشد برداشته شده است. <code>foo.rs</code> می‌تواند همان <code>foo.rs</code> باشد و زیرماژول همچنان <code>foo/bar.rs</code> است. این کار نام ویژه را حذف می‌کند و اگر در ویرایشگر خود فایل‌های زیادی باز داشته باشید، می‌توانید نام آن‌ها را به‌روشنی ببینید، به‌جای اینکه تعداد زیادی زبانه با نام <code>mod.rs</code> داشته باشید.</p>
+<table>
+  
+<thead>
+    
+<tr>
+      <th>Rust 2015</th>
+      <th>Rust 2018</th>
+    </tr>
+
+  </thead>
+
+  
+<tbody>
+    
+<tr>
+      <td>
+<pre>
+.
+├── lib.rs
+└── foo/
+    ├── mod.rs
+    └── bar.rs
+</pre>
+
+    </td>
+    <td>
+<pre>
+.
+├── lib.rs
+├── foo.rs
+└── foo/
+    └── bar.rs
+</pre>
+
+      </td>
+    </tr>
+
+  </tbody>
+
+</table>
+
+<h3 id="use-paths"><a class="header" href="#use-paths">مسیرهای <code>use</code></a></h3>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="https://img.shields.io/badge/Minimum%20Rust%20Version-1.32-brightgreen.svg" alt="حداقل نسخهٔ Rust: 1.32"><span class="img-wrapper"><img src="https://img.shields.io/badge/Minimum%20Rust%20Version-1.32-brightgreen.svg" alt="حداقل نسخهٔ Rust: 1.32"></span></label></p>
+<p>Rust 2018 در مقایسه با Rust 2015 مدیریت مسیرها را ساده و یکپارچه می‌کند. در Rust 2015 مسیرها در اعلان‌های <code>use</code> با جاهای دیگر متفاوت عمل می‌کردند. به‌طور خاص، مسیرها در اعلان‌های <code>use</code> همیشه از ریشهٔ crate شروع می‌شدند، در حالی که مسیرها در سایر کدها به‌طور ضمنی از scope فعلی شروع می‌شدند. این تفاوت‌ها در ماژول سطح بالا هیچ تأثیری نداشتند، که یعنی همه‌چیز ساده به نظر می‌رسید تا زمانی که روی پروژه‌ای به اندازه‌ای بزرگ کار کنید که زیرماژول داشته باشد.</p>
+<p>در Rust 2018 مسیرها در اعلان‌های <code>use</code> و در سایر کدها یکسان عمل می‌کنند، هم در ماژول سطح بالا و هم در هر زیرماژول. می‌توانید از یک مسیر نسبی از scope فعلی، مسیری که از نام یک crate خارجی شروع می‌شود، یا مسیری که با <code>::</code>، <code>crate</code>، <code>super</code> یا <code>self</code> شروع می‌شود استفاده کنید.</p>
+<p>کدی که این‌گونه بود:</p>
+<pre><code class="language-rust ignore">// Rust 2015
+
+extern crate futures;
+
+use futures::Future;
+
+mod foo {
+    pub struct Bar;
+}
+
+use foo::Bar;
+
+fn my_poll() -&gt; futures::Poll { ... }
+
+enum SomeEnum {
+    V1(usize),
+    V2(String),
+}
+
+fn func() {
+    let five = std::sync::Arc::new(5);
+    use SomeEnum::*;
+    match ... {
+        V1(i) =&gt; { ... }
+        V2(s) =&gt; { ... }
+    }
+}</code></pre>
+<p>در Rust 2018 دقیقاً به همین شکل خواهد بود، با این تفاوت که می‌توانید خط <code>extern crate</code> را حذف کنید:</p>
+<pre><code class="language-rust ignore">// Rust 2018
+
+use futures::Future;
+
+mod foo {
+    pub struct Bar;
+}
+
+use foo::Bar;
+
+fn my_poll() -&gt; futures::Poll { ... }
+
+enum SomeEnum {
+    V1(usize),
+    V2(String),
+}
+
+fn func() {
+    let five = std::sync::Arc::new(5);
+    use SomeEnum::*;
+    match ... {
+        V1(i) =&gt; { ... }
+        V2(s) =&gt; { ... }
+    }
+}</code></pre>
+<p>همین کد در یک زیرماژول هم بدون هیچ تغییری کار می‌کند:</p>
+<pre><code class="language-rust ignore">// Rust 2018
+
+mod submodule {
+    use futures::Future;
+
+    mod foo {
+        pub struct Bar;
+    }
+
+    use foo::Bar;
+
+    fn my_poll() -&gt; futures::Poll { ... }
+
+    enum SomeEnum {
+        V1(usize),
+        V2(String),
+    }
+
+    fn func() {
+        let five = std::sync::Arc::new(5);
+        use SomeEnum::*;
+        match ... {
+            V1(i) =&gt; { ... }
+            V2(s) =&gt; { ... }
+        }
+    }
+}</code></pre>
+<p>این کار جابه‌جا کردن کد در یک پروژه را آسان می‌کند و از افزودن پیچیدگی اضافی به پروژه‌های چندماژولی جلوگیری می‌کند.</p><nav class="page-nav"><a href="index.html">→ Rust 2018</a><a href="trait-fn-parameters.html">پارامترهای بی‌نام تابع‌های صفت منسوخ شدند ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

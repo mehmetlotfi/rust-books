@@ -1,0 +1,183 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>ارتباط با ماشین‌ها — کتاب برنامه‌های خط فرمان</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="in-depth/machine-communication"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../cli/index.html" style="color:inherit;text-decoration:none">کتاب برنامه‌های خط فرمان</a><small class="en-title" dir="ltr">Command Line Applications in Rust</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="communicating-with-machines"><a class="header" href="#communicating-with-machines">ارتباط با ماشین‌ها</a></h1>
+<p>قدرت ابزارهای خط فرمان وقتی واقعاً خودش را نشان می‌دهد که بتوانید آن‌ها را با هم ترکیب کنید. این ایدهٔ جدیدی نیست: در واقع، این جمله‌ای از <a href="https://en.wikipedia.org/wiki/Unix_philosophy">فلسفهٔ یونیکس</a> است:</p>
+<blockquote>
+<p>انتظار داشته باشید خروجی هر برنامه به ورودی برنامه‌ای دیگر تبدیل شود، برنامه‌ای که هنوز ناشناخته است.</p>
+</blockquote>
+<p>اگر برنامه‌های ما این انتظار را برآورده کنند، کاربرانمان راضی خواهند بود. برای اطمینان از اینکه این کار خوب عمل می‌کند، باید نه‌فقط خروجی زیبا برای انسان‌ها، بلکه نسخه‌ای متناسب با نیاز برنامه‌های دیگر نیز ارائه دهیم. ببینیم چگونه می‌توانیم این کار را انجام دهیم.</p>
+<aside>
+<p><strong>توجه:</strong> ابتدا حتماً <a href="../tutorial/output.html">فصل مربوط به خروجی CLI</a> را در آموزش بخوانید. آن فصل توضیح می‌دهد که چگونه خروجی را در ترمینال بنویسید.</p>
+</aside>
+<h2 id="whos-reading-this"><a class="header" href="#whos-reading-this">چه کسی این را می‌خواند؟</a></h2>
+<p>نخستین پرسشی که باید بپرسیم این است: آیا خروجی ما برای انسانی است که پشت یک ترمینال رنگی نشسته، یا برای برنامه‌ای دیگر؟ برای پاسخ به این پرسش، می‌توانیم از trait با نام <a href="https://doc.rust-lang.org/stable/std/io/trait.IsTerminal.html">IsTerminal</a> استفاده کنیم:</p>
+<pre><code class="language-rust ignore">use std::io::IsTerminal;
+
+if std::io::stdout().is_terminal() {
+    println!("I'm a terminal");
+} else {
+    println!("I'm not");
+}</code></pre>
+<p>بسته به اینکه چه کسی خروجی ما را خواهد خواند، می‌توانیم اطلاعات اضافه‌ای بیفزاییم. انسان‌ها معمولاً رنگ را دوست دارند، برای مثال، اگر <code>ls</code> را در یک پروژهٔ تصادفی Rust اجرا کنید، ممکن است چیزی شبیه این ببینید:</p>
+<pre><code class="language-console">$ ls
+CODE_OF_CONDUCT.md   LICENSE-APACHE       examples
+CONTRIBUTING.md      LICENSE-MIT          proptest-regressions
+Cargo.lock           README.md            src
+Cargo.toml           convey_derive        target
+</code></pre>
+<p>از آنجا که این سبک برای انسان‌ها ساخته شده، در بیشتر پیکربندی‌ها حتی برخی از نام‌ها (مانند <code>src</code>) را رنگی چاپ می‌کند تا نشان دهد پوشه هستند. اگر در عوض آن را به یک فایل، یا برنامه‌ای مانند <code>cat</code> پایپ کنید، <code>ls</code> خروجی‌اش را تطبیق می‌دهد. به‌جای استفاده از ستون‌هایی که در پنجرهٔ ترمینال من جا شوند هر ورودی را در خط خودش چاپ می‌کند. همچنین هیچ رنگی تولید نمی‌کند.</p>
+<pre><code class="language-console">$ ls | cat
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+Cargo.lock
+Cargo.toml
+LICENSE-APACHE
+LICENSE-MIT
+README.md
+convey_derive
+examples
+proptest-regressions
+src
+target
+</code></pre>
+<h2 id="easy-output-formats-for-machines"><a class="header" href="#easy-output-formats-for-machines">قالب‌های خروجی ساده برای ماشین‌ها</a></h2>
+<p>از قدیم، تنها نوع خروجی‌ای که ابزارهای خط فرمان تولید می‌کردند رشته بود. این معمولاً برای افرادی که پشت ترمینال نشسته‌اند مشکلی ندارد، چون می‌توانند متن را بخوانند و دربارهٔ معنای آن استدلال کنند. اما برنامه‌های دیگر معمولاً چنین توانایی‌ای ندارند: تنها راه برای آن‌ها تا خروجی ابزاری مانند <code>ls</code> را بفهمند این است که نویسندهٔ برنامه یک تجزیه‌گر (parser) گنجانده باشد که برای هر چیزی که <code>ls</code> تولید می‌کند کار کند.</p>
+<p>این اغلب به آن معنا است که خروجی به چیزهایی محدود می‌شد که تجزیهٔ آن‌ها آسان است. قالب‌هایی مانند TSV (مقادیر جداشده با تب)، که در آن هر رکورد در خط خودش است و هر خط شامل محتوای جداشده با تب است، بسیار محبوب هستند. این قالب‌های ساده مبتنی بر خطوط متن اجازه می‌دهند ابزارهایی مانند <code>grep</code> روی خروجی ابزارهایی مانند <code>ls</code> به کار روند. <code>| grep Cargo</code> اهمیتی نمی‌دهد که خطوط شما از <code>ls</code> آمده‌اند یا از فایل، فقط خط‌به‌خط فیلتر می‌کند.</p>
+<p>اشکال این روش آن است که نمی‌توانید با یک فراخوانی ساده از <code>grep</code> همهٔ پوشه‌هایی را که <code>ls</code> به شما داده فیلتر کنید. برای این کار، هر آیتم پوشه باید داده‌های اضافی با خود حمل کند.</p>
+<h2 id="json-output-for-machines"><a class="header" href="#json-output-for-machines">خروجی JSON برای ماشین‌ها</a></h2>
+<p>مقادیر جداشده با تب روشی ساده برای خروجی دادن داده‌های ساخت‌یافته است اما از برنامهٔ دیگر می‌خواهد بداند چه فیلدهایی را باید انتظار داشته باشد (و به چه ترتیبی) و خروجی دادن پیام‌هایی از انواع مختلف در آن دشوار است. برای مثال، فرض کنید برنامهٔ ما می‌خواهد به مصرف‌کننده پیام بدهد که در حال حاضر منتظر یک دانلود است، و پس از آن پیامی را خروجی دهد که داده‌های دریافت‌شده را توصیف می‌کند. این‌ها انواع بسیار متفاوتی از پیام هستند و تلاش برای یکپارچه کردن آن‌ها در خروجی TSV ما را وادار می‌کند راهی برای تمایز میان آن‌ها اختراع کنیم. وقتی بخواهیم پیامی چاپ کنیم که شامل دو فهرست از آیتم‌هایی با طول‌های متفاوت است نیز همین مشکل پیش می‌آید.</p>
+<p>با این حال، ایدهٔ خوبی است که قالبی را انتخاب کنیم که در بیشتر زبان‌های برنامه‌نویسی/محیط‌ها به‌آسانی قابل تجزیه باشد. از این رو، در سال‌های اخیر بسیاری از برنامه‌ها توانایی خروجی دادن داده‌هایشان را با <a href="https://www.json.org/">JSON</a> به دست آورده‌اند. این قالب آن‌قدر ساده است که تقریباً برای هر زبانی تجزیه‌گر دارد و در عین حال آن‌قدر قدرتمند است که در موارد بسیاری مفید باشد. با اینکه قالبی متنی است که انسان‌ها می‌توانند بخوانند، افراد بسیاری نیز روی پیاده‌سازی‌هایی کار کرده‌اند که در تجزیهٔ داده‌های JSON و سریال‌سازی داده‌ها به JSON بسیار سریع هستند.</p>
+<p>در توضیح بالا، از «پیام‌هایی» صحبت کردیم که برنامهٔ ما می‌نویسد. این شیوهٔ خوبی برای فکر کردن به خروجی است: برنامهٔ شما لزوماً فقط یک توده داده را خروجی نمی‌دهد بلکه ممکن است در واقع در حین اجرا اطلاعات بسیار متفاوتی منتشر کند. یک راه ساده برای پشتیبانی از این رویکرد هنگام خروجی دادن JSON این است که برای هر پیام یک سند JSON بنویسید و هر سند JSON را در یک خط جدید قرار دهید (که گاهی <a href="https://en.wikipedia.org/wiki/JSON_streaming#Line-delimited_JSON">JSON خط‌به‌خط</a> نامیده می‌شود). این کار می‌تواند پیاده‌سازی را تا حد استفاده از یک <code>println!</code> معمولی ساده کند.</p>
+<p>این یک مثال ساده است که از ماکروی <code>json!</code> در <a href="https://crates.io/crates/serde_json">serde_json</a> استفاده می‌کند تا به‌سرعت JSON معتبر را در کد منبع Rust بنویسد:</p>
+<pre><code class="language-rust ignore">use clap::Parser;
+use serde_json::json;
+
+/// Search for a pattern in a file and display the lines that contain it.
+#[derive(Parser)]
+struct Cli {
+    /// Output JSON instead of human readable messages
+    #[arg(long = "json")]
+    json: bool,
+}
+
+fn main() {
+    let args = Cli::parse();
+    if args.json {
+        println!(
+            "{}",
+            json!({
+                "type": "message",
+                "content": "Hello world",
+            })
+        );
+    } else {
+        println!("Hello world");
+    }
+}</code></pre>
+<p>و این هم خروجی آن:</p>
+<pre><code class="language-console">$ cargo run -q
+Hello world
+$ cargo run -q -- --json
+{"content":"Hello world","type":"message"}
+</code></pre>
+<p>(اجرای <code>cargo</code> با <code>-q</code> خروجی معمول آن را سرکوب می‌کند. آرگومان‌های بعد از <code>--</code> به برنامهٔ ما داده می‌شوند.)</p>
+<h3 id="practical-example-ripgrep"><a class="header" href="#practical-example-ripgrep">مثال عملی: ripgrep</a></h3>
+<p><em><a href="https://github.com/BurntSushi/ripgrep">ripgrep</a></em> جایگزینی برای <em>grep</em> یا <em>ag</em> است که با Rust نوشته شده است. به‌طور پیش‌فرض خروجی‌ای شبیه این تولید می‌کند:</p>
+<pre><code class="language-console">$ rg default
+src/lib.rs
+37:    Output::default()
+
+src/components/span.rs
+6:    Span::default()
+</code></pre>
+<p>اما اگر <code>--json</code> داده شود چنین چیزی چاپ می‌کند:</p>
+<pre><code class="language-console">$ rg default --json
+{"type":"begin","data":{"path":{"text":"src/lib.rs"}}}
+{"type":"match","data":{"path":{"text":"src/lib.rs"},"lines":{"text":"    Output::default()\n"},"line_number":37,"absolute_offset":761,"submatches":[{"match":{"text":"default"},"start":12,"end":19}]}}
+{"type":"end","data":{"path":{"text":"src/lib.rs"},"binary_offset":null,"stats":{"elapsed":{"secs":0,"nanos":137622,"human":"0.000138s"},"searches":1,"searches_with_match":1,"bytes_searched":6064,"bytes_printed":256,"matched_lines":1,"matches":1}}}
+{"type":"begin","data":{"path":{"text":"src/components/span.rs"}}}
+{"type":"match","data":{"path":{"text":"src/components/span.rs"},"lines":{"text":"    Span::default()\n"},"line_number":6,"absolute_offset":117,"submatches":[{"match":{"text":"default"},"start":10,"end":17}]}}
+{"type":"end","data":{"path":{"text":"src/components/span.rs"},"binary_offset":null,"stats":{"elapsed":{"secs":0,"nanos":22025,"human":"0.000022s"},"searches":1,"searches_with_match":1,"bytes_searched":5221,"bytes_printed":277,"matched_lines":1,"matches":1}}}
+{"data":{"elapsed_total":{"human":"0.006995s","nanos":6994920,"secs":0},"stats":{"bytes_printed":533,"bytes_searched":11285,"elapsed":{"human":"0.000160s","nanos":159647,"secs":0},"matched_lines":2,"matches":2,"searches":2,"searches_with_match":2}},"type":"summary"}
+</code></pre>
+<p>همان‌طور که می‌بینید، هر سند JSON یک شیء (map) است که شامل فیلد <code>type</code> می‌شود. این به ما اجازه می‌دهد یک رابط کاربری ساده برای <code>rg</code> بنویسیم که این سندها را همین‌که می‌رسند می‌خواند و تطابق‌ها را (همراه با فایل‌هایی که در آن‌ها هستند) نشان می‌دهد، حتی در حالی که <em>ripgrep</em> هنوز در حال جست‌وجو است.</p>
+<aside>
+<p>**توجه:** Visual Studio Code برای جست‌وجوی کد خود به این شکل از _ripgrep_ استفاده می‌کند.</p>
+</aside>
+<h2 id="how-to-deal-with-input-piped-into-us"><a class="header" href="#how-to-deal-with-input-piped-into-us">چگونه با ورودی پایپ‌شده به برنامه برخورد کنیم</a></h2>
+<p>فرض کنید برنامه‌ای داریم که تعداد کلمات یک فایل را می‌خواند:</p>
+<pre><code class="language-rust ignore">use clap::Parser;
+use std::path::PathBuf;
+
+/// Count the number of lines in a file
+#[derive(Parser)]
+#[command(arg_required_else_help = true)]
+struct Cli {
+    /// The path to the file to read
+    file: PathBuf,
+}
+
+fn main() {
+    let args = Cli::parse();
+    let mut word_count = 0;
+    let file = args.file;
+
+    for line in std::fs::read_to_string(&amp;file).unwrap().lines() {
+        word_count += line.split(' ').count();
+    }
+
+    println!("Words in {}: {}", file.to_str().unwrap(), word_count)
+}</code></pre>
+<p>این برنامه مسیر یک فایل را می‌گیرد، آن را خط‌به‌خط می‌خواند و تعداد کلماتی را که با فاصله از هم جدا شده‌اند می‌شمارد.</p>
+<p>وقتی آن را اجرا کنید، مجموع کلمات فایل را در خروجی چاپ می‌کند:</p>
+<pre><code class="language-console">$ cargo run README.md
+Words in README.md: 47
+</code></pre>
+<p>اما اگر بخواهیم تعداد کلماتی را بشماریم که به برنامه پایپ شده‌اند چه؟ برنامه‌های Rust می‌توانند داده‌هایی را که از طریق stdin می‌رسند بخوانند، با <a href="https://doc.rust-lang.org/std/io/struct.Stdin.html">ساختار Stdin</a> که می‌توانید آن را از طریق <a href="https://doc.rust-lang.org/std/io/fn.stdin.html">تابع stdin</a> در کتابخانهٔ استاندارد به دست آورید. مانند خواندن خطوط یک فایل، می‌تواند خطوط را از stdin بخواند.</p>
+<p>این برنامه‌ای است که کلمات ورودی پایپ‌شده از طریق stdin را می‌شمارد</p>
+<pre><code class="language-rust ignore">use clap::{CommandFactory, Parser};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader, IsTerminal, stdin},
+    path::PathBuf,
+};
+
+/// Count the number of lines in a file or stdin
+#[derive(Parser)]
+#[command(arg_required_else_help = true)]
+struct Cli {
+    /// The path to the file to read, use - to read from stdin (must not be a tty)
+    file: PathBuf,
+}
+
+fn main() {
+    let args = Cli::parse();
+
+    let word_count;
+    let mut file = args.file;
+
+    if file == PathBuf::from("-") {
+        if stdin().is_terminal() {
+            Cli::command().print_help().unwrap();
+            ::std::process::exit(2);
+        }
+
+        file = PathBuf::from("&lt;stdin&gt;");
+        word_count = words_in_buf_reader(BufReader::new(stdin().lock()));
+    } else {
+        word_count = words_in_buf_reader(BufReader::new(File::open(&amp;file).unwrap()));
+    }
+
+    println!("Words from {}: {}", file.to_string_lossy(), word_count)
+}
+
+fn words_in_buf_reader&lt;R: BufRead&gt;(buf_reader: R) -&gt; usize {
+    let mut count = 0;
+    for line in buf_reader.lines() {
+        count += line.unwrap().split(' ').count()
+    }
+    count
+}</code></pre>
+<p>اگر آن برنامه را با متنی که از طریق پایپ به آن داده شده اجرا کنید، و با <code>-</code> نشان دهید که قصد دارید از <code>stdin</code> بخوانید، تعداد کلمات را در خروجی چاپ می‌کند:</p>
+<pre><code class="language-console">$ echo "hi there friend" | cargo run -- -
+Words from stdin: 3
+</code></pre>
+<p>این برنامه لازم دارد که stdin تعاملی نباشد، چون ورودی‌ای را انتظار داریم که به برنامه پایپ می‌شود، نه متنی که هنگام اجرا تایپ می‌شود. اگر stdin یک tty باشد، مستندات راهنما را خروجی می‌دهد تا روشن شود چرا کار نمی‌کند.</p><nav class="page-nav"><a href="../../cli/in-depth/human-communication.html">→ ارتباط با انسان‌ها</a><a href="../../cli/in-depth/docs.html">تولید مستندات برای برنامه‌های CLI شما ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cli/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

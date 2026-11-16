@@ -1,0 +1,137 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>نشت — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="leaking"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="leaking"><a class="header" href="#leaking">نشت (Leaking)</a></h1>
+<p>مدیریت منابع مبتنی بر مالکیت برای ساده‌تر کردن ترکیب‌پذیری طراحی شده است. شما منابع را هنگام ساخت شیء به دست می‌آورید و هنگام نابود شدن آن آزاد می‌کنید. چون نابودی برای شما انجام می‌شود، یعنی نمی‌توانید آزاد کردن منابع را فراموش کنید و آزادسازی هم در زودترین زمان ممکن رخ می‌دهد! مسلماً این بی‌نقص است و همهٔ مشکلات ما حل شده‌اند.</p>
+<p>همه‌چیز افتضاح است و مشکلات تازه و عجیبی داریم که باید سعی کنیم حلشان کنیم.</p>
+<p>بسیاری از مردم دوست دارند باور کنند که Rust نشت منابع را از بین می‌برد. در عمل این تا حد زیادی درست است. دیدن یک برنامهٔ Rust امن که منابع را به شکل کنترل‌نشده نشت دهد شما را شگفت‌زده خواهد کرد.</p>
+<p>اما از نگاه نظری، به‌هیچ وجه چنین نیست، از هر زاویه‌ای که نگاه کنید. به سخت‌گیرانه‌ترین معنا، «نشت» آن‌قدر انتزاعی است که نمی‌توان از آن جلوگیری کرد. کاملاً پیش‌پاافتاده است که در ابتدای برنامه یک مجموعه را مقداردهی اولیه کنیم، آن را با تعداد زیادی شیء دارای نابودگر پر کنیم و سپس وارد یک حلقهٔ رویداد بی‌پایان شویم که هرگز به آن اشاره نمی‌کند. مجموعه بی‌فایده همان‌جا می‌ماند و منابع گران‌بهایش را نگه می‌دارد تا برنامه پایان یابد (که در آن لحظه همهٔ آن منابع به هر حال توسط سیستم‌عامل پس گرفته می‌شد).</p>
+<p>می‌توانیم شکل محدودتری از نشت را در نظر بگیریم: نابود نکردن مقداری که غیرقابل دسترس است. Rust از این هم جلوگیری نمی‌کند. در واقع Rust <em>تابعی برای انجام همین کار دارد</em>: <code>mem::forget</code>. این تابع مقداری را که به آن داده می‌شود مصرف می‌کند <em>و سپس نابودگر آن را اجرا نمی‌کند</em>.</p>
+<p>در گذشته <code>mem::forget</code> به‌عنوان نوعی lint علیه استفاده از آن به‌صورت unsafe علامت‌گذاری شده بود، چون فراخوانی نکردن نابودگر عموماً کار درست و پسندیده‌ای نیست (هرچند برای برخی کدهای ناامنِ خاص مفید است). با این حال به‌طور کلی مشخص شد که این موضع قابل دفاع نیست: راه‌های زیادی برای فراخوانی نشدن نابودگر در کد امن وجود دارد. معروف‌ترین مثال ساختن یک چرخه از اشاره‌گرهای شمارش‌مرجع با استفاده از تغییرپذیری درونی (interior mutability) است.</p>
+<p>برای کد امن منطقی است که فرض کند نشت نابودگر رخ نمی‌دهد، چون هر برنامه‌ای که نابودگرها را نشت دهد احتمالاً اشتباه است. اما کد <em>ناامن</em> نمی‌تواند برای امن بودن به اجرا شدن نابودگرها تکیه کند. برای بیشتر انواع این اهمیتی ندارد: اگر نابودگر را نشت دهید، آن نوع طبق تعریف غیرقابل دسترسی می‌شود، پس مهم نیست، درست است؟ برای مثال، اگر یک <code>Box&lt;u8&gt;</code> را نشت دهید مقداری حافظه هدر می‌دهید اما این به‌سختی امنیت حافظه را نقض می‌کند.</p>
+<p>با این حال جایی که باید دربارهٔ نشت نابودگر محتاط باشیم، انواع <em>پراکسی (proxy)</em> هستند. این‌ها انواعی هستند که دسترسی به یک شیء مجزا را مدیریت می‌کنند اما در واقع مالک آن نیستند. اشیای پراکسی کاملاً نادرند. اشیای پراکسی‌ای که لازم باشد به آن‌ها اهمیت دهید حتی نادرترند. با این حال بر سه مثال جالب در کتابخانهٔ استاندارد تمرکز می‌کنیم:</p>
+<ul>
+<li><code>vec::Drain</code></li>
+<li><code>Rc</code></li>
+<li><code>thread::scoped::JoinGuard</code></li>
+</ul>
+<h2 id="drain"><a class="header" href="#drain">Drain</a></h2>
+<p><code>drain</code> یک API مجموعه‌ها است که داده‌ها را بدون مصرف کردن ظرف (container)، از آن بیرون می‌برد. این کار به ما امکان می‌دهد پس از به دست گرفتن مالکیت همهٔ محتویات یک <code>Vec</code>، از تخصیص آن دوباره استفاده کنیم. این تابع یک iterator (به نام Drain) تولید می‌کند که محتویات Vec را به‌صورت مقدار (by-value) برمی‌گرداند.</p>
+<p>اکنون Drain را در میانهٔ پیمایش در نظر بگیرید: برخی مقدارها بیرون برده شده‌اند و برخی نه. یعنی بخشی از Vec اکنون پر از داده‌های منطقاً مقداردهی‌نشده است! می‌توانستیم هر بار که یک مقدار را برمی‌داریم همهٔ عناصر Vec را به عقب شیفت دهیم، اما این کار پیامدهای عملکردی بسیار فاجعه‌باری می‌داشت.</p>
+<p>در عوض می‌خواهیم Drain هنگام drop شدن، فضای ذخیره‌سازی پشتیبان Vec را درست کند. باید خودش را تا پایان اجرا کند، هر عنصری را که برداشته نشده به عقب شیفت دهد (drain از زیربازه‌ها پشتیبانی می‌کند) و سپس <code>len</code> مربوط به Vec را اصلاح کند. حتی در برابر unwinding هم ایمن است! آسان!</p>
+<p>حالا این را در نظر بگیرید:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">let mut vec = vec![Box::new(0); 4];
+
+{
+    // start draining, vec can no longer be accessed
+    let mut drainer = vec.drain(..);
+
+    // pull out two elements and immediately drop them
+    drainer.next();
+    drainer.next();
+
+    // get rid of drainer, but don't call its destructor
+    mem::forget(drainer);
+}
+
+// Oops, vec[0] was dropped, we're reading a pointer into free'd memory!
+println!("{}", vec[0]);</code></pre>
+<p>این به‌روشنی خوب نیست. متأسفانه ما بین دو راه سخت گیر کرده‌ایم: حفظ وضعیت سازگار در هر گام هزینهٔ عظیمی دارد (و هر مزیتی از API را از بین می‌برد). حفظ نکردن وضعیت سازگار در کد امن به ما رفتار تعریف‌نشده (Undefined Behavior) می‌دهد (و API را ناسالم (unsound) می‌کند).</p>
+<p>پس چه کار می‌توانیم بکنیم؟ می‌توانیم یک وضعیت بدیهیِ سازگار انتخاب کنیم: هنگام شروع پیمایش، طول Vec را ۰ قرار دهیم و در صورت نیاز آن را در نابودگر درست کنیم. به این ترتیب، اگر همه‌چیز به‌طور عادی اجرا شود رفتار مطلوب را با سربار حداقلی به دست می‌آوریم. اما اگر کسی <em>جسارت</em> آن را داشته باشد که در میانهٔ پیمایش ما را mem::forget کند، تنها اتفاقی که می‌افتد <em>نشت بیشتر</em> است (و احتمالاً Vec در وضعیتی غیرمنتظره اما در غیر این صورت سازگار باقی می‌ماند). چون پذیرفته‌ایم که mem::forget امن است، این قطعاً امن است. نشتی را که باعث نشت‌های بیشتر می‌شود <em>تقویت نشت (leak amplification)</em> می‌نامیم.</p>
+<h2 id="rc"><a class="header" href="#rc">Rc</a></h2>
+<p>Rc مورد جالبی است، چون در نگاه اول اصلاً یک مقدار پراکسی به نظر نمی‌رسد. به هر حال، داده‌ای را که به آن اشاره می‌کند مدیریت می‌کند و drop شدن همهٔ Rcهای یک مقدار آن مقدار را drop می‌کند. نشت دادن یک Rc به‌نظر نمی‌رسد خطر چندانی داشته باشد. شمارندهٔ ارجاع (refcount) را برای همیشه افزایش‌یافته باقی می‌گذارد و از آزاد یا drop شدن داده جلوگیری می‌کند، اما این شبیه Box است، درست است؟</p>
+<p>نه.</p>
+<p>بیایید یک پیاده‌سازی ساده‌شده از Rc را در نظر بگیریم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">struct Rc&lt;T&gt; {
+    ptr: *mut RcBox&lt;T&gt;,
+}
+
+struct RcBox&lt;T&gt; {
+    data: T,
+    ref_count: usize,
+}
+
+impl&lt;T&gt; Rc&lt;T&gt; {
+    fn new(data: T) -&gt; Self {
+        unsafe {
+            // Wouldn't it be nice if heap::allocate worked like this?
+            let ptr = heap::allocate::&lt;RcBox&lt;T&gt;&gt;();
+            ptr::write(ptr, RcBox {
+                data,
+                ref_count: 1,
+            });
+            Rc { ptr }
+        }
+    }
+
+    fn clone(&amp;self) -&gt; Self {
+        unsafe {
+            (*self.ptr).ref_count += 1;
+        }
+        Rc { ptr: self.ptr }
+    }
+}
+
+impl&lt;T&gt; Drop for Rc&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        unsafe {
+            (*self.ptr).ref_count -= 1;
+            if (*self.ptr).ref_count == 0 {
+                // drop the data and then free it
+                ptr::read(self.ptr);
+                heap::deallocate(self.ptr);
+            }
+        }
+    }
+}</code></pre>
+<p>این کد یک فرض ضمنی و ظریف دارد: <code>ref_count</code> در یک <code>usize</code> جا می‌شود، چون نمی‌تواند بیش از <code>usize::MAX</code> عدد Rc در حافظه وجود داشته باشد. اما این خودش فرض می‌کند که <code>ref_count</code> تعداد Rcهای موجود در حافظه را دقیقاً منعکس می‌کند، که می‌دانیم با <code>mem::forget</code> نادرست است. با استفاده از <code>mem::forget</code> می‌توانیم <code>ref_count</code> را سرریز کنیم و سپس آن را در حالی که Rcهای زنده هنوز هستند به ۰ برسانیم. آن‌گاه می‌توانیم با خیال راحت از داده‌های درونی بعد از آزادسازی (use-after-free) استفاده کنیم. خیلی بد، اصلاً خوب نیست.</p>
+<p>این مشکل را می‌توان با فقط بررسی <code>ref_count</code> و انجام <em>یک کاری</em> حل کرد. موضع کتابخانهٔ استاندارد این است که فقط abort کند، چون برنامهٔ شما به‌شدت منحط شده است. ضمناً <em>وای خدای من</em>، این یک حالت مرزی به‌شدت مضحک است.</p>
+<h2 id="threadscopedjoinguard"><a class="header" href="#threadscopedjoinguard">thread::scoped::JoinGuard</a></h2>
+<blockquote>
+<p>توجه: این API پیش‌تر از std حذف شده است؛ برای اطلاعات بیشتر می‌توانید به <a href="https://github.com/rust-lang/rust/issues/24292">issue #24292</a> مراجعه کنید.</p>
+<p>این بخش همچنان اینجا مانده است، چون فکر می‌کنیم این مثال مهم است، چه بخشی از std باشد و چه نباشد.</p>
+</blockquote>
+<p>API به نام thread::scoped برای این بود که امکان ایجاد نخ‌هایی را بدهد که به داده‌های روی پشتهٔ والد خود ارجاع دارند، آن هم بدون هیچ هم‌گام‌سازی روی آن داده‌ها، با اطمینان از اینکه والد پیش از خروج هر یک از داده‌های مشترک از حوزه نخ را join می‌کند.</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">pub fn scoped&lt;'a, F&gt;(f: F) -&gt; JoinGuard&lt;'a&gt;
+    where F: FnOnce() + Send + 'a</code></pre>
+<p>در اینجا <code>f</code> یک closure است که نخ دیگر آن را اجرا می‌کند. گفتن اینکه <code>F: Send + 'a</code> یعنی روی داده‌ای که برای <code>'a</code> زنده است بسته می‌شود و یا مالک آن داده است یا آن داده Sync بوده است (که به معنی Send بودن <code>&amp;data</code> است).</p>
+<p>چون JoinGuard طول عمر دارد، همهٔ داده‌هایی را که روی آن‌ها بسته می‌شود در نخ والد قرض‌گرفته‌شده نگه می‌دارد. یعنی JoinGuard نمی‌تواند بیشتر از داده‌ای که نخ دیگر روی آن کار می‌کند عمر کند. وقتی JoinGuard <em>واقعاً</em> drop می‌شود، نخ والد را مسدود می‌کند و اطمینان می‌دهد که نخ فرزند پیش از آنکه هر یک از داده‌های بسته‌شده در والد از حوزه خارج شوند، پایان می‌یابد.</p>
+<p>کاربرد آن به این شکل بود:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">let mut data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+{
+    let mut guards = vec![];
+    for x in &amp;mut data {
+        // Move the mutable reference into the closure, and execute
+        // it on a different thread. The closure has a lifetime bound
+        // by the lifetime of the mutable reference `x` we store in it.
+        // The guard that is returned is in turn assigned the lifetime
+        // of the closure, so it also mutably borrows `data` as `x` did.
+        // This means we cannot access `data` until the guard goes away.
+        let guard = thread::scoped(move || {
+            *x *= 2;
+        });
+        // store the thread's guard for later
+        guards.push(guard);
+    }
+    // All guards are dropped here, forcing the threads to join
+    // (this thread blocks here until the others terminate).
+    // Once the threads join, the borrow expires and the data becomes
+    // accessible again in this thread.
+}
+// data is definitely mutated here.</code></pre>
+<p>در اصل، این کاملاً کار می‌کند! سیستم مالکیت Rust آن را به‌طور کامل تضمین می‌کند! …جز اینکه برای امن بودن به فراخوانی شدن یک نابودگر تکیه دارد.</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">let mut data = Box::new(0);
+{
+    let guard = thread::scoped(|| {
+        // This is at best a data race. At worst, it's also a use-after-free.
+        *data += 1;
+    });
+    // Because the guard is forgotten, expiring the loan without blocking this
+    // thread.
+    mem::forget(guard);
+}
+// So the Box is dropped here while the scoped thread may or may not be trying
+// to access it.</code></pre>
+<p>لعنتی. در اینجا اجرا شدن نابودگر برای API اساسی بود و مجبور شدند آن را کنار بگذارند و به‌جایش طرحی کاملاً متفاوت در پیش بگیرند.</p><nav class="page-nav"><a href="destructors.html">→ مخرب‌ها</a><a href="unwinding.html">Unwinding ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

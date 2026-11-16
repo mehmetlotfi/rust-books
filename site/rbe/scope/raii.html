@@ -1,0 +1,69 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>RAII — Rust با مثال</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="scope/raii"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../rbe/index.html" style="color:inherit;text-decoration:none">Rust با مثال</a><small class="en-title" dir="ltr">Rust By Example</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="raii"><a class="header" href="#raii">RAII</a></h1>
+<p>متغیرها در راست فقط داده را روی پشته نگه نمی‌دارند، بلکه <em>مالک</em> منابع نیز هستند؛ برای نمونه <code>Box&lt;T&gt;</code> مالک حافظه‌ای در هیپ است. راست الگوی <a href="https://en.wikipedia.org/wiki/Resource_Acquisition_Is_Initialization">RAII</a>، یعنی «دریافت منبع همان مقداردهی اولیه است»، را اعمال می‌کند. بنابراین هرگاه یک شیء از محدوده خارج شود، تخریب‌گر آن فراخوانی و منابع تحت مالکیتش آزاد می‌شوند.</p>
+<p>این رفتار از خطاهای <em>نشت منبع</em> جلوگیری می‌کند؛ پس نیازی نیست حافظه را دستی آزاد کنید یا نگران نشت حافظه باشید. یک نمونهٔ کوتاه:</p>
+<pre><code class="language-rust editable">// raii.rs
+fn create_box() {
+    // Allocate an integer on the heap
+    let _box1 = Box::new(3i32);
+
+    // `_box1` is destroyed here, and memory gets freed
+}
+
+fn main() {
+    // Allocate an integer on the heap
+    let _box2 = Box::new(5i32);
+
+    // A nested scope:
+    {
+        // Allocate an integer on the heap
+        let _box3 = Box::new(4i32);
+
+        // `_box3` is destroyed here, and memory gets freed
+    }
+
+    // Creating lots of boxes just for fun
+    // There's no need to manually free memory!
+    for _ in 0u32..1_000 {
+        create_box();
+    }
+
+    // `_box2` is destroyed here, and memory gets freed
+}</code></pre>
+<p>می‌توانیم با <a href="http://valgrind.org/info/"><code>valgrind</code></a> نیز نبود خطاهای حافظه را دوباره بررسی کنیم:</p>
+<!-- REUSE-IgnoreStart -->
+<!-- Prevent REUSE from parsing the copyright statement in the sample code -->
+<pre><code class="language-shell">$ rustc raii.rs &amp;&amp; valgrind ./raii
+==26873== Memcheck, a memory error detector
+==26873== Copyright (C) 2002-2013, and GNU GPL'd, by Julian Seward et al.
+==26873== Using Valgrind-3.9.0 and LibVEX; rerun with -h for copyright info
+==26873== Command: ./raii
+==26873==
+==26873==
+==26873== HEAP SUMMARY:
+==26873==     in use at exit: 0 bytes in 0 blocks
+==26873==   total heap usage: 1,013 allocs, 1,013 frees, 8,696 bytes allocated
+==26873==
+==26873== All heap blocks were freed -- no leaks are possible
+==26873==
+==26873== For counts of detected and suppressed errors, rerun with: -v
+==26873== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 2 from 2)
+</code></pre>
+<!-- REUSE-IgnoreEnd -->
+<p>اینجا هیچ نشتی‌ای وجود ندارد!</p>
+<h2 id="destructor"><a class="header" href="#destructor">تخریب‌گر</a></h2>
+<p>مفهوم تخریب‌گر (destructor) در راست از طریق صفت <a href="https://doc.rust-lang.org/std/ops/trait.Drop.html"><code>Drop</code></a> فراهم می‌شود. تخریب‌گر وقتی فراخوانی می‌شود که منبع از دامنه خارج شود. لازم نیست این صفت برای هر نوعی پیاده‌سازی شود؛ فقط در صورتی آن را برای نوع خود پیاده‌سازی کنید که به منطق تخریب‌گر اختصاصی نیاز دارید.</p>
+<p>مثال زیر را اجرا کنید تا ببینید صفت <a href="https://doc.rust-lang.org/std/ops/trait.Drop.html"><code>Drop</code></a> چگونه کار می‌کند. وقتی متغیر درون تابع <code>main</code> از دامنه خارج شود، تخریب‌گر سفارشی فراخوانی می‌شود.</p>
+<pre><code class="language-rust editable">struct ToDrop;
+
+impl Drop for ToDrop {
+    fn drop(&amp;mut self) {
+        println!("ToDrop is being dropped");
+    }
+}
+
+fn main() {
+    let x = ToDrop;
+    println!("Made a ToDrop!");
+}</code></pre>
+<h3 id="see-also"><a class="header" href="#see-also">بیشتر بخوانید</a></h3>
+<p><a href="../std/box.html">Box</a></p><nav class="page-nav"><a href="../../rbe/scope.html">→ قواعد محدوده</a><a href="../../rbe/scope/move.html">مالکیت و انتقال ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rbe/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

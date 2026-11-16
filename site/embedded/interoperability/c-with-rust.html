@@ -1,0 +1,77 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>کمی C همراه Rust شما — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="interoperability/c-with-rust"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="a-little-c-with-your-rust"><a class="header" href="#a-little-c-with-your-rust">کمی C در کنار Rust شما</a></h1>
+<p>استفاده از C یا C++ درون یک پروژهٔ Rust از دو بخش اصلی تشکیل می‌شود:</p>
+<ul>
+<li>پوشاندن API ارائه‌شدهٔ C برای استفاده با Rust</li>
+<li>ساخت کد C یا C++ شما تا با کد Rust یکپارچه شود</li>
+</ul>
+<p>چون C++ ABI پایداری ندارد که کامپایلر Rust آن را هدف بگیرد، توصیه می‌شود هنگام ترکیب Rust با C یا C++ از ABI نوع <code>C</code> استفاده شود.</p>
+<h2 id="defining-the-interface"><a class="header" href="#defining-the-interface">تعریف رابط</a></h2>
+<p>پیش از مصرف کد C یا C++ از Rust، لازم است (در Rust) تعریف کنیم که چه نوع‌های داده و امضاهای توابعی در کد پیوند‌شده وجود دارند. در C یا C++، فایلی سرآیند (<code>.h</code> یا <code>.hpp</code>) را <code>include</code> می‌کنید که این داده را تعریف می‌کند. در Rust لازم است یا این تعریف‌ها را دستی به Rust ترجمه کنید، یا از ابزاری برای تولید این تعریف‌ها استفاده کنید.</p>
+<p>ابتدا ترجمهٔ دستی این تعریف‌ها از C/C++ به Rust را بررسی می‌کنیم.</p>
+<h3 id="wrapping-c-functions-and-datatypes"><a class="header" href="#wrapping-c-functions-and-datatypes">پوشاندن توابع و نوع‌های داده در C</a></h3>
+<p>معمولاً کتابخانه‌هایی که با C یا C++ نوشته شده‌اند یک فایل سرآیند فراهم می‌کنند که همهٔ نوع‌ها و توابع به‌کاررفته در رابط‌های عمومی را تعریف می‌کند. یک فایل نمونه ممکن است چنین باشد:</p>
+<pre><code class="language-C">/* File: cool.h */
+typedef struct CoolStruct {
+    int x;
+    int y;
+} CoolStruct;
+
+void cool_function(int i, char c, CoolStruct* cs);
+</code></pre>
+<p>وقتی به Rust ترجمه شود، این رابط به این شکل خواهد بود:</p>
+<pre><code class="language-rust ignore">/* File: cool_bindings.rs */
+#[repr(C)]
+pub struct CoolStruct {
+    pub x: cty::c_int,
+    pub y: cty::c_int,
+}
+
+extern "C" {
+    pub fn cool_function(
+        i: cty::c_int,
+        c: cty::c_char,
+        cs: *mut CoolStruct
+    );
+}</code></pre>
+<p>بیایید این تعریف را تکه‌تکه بررسی کنیم تا هر بخش را توضیح دهیم.</p>
+<pre><code class="language-rust ignore">#[repr(C)]
+pub struct CoolStruct { ... }</code></pre>
+<p>به‌طور پیش‌فرض، Rust ترتیب، فاصله‌گذاری (padding) یا اندازهٔ داده‌های موجود در یک <code>struct</code> را تضمین نمی‌کند. برای تضمین سازگاری با کد C، attribute به نام <code>#[repr(C)]</code> را اضافه می‌کنیم که به کامپایلر Rust دستور می‌دهد برای سازمان‌دهی داده‌ها درون یک ساختار همیشه از همان قواعدی استفاده کند که C به کار می‌برد.</p>
+<pre><code class="language-rust ignore">pub x: cty::c_int,
+pub y: cty::c_int,</code></pre>
+<p>به‌خاطر انعطافی که C یا C++ در تعریف <code>int</code> یا <code>char</code> دارند، توصیه می‌شود از نوع‌های داده‌ای اولیه‌ای استفاده کنید که در <code>cty</code> تعریف شده‌اند و نوع‌های C را به نوع‌های Rust نگاشت می‌کنند.</p>
+<pre><code class="language-rust ignore">extern "C" { pub fn cool_function( ... ); }</code></pre>
+<p>این دستور امضای تابعی را تعریف می‌کند که از ABI زبان C استفاده می‌کند و <code>cool_function</code> نام دارد. با تعریف امضا بدون تعریف بدنهٔ تابع، تعریف این تابع باید در جای دیگری فراهم شود، یا از یک کتابخانهٔ ایستا در کتابخانه یا باینری نهایی پیوند داده شود.</p>
+<pre><code class="language-rust ignore">    i: cty::c_int,
+    c: cty::c_char,
+    cs: *mut CoolStruct</code></pre>
+<p>مشابه نوع داده‌ای که بالا آمد، نوع‌های داده‌ای آرگومان‌های تابع را با تعریف‌های سازگار با C تعریف می‌کنیم. برای وضوح، نام آرگومان‌ها را نیز همان‌طور نگه می‌داریم.</p>
+<p>یک نوع جدید در اینجا داریم: <code>*mut CoolStruct</code>. چون C مفهوم ارجاع‌های Rust را ندارد، که چیزی شبیه این می‌شد: <code>&amp;mut CoolStruct</code>، در عوض یک اشاره‌گر خام داریم. از آن‌جا که dereference کردن این اشاره‌گر <code>unsafe</code> است و اشاره‌گر ممکن است در واقع یک اشاره‌گر <code>null</code> باشد، هنگام تعامل با کد C یا C++ باید مراقب بود که تضمین‌های معمول Rust حفظ شوند.</p>
+<h3 id="automatically-generating-the-interface"><a class="header" href="#automatically-generating-the-interface">تولید خودکار رابط</a></h3>
+<p>به‌جای تولید دستی این رابط‌ها، که ممکن است خسته‌کننده و مستعد خطا باشد، ابزاری به نام <a href="https://github.com/rust-lang/rust-bindgen">bindgen</a> وجود دارد که این تبدیل‌ها را به‌طور خودکار انجام می‌دهد. برای راهنمای استفاده از <a href="https://github.com/rust-lang/rust-bindgen">bindgen</a> به <a href="https://rust-lang.github.io/rust-bindgen/">راهنمای کاربر bindgen</a> مراجعه کنید، با این حال فرایند معمول شامل مراحل زیر است:</p>
+<ol>
+<li>همهٔ سرآیندهای C یا C++ را که رابط‌ها یا نوع‌های داده‌ای را تعریف می‌کنند و می‌خواهید با Rust استفاده کنید گرد آورید.</li>
+<li>یک فایل <code>bindings.h</code> بنویسید که هر یک از فایل‌هایی را که در گام اول گرد آوردید با <code>#include "..."</code> درج کند.</li>
+<li>این فایل <code>bindings.h</code> را همراه با هر پرچم کامپایلی که برای کامپایل کدتان به کار رفته به <code>bindgen</code> بدهید. نکته: از <code>Builder.ctypes_prefix("cty")</code> / <code>--ctypes-prefix=cty</code> و <code>Builder.use_core()</code> / <code>--use-core</code> استفاده کنید تا کد تولیدشده با <code>#![no_std]</code> سازگار شود.</li>
+<li><code>bindgen</code> کد Rust تولیدشده را در خروجی پنجرهٔ ترمینال تولید می‌کند. این خروجی را می‌توان به یک فایل در پروژهٔ شما، مانند <code>bindings.rs</code>، هدایت کرد. می‌توانید از این فایل در پروژهٔ Rust خود برای تعامل با کد C/C++ که به‌صورت کتابخانهٔ خارجی کامپایل و پیوند شده است استفاده کنید. نکته: اگر نوع‌ها در bindingهای تولیدشده با <code>cty</code> پیشوند خورده‌اند، فراموش نکنید که از crate به نام <a href="https://crates.io/crates/cty"><code>cty</code></a> استفاده کنید.</li>
+</ol>
+<h2 id="building-your-cc-code"><a class="header" href="#building-your-cc-code">ساخت کد C/C++ شما</a></h2>
+<p>چون کامپایلر Rust مستقیماً نمی‌داند چگونه کد C یا C++ (یا کد هر زبان دیگری که رابط C ارائه می‌دهد) را کامپایل کند، لازم است کد غیر Rust خود را از پیش کامپایل کنید.</p>
+<p>در پروژه‌های توکار، این بیشتر به معنای کامپایل کد C/C++ به یک آرشیو ایستا (مانند <code>cool-library.a</code>) است که سپس می‌توان آن را در گام نهایی پیوند با کد Rust شما ترکیب کرد.</p>
+<p>اگر کتابخانه‌ای که می‌خواهید استفاده کنید از قبل به‌صورت آرشیو ایستا توزیع شده است، لازم نیست کدتان را دوباره بسازید. فقط فایل سرآیند رابط ارائه‌شده را همان‌طور که در بالا توضیح داده شد تبدیل کنید و آرشیو ایستا را هنگام کامپایل/پیوند بگنجانید.</p>
+<p>اگر کد شما به‌صورت یک پروژهٔ سورس وجود دارد، لازم است کد C/C++ خود را به یک کتابخانهٔ ایستا کامپایل کنید، یا با راه‌اندازی سامانهٔ ساخت موجودتان (مانند <code>make</code>، <code>CMake</code> و غیره)، یا با انتقال گام‌های کامپایل لازم به ابزاری به نام crate به نام <code>cc</code>. برای هر دوی این گام‌ها لازم است از یک اسکریپت <code>build.rs</code> استفاده کنید.</p>
+<h3 id="rust-buildrs-build-scripts"><a class="header" href="#rust-buildrs-build-scripts">اسکریپت‌های ساخت <code>build.rs</code> در Rust</a></h3>
+<p>اسکریپت <code>build.rs</code> فایلی است که با نحو Rust نوشته می‌شود و روی ماشین کامپایل شما اجرا می‌شود، بعد از آن‌که وابستگی‌های پروژهٔ شما ساخته شدند، اما پیش از ساخته شدن پروژهٔ شما.</p>
+<p>مرجع کامل را می‌توانید <a href="../../cargo/reference/build-scripts.html">اینجا</a> بیابید. اسکریپت‌های <code>build.rs</code> برای تولید کد (مثلاً از طریق <a href="https://github.com/rust-lang/rust-bindgen">bindgen</a>)، فراخوانی سامانه‌های ساخت خارجی مانند <code>Make</code>، یا کامپایل مستقیم C/C++ با استفاده از crate به نام <code>cc</code> مفیدند.</p>
+<h3 id="triggering-external-build-systems"><a class="header" href="#triggering-external-build-systems">راه‌اندازی سامانه‌های ساخت خارجی</a></h3>
+<p>برای پروژه‌هایی که پروژه‌ها یا سامانه‌های ساخت خارجی پیچیده‌ای دارند، ممکن است ساده‌ترین کار این باشد که با <a href="https://doc.rust-lang.org/std/process/struct.Command.html"><code>std::process::Command</code></a> از سامانه‌های ساخت دیگرتان «بیرون‌پرانی» (shell out) کنید: با پیمودن مسیرهای نسبی، فراخوانی یک دستور ثابت (مانند <code>make library</code>) و سپس کپی کردن کتابخانهٔ ایستای حاصل به مکان مناسب در پوشهٔ ساخت <code>target</code>.</p>
+<p>اگرچه crate شما ممکن است یک پلتفرم توکار <code>no_std</code> را هدف بگیرد، <code>build.rs</code> شما فقط روی ماشین‌هایی اجرا می‌شود که crate شما را کامپایل می‌کنند. این یعنی می‌توانید از هر crate Rust که روی میزبان کامپایل شما اجرا می‌شود استفاده کنید.</p>
+<h3 id="building-cc-code-with-the-cc-crate"><a class="header" href="#building-cc-code-with-the-cc-crate">ساخت کد C/C++ با crate به نام <code>cc</code></a></h3>
+<p>برای پروژه‌هایی با وابستگی‌ها یا پیچیدگی محدود، یا پروژه‌هایی که تغییر سامانهٔ ساخت برای تولید یک کتابخانهٔ ایستا (به‌جای باینری یا فایل اجرایی نهایی) در آن‌ها دشوار است، ممکن است استفاده از <a href="https://github.com/alexcrichton/cc-rs">crate با نام <code>cc</code></a> آسان‌تر باشد که رابطی Rust‌پسند (idiomatic) برای کامپایلر ارائه‌شده توسط میزبان فراهم می‌کند.</p>
+<p>در ساده‌ترین حالت، یعنی کامپایل یک فایل C به‌عنوان وابستگی یک کتابخانهٔ ایستا، نمونه‌ای از اسکریپت <code>build.rs</code> با استفاده از <a href="https://github.com/alexcrichton/cc-rs">crate با نام <code>cc</code></a> چنین خواهد بود:</p>
+<pre><code class="language-rust ignore">fn main() {
+    cc::Build::new()
+        .file("src/foo.c")
+        .compile("foo");
+}</code></pre>
+<p><code>build.rs</code> در ریشهٔ بسته قرار می‌گیرد. سپس <code>cargo build</code> آن را پیش از ساخت بسته کامپایل و اجرا می‌کند. یک آرشیو ایستا به نام <code>libfoo.a</code> تولید می‌شود و در پوشهٔ <code>target</code> قرار می‌گیرد.</p><nav class="page-nav"><a href="../../embedded/interoperability/index.html">→ تعامل‌پذیری</a><a href="../../embedded/interoperability/rust-with-c.html">کمی Rust همراه C شما ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

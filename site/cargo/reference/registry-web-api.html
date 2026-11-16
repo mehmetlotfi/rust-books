@@ -1,0 +1,314 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>API وب رجیستری — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/registry-web-api"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="web-api"><a class="header" href="#web-api">Web API</a></h1>
+<p>یک رجیستری می‌تواند در مکانی که در <code>config.json</code> تعریف شده است یک رابط برنامه‌نویسی وب (Web API) ارائه کند تا از هر یک از اقدام‌های فهرست‌شده در زیر پشتیبانی کند.</p>
+<p>Cargo برای درخواست‌هایی که به احراز هویت نیاز دارند، سرآیند <code>Authorization</code> را می‌فرستد. مقدار این سرآیند همان توکن API است. اگر توکن معتبر نباشد، سرور باید با کد پاسخ 403 جواب دهد. انتظار می‌رود کاربران برای دریافت توکن به وب‌سایت رجیستری مراجعه کنند، و Cargo می‌تواند توکن را با دستور <a href="../commands/cargo-login.html"><code>cargo login</code></a> یا با ارسال آن در خط فرمان ذخیره کند.</p>
+<p>پاسخ‌ها برای موفقیت از کد پاسخ 2xx استفاده می‌کنند. خطاها باید از کد پاسخ مناسبی مانند 404 استفاده کنند. پاسخ‌های ناموفق باید یک شیء JSON با ساختار زیر داشته باشند:</p>
+<pre><code class="language-javascript">{
+    // Array of errors to display to the user.
+    "errors": [
+        {
+            // The error message as a string.
+            "detail": "error message text"
+        }
+    ]
+}
+</code></pre>
+<p>اگر پاسخ این ساختار را داشته باشد، Cargo پیام تفصیلی را به کاربر نمایش می‌دهد، حتی اگر کد پاسخ 200 باشد. اگر کد پاسخ نشان‌دهندهٔ خطا باشد و محتوا این ساختار را نداشته باشد، Cargo پیامی را به کاربر نمایش می‌دهد که برای کمک به اشکال‌زدایی خطای سرور در نظر گرفته شده است. سروری که یک شیء <code>errors</code> برمی‌گرداند به رجیستری اجازه می‌دهد پیام خطایی دقیق‌تر و کاربرمحورتر ارائه کند.</p>
+<p>برای سازگاری با نسخه‌های قبلی، سرورها باید هر پارامتر پرس‌وجو یا فیلد JSON غیرمنتظره را نادیده بگیرند. اگر یک فیلد JSON وجود نداشته باشد، باید فرض شود که null است. نقاط پایانی (endpoint) با مؤلفهٔ <code>v1</code> در مسیر نسخه‌بندی می‌شوند، و در صورتی که در آینده به راهکارهای جایگزین برای سازگاری با نسخه‌های قبلی نیاز باشد، مدیریت آن‌ها بر عهدهٔ Cargo است.</p>
+<p>Cargo سرآیند <code>User-Agent</code> را برای همهٔ درخواست‌ها روی نسخهٔ Cargo تنظیم می‌کند، مانند <code>cargo/1.32.0 (8610973aa 2019-01-02)</code>. کاربر می‌تواند این مقدار را در یک مقدار پیکربندی تغییر دهد. این قابلیت در نسخهٔ 1.29 اضافه شد.</p>
+<p>سایر سرآیندها بسته به نقطهٔ پایانی متفاوت‌اند و در ادامه مستند شده‌اند.</p>
+<h2 id="publish"><a class="header" href="#publish">انتشار (Publish)</a></h2>
+<ul>
+<li>نقطهٔ پایانی: <code>/api/v1/crates/new</code></li>
+<li>متد: PUT</li>
+<li>احراز هویت: ارسال می‌شود</li>
+<li>سرآیندها:
+<ul>
+<li><code>Content-Type</code>: <code>application/octet-stream</code></li>
+<li><code>Accept</code>: <code>application/json</code></li>
+</ul>
+</li>
+<li>بدنه: ارسال می‌شود (در ادامه ببینید)</li>
+</ul>
+<p>نقطهٔ پایانی انتشار برای انتشار نسخهٔ جدیدی از یک crate استفاده می‌شود. سرور باید crate را اعتبارسنجی کند، آن را برای دانلود در دسترس قرار دهد و به ایندکس اضافه کند.</p>
+<p>لازم نیست ایندکس پیش از ارسال پاسخ موفق به‌روزرسانی شده باشد. پس از یک پاسخ موفق، Cargo برای مدت کوتاهی ایندکس را بررسی می‌کند تا ببیند crate جدید اضافه شده است یا نه. اگر crate پس از مدت کوتاهی در ایندکس ظاهر نشود، Cargo یک هشدار نمایش می‌دهد تا به کاربر اطلاع دهد که crate جدید هنوز در دسترس نیست.</p>
+<p>بدنهٔ دادهٔ ارسالی از طرف Cargo به این صورت است:</p>
+<ul>
+<li>یک عدد صحیح بدون علامت ۳۲ بیتی به‌صورت little-endian که طول داده‌های JSON را نشان می‌دهد.</li>
+<li>فراداده‌های بسته به‌صورت یک شیء JSON.</li>
+<li>یک عدد صحیح بدون علامت ۳۲ بیتی به‌صورت little-endian که طول فایل <code>.crate</code> را نشان می‌دهد.</li>
+<li>فایل <code>.crate</code>.</li>
+</ul>
+<p>آنچه در ادامه می‌آید نمونه‌ای توضیح‌دار از شیء JSON است. برخی یادداشت‌ها دربارهٔ محدودیت‌هایی که <a href="https://crates.io/">crates.io</a> اعمال می‌کند صرفاً برای نشان دادن پیشنهادهایی دربارهٔ انواع اعتبارسنجی‌هایی که می‌توان انجام داد آمده‌اند و نباید فهرستی کامل از محدودیت‌های <a href="https://crates.io/">crates.io</a> تلقی شوند.</p>
+<pre><code class="language-javascript">{
+    // The name of the package.
+    "name": "foo",
+    // The version of the package being published.
+    "vers": "0.1.0",
+    // Array of direct dependencies of the package.
+    "deps": [
+        {
+            // Name of the dependency.
+            // If the dependency is renamed from the original package name,
+            // this is the original name. The new package name is stored in
+            // the `explicit_name_in_toml` field.
+            "name": "rand",
+            // The semver requirement for this dependency.
+            "version_req": "^0.6",
+            // Array of features (as strings) enabled for this dependency.
+            "features": ["i128_support"],
+            // Boolean of whether or not this is an optional dependency.
+            "optional": false,
+            // Boolean of whether or not default features are enabled.
+            "default_features": true,
+            // The target platform for the dependency.
+            // null if not a target dependency.
+            // Otherwise, a string such as "cfg(windows)".
+            "target": null,
+            // The dependency kind.
+            // "dev", "build", or "normal".
+            "kind": "normal",
+            // The URL of the index of the registry where this dependency is
+            // from as a string. If not specified or null, it is assumed the
+            // dependency is in the current registry.
+            "registry": null,
+            // If the dependency is renamed, this is a string of the new
+            // package name. If not specified or null, this dependency is not
+            // renamed.
+            "explicit_name_in_toml": null,
+        }
+    ],
+    // Set of features defined for the package.
+    // Each feature maps to an array of features or dependencies it enables.
+    // Cargo does not impose limitations on feature names, but crates.io
+    // requires alphanumeric ASCII, `_` or `-` characters.
+    "features": {
+        "extras": ["rand/simd_support"]
+    },
+    // List of strings of the authors.
+    // May be empty.
+    "authors": ["Alice &lt;a@example.com&gt;"],
+    // Description field from the manifest.
+    // May be null. crates.io requires at least some content.
+    "description": null,
+    // String of the URL to the website for this package's documentation.
+    // May be null.
+    "documentation": null,
+    // String of the URL to the website for this package's home page.
+    // May be null.
+    "homepage": null,
+    // String of the content of the README file.
+    // May be null.
+    "readme": null,
+    // String of a relative path to a README file in the crate.
+    // May be null.
+    "readme_file": null,
+    // Array of strings of keywords for the package.
+    "keywords": [],
+    // Array of strings of categories for the package.
+    "categories": [],
+    // String of the license for the package.
+    // May be null. crates.io requires either `license` or `license_file` to be set.
+    "license": null,
+    // String of a relative path to a license file in the crate.
+    // May be null.
+    "license_file": null,
+    // String of the URL to the website for the source repository of this package.
+    // May be null.
+    "repository": null,
+    // Optional object of "status" badges. Each value is an object of
+    // arbitrary string to string mappings.
+    // crates.io has special interpretation of the format of the badges.
+    "badges": {
+        "travis-ci": {
+            "branch": "master",
+            "repository": "rust-lang/cargo"
+        }
+    },
+    // The `links` string value from the package's manifest, or null if not
+    // specified. This field is optional and defaults to null.
+    "links": null,
+    // The minimal supported Rust version (optional)
+    // This must be a valid version requirement without an operator (e.g. no `=`)
+    "rust_version": null
+}
+</code></pre>
+<p>یک پاسخ موفق شامل شیء JSON زیر است:</p>
+<pre><code class="language-javascript">{
+    // Optional object of warnings to display to the user.
+    "warnings": {
+        // Array of strings of categories that are invalid and ignored.
+        "invalid_categories": [],
+        // Array of strings of badge names that are invalid and ignored.
+        "invalid_badges": [],
+        // Array of strings of arbitrary warnings to display to the user.
+        "other": []
+    }
+}
+</code></pre>
+<h2 id="yank"><a class="header" href="#yank">Yank</a></h2>
+<ul>
+<li>نقطهٔ پایانی: <code>/api/v1/crates/{crate_name}/{version}/yank</code></li>
+<li>متد: DELETE</li>
+<li>احراز هویت: ارسال می‌شود</li>
+<li>سرآیندها:
+<ul>
+<li><code>Accept</code>: <code>application/json</code></li>
+</ul>
+</li>
+<li>بدنه: ندارد</li>
+</ul>
+<p>نقطهٔ پایانی yank فیلد <code>yank</code> مربوط به نسخهٔ داده‌شدهٔ یک crate را در ایندکس روی <code>true</code> تنظیم می‌کند.</p>
+<p>یک پاسخ موفق شامل شیء JSON زیر است:</p>
+<pre><code class="language-javascript">{
+    // Indicates the yank succeeded, always true.
+    "ok": true,
+}
+</code></pre>
+<h2 id="unyank"><a class="header" href="#unyank">Unyank</a></h2>
+<ul>
+<li>نقطهٔ پایانی: <code>/api/v1/crates/{crate_name}/{version}/unyank</code></li>
+<li>متد: PUT</li>
+<li>احراز هویت: ارسال می‌شود</li>
+<li>سرآیندها:
+<ul>
+<li><code>Accept</code>: <code>application/json</code></li>
+</ul>
+</li>
+<li>بدنه: ندارد</li>
+</ul>
+<p>نقطهٔ پایانی unyank فیلد <code>yank</code> مربوط به نسخهٔ داده‌شدهٔ یک crate را در ایندکس روی <code>false</code> تنظیم می‌کند.</p>
+<p>یک پاسخ موفق شامل شیء JSON زیر است:</p>
+<pre><code class="language-javascript">{
+    // Indicates the unyank succeeded, always true.
+    "ok": true,
+}
+</code></pre>
+<h2 id="owners"><a class="header" href="#owners">مالکان (Owners)</a></h2>
+<p>Cargo مفهوم ذاتی برای کاربران و مالکان ندارد، اما دستور <code>owner</code> را فراهم می‌کند تا به مدیریت اینکه چه کسانی اجازهٔ کنترل یک crate را دارند کمک کند. اینکه کاربران و مالکان دقیقاً چگونه مدیریت شوند به عهدهٔ رجیستری است. برای توضیح اینکه <a href="https://crates.io/">crates.io</a> مالکان را از طریق کاربران و تیم‌های GitHub چگونه مدیریت می‌کند، <a href="publishing.html#cargo-owner">مستندات انتشار</a> را ببینید.</p>
+<h3 id="owners-list"><a class="header" href="#owners-list">مالکان: فهرست (List)</a></h3>
+<ul>
+<li>نقطهٔ پایانی: <code>/api/v1/crates/{crate_name}/owners</code></li>
+<li>متد: GET</li>
+<li>احراز هویت: ارسال می‌شود</li>
+<li>سرآیندها:
+<ul>
+<li><code>Accept</code>: <code>application/json</code></li>
+</ul>
+</li>
+<li>بدنه: ندارد</li>
+</ul>
+<p>نقطهٔ پایانی owners فهرستی از مالکان crate را برمی‌گرداند.</p>
+<p>یک پاسخ موفق شامل شیء JSON زیر است:</p>
+<pre><code class="language-javascript">{
+    // Array of owners of the crate.
+    "users": [
+        {
+            // Unique unsigned 32-bit integer of the owner.
+            "id": 70,
+            // The unique username of the owner.
+            "login": "github:rust-lang:core",
+            // Name of the owner.
+            // This is optional and may be null.
+            "name": "Core",
+        }
+    ]
+}
+</code></pre>
+<h3 id="owners-add"><a class="header" href="#owners-add">مالکان: افزودن (Add)</a></h3>
+<ul>
+<li>نقطهٔ پایانی: <code>/api/v1/crates/{crate_name}/owners</code></li>
+<li>متد: PUT</li>
+<li>احراز هویت: ارسال می‌شود</li>
+<li>سرآیندها:
+<ul>
+<li><code>Content-Type</code>: <code>application/json</code></li>
+<li><code>Accept</code>: <code>application/json</code></li>
+</ul>
+</li>
+<li>بدنه: ارسال می‌شود (در ادامه ببینید)</li>
+</ul>
+<p>یک درخواست PUT درخواستی را برای افزودن مالکی جدید به یک crate به رجیستری می‌فرستد. نحوهٔ رسیدگی به این درخواست به عهدهٔ رجیستری است. برای مثال، <a href="https://crates.io/">crates.io</a> برای کاربر یک دعوت‌نامه می‌فرستد که باید پیش از افزوده شدن آن را بپذیرد.</p>
+<p>درخواست باید شامل شیء JSON زیر باشد:</p>
+<pre><code class="language-javascript">{
+    // Array of `login` strings of owners to add.
+    "users": ["login_name"]
+}
+</code></pre>
+<p>یک پاسخ موفق شامل شیء JSON زیر است:</p>
+<pre><code class="language-javascript">{
+    // Indicates the add succeeded, always true.
+    "ok": true,
+    // A string to be displayed to the user.
+    "msg": "user ehuss has been invited to be an owner of crate cargo"
+}
+</code></pre>
+<h3 id="owners-remove"><a class="header" href="#owners-remove">مالکان: حذف (Remove)</a></h3>
+<ul>
+<li>نقطهٔ پایانی: <code>/api/v1/crates/{crate_name}/owners</code></li>
+<li>متد: DELETE</li>
+<li>احراز هویت: ارسال می‌شود</li>
+<li>سرآیندها:
+<ul>
+<li><code>Content-Type</code>: <code>application/json</code></li>
+<li><code>Accept</code>: <code>application/json</code></li>
+</ul>
+</li>
+<li>بدنه: ارسال می‌شود (در ادامه ببینید)</li>
+</ul>
+<p>یک درخواست DELETE مالکی را از یک crate حذف می‌کند. درخواست باید شامل شیء JSON زیر باشد:</p>
+<pre><code class="language-javascript">{
+    // Array of `login` strings of owners to remove.
+    "users": ["login_name"]
+}
+</code></pre>
+<p>یک پاسخ موفق شامل شیء JSON زیر است:</p>
+<pre><code class="language-javascript">{
+    // Indicates the remove succeeded, always true.
+    "ok": true
+    // A string to be displayed to the user. Currently ignored by cargo.
+    "msg": "owners successfully removed",
+}
+</code></pre>
+<h2 id="search"><a class="header" href="#search">جست‌وجو (Search)</a></h2>
+<ul>
+<li>نقطهٔ پایانی: <code>/api/v1/crates</code></li>
+<li>متد: GET</li>
+<li>احراز هویت: ارسال نمی‌شود</li>
+<li>سرآیندها:
+<ul>
+<li><code>Accept</code>: <code>application/json</code></li>
+</ul>
+</li>
+<li>بدنه: ندارد</li>
+<li>پارامترهای پرس‌وجو:
+<ul>
+<li><code>q</code>: رشتهٔ پرس‌وجوی جست‌وجو.</li>
+<li><code>per_page</code>: تعداد نتایج؛ پیش‌فرض 10 و حداکثر 100.</li>
+</ul>
+</li>
+</ul>
+<p>درخواست جست‌وجو با استفاده از معیارهایی که در سرور تعریف شده‌اند، crateها را جست‌وجو می‌کند.</p>
+<p>یک پاسخ موفق شامل شیء JSON زیر است:</p>
+<pre><code class="language-javascript">{
+    // Array of results.
+    "crates": [
+        {
+            // Name of the crate.
+            "name": "rand",
+            // The highest version available.
+            "max_version": "0.6.1",
+            // Textual description of the crate.
+            "description": "Random number generators and other randomness functionality.\n",
+        }
+    ],
+    "meta": {
+        // Total number of results available on the server.
+        "total": 119
+    }
+}
+</code></pre>
+<h2 id="login"><a class="header" href="#login">ورود (Login)</a></h2>
+<ul>
+<li>نقطهٔ پایانی: <code>/me</code></li>
+</ul>
+<p>نقطهٔ پایانی «login» یک درخواست واقعی API نیست. این نقطه صرفاً برای دستور <a href="../commands/cargo-login.html"><code>cargo login</code></a> وجود دارد تا نشانی URL را نمایش دهد و به کاربر بگوید برای ورود و دریافت توکن API آن را در یک مرورگر وب باز کند.</p><nav class="page-nav"><a href="registry-index.html">→ فهرست رجیستری</a><a href="semver.html">سازگاری SemVer ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

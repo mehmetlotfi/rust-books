@@ -1,0 +1,74 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>کران‌های صفت با رتبهٔ بالاتر — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="hrtb"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="higher-rank-trait-bounds-hrtbs"><a class="header" href="#higher-rank-trait-bounds-hrtbs">کران‌های صفت با رتبهٔ بالاتر (HRTB)</a></h1>
+<p>صفت‌های <code>Fn</code> در Rust کمی جادویی هستند. برای مثال، می‌توانیم کد زیر را بنویسیم:</p>
+<pre><code class="language-rust">struct Closure&lt;F&gt; {
+    data: (u8, u16),
+    func: F,
+}
+
+impl&lt;F&gt; Closure&lt;F&gt;
+    where F: Fn(&amp;(u8, u16)) -&gt; &amp;u8,
+{
+    fn call(&amp;self) -&gt; &amp;u8 {
+        (self.func)(&amp;self.data)
+    }
+}
+
+fn do_it(data: &amp;(u8, u16)) -&gt; &amp;u8 { &amp;data.0 }
+
+fn main() {
+    let clo = Closure { data: (0, 1), func: do_it };
+    println!("{}", clo.call());
+}</code></pre>
+<p>اگر بخواهیم این کد را به همان شیوه‌ای که در <a href="lifetimes.html">بخش طول عمر</a> انجام دادیم ساده‌لوحانه از قند نحوی (desugar) درآوریم، به مشکل برمی‌خوریم:</p>
+<!-- ignore: desugared code -->
+<pre><code class="language-rust ignore">// NOTE: `&amp;'b data.0` and `'x: {` is not valid syntax!
+struct Closure&lt;F&gt; {
+    data: (u8, u16),
+    func: F,
+}
+
+impl&lt;F&gt; Closure&lt;F&gt;
+    // where F: Fn(&amp;'??? (u8, u16)) -&gt; &amp;'??? u8,
+{
+    fn call&lt;'a&gt;(&amp;'a self) -&gt; &amp;'a u8 {
+        (self.func)(&amp;self.data)
+    }
+}
+
+fn do_it&lt;'b&gt;(data: &amp;'b (u8, u16)) -&gt; &amp;'b u8 { &amp;'b data.0 }
+
+fn main() {
+    'x: {
+        let clo = Closure { data: (0, 1), func: do_it };
+        println!("{}", clo.call());
+    }
+}</code></pre>
+<p>چطور باید طول عمرها را روی کران صفتِ <code>F</code> بیان کنیم؟ باید در آنجا یک طول عمر بدهیم، اما طول عمری که برایمان اهمیت دارد تا زمانی که وارد بدنهٔ <code>call</code> نشویم نامی ندارد! همچنین این یک طول عمر ثابت نیست؛ <code>call</code> با <em>هر</em> طول عمری که <code>&amp;self</code> در آن نقطه داشته باشد کار می‌کند.</p>
+<p>این کار به جادوی کران‌های صفت با رتبهٔ بالاتر (HRTB) نیاز دارد. روش desugar کردن آن به این صورت است:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">where for&lt;'a&gt; F: Fn(&amp;'a (u8, u16)) -&gt; &amp;'a u8,</code></pre>
+<p>یا به شکل دیگر:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">where F: for&lt;'a&gt; Fn(&amp;'a (u8, u16)) -&gt; &amp;'a u8,</code></pre>
+<p>(در اینجا <code>Fn(a, b, c) -&gt; d</code> خودش فقط قند نحوی برای صفت <em>واقعیِ</em> ناپایدار <code>Fn</code> است.)</p>
+<p><code>for&lt;'a&gt;</code> را می‌توان «برای همهٔ انتخاب‌های <code>'a</code>» خواند، و در اصل یک <em>فهرست نامتناهی</em> از کران‌های صفت تولید می‌کند که F باید آن‌ها را برآورده کند. شدید است. جاهای زیادی بیرون از صفت‌های <code>Fn</code> نیست که با HRTBها روبه‌رو شویم، و حتی برای آن‌ها هم برای حالت‌های رایج قند نحوی جادویی خوبی داریم.</p>
+<p>در مجموع، می‌توانیم کد اصلی را صریح‌تر این‌گونه بازنویسی کنیم:</p>
+<pre><code class="language-rust">struct Closure&lt;F&gt; {
+    data: (u8, u16),
+    func: F,
+}
+
+impl&lt;F&gt; Closure&lt;F&gt;
+    where for&lt;'a&gt; F: Fn(&amp;'a (u8, u16)) -&gt; &amp;'a u8,
+{
+    fn call(&amp;self) -&gt; &amp;u8 {
+        (self.func)(&amp;self.data)
+    }
+}
+
+fn do_it(data: &amp;(u8, u16)) -&gt; &amp;u8 { &amp;data.0 }
+
+fn main() {
+    let clo = Closure { data: (0, 1), func: do_it };
+    println!("{}", clo.call());
+}</code></pre><nav class="page-nav"><a href="unbounded-lifetimes.html">→ طول عمرهای بی‌کران</a><a href="subtyping.html">زیرنوع‌سازی و واریانس ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

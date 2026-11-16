@@ -1,0 +1,33 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>negative-impls — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/negative-impls"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="negative_impls"><a class="header" href="#negative_impls"><code>negative_impls</code></a></h1>
+<p>issue ردیابی این ویژگی <a href="https://github.com/rust-lang/rust/issues/68318">#68318</a> است.</p>
+<hr>
+<p>با فعال کردن feature gate به نام <code>negative_impls</code> می‌توانید علاوه بر impl‌های مثبت، impl‌های منفی هم بنویسید:</p>
+<pre><code class="language-rust">#![feature(negative_impls)]
+trait DerefMut { }
+impl&lt;T: ?Sized&gt; !DerefMut for &amp;T { }</code></pre>
+<p>impl‌های منفی یک تضمین semver هستند که نشان می‌دهد صفت داده‌شده برای نوع‌های مشخص‌شده پیاده‌سازی نخواهد شد. impl‌های منفی برای auto traitها کاربرد دیگری هم دارند که در ادامه توضیح داده شده است.</p>
+<p>impl‌های منفی ویژگی‌های زیر را دارند:</p>
+<ul>
+<li>هیچ آیتمی ندارند.</li>
+<li>باید از قواعد orphan پیروی کنند، درست مثل اینکه یک impl مثبت باشند.</li>
+<li>نمی‌توانند با هیچ impl مثبتی «همپوشانی» داشته باشند.</li>
+</ul>
+<h2 id="semver-interaction"><a class="header" href="#semver-interaction">تعامل با semver</a></h2>
+<p>حذف یک impl منفی یک تغییر ناسازگار (breaking change) است. impl‌های منفی تعهدی هستند مبنی بر اینکه صفت داده‌شده را برای نوع‌های نام‌برده پیاده‌سازی نکنیم.</p>
+<h2 id="orphan-and-overlap-rules"><a class="header" href="#orphan-and-overlap-rules">قواعد orphan و همپوشانی</a></h2>
+<p>impl‌های منفی باید از همان قواعد orphan پیروی کنند که impl‌های مثبت پیروی می‌کنند. این یعنی نمی‌توانید برای نوع‌هایی که در crateهای بالادستی تعریف شده‌اند impl منفی اضافه کنید و مانند آن.</p>
+<p>به همین ترتیب، impl‌های منفی نمی‌توانند با impl‌های مثبت همپوشانی داشته باشند، که باز هم از همان بررسی «همپوشانی» استفاده می‌شود که معمولاً برای تشخیص همپوشانی دو impl به کار می‌رود. (توجه کنید که impl‌های مثبت هم معمولاً نمی‌توانند با یکدیگر همپوشانی داشته باشند، مگر در مواردی که specialization اجازه دهد.)</p>
+<h2 id="interaction-with-auto-traits"><a class="header" href="#interaction-with-auto-traits">تعامل با auto traitها</a></h2>
+<p>اعلان یک impl منفی به شکل <code>impl !SomeAutoTrait for SomeType</code> برای یک auto-trait دو هدف دارد:</p>
+<ul>
+<li>مانند هر صفت دیگری، اعلام می‌کند که <code>SomeType</code> هرگز <code>SomeAutoTrait</code> را پیاده‌سازی نخواهد کرد؛</li>
+<li>پیاده‌سازی خودکار <code>SomeType: SomeAutoTrait</code> را که در غیر این صورت تولید می‌شد غیرفعال می‌کند.</li>
+</ul>
+<p>توجه کنید که در حال حاضر راهی وجود ندارد که نشان دهیم یک نوع یک auto trait را پیاده‌سازی نمی‌کند <em>اما ممکن است در آینده بکند</em>. برای نوع‌های معمولی، این کار با ساده‌ترین روش یعنی اعلام نکردن هیچ impl انجام می‌شود، اما برای auto traitها این گزینه وجود ندارد. یک راه‌حل این است که یک نوع نشانگر (marker) را به عنوان یکی از فیلدها قرار دهیم، به طوری که نوع نشانگر <code>!AutoTrait</code> باشد.</p>
+<h2 id="immediate-uses"><a class="header" href="#immediate-uses">کاربردهای فوری</a></h2>
+<p>impl‌های منفی برای اعلام اینکه <code>&amp;T: !DerefMut</code> و <code>&amp;mut T: !Clone</code> به کار می‌روند، همان‌طور که برای رفع مشکل صحت (soundness) نوع <code>Pin</code> که در <a href="https://github.com/rust-lang/rust/issues/66544">#66544</a> شرح داده شده لازم است.</p>
+<p>این کار دو هدف دارد:</p>
+<ul>
+<li>برای اثبات درستی کد unsafe می‌توانیم از آن impl به عنوان شاهدی استفاده کنیم که هیچ impl از <code>DerefMut</code> یا <code>Clone</code> وجود ندارد.</li>
+<li>از ساخته شدن چنین impl‌هایی توسط crateهای پایین‌دست جلوگیری می‌کند.</li>
+</ul><nav class="page-nav"><a href="../../unstable/language-features/native-link-modifiers-as-needed.html">→ native-link-modifiers-as-needed</a><a href="../../unstable/language-features/new-range.html">new-range ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

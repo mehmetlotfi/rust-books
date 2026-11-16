@@ -1,0 +1,201 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>بررسی Drop — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="dropck"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="drop-check"><a class="header" href="#drop-check">بررسی drop</a></h1>
+<p>دیدیم که طول عمرها چگونه قوانین نسبتاً ساده‌ای برای تضمین اینکه هرگز ارجاع معلق (dangling) نخوانیم در اختیارمان می‌گذارند. با این حال تا اینجا رابطه‌ی <em>outlives</em> را همیشه به شکل فراگیر (inclusive) به کار برده‌ایم. یعنی وقتی از <code>'a: 'b</code> صحبت می‌کردیم، اشکالی نداشت که <code>'a</code> <em>دقیقاً</em> به اندازه‌ی <code>'b</code> زنده بماند. در نگاه اول، این تمایز بی‌معنی به نظر می‌رسد. هیچ چیزی همزمان با چیز دیگری drop نمی‌شود، درست است؟ به همین دلیل از این desugaring برای دستورهای <code>let</code> استفاده کردیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">let x;
+let y;</code></pre>
+<p>که desugar می‌شود به:</p>
+<!-- ignore: desugared code -->
+<pre><code class="language-rust ignore">{
+    let x;
+    {
+        let y;
+    }
+}</code></pre>
+<p>شرایط پیچیده‌تری هم هست که نمی‌توان با استفاده از scopeها آن‌ها را desugar کرد، اما ترتیب همچنان تعریف‌شده است ‒ متغیرها به ترتیب معکوس تعریفشان drop می‌شوند و فیلدهای ساختارها و tupleها به ترتیب تعریفشان. جزئیات بیشتری درباره‌ی ترتیب drop در <a href="https://github.com/rust-lang/rfcs/blob/master/text/1857-stabilize-drop-order.md">RFC 1857</a> آمده است.</p>
+<p>بیایید این کار را بکنیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">let tuple = (vec![], vec![]);</code></pre>
+<p>بردار سمت چپ ابتدا drop می‌شود. اما آیا این بدان معناست که از دید borrow checker، بردار سمت راست به‌طور اکید از آن بیشتر عمر می‌کند؟ پاسخ این پرسش <em>خیر</em> است. borrow checker می‌تواند فیلدهای tuple را جداگانه ردیابی کند، اما باز هم نمی‌تواند در مورد عناصر بردار تصمیم بگیرد که چه چیزی از چه چیزی بیشتر عمر می‌کند، چون این عناصر به‌صورت دستی و از طریق کد کتابخانه‌ای محض drop می‌شوند که borrow checker آن را نمی‌فهمد.</p>
+<p>پس چرا اهمیت می‌دهیم؟ چون اگر سیستم نوع دقت نکند، ممکن است به‌طور تصادفی اشاره‌گرهای معلق بسازد. برنامه‌ی ساده‌ی زیر را در نظر بگیرید:</p>
+<pre><code class="language-rust">struct Inspector&lt;'a&gt;(&amp;'a u8);
+
+struct World&lt;'a&gt; {
+    inspector: Option&lt;Inspector&lt;'a&gt;&gt;,
+    days: Box&lt;u8&gt;,
+}
+
+fn main() {
+    let mut world = World {
+        inspector: None,
+        days: Box::new(1),
+    };
+    world.inspector = Some(Inspector(&amp;world.days));
+}</code></pre>
+<p>این برنامه کاملاً صحیح (sound) است و امروز کامپایل می‌شود. اینکه <code>days</code> به‌طور اکید بیشتر از <code>inspector</code> عمر نمی‌کند اهمیتی ندارد. تا زمانی که <code>inspector</code> زنده است، <code>days</code> هم زنده است.</p>
+<p>اما اگر یک destructor اضافه کنیم، برنامه دیگر کامپایل نمی‌شود!</p>
+<pre><code class="language-rust compile_fail">struct Inspector&lt;'a&gt;(&amp;'a u8);
+
+impl&lt;'a&gt; Drop for Inspector&lt;'a&gt; {
+    fn drop(&amp;mut self) {
+        println!("I was only {} days from retirement!", self.0);
+    }
+}
+
+struct World&lt;'a&gt; {
+    inspector: Option&lt;Inspector&lt;'a&gt;&gt;,
+    days: Box&lt;u8&gt;,
+}
+
+fn main() {
+    let mut world = World {
+        inspector: None,
+        days: Box::new(1),
+    };
+    world.inspector = Some(Inspector(&amp;world.days));
+    // Let's say `days` happens to get dropped first.
+    // Then when Inspector is dropped, it will try to read free'd memory!
+}</code></pre>
+<pre><code class="language-text">error[E0597]: `world.days` does not live long enough
+  --&gt; src/main.rs:19:38
+   |
+19 |     world.inspector = Some(Inspector(&amp;world.days));
+   |                                      ^^^^^^^^^^^ borrowed value does not live long enough
+...
+22 | }
+   | -
+   | |
+   | `world.days` dropped here while still borrowed
+   | borrow might be used here, when `world` is dropped and runs the destructor for type `World&lt;'_&gt;`
+</code></pre>
+<p>می‌توانید ترتیب فیلدها را تغییر دهید یا به‌جای ساختار از tuple استفاده کنید، باز هم کامپایل نخواهد شد.</p>
+<p>پیاده‌سازی <code>Drop</code> به <code>Inspector</code> اجازه می‌دهد هنگام مرگش کدی دلخواه اجرا کند. این یعنی ممکن است بتواند ببیند که نوع‌هایی که قرار بود به اندازه‌ی خودش زنده بمانند، در واقع زودتر نابود شده‌اند.</p>
+<p>جالب اینکه فقط نوع‌های جنریک باید نگران این موضوع باشند. اگر جنریک نباشند، تنها طول عمری که می‌توانند در خود جای دهند <code>'static</code> است که واقعاً برای <em>همیشه</em> زنده می‌ماند. به همین دلیل این مشکل را <em>sound generic drop</em> (drop صحیح جنریک) می‌نامند. sound generic drop توسط <em>drop checker</em> اِعمال می‌شود. در زمان نگارش این متن، برخی از جزئیات دقیق‌تر اینکه drop checker (که dropck هم نامیده می‌شود) چگونه نوع‌ها را اعتبارسنجی می‌کند کاملاً نامشخص است. با این حال «قانون بزرگ» همان ظرافتی است که در سراسر این بخش بر آن تمرکز کرده‌ایم:</p>
+<p><strong>برای اینکه یک نوع جنریک بتواند drop را به‌صورت صحیح پیاده‌سازی کند، آرگومان‌های جنریک آن باید به‌طور اکید بیشتر از خودش عمر کنند.</strong></p>
+<p>رعایت این قانون (معمولاً) برای راضی‌کردن borrow checker لازم است؛ رعایت آن برای صحیح‌بودن کافی است اما ضروری نیست. یعنی اگر نوع شما از این قانون پیروی کند، قطعاً drop آن صحیح است.</p>
+<p>دلیل اینکه همیشه لازم نیست قانون بالا رعایت شود این است که برخی پیاده‌سازی‌های Drop به داده‌ی قرض‌گرفته‌شده دسترسی نمی‌یابند، هرچند نوعشان چنین قابلیت دسترسی‌ای به آن‌ها می‌دهد، یا اینکه ترتیب دقیق drop را می‌دانیم و داده‌ی قرض‌گرفته‌شده حتی اگر borrow checker این را نداند، همچنان سالم است.</p>
+<p>برای مثال، این گونه‌ی مثال <code>Inspector</code> بالا هرگز به داده‌ی قرض‌گرفته‌شده دسترسی نخواهد یافت:</p>
+<pre><code class="language-rust compile_fail">struct Inspector&lt;'a&gt;(&amp;'a u8, &amp;'static str);
+
+impl&lt;'a&gt; Drop for Inspector&lt;'a&gt; {
+    fn drop(&amp;mut self) {
+        println!("Inspector(_, {}) knows when *not* to inspect.", self.1);
+    }
+}
+
+struct World&lt;'a&gt; {
+    inspector: Option&lt;Inspector&lt;'a&gt;&gt;,
+    days: Box&lt;u8&gt;,
+}
+
+fn main() {
+    let mut world = World {
+        inspector: None,
+        days: Box::new(1),
+    };
+    world.inspector = Some(Inspector(&amp;world.days, "gadget"));
+    // Let's say `days` happens to get dropped first.
+    // Even when Inspector is dropped, its destructor will not access the
+    // borrowed `days`.
+}</code></pre>
+<p>به همین ترتیب، این گونه نیز هرگز به داده‌ی قرض‌گرفته‌شده دسترسی نخواهد یافت:</p>
+<pre><code class="language-rust compile_fail">struct Inspector&lt;T&gt;(T, &amp;'static str);
+
+impl&lt;T&gt; Drop for Inspector&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        println!("Inspector(_, {}) knows when *not* to inspect.", self.1);
+    }
+}
+
+struct World&lt;T&gt; {
+    inspector: Option&lt;Inspector&lt;T&gt;&gt;,
+    days: Box&lt;u8&gt;,
+}
+
+fn main() {
+    let mut world = World {
+        inspector: None,
+        days: Box::new(1),
+    };
+    world.inspector = Some(Inspector(&amp;world.days, "gadget"));
+    // Let's say `days` happens to get dropped first.
+    // Even when Inspector is dropped, its destructor will not access the
+    // borrowed `days`.
+}</code></pre>
+<p>با این حال، borrow checker هر <em>دو</em> گونه‌ی بالا را هنگام تحلیل <code>fn main</code> رد می‌کند و می‌گوید <code>days</code> به اندازه‌ی کافی زنده نمی‌ماند.</p>
+<p>دلیل این است که تحلیل borrow checking برای <code>main</code> از جزئیات داخلی پیاده‌سازی <code>Drop</code> هر <code>Inspector</code> خبر ندارد. تا آنجا که borrow checker هنگام تحلیل <code>main</code> می‌داند، بدنه‌ی destructor یک inspector ممکن است به آن داده‌ی قرض‌گرفته‌شده دسترسی پیدا کند.</p>
+<p>بنابراین drop checker همه‌ی داده‌های قرض‌گرفته‌شده در یک مقدار را مجبور می‌کند که به‌طور اکید بیشتر از آن مقدار عمر کنند.</p>
+<h2 id="an-escape-hatch"><a class="header" href="#an-escape-hatch">یک راه گریز</a></h2>
+<p>قوانین دقیقی که بررسی drop را کنترل می‌کنند ممکن است در آینده محدودکننده‌ی کمتری باشند.</p>
+<p>تحلیل فعلی عمداً محافظه‌کارانه است؛ همه‌ی داده‌های قرض‌گرفته‌شده در یک مقدار را مجبور می‌کند بیشتر از آن مقدار عمر کنند، که قطعاً صحیح است.</p>
+<p>نسخه‌های آینده‌ی زبان ممکن است تحلیل را دقیق‌تر کنند تا شمار حالت‌هایی که در آن‌ها کد صحیح به‌عنوان ناایمن رد می‌شود کاهش یابد. این کار به رفع حالت‌هایی مانند دو <code>Inspector</code> بالا که می‌دانند هنگام نابودی نباید چیزی را بازرسی کنند کمک می‌کند.</p>
+<p>در این میان، یک attribute ناپایدار وجود دارد که می‌توان از آن برای ادعای (به‌صورت ناایمن) این استفاده کرد که destructor یک نوع جنریک <em>تضمین‌شده</em> به هیچ داده‌ی منقضی‌شده‌ای دسترسی نمی‌یابد، حتی اگر نوعش این قابلیت را به آن بدهد.</p>
+<p>این attribute <code>may_dangle</code> نام دارد و در <a href="https://github.com/rust-lang/rfcs/blob/master/text/1327-dropck-param-eyepatch.md">RFC 1327</a> معرفی شد. برای به‌کارگیری آن روی <code>Inspector</code> بالا، چنین می‌نویسیم:</p>
+<pre><code class="language-rust">#![feature(dropck_eyepatch)]
+
+struct Inspector&lt;'a&gt;(&amp;'a u8, &amp;'static str);
+
+unsafe impl&lt;#[may_dangle] 'a&gt; Drop for Inspector&lt;'a&gt; {
+    fn drop(&amp;mut self) {
+        println!("Inspector(_, {}) knows when *not* to inspect.", self.1);
+    }
+}
+
+struct World&lt;'a&gt; {
+    days: Box&lt;u8&gt;,
+    inspector: Option&lt;Inspector&lt;'a&gt;&gt;,
+}
+
+fn main() {
+    let mut world = World {
+        inspector: None,
+        days: Box::new(1),
+    };
+    world.inspector = Some(Inspector(&amp;world.days, "gadget"));
+}</code></pre>
+<p>استفاده از این attribute مستلزم آن است که پیاده‌سازی <code>Drop</code> با <code>unsafe</code> علامت‌گذاری شود، زیرا کامپایلر این ادعای ضمنی را که به هیچ داده‌ی بالقوه منقضی‌شده‌ای (مثلاً <code>self.0</code> در بالا) دسترسی نمی‌شود بررسی نمی‌کند.</p>
+<p>این attribute را می‌توان بر هر تعداد پارامتر طول عمر و نوع اعمال کرد. در مثال زیر، ادعا می‌کنیم که به هیچ داده‌ای پشت ارجاعی با طول عمر <code>'b</code> دسترسی نداریم و تنها کاربردهای <code>T</code> انتقال یا drop خواهند بود، اما attribute را از <code>'a</code> و <code>U</code> حذف می‌کنیم، چون به داده‌هایی با آن طول عمر و آن نوع دسترسی داریم:</p>
+<pre><code class="language-rust">#![feature(dropck_eyepatch)]
+use std::fmt::Display;
+
+struct Inspector&lt;'a, 'b, T, U: Display&gt;(&amp;'a u8, &amp;'b u8, T, U);
+
+unsafe impl&lt;'a, #[may_dangle] 'b, #[may_dangle] T, U: Display&gt; Drop for Inspector&lt;'a, 'b, T, U&gt; {
+    fn drop(&amp;mut self) {
+        println!("Inspector({}, _, _, {})", self.0, self.3);
+    }
+}</code></pre>
+<p>گاهی واضح است که چنین دسترسی‌ای رخ نمی‌دهد، مانند حالت بالا. اما هنگام کار با یک پارامتر نوع جنریک، چنین دسترسی‌ای می‌تواند به‌طور غیرمستقیم رخ دهد. نمونه‌هایی از این دسترسی غیرمستقیم عبارت‌اند از:</p>
+<ul>
+<li>فراخوانی یک callback،</li>
+<li>از طریق فراخوانی متد یک صفت.</li>
+</ul>
+<p>(تغییرات آینده‌ی زبان، مانند impl specialization، ممکن است راه‌های دیگری برای چنین دسترسی غیرمستقیمی اضافه کنند.)</p>
+<p>این هم مثالی از فراخوانی یک callback:</p>
+<pre><code class="language-rust">struct Inspector&lt;T&gt;(T, &amp;'static str, Box&lt;for &lt;'r&gt; fn(&amp;'r T) -&gt; String&gt;);
+
+impl&lt;T&gt; Drop for Inspector&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        // The `self.2` call could access a borrow e.g. if `T` is `&amp;'a _`.
+        println!("Inspector({}, {}) unwittingly inspects expired data.",
+                 (self.2)(&amp;self.0), self.1);
+    }
+}</code></pre>
+<p>و این هم مثالی از فراخوانی متد یک صفت:</p>
+<pre><code class="language-rust">use std::fmt;
+
+struct Inspector&lt;T: fmt::Display&gt;(T, &amp;'static str);
+
+impl&lt;T: fmt::Display&gt; Drop for Inspector&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        // There is a hidden call to `&lt;T as Display&gt;::fmt` below, which
+        // could access a borrow e.g. if `T` is `&amp;'a _`
+        println!("Inspector({}, {}) unwittingly inspects expired data.",
+                 self.0, self.1);
+    }
+}</code></pre>
+<p>و البته همه‌ی این دسترسی‌ها می‌توانند در متد دیگری که destructor آن را فراخوانی می‌کند پنهان شوند، به‌جای آنکه مستقیماً در خود destructor نوشته شوند.</p>
+<p>در همه‌ی حالت‌های بالا که در destructor به <code>&amp;'a u8</code> دسترسی می‌شود، افزودن attribute با نام <code>#[may_dangle]</code> نوع را در برابر سوءاستفاده‌ای آسیب‌پذیر می‌کند که borrow checker آن را نمی‌گیرد و به آشوب دعوت می‌کند. بهتر است از افزودن این attribute پرهیز شود.</p>
+<h2 id="a-related-side-note-about-drop-order"><a class="header" href="#a-related-side-note-about-drop-order">یادداشتی جانبی و مرتبط درباره‌ی ترتیب drop</a></h2>
+<p>اگرچه ترتیب drop فیلدهای درون یک struct تعریف‌شده است، تکیه‌کردن بر آن شکننده و ظریف است. وقتی ترتیب اهمیت دارد، بهتر است از پوشانهٔ <a href="https://doc.rust-lang.org/std/mem/struct.ManuallyDrop.html"><code>ManuallyDrop</code></a> استفاده شود.</p>
+<h2 id="is-that-all-about-drop-checker"><a class="header" href="#is-that-all-about-drop-checker">آیا درباره‌ی drop checker همین بود؟</a></h2>
+<p>معلوم می‌شود هنگام نوشتن کد unsafe، عموماً اصلاً لازم نیست نگران انجام کار درست برای drop checker باشیم. با این حال یک حالت خاص وجود دارد که باید نگرانش باشید و در بخش بعد به آن می‌پردازیم.</p><nav class="page-nav"><a href="subtyping.html">→ زیرنوع‌سازی و واریانس</a><a href="phantom-data.html">PhantomData ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

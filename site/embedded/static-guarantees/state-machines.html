@@ -1,0 +1,102 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>پیرامونی‌ها به‌عنوان ماشین‌های حالت — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="static-guarantees/state-machines"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="peripherals-as-state-machines"><a class="header" href="#peripherals-as-state-machines">پیرامونی‌ها به‌عنوان ماشین‌های حالت</a></h1>
+<p>دستگاه‌های جانبی یک میکروکنترلر را می‌توان مجموعه‌ای از ماشین‌های حالت در نظر گرفت. برای مثال، پیکربندی یک <a href="https://en.wikipedia.org/wiki/General-purpose_input/output">پایهٔ GPIO</a> ساده‌شده را می‌توان با درخت حالت‌های زیر نمایش داد:</p>
+<ul>
+<li>غیرفعال (Disabled)</li>
+<li>فعال (Enabled)
+<ul>
+<li>پیکربندی‌شده به‌عنوان خروجی
+<ul>
+<li>خروجی: بالا</li>
+<li>خروجی: پایین</li>
+</ul>
+</li>
+<li>پیکربندی‌شده به‌عنوان ورودی
+<ul>
+<li>ورودی: مقاومت بالا</li>
+<li>ورودی: کشیده‌شده به پایین</li>
+<li>ورودی: کشیده‌شده به بالا</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>اگر دستگاه جانبی در حالت <code>Disabled</code> شروع شود، برای رفتن به حالت <code>Input: High Resistance</code> باید مراحل زیر را انجام دهیم:</p>
+<ol>
+<li>غیرفعال</li>
+<li>فعال</li>
+<li>پیکربندی‌شده به‌عنوان ورودی</li>
+<li>ورودی: مقاومت بالا</li>
+</ol>
+<p>اگر بخواهیم از <code>Input: High Resistance</code> به <code>Input: Pulled Low</code> برویم، باید مراحل زیر را انجام دهیم:</p>
+<ol>
+<li>ورودی: مقاومت بالا</li>
+<li>ورودی: کشیده‌شده به پایین</li>
+</ol>
+<p>به‌طور مشابه، اگر بخواهیم یک پایهٔ GPIO را از حالت <code>Input: Pulled Low</code> به <code>Output: High</code> ببریم، باید مراحل زیر را انجام دهیم:</p>
+<ol>
+<li>ورودی: کشیده‌شده به پایین</li>
+<li>پیکربندی‌شده به‌عنوان ورودی</li>
+<li>پیکربندی‌شده به‌عنوان خروجی</li>
+<li>خروجی: بالا</li>
+</ol>
+<h2 id="hardware-representation"><a class="header" href="#hardware-representation">نمایش سخت‌افزاری</a></h2>
+<p>معمولاً حالت‌های فهرست‌شدهٔ بالا با نوشتن مقادیری در رجیسترهای مشخصی که به یک دستگاه جانبی GPIO نگاشت شده‌اند تنظیم می‌شوند. برای توضیح این موضوع، یک رجیستر پیکربندی GPIO فرضی تعریف می‌کنیم:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: right">نام</th><th style="text-align: right">شمارهٔ بیت‌ها</th><th style="text-align: right">مقدار</th><th style="text-align: right">معنا</th><th style="text-align: right">توضیحات</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: right">enable</td><td style="text-align: right">0</td><td style="text-align: right">0</td><td style="text-align: right">disabled</td><td style="text-align: right">GPIO را غیرفعال می‌کند</td></tr>
+<tr><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right">1</td><td style="text-align: right">enabled</td><td style="text-align: right">GPIO را فعال می‌کند</td></tr>
+<tr><td style="text-align: right">direction</td><td style="text-align: right">1</td><td style="text-align: right">0</td><td style="text-align: right">input</td><td style="text-align: right">جهت را روی ورودی (Input) تنظیم می‌کند</td></tr>
+<tr><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right">1</td><td style="text-align: right">output</td><td style="text-align: right">جهت را روی خروجی (Output) تنظیم می‌کند</td></tr>
+<tr><td style="text-align: right">input_mode</td><td style="text-align: right">2..3</td><td style="text-align: right">00</td><td style="text-align: right">hi-z</td><td style="text-align: right">ورودی را روی مقاومت بالا تنظیم می‌کند</td></tr>
+<tr><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right">01</td><td style="text-align: right">pull-low</td><td style="text-align: right">پایهٔ ورودی به پایین کشیده می‌شود</td></tr>
+<tr><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right">10</td><td style="text-align: right">pull-high</td><td style="text-align: right">پایهٔ ورودی به بالا کشیده می‌شود</td></tr>
+<tr><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right">11</td><td style="text-align: right">ندارد</td><td style="text-align: right">حالت نامعتبر. تنظیم نکنید</td></tr>
+<tr><td style="text-align: right">output_mode</td><td style="text-align: right">4</td><td style="text-align: right">0</td><td style="text-align: right">set-low</td><td style="text-align: right">پایهٔ خروجی در سطح پایین رانده می‌شود</td></tr>
+<tr><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right">1</td><td style="text-align: right">set-high</td><td style="text-align: right">پایهٔ خروجی در سطح بالا رانده می‌شود</td></tr>
+<tr><td style="text-align: right">input_status</td><td style="text-align: right">5</td><td style="text-align: right">x</td><td style="text-align: right">in-val</td><td style="text-align: right">اگر ورودی کمتر از 1.5v باشد 0 و اگر ورودی بزرگ‌تر یا مساوی 1.5v باشد 1</td></tr>
+</tbody>
+</table>
+</div>
+<p>ما <em>می‌توانیم</em> ساختار زیر را در Rust برای کنترل این GPIO در اختیار قرار دهیم:</p>
+<pre><code class="language-rust ignore">/// GPIO interface
+struct GpioConfig {
+    /// GPIO Configuration structure generated by svd2rust
+    periph: GPIO_CONFIG,
+}
+
+impl GpioConfig {
+    pub fn set_enable(&amp;mut self, is_enabled: bool) {
+        self.periph.modify(|_r, w| {
+            w.enable().set_bit(is_enabled)
+        });
+    }
+
+    pub fn set_direction(&amp;mut self, is_output: bool) {
+        self.periph.modify(|_r, w| {
+            w.direction().set_bit(is_output)
+        });
+    }
+
+    pub fn set_input_mode(&amp;mut self, variant: InputMode) {
+        self.periph.modify(|_r, w| {
+            w.input_mode().variant(variant)
+        });
+    }
+
+    pub fn set_output_mode(&amp;mut self, is_high: bool) {
+        self.periph.modify(|_r, w| {
+            w.output_mode.set_bit(is_high)
+        });
+    }
+
+    pub fn get_input_status(&amp;self) -&gt; bool {
+        self.periph.read().input_status().bit_is_set()
+    }
+}</code></pre>
+<p>با این حال، این کار به ما اجازه می‌دهد رجیسترهایی را تغییر دهیم که معنایی ندارند. برای مثال، اگر وقتی GPIO ما به‌عنوان ورودی پیکربندی شده است فیلد <code>output_mode</code> را تنظیم کنیم چه اتفاقی می‌افتد؟</p>
+<p>به‌طور کلی، استفاده از این ساختار به ما اجازه می‌دهد به حالت‌هایی برسیم که در ماشین حالت بالا تعریف نشده‌اند؛ مثلاً خروجی‌ای که به پایین کشیده شده است، یا ورودی‌ای که روی بالا تنظیم شده است. برای برخی سخت‌افزارها ممکن است این موضوع اهمیتی نداشته باشد. در سخت‌افزارهای دیگر، می‌تواند رفتار غیرمنتظره یا تعریف‌نشده ایجاد کند!</p>
+<p>هرچند نوشتن این رابط راحت است، قراردادهای طراحی‌ای را که پیاده‌سازی سخت‌افزاری ما تعیین کرده است اعمال نمی‌کند.</p><nav class="page-nav"><a href="../../embedded/static-guarantees/typestate-programming.html">→ برنامه‌نویسی Typestate</a><a href="../../embedded/static-guarantees/design-contracts.html">قراردادهای طراحی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

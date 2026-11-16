@@ -1,0 +1,190 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0038 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0038"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>برای هر trait به نام <code>Trait</code> ممکن است یک <em>نوع</em> مرتبط وجود داشته باشد که <em>نوع شیء trait</em> نام دارد و معمولاً به شکل <code>dyn Trait</code> نوشته می‌شود. در ویرایش‌های قدیمی‌تر Rust، نوع شیء trait به‌صورت ساده <code>Trait</code> (فقط نام trait در جایگاه نوع) نوشته می‌شد، اما این کمی گیج‌کننده بود، بنابراین اکنون <code>dyn Trait</code> می‌نویسیم.</p>
+<p>برخی traitها اجازه ندارند به‌عنوان نوع شیء trait به کار روند. traitهایی که اجازه دارند به‌عنوان نوع شیء trait استفاده شوند، traitهای «dyn-compatible»<sup class="footnote-reference" id="fr-1-1"><a href="#footnote-1">1</a></sup> نامیده می‌شوند. تلاش برای استفاده از نوع شیء trait برای traitی که dyn-compatible نیست، خطای E0038 را ایجاد می‌کند.</p>
+<p>دو جنبه کلی از انواع شیء trait منشأ این محدودیت‌ها هستند:</p>
+<ol>
+<li>
+<p>انواع شیء trait، انواعی با اندازه پویا (DST) هستند و اشیای trait از این انواع فقط از طریق اشاره‌گر قابل دسترسی‌اند، مانند <code>&amp;dyn Trait</code> یا <code>Box&lt;dyn Trait&gt;</code>. اندازه چنین اشاره‌گری مشخص است، اما اندازه شیء <code>dyn Trait</code> که اشاره‌گر به آن اشاره می‌کند برای کدی که با آن کار می‌کند <em>مبهم</em> (opaque) است، و اشیای trait متفاوت با نوع شیء trait یکسان ممکن است اندازه‌های متفاوتی داشته باشند.</p>
+</li>
+<li>
+<p>اشاره‌گری که برای دسترسی به یک شیء trait به کار می‌رود با یک اشاره‌گر اضافی جفت می‌شود که به «جدول متد مجازی» یا «vtable» اشاره می‌کند و برای پیاده‌سازی توزیع پویا (dynamic dispatch) به پیاده‌سازی‌های شیء از متدهای trait به کار می‌رود. برای هر پیاده‌سازی trait یک vtable منحصربه‌فرد وجود دارد، اما اشیای trait متفاوت با نوع شیء trait یکسان ممکن است به vtableهای پیاده‌سازی‌های مختلف اشاره کنند.</p>
+</li>
+</ol>
+<p>شرایط خاصی که dyn-compatibility را نقض می‌کنند در ادامه آمده است؛ بیشتر آن‌ها به نبود اطلاعات اندازه و چندریختی vtable ناشی از این جنبه‌ها مربوط می‌شوند.</p>
+<h3 id="the-trait-requires-self-sized"><a class="header" href="#the-trait-requires-self-sized">trait شرط <code>Self: Sized</code> را لازم دارد</a></h3>
+<p>traitهایی که به شکل <code>Trait: Sized</code> تعریف شده‌اند یا به‌گونه‌ای دیگر قید <code>Self:Sized</code> را به ارث برده‌اند، dyn-compatible نیستند.</p>
+<p>استدلال پشت این موضوع تا حدی ظریف است. این استدلال از این واقعیت ناشی می‌شود که Rust الزام می‌کند (و تعریف می‌کند) که هر نوع شیء trait به شکل <code>dyn Trait</code> به‌طور خودکار <code>Trait</code> را پیاده‌سازی کند. Rust این کار را برای ساده‌کردن گزارش خطا و تسهیل تعامل بین چندریختی ایستا و پویا انجام می‌دهد. برای مثال، این کد کار می‌کند:</p>
+<pre><code>trait Trait {
+}
+
+fn static_foo&lt;T:Trait + ?Sized&gt;(b: &amp;T) {
+}
+
+fn dynamic_bar(a: &amp;dyn Trait) {
+    static_foo(a)
+}
+</code></pre>
+<p>این کد کار می‌کند چون <code>dyn Trait</code>، در صورت وجود، همیشه <code>Trait</code> را پیاده‌سازی می‌کند.</p>
+<p>اما همان‌طور که می‌دانیم، هر <code>dyn Trait</code> بدون اندازه (unsized) نیز هست و بنابراین هرگز نمی‌تواند traitی با اندازه مشخص مانند <code>Trait:Sized</code> را پیاده‌سازی کند. پس به‌جای آنکه استثنایی برای این قاعده که <code>dyn Trait</code> همیشه <code>Trait</code> را پیاده‌سازی می‌کند در نظر بگیرد، Rust ترجیح می‌دهد وجود چنین <code>dyn Trait</code>ای را به‌کلی ممنوع کند.</p>
+<p>فقط traitهای بدون اندازه (unsized) dyn-compatible محسوب می‌شوند.</p>
+<p>به‌طور کلی، <code>Self: Sized</code> برای نشان‌دادن این به کار می‌رود که trait نباید به‌عنوان شیء trait استفاده شود. اگر trait از crate خودتان است، حذف این محدودیت را در نظر بگیرید.</p>
+<h3 id="method-references-the-self-type-in-its-parameters-or-return-type"><a class="header" href="#method-references-the-self-type-in-its-parameters-or-return-type">متد در پارامترها یا نوع بازگشتی خود به نوع <code>Self</code> ارجاع می‌دهد</a></h3>
+<p>این زمانی رخ می‌دهد که trait متدی مانند مثال زیر داشته باشد:</p>
+<pre><code>trait Trait {
+    fn foo(&amp;self) -&gt; Self;
+}
+
+impl Trait for String {
+    fn foo(&amp;self) -&gt; Self {
+        "hi".to_owned()
+    }
+}
+
+impl Trait for u8 {
+    fn foo(&amp;self) -&gt; Self {
+        1
+    }
+}
+</code></pre>
+<p>(توجه کنید که <code>&amp;self</code> و <code>&amp;mut self</code> مشکلی ندارند؛ آنچه این مشکل را ایجاد می‌کند، نوع‌های <code>Self</code> اضافی است.)</p>
+<p>در چنین حالتی، کامپایلر نمی‌تواند نوع بازگشتی <code>foo()</code> را در موقعیتی مانند زیر پیش‌بینی کند:</p>
+<pre><code class="language-compile_fail E0038">trait Trait {
+    fn foo(&amp;self) -&gt; Self;
+}
+
+fn call_foo(x: Box&lt;dyn Trait&gt;) {
+    let y = x.foo(); // What type is y?
+    // ...
+}
+</code></pre>
+<p>اگر فقط برخی متدها dyn-compatible نیستند، می‌توانید قید <code>where Self: Sized</code> را به آن‌ها اضافه کنید تا به‌صراحت برای اشیای trait غیرقابل‌دسترس علامت‌گذاری شوند. این قابلیت همچنان برای همه پیاده‌سازهای دیگر در دسترس خواهد بود، از جمله <code>Box&lt;dyn Trait&gt;</code> که خودش اندازه مشخص دارد (با فرض اینکه <code>impl Trait for Box&lt;dyn Trait&gt;</code> را بنویسید).</p>
+<pre><code>trait Trait {
+    fn foo(&amp;self) -&gt; Self where Self: Sized;
+    // more functions
+}
+</code></pre>
+<p>اکنون دیگر نمی‌توان <code>foo()</code> را روی یک شیء trait فراخوانی کرد، اما اجازه خواهید داشت یک شیء trait بسازید و آن شیء می‌تواند هر متد dyn-compatible را فراخوانی کند. با چنین قیدی، همچنان می‌توان <code>foo()</code> را روی انواعی که آن trait را پیاده‌سازی می‌کنند و پشت شیء trait نیستند فراخوانی کرد.</p>
+<h3 id="method-has-generic-type-parameters"><a class="header" href="#method-has-generic-type-parameters">متد پارامترهای نوع جنریک دارد</a></h3>
+<p>همان‌طور که پیش‌تر گفته شد، اشیای trait حاوی اشاره‌گر به جدول متدها هستند. بنابراین اگر داشته باشیم:</p>
+<pre><code>trait Trait {
+    fn foo(&amp;self);
+}
+
+impl Trait for String {
+    fn foo(&amp;self) {
+        // implementation 1
+    }
+}
+
+impl Trait for u8 {
+    fn foo(&amp;self) {
+        // implementation 2
+    }
+}
+// ...
+</code></pre>
+<p>در زمان کامپایل، هر پیاده‌سازی <code>Trait</code> جدولی شامل متدهای مختلف (و آیتم‌های دیگر) مربوط به آن پیاده‌سازی تولید می‌کند، که به‌عنوان جدول متد مجازی برای شیء <code>dyn Trait</code> حاصل از آن پیاده‌سازی به کار می‌رود.</p>
+<p>این به‌خوبی کار می‌کند، اما وقتی متد پارامترهای جنریک پیدا می‌کند، ممکن است مشکل پیش بیاید.</p>
+<p>معمولاً پارامترهای جنریک <em>monomorphize</em> می‌شوند. برای مثال، اگر داشته باشم</p>
+<pre><code>fn foo&lt;T&gt;(x: T) {
+    // ...
+}
+</code></pre>
+<p>کد ماشین <code>foo::&lt;u8&gt;()</code>، <code>foo::&lt;bool&gt;()</code>، <code>foo::&lt;String&gt;()</code> یا هر نمونه‌سازی دیگر متفاوت است. از این رو کامپایلر پیاده‌سازی را در صورت نیاز تولید می‌کند. اگر <code>foo()</code> را با پارامتری از نوع <code>bool</code> فراخوانی کنید، کامپایلر فقط برای <code>foo::&lt;bool&gt;()</code> کد تولید می‌کند. وقتی پارامترهای نوع بیشتری داریم، تعداد پیاده‌سازی‌های monomorphize‌شده‌ای که کامپایلر تولید می‌کند به‌شدت افزایش نمی‌یابد، زیرا کامپایلر فقط وقتی پیاده‌سازی تولید می‌کند که تابع با آرگومان‌های کاملاً مشخص (یعنی آرگومان‌هایی که شامل هیچ پارامتر جنریکی نیستند) فراخوانی شود.</p>
+<p>اما در مورد اشیای trait باید جدولی بسازیم که شامل <em>همه</em> اشیایی باشد که trait را پیاده‌سازی می‌کنند. حالا اگر پارامتر نوع وجود داشته باشد، باید برای هر نوعی که trait را پیاده‌سازی می‌کند پیاده‌سازی‌هایی اضافه کنیم، و از نظر تئوری می‌تواند تعداد بی‌نهایتی نوع وجود داشته باشد.</p>
+<p>برای مثال، با:</p>
+<pre><code>trait Trait {
+    fn foo&lt;T&gt;(&amp;self, on: T);
+    // more methods
+}
+
+impl Trait for String {
+    fn foo&lt;T&gt;(&amp;self, on: T) {
+        // implementation 1
+    }
+}
+
+impl Trait for u8 {
+    fn foo&lt;T&gt;(&amp;self, on: T) {
+        // implementation 2
+    }
+}
+
+// 8 more implementations
+</code></pre>
+<p>حالا اگر کد زیر را داشته باشیم:</p>
+<pre><code class="language-compile_fail E0038"># trait Trait { fn foo&lt;T&gt;(&amp;self, on: T); }
+# impl Trait for String { fn foo&lt;T&gt;(&amp;self, on: T) {} }
+# impl Trait for u8 { fn foo&lt;T&gt;(&amp;self, on: T) {} }
+# impl Trait for bool { fn foo&lt;T&gt;(&amp;self, on: T) {} }
+# // etc.
+fn call_foo(thing: Box&lt;dyn Trait&gt;) {
+    thing.foo(true); // this could be any one of the 8 types above
+    thing.foo(1);
+    thing.foo("hello");
+}
+</code></pre>
+<p>ما فقط نیاز نداریم جدولی از همه پیاده‌سازی‌های همه متدهای <code>Trait</code> بسازیم، بلکه باید چنین جدولی را برای هر نوع متفاوتی که به <code>foo()</code> داده می‌شود بسازیم. در این مورد، این برابر می‌شود با (۱۰ نوع پیاده‌سازکننده <code>Trait</code>)*(۳ نوعی که به <code>foo()</code> داده می‌شوند) = ۳۰ پیاده‌سازی!</p>
+<p>با traitهای دنیای واقعی، این اعداد می‌توانند به‌شدت رشد کنند.</p>
+<p>برای رفع این مشکل، اگر قصد ندارید متد را با پارامترهای نوع فراخوانی کنید، پیشنهاد می‌شود از قید <code>where Self: Sized</code> مشابه راه‌حل زیرخطای بالا استفاده کنید:</p>
+<pre><code>trait Trait {
+    fn foo&lt;T&gt;(&amp;self, on: T) where Self: Sized;
+    // more methods
+}
+</code></pre>
+<p>اگر این گزینه ممکن نیست، جایگزین‌کردن پارامتر نوع با شیء trait دیگری را در نظر بگیرید (مثلاً اگر <code>T: OtherTrait</code>، از <code>on: Box&lt;dyn OtherTrait&gt;</code> استفاده کنید). اگر تعداد انواعی که قصد دارید به این متد بدهید محدود است، می‌توانید متدهای انواع مختلف را به‌صورت دستی فهرست کنید.</p>
+<h3 id="method-has-no-receiver"><a class="header" href="#method-has-no-receiver">متد گیرنده (receiver) ندارد</a></h3>
+<p>متدهایی که پارامتر <code>self</code> نمی‌گیرند قابل فراخوانی نیستند، زیرا راهی برای به‌دست‌آوردن اشاره‌گر به جدول متد آن‌ها وجود نخواهد داشت.</p>
+<pre><code>trait Foo {
+    fn foo() -&gt; u8;
+}
+</code></pre>
+<p>این متد را می‌توان به شکل <code>&lt;Foo as Foo&gt;::foo()</code> فراخوانی کرد، که نمی‌تواند یک پیاده‌سازی را انتخاب کند.</p>
+<p>افزودن قید <code>Self: Sized</code> به این متدها معمولاً باعث می‌شود کد کامپایل شود.</p>
+<pre><code>trait Foo {
+    fn foo() -&gt; u8 where Self: Sized;
+}
+</code></pre>
+<h3 id="trait-contains-associated-constants"><a class="header" href="#trait-contains-associated-constants">trait شامل ثابت‌های وابسته است</a></h3>
+<p>درست مثل توابع ایستا، ثابت‌های وابسته (associated constants) در جدول متد ذخیره نمی‌شوند. اگر trait یا هر زیر‌trait آن شامل ثابت وابسته باشد، dyn-compatible نیست.</p>
+<pre><code class="language-compile_fail E0038">trait Foo {
+    const X: i32;
+}
+
+impl dyn Foo {}
+</code></pre>
+<p>یک راه‌حل ساده استفاده از یک متد کمکی به‌جای آن است:</p>
+<pre><code>trait Foo {
+    fn x(&amp;self) -&gt; i32;
+}
+</code></pre>
+<h3 id="trait-uses-self-as-a-type-parameter-in-the-supertrait-listing"><a class="header" href="#trait-uses-self-as-a-type-parameter-in-the-supertrait-listing">trait در فهرست supertraitها از <code>Self</code> به‌عنوان پارامتر نوع استفاده می‌کند</a></h3>
+<p>این مورد مشابه زیرخطای دوم است، اما ظریف‌تر. در موقعیت‌هایی مانند زیر رخ می‌دهد:</p>
+<pre><code class="language-compile_fail E0038">trait Super&lt;A: ?Sized&gt; {}
+
+trait Trait: Super&lt;Self&gt; {
+}
+
+struct Foo;
+
+impl Super&lt;Foo&gt; for Foo{}
+
+impl Trait for Foo {}
+
+fn main() {
+    let x: Box&lt;dyn Trait&gt;;
+}
+</code></pre>
+<p>در اینجا، supertrait ممکن است متدهایی به شکل زیر داشته باشد:</p>
+<pre><code>trait Super&lt;A: ?Sized&gt; {
+    fn get_a(&amp;self) -&gt; &amp;A; // note that this is dyn-compatible!
+}
+</code></pre>
+<p>اگر trait به نام <code>Trait</code> از چیزی مانند <code>Super&lt;String&gt;</code> یا <code>Super&lt;T&gt;</code> ارث می‌برد (که در آن خود <code>Foo</code> به شکل <code>Foo&lt;T&gt;</code> است)، مشکلی نیست، زیرا با داشتن یک نوع، <code>get_a()</code> قطعاً شیئی از همان نوع را برمی‌گرداند.</p>
+<p>اما اگر از <code>Super&lt;Self&gt;</code> ارث ببرد، با اینکه <code>Super</code> dyn-compatible است، متد <code>get_a()</code> هنگام فراخوانی روی تابع، شیئی با نوع نامعلوم برمی‌گرداند. پارامترهای نوع <code>Self</code> می‌توانند traitهای dyn-compatible را غیرسازگار کنند، بنابراین هنگام تعیین supertraitها ممنوع هستند.</p>
+<p>راه‌حل آسانی برای این مشکل وجود ندارد. به‌طور کلی، کد باید بازآرایی شود تا دیگر نیازی به ارث‌بری از <code>Super&lt;Self&gt;</code> نداشته باشید.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-1">
+<p>پیش‌تر با نام «object-safe» شناخته می‌شد. <a href="#fr-1-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="../errors/E0034.html">→ E0034</a><a href="../errors/E0040.html">E0040 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,533 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>صفت‌های پیشرفته — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch20-02-advanced-traits"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="advanced-traits"><a class="header" href="#advanced-traits">صفت‌های پیشرفته</a></h2>
+<p>ما ابتدا <code>trait</code>ها را در بخش <a href="ch10-02-traits.html">«Traits: تعریف رفتار مشترک»</a><!-- ignore --> در فصل ۱۰ بررسی کردیم، اما وارد جزئیات پیشرفته‌تر آن نشدیم. اکنون که با Rust بیشتر آشنا شده‌اید، می‌توانیم به نکات دقیق‌تر و تخصصی‌تر بپردازیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="specifying-placeholder-types-in-trait-definitions-with-associated-types"></a>
+<a id="associated-types"></a></p>
+<h3 id="defining-traits-with-associated-types"><a class="header" href="#defining-traits-with-associated-types">تعریف traitها با نوع‌های وابسته (Associated Types)</a></h3>
+<p><em>نوع‌های مرتبط</em> (Associated types) یک نوع جایگزین را با یک trait متصل می‌کنند، به‌گونه‌ای که تعریف‌های متد trait می‌توانند از این نوع‌های جایگزین در امضاهای خود استفاده کنند. پیاده‌ساز یک trait نوع خاصی را برای جایگزینی نوع جایگزین برای پیاده‌سازی خاص مشخص می‌کند. به این ترتیب، می‌توانیم یک trait تعریف کنیم که از برخی نوع‌ها استفاده می‌کند بدون اینکه نیاز داشته باشیم دقیقاً بدانیم این نوع‌ها چه هستند تا زمانی که trait پیاده‌سازی شود.</p>
+<p>بیشتر ویژگی‌های پیشرفته‌ای که در این فصل توضیح داده شده است، به‌ندرت مورد نیاز هستند. نوع‌های مرتبط در حد وسط قرار دارند: آن‌ها کمتر از ویژگی‌های توضیح داده‌شده در بقیه کتاب استفاده می‌شوند، اما بیشتر از بسیاری از ویژگی‌های دیگر مورد بحث در این فصل به کار می‌روند.</p>
+<p>یکی از مثال‌های یک trait با یک نوع مرتبط، trait <code>Iterator</code> است که کتابخانه استاندارد فراهم می‌کند. نوع مرتبط با نام <code>Item</code> مشخص شده و به‌جای نوع مقادیری که نوع پیاده‌سازی‌کننده <code>Iterator</code> از روی آن‌ها تکرار می‌کند قرار می‌گیرد. تعریف trait <code>Iterator</code> همان‌طور که در فهرست 20-13 نشان داده شده است:</p>
+<figure class="listing" id="listing-20-13">
+<pre><code class="language-rust noplayground">pub trait Iterator {
+    type Item;
+
+    fn next(&amp;mut self) -&gt; Option&lt;Self::Item&gt;;
+}</code></pre>
+<figcaption><a href="#listing-20-13">لیست ۲۰-۱۳</a>: تعریف trait &lt;code&gt;&lt;/x-listing&gt;Iterator&lt;/code&gt; که دارای یک نوع مرتبط به نام &lt;code&gt;Item&lt;/code&gt; است</figcaption>
+</figure>
+<p>نوع <code>Item</code> یک جایگزین است و تعریف متد <code>next</code> نشان می‌دهد که مقادیری از نوع <code>Option&lt;Self::Item&gt;</code> را بازمی‌گرداند. پیاده‌سازان trait <code>Iterator</code> نوع خاصی را برای <code>Item</code> مشخص می‌کنند و متد <code>next</code> یک <code>Option</code> حاوی مقدار از آن نوع خاص بازمی‌گرداند.</p>
+<p>نوع‌های مرتبط ممکن است مفهومی مشابه با genericها به نظر برسند، به این معنا که genericها به ما اجازه می‌دهند یک تابع بدون مشخص کردن نوع‌هایی که می‌تواند با آن‌ها کار کند، تعریف کنیم. برای بررسی تفاوت بین این دو مفهوم، به یک پیاده‌سازی trait <code>Iterator</code> روی یک نوع به نام <code>Counter</code> نگاه خواهیم کرد که نوع <code>Item</code> را به‌عنوان <code>u32</code> مشخص می‌کند:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">struct Counter {
+</span><span class="boring">    count: u32,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Counter {
+</span><span class="boring">    fn new() -&gt; Counter {
+</span><span class="boring">        Counter { count: 0 }
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Iterator for Counter {
+    type Item = u32;
+
+    fn next(&amp;mut self) -&gt; Option&lt;Self::Item&gt; {
+        // --snip--
+<span class="boring">        if self.count &lt; 5 {
+</span><span class="boring">            self.count += 1;
+</span><span class="boring">            Some(self.count)
+</span><span class="boring">        } else {
+</span><span class="boring">            None
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+</figure>
+<p>این سینتکس با سینتکس genericها قابل مقایسه به نظر می‌رسد. پس چرا به جای این کار، trait <code>Iterator</code> را با استفاده از genericها تعریف نکنیم، همان‌طور که در فهرست 20-14 نشان داده شده است؟</p>
+<figure class="listing" id="listing-20-14">
+<pre><code class="language-rust noplayground">pub trait Iterator&lt;T&gt; {
+    fn next(&amp;mut self) -&gt; Option&lt;T&gt;;
+}</code></pre>
+<figcaption><a href="#listing-20-14">لیست ۲۰-۱۴</a>: یک تعریف فرضی از trait &lt;code&gt;&lt;/x-listing&gt;Iterator&lt;/code&gt; با استفاده از genericها</figcaption>
+</figure>
+<p>تفاوت این است که هنگام استفاده از genericها، همان‌طور که در فهرست 20-14 نشان داده شده است، ما باید نوع‌ها را در هر پیاده‌سازی حاشیه‌نویسی کنیم. زیرا می‌توانیم همچنین <code>Iterator&lt;String&gt; for Counter</code> یا هر نوع دیگری را پیاده‌سازی کنیم، به‌طوری که بتوانیم پیاده‌سازی‌های متعددی از <code>Iterator</code> برای <code>Counter</code> داشته باشیم. به عبارت دیگر، زمانی که یک trait یک پارامتر generic دارد، می‌تواند برای یک نوع چندین بار پیاده‌سازی شود و نوع‌های خاص پارامترهای generic را هر بار تغییر دهد. زمانی که ما از متد <code>next</code> بر روی <code>Counter</code> استفاده می‌کنیم، باید حاشیه‌نویسی نوع ارائه دهیم تا مشخص کنیم کدام پیاده‌سازی <code>Iterator</code> را می‌خواهیم استفاده کنیم.</p>
+<p>با استفاده از نوع‌های وابسته (associated types)، نیازی به مشخص‌کردن نوع‌ها نداریم، زیرا نمی‌توان یک <code>trait</code> را چند بار برای یک نوع پیاده‌سازی کرد. در لیستینگ 20-13، با تعریفی که از نوع‌های وابسته استفاده می‌کند، تنها یک‌بار می‌توانیم مشخص کنیم که نوع <code>Item</code> چه چیزی خواهد بود، چرا که تنها یک <code>impl Iterator for Counter</code> می‌تواند وجود داشته باشد. بنابراین، لازم نیست هر بار که روی <code>Counter</code> تابع <code>next</code> را صدا می‌زنیم، مشخص کنیم که می‌خواهیم یک <code>iterator</code> از نوع <code>u32</code> داشته باشیم.</p>
+<p>نوع‌های وابسته به بخشی از قرارداد trait نیز تبدیل می‌شوند: پیاده‌سازان trait باید نوعی را برای جانشینی جای‌نگهدار (placeholder) نوع وابسته ارائه دهند. نوع‌های وابسته معمولاً نامی دارند که توضیح می‌دهد آن نوع چگونه استفاده خواهد شد، و مستندسازی نوع وابسته در مستندات API رویه‌ای خوب است.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="default-generic-type-parameters-and-operator-overloading"></a></p>
+<h3 id="using-default-generic-parameters-and-operator-overloading"><a class="header" href="#using-default-generic-parameters-and-operator-overloading">پارامترهای نوع عمومی پیش‌فرض و سربارگذاری عملگر</a></h3>
+<p>وقتی که از پارامترهای generic type استفاده می‌کنیم، می‌توانیم یک نوع خاص پیش‌فرض برای پارامتر generic تعیین کنیم. این نیاز به مشخص کردن یک نوع خاص توسط پیاده‌سازان trait را در صورتی که نوع پیش‌فرض کار کند، از بین می‌برد. شما می‌توانید هنگام اعلام یک نوع generic، یک نوع پیش‌فرض با سینتکس <code>&lt;PlaceholderType=ConcreteType&gt;</code> مشخص کنید.</p>
+<p>یک مثال عالی از وضعیتی که این تکنیک مفید است، <em>بارگذاری مجدد عملگرها</em> است، جایی که شما رفتار یک عملگر (مانند <code>+</code>) را در شرایط خاص شخصی‌سازی می‌کنید.</p>
+<p>زبان Rust اجازه نمی‌دهد که عملگرهای دلخواه خودتان را ایجاد کرده یا هر عملگری را به‌دلخواه overload کنید. اما می‌توانید عملیات و traitهای متناظر فهرست‌شده در <code>std::ops</code> را با پیاده‌سازی traitهای مربوط به آن عملگر overload کنید. برای مثال، در لیستینگ 20-15 عملگر <code>+</code> را overload می‌کنیم تا دو نمونه از <code>Point</code> را با یکدیگر جمع کنیم. این کار را با پیاده‌سازی trait <code>Add</code> برای ساختار <code>Point</code> انجام می‌دهیم.</p>
+<figure class="listing" id="listing-20-15">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::ops::Add;
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Add for Point {
+    type Output = Point;
+
+    fn add(self, other: Point) -&gt; Point {
+        Point {
+            x: self.x + other.x,
+            y: self.y + other.y,
+        }
+    }
+}
+
+fn main() {
+    assert_eq!(
+        Point { x: 1, y: 0 } + Point { x: 2, y: 3 },
+        Point { x: 3, y: 3 }
+    );
+}</code></pre>
+<figcaption><a href="#listing-20-15">لیست ۲۰-۱۵</a>: پیاده‌سازی trait &lt;code&gt;&lt;/x-listing&gt;Add&lt;/code&gt; برای بارگذاری مجدد عملگر &lt;code&gt;+&lt;/code&gt; برای نمونه‌های &lt;code&gt;Point&lt;/code&gt;</figcaption>
+</figure>
+<p>متد <code>add</code> مقادیر <code>x</code> دو نمونه <code>Point</code> و مقادیر <code>y</code> دو نمونه <code>Point</code> را اضافه می‌کند تا یک نمونه جدید از <code>Point</code> ایجاد کند. trait <code>Add</code> دارای یک نوع مرتبط با نام <code>Output</code> است که نوع بازگشتی از متد <code>add</code> را تعیین می‌کند.</p>
+<p>نوع generic پیش‌فرض در این کد در داخل trait <code>Add</code> است. در اینجا تعریف آن آمده است:</p>
+<pre><code class="language-rust">trait Add&lt;Rhs=Self&gt; {
+    type Output;
+
+    fn add(self, rhs: Rhs) -&gt; Self::Output;
+}</code></pre>
+<p>این کد باید به‌طور کلی آشنا به نظر برسد: یک <code>trait</code> با یک متد و یک نوع وابسته. بخش جدید <code>Rhs=Self</code> است؛ این نحوی به <em>پارامتر نوع پیش‌فرض</em> (default type parameters) معروف است. پارامتر نوع generic با نام <code>Rhs</code> (مخفف “right-hand side”) نوع پارامتر <code>rhs</code> در متد <code>add</code> را تعریف می‌کند. اگر هنگام پیاده‌سازی <code>trait</code> <code>Add</code> نوع مشخصی برای <code>Rhs</code> تعیین نکنیم، مقدار پیش‌فرض <code>Rhs</code> برابر با <code>Self</code> خواهد بود، یعنی همان نوعی که در حال پیاده‌سازی <code>Add</code> برای آن هستیم.</p>
+<p>هنگامی که <code>Add</code> را برای <code>Point</code> پیاده‌سازی کردیم، از پیش‌فرض برای <code>Rhs</code> استفاده کردیم زیرا می‌خواستیم دو نمونه <code>Point</code> را به هم اضافه کنیم. حال، بیایید به مثالی از پیاده‌سازی trait <code>Add</code> نگاه کنیم که در آن می‌خواهیم نوع <code>Rhs</code> را شخصی‌سازی کنیم و از پیش‌فرض استفاده نکنیم.</p>
+<p>ما دو struct به نام‌های <code>Millimeters</code> و <code>Meters</code> داریم که مقادیر را در واحدهای متفاوت نگه می‌دارند. این پوشاندن سبک یک نوع موجود در یک struct دیگر به <em>الگوی newtype</em> معروف است که در بخش <a href="ch20-02-advanced-traits.html#implementing-external-traits-with-the-newtype-pattern">«پیاده‌سازی traitهای خارجی با الگوی Newtype»</a><!-- ignore --> با جزئیات بیشتری توضیح می‌دهیم. می‌خواهیم مقادیر برحسب میلی‌متر را به مقادیر برحسب متر اضافه کنیم و پیاده‌سازی <code>Add</code> تبدیل واحد را به‌درستی انجام دهد. می‌توانیم <code>Add</code> را برای <code>Millimeters</code> با <code>Meters</code> به‌عنوان <code>Rhs</code> پیاده‌سازی کنیم، همان‌طور که در فهرست ۲۰-۱۶ نشان داده شده است.</p>
+<figure class="listing" id="listing-20-16">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">use std::ops::Add;
+
+struct Millimeters(u32);
+struct Meters(u32);
+
+impl Add&lt;Meters&gt; for Millimeters {
+    type Output = Millimeters;
+
+    fn add(self, other: Meters) -&gt; Millimeters {
+        Millimeters(self.0 + (other.0 * 1000))
+    }
+}</code></pre>
+<figcaption><a href="#listing-20-16">لیست ۲۰-۱۶</a>: پیاده‌سازی trait &lt;code&gt;&lt;/x-listing&gt;Add&lt;/code&gt; برای &lt;code&gt;Millimeters&lt;/code&gt; جهت افزودن &lt;code&gt;Millimeters&lt;/code&gt; به &lt;code&gt;Meters&lt;/code&gt;</figcaption>
+</figure>
+<p>برای افزودن <code>Millimeters</code> و <code>Meters</code>، ما <code>impl Add&lt;Meters&gt;</code> را مشخص می‌کنیم تا مقدار پارامتر نوع <code>Rhs</code> را به جای استفاده از پیش‌فرض <code>Self</code> تنظیم کنیم.</p>
+<p>شما از پارامترهای نوع پیش‌فرض در دو حالت اصلی استفاده خواهید کرد:</p>
+<ol>
+<li>برای گسترش یک نوع بدون آن‌که کد موجود را دچار شکست کنیم</li>
+<li>برای فراهم‌کردن امکان سفارشی‌سازی در موارد خاصی که اکثر کاربران به آن نیازی نخواهند داشت</li>
+</ol>
+<p>trait <code>Add</code> در کتابخانه استاندارد یک مثال از هدف دوم است: معمولاً شما دو نوع مشابه را اضافه خواهید کرد، اما trait <code>Add</code> قابلیت شخصی‌سازی فراتر از آن را فراهم می‌کند. استفاده از پارامتر نوع پیش‌فرض در تعریف trait <code>Add</code> به این معناست که شما بیشتر اوقات نیازی به مشخص کردن پارامتر اضافی ندارید. به عبارت دیگر، مقدار کمی از کد اضافی حذف می‌شود و استفاده از trait آسان‌تر می‌شود.</p>
+<p>هدف اول مشابه هدف دوم است، اما به‌صورت معکوس: اگر بخواهید یک پارامتر نوع را به یک trait موجود اضافه کنید، می‌توانید برای گسترش قابلیت‌های trait بدون شکستن کد پیاده‌سازی موجود، یک مقدار پیش‌فرض برای آن تنظیم کنید.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="fully-qualified-syntax-for-disambiguation-calling-methods-with-the-same-name"></a>
+<a id="disambiguating-between-methods-with-the-same-name"></a></p>
+<h3 id="disambiguating-between-identically-named-methods"><a class="header" href="#disambiguating-between-identically-named-methods">رفع ابهام میان متدهای هم‌نام</a></h3>
+<p>در راست هیچ محدودیتی برای داشتن یک متد با همان نام در یک trait و در نوعی دیگر وجود ندارد و همچنین راست مانع نمی‌شود که هر دو trait را بر روی یک نوع پیاده‌سازی کنید. همچنین می‌توانید متدی را مستقیماً بر روی نوعی پیاده‌سازی کنید که همان نام متدهای مربوط به traits را دارد.</p>
+<p>هنگام فراخوانی متدهایی با همان نام، باید به راست بگویید که کدام یک را می‌خواهید استفاده کنید. کد زیر در فهرست 20-17 را در نظر بگیرید که در آن دو trait به نام‌های <code>Pilot</code> و <code>Wizard</code> تعریف شده‌اند که هر دو دارای متدی به نام <code>fly</code> هستند. سپس هر دو trait بر روی نوع <code>Human</code> پیاده‌سازی می‌شوند که قبلاً متدی به نام <code>fly</code> نیز بر روی آن پیاده‌سازی شده است. هر متد <code>fly</code> کاری متفاوت انجام می‌دهد.</p>
+<figure class="listing" id="listing-20-17">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">trait Pilot {
+    fn fly(&amp;self);
+}
+
+trait Wizard {
+    fn fly(&amp;self);
+}
+
+struct Human;
+
+impl Pilot for Human {
+    fn fly(&amp;self) {
+        println!("This is your captain speaking.");
+    }
+}
+
+impl Wizard for Human {
+    fn fly(&amp;self) {
+        println!("Up!");
+    }
+}
+
+impl Human {
+    fn fly(&amp;self) {
+        println!("*waving arms furiously*");
+    }
+}
+<span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+<figcaption><a href="#listing-20-17">لیست ۲۰-۱۷</a>: دو trait تعریف شده‌اند که یک متد مشترک دارند و بر روی نوع &lt;code&gt;&lt;/x-listing&gt;Human&lt;/code&gt; پیاده‌سازی شده‌اند، و یک متد &lt;code&gt;fly&lt;/code&gt; به‌طور مستقیم بر روی &lt;code&gt;Human&lt;/code&gt; پیاده‌سازی شده است</figcaption>
+</figure>
+<p>وقتی متد <code>fly</code> را بر روی یک نمونه از <code>Human</code> فراخوانی می‌کنیم، کامپایلر به طور پیش‌فرض متدی را که مستقیماً بر روی نوع پیاده‌سازی شده است، فراخوانی می‌کند، همان‌طور که در فهرست 20-18 نشان داده شده است.</p>
+<figure class="listing" id="listing-20-18">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">trait Pilot {
+</span><span class="boring">    fn fly(&amp;self);
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">trait Wizard {
+</span><span class="boring">    fn fly(&amp;self);
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct Human;
+</span><span class="boring">
+</span><span class="boring">impl Pilot for Human {
+</span><span class="boring">    fn fly(&amp;self) {
+</span><span class="boring">        println!("This is your captain speaking.");
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Wizard for Human {
+</span><span class="boring">    fn fly(&amp;self) {
+</span><span class="boring">        println!("Up!");
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Human {
+</span><span class="boring">    fn fly(&amp;self) {
+</span><span class="boring">        println!("*waving arms furiously*");
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn main() {
+    let person = Human;
+    person.fly();
+}</code></pre>
+<figcaption><a href="#listing-20-18">لیست ۲۰-۱۸</a>: فراخوانی &lt;code&gt;&lt;/x-listing&gt;fly&lt;/code&gt; بر روی یک نمونه از &lt;code&gt;Human&lt;/code&gt;</figcaption>
+</figure>
+<p>اجرای این کد متن <code>*waving arms furiously*</code> را چاپ می‌کند و نشان می‌دهد که راست متد <code>fly</code> پیاده‌سازی‌شده بر روی <code>Human</code> را مستقیماً فراخوانی کرده است.</p>
+<p>برای فراخوانی متدهای <code>fly</code> از trait با نام <code>Pilot</code> یا trait با نام <code>Wizard</code>، باید از نحوی صریح‌تر استفاده کنیم تا مشخص کنیم منظورمان کدام متد <code>fly</code> است. فهرست ۲۰-۱۹ این نحو را نشان می‌دهد.</p>
+<figure class="listing" id="listing-20-19">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">trait Pilot {
+</span><span class="boring">    fn fly(&amp;self);
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">trait Wizard {
+</span><span class="boring">    fn fly(&amp;self);
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct Human;
+</span><span class="boring">
+</span><span class="boring">impl Pilot for Human {
+</span><span class="boring">    fn fly(&amp;self) {
+</span><span class="boring">        println!("This is your captain speaking.");
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Wizard for Human {
+</span><span class="boring">    fn fly(&amp;self) {
+</span><span class="boring">        println!("Up!");
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Human {
+</span><span class="boring">    fn fly(&amp;self) {
+</span><span class="boring">        println!("*waving arms furiously*");
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn main() {
+    let person = Human;
+    Pilot::fly(&amp;person);
+    Wizard::fly(&amp;person);
+    person.fly();
+}</code></pre>
+<figcaption><a href="#listing-20-19">لیست ۲۰-۱۹</a>: مشخص کردن متد &lt;code&gt;&lt;/x-listing&gt;fly&lt;/code&gt; مربوط به کدام trait را می‌خواهیم فراخوانی کنیم</figcaption>
+</figure>
+<p>مشخص کردن نام trait قبل از نام متد، به راست مشخص می‌کند که کدام پیاده‌سازی متد <code>fly</code> را می‌خواهیم فراخوانی کنیم. همچنین می‌توانیم <code>Human::fly(&amp;person)</code> بنویسیم که معادل با <code>person.fly()</code> است که در فهرست 20-19 استفاده کرده‌ایم، اما اگر نیازی به رفع ابهام نباشد، این روش کمی طولانی‌تر است.</p>
+<p>اجرای این کد خروجی زیر را چاپ می‌کند:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling traits-example v0.1.0 (file:///projects/traits-example)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.46s
+     Running `target/debug/traits-example`
+This is your captain speaking.
+Up!
+*waving arms furiously*
+</code></pre>
+<p>از آنجا که متد <code>fly</code> یک پارامتر <code>self</code> می‌گیرد، اگر دو <em>نوع</em> داشته باشیم که یک <em>trait</em> را پیاده‌سازی کنند، راست می‌تواند بر اساس نوع <code>self</code> مشخص کند که کدام پیاده‌سازی trait را باید استفاده کند.</p>
+<p>با این حال، توابع وابسته‌ای که متد نیستند پارامتر <code>self</code> ندارند. وقتی چند نوع یا trait توابع غیرمتدی با نام یکسان تعریف می‌کنند، Rust همیشه نمی‌داند منظور شما کدام نوع است، مگر اینکه از نحو کاملاً مشخص‌شده (fully qualified syntax) استفاده کنید. برای مثال، در فهرست ۲۰-۲۰ یک trait برای یک پناهگاه حیوانات می‌سازیم که می‌خواهد نام همهٔ توله‌سگ‌ها را Spot بگذارد. یک trait به نام <code>Animal</code> با یک تابع وابستهٔ غیرمتدی به نام <code>baby_name</code> تعریف می‌کنیم. trait با نام <code>Animal</code> برای struct با نام <code>Dog</code> پیاده‌سازی شده است، و روی <code>Dog</code> نیز مستقیماً یک تابع وابستهٔ غیرمتدی به نام <code>baby_name</code> ارائه می‌دهیم.</p>
+<figure class="listing" id="listing-20-20">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">trait Animal {
+    fn baby_name() -&gt; String;
+}
+
+struct Dog;
+
+impl Dog {
+    fn baby_name() -&gt; String {
+        String::from("Spot")
+    }
+}
+
+impl Animal for Dog {
+    fn baby_name() -&gt; String {
+        String::from("puppy")
+    }
+}
+
+fn main() {
+    println!("A baby dog is called a {}", Dog::baby_name());
+}</code></pre>
+<figcaption><a href="#listing-20-20">لیست ۲۰-۲۰</a>: یک trait با یک تابع مرتبط و یک نوع با یک تابع مرتبط با همان نام که همچنین trait را پیاده‌سازی می‌کند</figcaption>
+</figure>
+<p>ما کدی برای نام‌گذاری تمام سگ‌های کوچک به نام Spot در تابع مرتبط <code>baby_name</code> که بر روی <code>Dog</code> تعریف شده است، پیاده‌سازی می‌کنیم. نوع <code>Dog</code> همچنین trait <code>Animal</code> را پیاده‌سازی می‌کند، که ویژگی‌هایی که تمام حیوانات دارند را توصیف می‌کند. سگ‌های کوچک به نام puppy شناخته می‌شوند و این در پیاده‌سازی trait <code>Animal</code> بر روی <code>Dog</code> در تابع <code>baby_name</code> مرتبط با trait <code>Animal</code> بیان شده است.</p>
+<p>در تابع <code>main</code>، ما تابع <code>Dog::baby_name</code> را فراخوانی می‌کنیم، که تابع مرتبط تعریف شده بر روی <code>Dog</code> را مستقیماً فراخوانی می‌کند. این کد خروجی زیر را چاپ می‌کند:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling traits-example v0.1.0 (file:///projects/traits-example)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.54s
+     Running `target/debug/traits-example`
+A baby dog is called a Spot
+</code></pre>
+<p>این خروجی آن چیزی نیست که ما می‌خواستیم. ما می‌خواهیم تابع <code>baby_name</code> که بخشی از trait <code>Animal</code> است و بر روی <code>Dog</code> پیاده‌سازی شده است را فراخوانی کنیم تا کد <code>A baby dog is called a puppy</code> را چاپ کند. تکنیکی که در فهرست 20-19 برای مشخص کردن نام trait استفاده کردیم، اینجا کمکی نمی‌کند. اگر <code>main</code> را به کد موجود در فهرست 20-21 تغییر دهیم، خطای کامپایل دریافت خواهیم کرد.</p>
+<figure class="listing" id="listing-20-21">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">trait Animal {
+</span><span class="boring">    fn baby_name() -&gt; String;
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct Dog;
+</span><span class="boring">
+</span><span class="boring">impl Dog {
+</span><span class="boring">    fn baby_name() -&gt; String {
+</span><span class="boring">        String::from("Spot")
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Animal for Dog {
+</span><span class="boring">    fn baby_name() -&gt; String {
+</span><span class="boring">        String::from("puppy")
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn main() {
+    println!("A baby dog is called a {}", Animal::baby_name());
+}</code></pre>
+<figcaption><a href="#listing-20-21">لیست ۲۰-۲۱</a>: تلاش برای فراخوانی تابع &lt;code&gt;&lt;/x-listing&gt;baby_name&lt;/code&gt; از trait &lt;code&gt;Animal&lt;/code&gt;، اما راست نمی‌داند که از کدام پیاده‌سازی استفاده کند</figcaption>
+</figure>
+<p>از آنجا که <code>Animal::baby_name</code> پارامتر <code>self</code> ندارد، و ممکن است انواع دیگری وجود داشته باشند که trait <code>Animal</code> را پیاده‌سازی کرده باشند، راست نمی‌تواند تشخیص دهد که کدام پیاده‌سازی از <code>Animal::baby_name</code> مورد نظر ما است. در نتیجه این خطای کامپایلر را دریافت خواهیم کرد:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling traits-example v0.1.0 (file:///projects/traits-example)
+error[E0790]: cannot call associated function on trait without specifying the corresponding `impl` type
+  --&gt; src/main.rs:20:43
+   |
+ 2 |     fn baby_name() -&gt; String;
+   |     ------------------------- `Animal::baby_name` defined here
+...
+20 |     println!("A baby dog is called a {}", Animal::baby_name());
+   |                                           ^^^^^^^^^^^^^^^^^^^ cannot call associated function of trait
+   |
+help: use the fully-qualified path to the only available implementation
+   |
+20 |     println!("A baby dog is called a {}", &lt;Dog as Animal&gt;::baby_name());
+   |                                           +++++++       +
+
+For more information about this error, try `rustc --explain E0790`.
+error: could not compile `traits-example` (bin "traits-example") due to 1 previous error
+</code></pre>
+<p>برای رفع ابهام و مشخص کردن اینکه ما می‌خواهیم از پیاده‌سازی trait <code>Animal</code> برای <code>Dog</code> استفاده کنیم، به جای پیاده‌سازی trait <code>Animal</code> برای نوع دیگری، باید از fully qualified syntax استفاده کنیم. فهرست 20-22 نشان می‌دهد چگونه از fully qualified syntax استفاده کنیم.</p>
+<figure class="listing" id="listing-20-22">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">trait Animal {
+</span><span class="boring">    fn baby_name() -&gt; String;
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct Dog;
+</span><span class="boring">
+</span><span class="boring">impl Dog {
+</span><span class="boring">    fn baby_name() -&gt; String {
+</span><span class="boring">        String::from("Spot")
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Animal for Dog {
+</span><span class="boring">    fn baby_name() -&gt; String {
+</span><span class="boring">        String::from("puppy")
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn main() {
+    println!("A baby dog is called a {}", &lt;Dog as Animal&gt;::baby_name());
+}</code></pre>
+<figcaption><a href="#listing-20-22">لیست ۲۰-۲۲</a>: استفاده از fully qualified syntax برای مشخص کردن اینکه می‌خواهیم تابع &lt;code&gt;&lt;/x-listing&gt;baby_name&lt;/code&gt; از trait &lt;code&gt;Animal&lt;/code&gt; که بر روی &lt;code&gt;Dog&lt;/code&gt; پیاده‌سازی شده است، فراخوانی کنیم</figcaption>
+</figure>
+<p>ما با استفاده از یک اعلان نوع در داخل angle brackets به راست می‌گوییم که می‌خواهیم متد <code>baby_name</code> از trait <code>Animal</code> که بر روی <code>Dog</code> پیاده‌سازی شده است، فراخوانی شود، با این کار مشخص می‌کنیم که می‌خواهیم نوع <code>Dog</code> را برای این فراخوانی تابع به‌عنوان یک <code>Animal</code> در نظر بگیریم. این کد اکنون خروجی مورد نظر ما را چاپ می‌کند:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling traits-example v0.1.0 (file:///projects/traits-example)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.48s
+     Running `target/debug/traits-example`
+A baby dog is called a puppy
+</code></pre>
+<p>به طور کلی، fully qualified syntax به صورت زیر تعریف می‌شود:</p>
+<pre><code class="language-rust ignore">&lt;Type as Trait&gt;::function(receiver_if_method, next_arg, ...);</code></pre>
+<p>برای توابع مرتبطی که متد نیستند، <code>receiver</code> وجود نخواهد داشت: فقط لیستی از آرگومان‌های دیگر خواهد بود. شما می‌توانید fully qualified syntax را در هر جایی که توابع یا متدها را فراخوانی می‌کنید، استفاده کنید. با این حال، مجاز هستید هر بخشی از این سینتکس را که راست می‌تواند از اطلاعات دیگر برنامه تشخیص دهد، حذف کنید. شما فقط در مواردی که چندین پیاده‌سازی با نام یکسان وجود دارد و راست به کمک نیاز دارد تا مشخص کند کدام پیاده‌سازی را می‌خواهید فراخوانی کنید، نیاز به استفاده از این سینتکس دقیق‌تر دارید.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="using-supertraits-to-require-one-traits-functionality-within-another-trait"></a></p>
+<h3 id="using-supertraits"><a class="header" href="#using-supertraits">استفاده از Supertraitها</a></h3>
+<p>گاهی ممکن است تعریفی از trait بنویسید که به trait دیگری وابسته است: می‌خواهید برای اینکه یک نوع بتواند trait اول را پیاده‌سازی کند، آن نوع ملزم باشد trait دوم را هم پیاده‌سازی کند. این کار را انجام می‌دهید تا تعریف trait شما بتواند از اعضای وابستهٔ trait دوم استفاده کند. traitای که تعریف trait شما به آن تکیه دارد، <em>supertrait</em> آن trait نامیده می‌شود.</p>
+<p>برای مثال، فرض کنید می‌خواهیم یک <code>trait</code> به‌نام <code>OutlinePrint</code> ایجاد کنیم با یک متد <code>outline_print</code> که مقدار داده‌شده را به‌صورتی فرمت‌شده چاپ می‌کند که درون قاب ستاره‌ای قرار گیرد. یعنی، اگر یک <code>struct</code> به‌نام <code>Point</code> داشته باشیم که <code>trait</code> استاندارد <code>Display</code> را پیاده‌سازی کرده باشد و خروجی آن <code>(x, y)</code> باشد، وقتی <code>outline_print</code> را روی یک نمونه از <code>Point</code> با <code>x</code> برابر با <code>1</code> و <code>y</code> برابر با <code>3</code> فراخوانی کنیم، باید چیزی مشابه زیر چاپ شود:</p>
+<pre><code class="language-text">**********
+*        *
+* (1, 3) *
+*        *
+**********
+</code></pre>
+<p>در پیاده‌سازی متد <code>outline_print</code>، می‌خواهیم از قابلیت‌های trait <code>Display</code> استفاده کنیم. بنابراین، نیاز داریم مشخص کنیم که trait <code>OutlinePrint</code> فقط برای انواعی کار خواهد کرد که همچنین trait <code>Display</code> را پیاده‌سازی کرده باشند و قابلیت‌های مورد نیاز <code>OutlinePrint</code> را ارائه دهند. می‌توانیم این کار را در تعریف trait با مشخص کردن <code>OutlinePrint: Display</code> انجام دهیم. این تکنیک شبیه به اضافه کردن یک محدودیت trait به trait است. فهرست 20-23 یک پیاده‌سازی از trait <code>OutlinePrint</code> را نشان می‌دهد.</p>
+<figure class="listing" id="listing-20-23">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::fmt;
+
+trait OutlinePrint: fmt::Display {
+    fn outline_print(&amp;self) {
+        let output = self.to_string();
+        let len = output.len();
+        println!("{}", "*".repeat(len + 4));
+        println!("*{}*", " ".repeat(len + 2));
+        println!("* {output} *");
+        println!("*{}*", " ".repeat(len + 2));
+        println!("{}", "*".repeat(len + 4));
+    }
+}
+<span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+<figcaption><a href="#listing-20-23">لیست ۲۰-۲۳</a>: پیاده‌سازی trait &lt;code&gt;&lt;/x-listing&gt;OutlinePrint&lt;/code&gt; که نیاز به قابلیت‌های &lt;code&gt;Display&lt;/code&gt; دارد</figcaption>
+</figure>
+<p>از آنجایی که مشخص کرده‌ایم که <code>OutlinePrint</code> به trait <code>Display</code> نیاز دارد، می‌توانیم از تابع <code>to_string</code> استفاده کنیم که به طور خودکار برای هر نوعی که <code>Display</code> را پیاده‌سازی کرده باشد، پیاده‌سازی شده است. اگر سعی کنیم <code>to_string</code> را بدون اضافه کردن دو نقطه و مشخص کردن trait <code>Display</code> بعد از نام trait استفاده کنیم، خطایی دریافت خواهیم کرد که می‌گوید هیچ متدی به نام <code>to_string</code> برای نوع <code>&amp;Self</code> در محدوده فعلی یافت نشد.</p>
+<p>حالا ببینیم چه اتفاقی می‌افتد اگر بخواهیم <code>OutlinePrint</code> را برای یک نوعی که <code>Display</code> را پیاده‌سازی نکرده است، مانند ساختار <code>Point</code>، پیاده‌سازی کنیم:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">use std::fmt;
+</span><span class="boring">
+</span><span class="boring">trait OutlinePrint: fmt::Display {
+</span><span class="boring">    fn outline_print(&amp;self) {
+</span><span class="boring">        let output = self.to_string();
+</span><span class="boring">        let len = output.len();
+</span><span class="boring">        println!("{}", "*".repeat(len + 4));
+</span><span class="boring">        println!("*{}*", " ".repeat(len + 2));
+</span><span class="boring">        println!("* {output} *");
+</span><span class="boring">        println!("*{}*", " ".repeat(len + 2));
+</span><span class="boring">        println!("{}", "*".repeat(len + 4));
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl OutlinePrint for Point {}
+<span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let p = Point { x: 1, y: 3 };
+</span><span class="boring">    p.outline_print();
+</span><span class="boring">}</span></code></pre>
+</figure>
+<p>خطایی دریافت می‌کنیم که می‌گوید <code>Display</code> مورد نیاز است ولی پیاده‌سازی نشده است:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling traits-example v0.1.0 (file:///projects/traits-example)
+error[E0277]: `Point` doesn't implement `std::fmt::Display`
+  --&gt; src/main.rs:20:23
+   |
+20 | impl OutlinePrint for Point {}
+   |                       ^^^^^ unsatisfied trait bound
+   |
+help: the trait `std::fmt::Display` is not implemented for `Point`
+  --&gt; src/main.rs:15:1
+   |
+15 | struct Point {
+   | ^^^^^^^^^^^^
+note: required by a bound in `OutlinePrint`
+  --&gt; src/main.rs:3:21
+   |
+ 3 | trait OutlinePrint: fmt::Display {
+   |                     ^^^^^^^^^^^^ required by this bound in `OutlinePrint`
+
+error[E0277]: `Point` doesn't implement `std::fmt::Display`
+  --&gt; src/main.rs:24:7
+   |
+24 |     p.outline_print();
+   |       ^^^^^^^^^^^^^ unsatisfied trait bound
+   |
+help: the trait `std::fmt::Display` is not implemented for `Point`
+  --&gt; src/main.rs:15:1
+   |
+15 | struct Point {
+   | ^^^^^^^^^^^^
+note: required by a bound in `OutlinePrint::outline_print`
+  --&gt; src/main.rs:3:21
+   |
+ 3 | trait OutlinePrint: fmt::Display {
+   |                     ^^^^^^^^^^^^ required by this bound in `OutlinePrint::outline_print`
+ 4 |     fn outline_print(&amp;self) {
+   |        ------------- required by a bound in this associated function
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `traits-example` (bin "traits-example") due to 2 previous errors
+</code></pre>
+<p>برای رفع این مشکل، باید <code>Display</code> را برای <code>Point</code> پیاده‌سازی کنیم و محدودیت مورد نیاز <code>OutlinePrint</code> را برآورده کنیم، به این صورت:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">trait OutlinePrint: fmt::Display {
+</span><span class="boring">    fn outline_print(&amp;self) {
+</span><span class="boring">        let output = self.to_string();
+</span><span class="boring">        let len = output.len();
+</span><span class="boring">        println!("{}", "*".repeat(len + 4));
+</span><span class="boring">        println!("*{}*", " ".repeat(len + 2));
+</span><span class="boring">        println!("* {output} *");
+</span><span class="boring">        println!("*{}*", " ".repeat(len + 2));
+</span><span class="boring">        println!("{}", "*".repeat(len + 4));
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct Point {
+</span><span class="boring">    x: i32,
+</span><span class="boring">    y: i32,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl OutlinePrint for Point {}
+</span><span class="boring">
+</span>use std::fmt;
+
+impl fmt::Display for Point {
+    fn fmt(&amp;self, f: &amp;mut fmt::Formatter) -&gt; fmt::Result {
+        write!(f, "({}, {})", self.x, self.y)
+    }
+}
+<span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let p = Point { x: 1, y: 3 };
+</span><span class="boring">    p.outline_print();
+</span><span class="boring">}</span></code></pre>
+</figure>
+<p>سپس، پیاده‌سازی <code>trait</code> به‌نام <code>OutlinePrint</code> برای <code>Point</code> با موفقیت کامپایل خواهد شد، و می‌توانیم متد <code>outline_print</code> را روی یک نمونه از <code>Point</code> فراخوانی کنیم تا آن را درون یک قاب ستاره‌ای نمایش دهد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="using-the-newtype-pattern-to-implement-external-traits-on-external-types"></a>
+<a id="using-the-newtype-pattern-to-implement-external-traits"></a></p>
+<h3 id="implementing-external-traits-with-the-newtype-pattern"><a class="header" href="#implementing-external-traits-with-the-newtype-pattern">استفاده از الگوی Newtype برای پیاده‌سازی Traitهای خارجی</a></h3>
+<p>در بخش <a href="ch10-02-traits.html#implementing-a-trait-on-a-type">«پیاده‌سازی یک Trait برای یک نوع»</a><!-- ignore --> در فصل ۱۰، به قانونی به نام <em>قانون یتیم</em> (orphan rule) اشاره کردیم که می‌گوید تنها در صورتی اجازه داریم یک <code>trait</code> را برای یک نوع پیاده‌سازی کنیم که یا خود <code>trait</code>، یا آن نوع، یا هر دو، محلی (local) به <code>crate</code> ما باشند. می‌توان با استفاده از الگوی <em>newtype</em> این محدودیت را دور زد. این الگو شامل ایجاد یک نوع جدید در قالب یک <code>tuple struct</code> است. (در فصل ۵ در بخش <a href="ch05-01-defining-structs.html#creating-different-types-with-tuple-structs">«استفاده از Tuple Structها بدون فیلدهای نام‌گذاری‌شده برای ایجاد انواع مختلف»</a><!-- ignore --> به این موضوع پرداختیم.) این <code>tuple struct</code> فقط یک فیلد خواهد داشت و در واقع یک بسته‌بندی نازک روی نوعی است که می‌خواهیم <code>trait</code> را برای آن پیاده‌سازی کنیم. از آن‌جایی که نوع بسته‌بندی‌شده محلی به <code>crate</code> ما خواهد بود، می‌توانیم <code>trait</code> مورد نظر را روی آن پیاده‌سازی کنیم. واژه‌ی <em>newtype</em> از زبان برنامه‌نویسی Haskell گرفته شده است. استفاده از این الگو هیچ‌گونه هزینه‌ای در زمان اجرا ندارد، زیرا نوع بسته‌بندی‌شده در زمان کامپایل حذف می‌شود.</p>
+<p>به‌عنوان مثال، فرض کنید می‌خواهیم <code>Display</code> را روی <code>Vec&lt;T&gt;</code> پیاده‌سازی کنیم، که قانون orphan مانع انجام این کار به‌صورت مستقیم می‌شود زیرا trait <code>Display</code> و نوع <code>Vec&lt;T&gt;</code> خارج از crate ما تعریف شده‌اند. می‌توانیم یک ساختار <code>Wrapper</code> بسازیم که شامل یک نمونه از <code>Vec&lt;T&gt;</code> باشد؛ سپس می‌توانیم <code>Display</code> را روی <code>Wrapper</code> پیاده‌سازی کنیم و از مقدار <code>Vec&lt;T&gt;</code> استفاده کنیم، همانطور که در فهرست 20-24 نشان داده شده است.</p>
+<figure class="listing" id="listing-20-24">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::fmt;
+
+struct Wrapper(Vec&lt;String&gt;);
+
+impl fmt::Display for Wrapper {
+    fn fmt(&amp;self, f: &amp;mut fmt::Formatter) -&gt; fmt::Result {
+        write!(f, "[{}]", self.0.join(", "))
+    }
+}
+
+fn main() {
+    let w = Wrapper(vec![String::from("hello"), String::from("world")]);
+    println!("w = {w}");
+}</code></pre>
+<figcaption><a href="#listing-20-24">لیست ۲۰-۲۴</a>: ایجاد نوع &lt;code&gt;&lt;/x-listing&gt;Wrapper&lt;/code&gt; دور &lt;code&gt;Vec&lt;String&gt;&lt;/code&gt; برای پیاده‌سازی &lt;code&gt;Display&lt;/code&gt;</figcaption>
+</figure>
+<p>پیاده‌سازی <code>Display</code> از <code>self.0</code> برای دسترسی به <code>Vec&lt;T&gt;</code> داخلی استفاده می‌کند، زیرا <code>Wrapper</code> یک <code>tuple struct</code> است و <code>Vec&lt;T&gt;</code> در موقعیت اندیس ۰ این <code>tuple</code> قرار دارد. سپس می‌توانیم از قابلیت‌های <code>trait</code> <code>Display</code> روی <code>Wrapper</code> استفاده کنیم.</p>
+<p>نکته‌ی منفی در استفاده از این تکنیک این است که <code>Wrapper</code> یک نوع جدید است، بنابراین متدهای نوعی که درون خود نگه می‌دارد را ندارد. باید تمام متدهای <code>Vec&lt;T&gt;</code> را مستقیماً روی <code>Wrapper</code> پیاده‌سازی کنیم به‌گونه‌ای که این متدها به <code>self.0</code> ارجاع دهند؛ این کار به ما اجازه می‌دهد که با <code>Wrapper</code> مانند یک <code>Vec&lt;T&gt;</code> رفتار کنیم. اگر بخواهیم نوع جدید همه‌ی متدهای نوع درونی را داشته باشد، پیاده‌سازی <code>trait</code> <code>Deref</code> برای <code>Wrapper</code> که نوع درونی را بازمی‌گرداند، یک راه‌حل خواهد بود (در فصل ۱۵ در بخش <a href="ch15-02-deref.html#treating-smart-pointers-like-regular-references">«رفتار دادن به Smart Pointerها مانند رفرنس‌های معمولی با <code>Deref</code>»</a><!-- ignore --> درباره‌ی پیاده‌سازی <code>Deref</code> صحبت کردیم). اما اگر نخواهیم نوع <code>Wrapper</code> همه‌ی متدهای نوع درونی را داشته باشد—برای مثال، برای محدود کردن رفتار نوع <code>Wrapper</code>—باید فقط متدهایی را که نیاز داریم، به‌صورت دستی پیاده‌سازی کنیم.</p>
+<p>این الگوی newtype حتی زمانی که traits درگیر نیستند نیز مفید است. حالا بیایید تمرکز خود را تغییر دهیم و به برخی از روش‌های پیشرفته برای تعامل با سیستم نوع Rust بپردازیم.</p><nav class="page-nav"><a href="ch20-01-unsafe-rust.html">→ Rust ناامن (unsafe)</a><a href="ch20-03-advanced-types.html">نوع‌های پیشرفته ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

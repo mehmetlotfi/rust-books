@@ -1,0 +1,593 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>LLDB - ارائه‌دهنده‌های Python — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="debuginfo/lldb-visualizers"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="lldb---python-providers"><a class="header" href="#lldb---python-providers">LLDB - ارائه‌دهنده‌های Python (Python Providers)</a></h1>
+<blockquote>
+<p>نکته: FFI مربوط به C++&lt;-&gt;Python در LLDB نسخه‌ای از Python را انتظار دارد که هنگام
+کامپایل LLDB تعیین شده است. LLDB دقت می‌کند این نسخه را با کمینهٔ نسخه در توزیع‌های رایج Linux و macOS هماهنگ کند،
+اما در Windows راه‌حل آسانی نیست. اگر خطای import دربارهٔ
+وجود نداشتن <code>_lldb</code> دریافت کردید، احتمالاً علت ناسازگاری نسخهٔ Python است.</p>
+<p>LLDB در حال بررسی راه‌حل‌هایی برای این مشکل است. برای به‌روزرسانی‌ها،
+<a href="https://discourse.llvm.org/t/a-minimal-python-install-for-lldb/88658">این بحث</a> و <a href="https://github.com/llvm/llvm-project/issues/167001">این issue در github</a> را ببینید</p>
+</blockquote>
+<blockquote>
+<p>نکته: تا <!-- date-check --> نوامبر ۲۰۲۵،
+کمینهٔ نسخهٔ Python پشتیبانی‌شده توسط LLDB برابر 3.8 است، با برنامه برای ارتقا به
+3.9 یا 3.10 بسته به چند عامل بیرونی. در حالت ایده‌آل اسکریپت‌ها باید فقط با
+قابلیت‌های موجود در کمینهٔ نسخهٔ Python پشتیبانی‌شده نوشته شوند. برای اطلاعات بیشتر <a href="https://discourse.llvm.org/t/rfc-upgrading-llvm-s-minimum-required-python-version/88605/">این بحث</a> را ببینید.</p>
+</blockquote>
+<blockquote>
+<p>نکته: مسیر بستهٔ Python مربوط به LLDB را می‌توان با دستور CLI ‏<code>lldb -P</code> یافت</p>
+</blockquote>
+<p>LLDB سه سازوکار برای سفارشی‌سازی خروجی فراهم می‌کند:</p>
+<ul>
+<li>قالب‌ها (Formats)</li>
+<li>ارائه‌دهنده‌های مصنوعی (Synthetic providers)</li>
+<li>ارائه‌دهنده‌های خلاصه (Summary providers)</li>
+</ul>
+<h2 id="formats"><a class="header" href="#formats">قالب‌ها (Formats)</a></h2>
+<p>مستندات رسمی <a href="https://lldb.llvm.org/use/variable.html#type-format">اینجاست</a>.
+به‌اختصار،
+قالب‌ها اجازه می‌دهند قالب چاپ پیش‌فرض نوع‌های اولیه تنظیم شود (مثلاً چاپ <code>25u8</code> به‌صورت دهدهی
+<code>25</code>، شانزدهی <code>0x19</code> یا دودویی <code>00011001</code>).</p>
+<p>Rust تقریباً همیشه باید <code>unsigned char</code>، <code>signed char</code>، <code>char</code>، <code>u8</code> و <code>i8</code> را به
+قالب دهدهی (بدون علامت) بازنویسی کند.</p>
+<h2 id="synthetic-providers"><a class="header" href="#synthetic-providers">ارائه‌دهنده‌های مصنوعی (Synthetic Providers)</a></h2>
+<p>مستندات رسمی <a href="https://lldb.llvm.org/use/variable.html#synthetic-children">اینجاست</a>،
+اما برخی اطلاعات مبهم، قدیمی یا کاملاً غایب است.</p>
+<p>تقریباً همهٔ تعامل کاربر با متغیرها از طریق
+<a href="https://lldb.llvm.org/python_api/lldb.SBValue.html">اشیای <code>SBValue</code></a> در LLDB انجام می‌شود که هم در API پایتون و هم در درون از طریق
+افزونه‌ها و CLI مربوط به LLDB به کار می‌روند.</p>
+<p>Synthetic Provider یک کلاس Python است که با یک رابط مشخص نوشته می‌شود و با
+یک یا چند نوع Rust مرتبط می‌شود.
+Synthetic Provider اشیای <code>SBValue</code> را می‌پوشاند و LLDB هنگام بررسی متغیر
+توابع کلاس ما را فراخوانی می‌کند.</p>
+<p>مقدار پوشانده‌شده همچنان یک <code>SBValue</code> است، اما وقتی مثلاً <code>SBValue.GetChildAtIndex</code> فراخوانی می‌شود،
+در درون <code>SyntheticProvider.get_child_at_index</code> را فراخوانی می‌کند.
+می‌توانید با <code>SBValue.IsSynthetic()</code> بررسی کنید که آیا مقداری
+synthetic provider دارد، و با <code>SBValue.GetTypeSynthetic()</code> بفهمید کدام synthetic است.
+اگر می‌خواهید با مقدار غیر-synthetic زیرین تعامل کنید، می‌توانید
+<code>SBValue.GetNonSyntheticValue()</code> را فراخوانی کنید.</p>
+<p>رابط مورد انتظار به این شکل است:</p>
+<pre><code class="language-python">class SyntheticProvider:
+    def __init__(self, valobj: SBValue, _lldb_internal): ...
+
+    # optional
+    def update(self) -&gt; bool: ...
+
+    # optional
+    def has_children(self) -&gt; bool: ...
+
+    # optional
+    def num_children(self, max_children: int) -&gt; int: ...
+
+    def get_child_index(self, name: str) -&gt; int: ...
+
+    def get_child_at_index(self, index: int) -&gt; SBValue: ...
+
+    # optional
+    def get_type_name(self) -&gt; str: ...
+
+    # optional
+    def get_value(self) -&gt; SBValue: ...
+</code></pre>
+<p>در ادامه توضیح متدها، نکات عجیب آن‌ها و چگونگی استفادهٔ عمومی‌شان آمده است.
+اگر متدی یک متد <code>SBValue</code> را بازنویسی کند، آن متد فهرست می‌شود.</p>
+<h3 id="__init__"><a class="header" href="#__init__"><code>__init__</code></a></h3>
+<p>این تابع یک بار برای هر شیء فراخوانی می‌شود و باید <code>valobj</code> را در کلاس Python ذخیره کند تا
+در جاهای دیگر در دسترس باشد.
+در اینجا باید بسیار کم کار دیگری انجام شود.</p>
+<h3 id="optional-update"><a class="header" href="#optional-update">(اختیاری) <code>update</code></a></h3>
+<p>این تابع پیش از تعامل LLDB با یک متغیر، اما پس از <code>__init__</code> فراخوانی می‌شود.
+LLDB پیگیری می‌کند که آیا <code>update</code> از پیش فراخوانی شده است.
+اگر شده باشد و ممکن نباشد متغیر
+تغییر کرده باشد (مثلاً بررسی دوبارهٔ همان متغیر بدون گام برداشتن)، فراخوانی
+<code>update</code> را حذف می‌کند.</p>
+<p>این تابع دو هدف دارد:</p>
+<ul>
+<li>ذخیره/به‌روزرسانی هر اطلاعاتی که ممکن است از آخرین باری که <code>update</code> اجرا شد تغییر کرده باشد</li>
+<li>اطلاع دادن به LLDB اگر فرزندان تغییر کرده‌اند تا کش فرزندان را پاک کند.</li>
+</ul>
+<p>عملیات معمول شامل ذخیرهٔ اشاره‌گر heap، طول، ظرفیت و نوع عنصر یک <code>Vec</code>،
+تعیین گونهٔ یک متغیر enum، یا بررسی اینکه کدام جایگاه‌های یک <code>HashMap</code> اشغال شده‌اند است.</p>
+<p>مقدار bool برگردانده‌شده از این تابع تا حدی پیچیده است؛ برای اطلاعات بیشتر
+<a href="#update-caching">کش کردن <code>update</code></a> را در ادامه ببینید.
+در صورت تردید، <code>False</code>/<code>None</code> برگردانید.
+تا <!-- date-check --> نوامبر ۲۰۲۵،
+هیچ‌یک از visualizerها <code>True</code> برنمی‌گردانند، اما این ممکن است با بهبود مجموعهٔ آزمون اطلاعات اشکال‌زدایی تغییر کند.</p>
+<h4 id="update-caching"><a class="header" href="#update-caching">کش کردن <code>update</code></a></h4>
+<p>LLDB در صورت امکان سعی می‌کند مقادیر، از جمله مقادیر فرزندان را کش کند.
+این کش در عمل
+تعداد اشیای فرزند و نشانی‌های حافظهٔ debuggee زیرینی است که شیء فرزند
+نمایش می‌دهد.
+با برگرداندن <code>True</code>، به LLDB می‌گویید تعداد فرزندان و نشانی‌های
+آن فرزندان از آخرین باری که <code>update</code> اجرا شد تغییر نکرده‌اند، یعنی می‌تواند از
+فرزندان کش‌شده دوباره استفاده کند.</p>
+<p><strong>برگرداندن <code>True</code> در شرایط نادرست باعث می‌شود debugger اطلاعات نادرست
+خروجی دهد</strong>.</p>
+<p>برگرداندن <code>False</code> نشان می‌دهد تغییراتی رخ داده است، کش پاک می‌شود و
+فرزندان از ابتدا واکشی می‌شوند.
+اگر مطمئن نیستید این گزینهٔ امن‌تر است.</p>
+<p>تنها رابطه‌ای که اهمیت دارد والد-به-فرزند است.
+نوه‌ها به تابع <code>update</code> والد مستقیم خود وابسته‌اند، نه والد والد.</p>
+<p>مهم است که کش فرزندان را به‌صورت اشاره‌گر-به-حافظه ببینید.
+برای مثال، اگر مقدار <code>data_ptr</code> یک slice
+و <code>length</code> آن تغییر نکرده باشند، برگرداندن <code>True</code> مناسب است.
+حتی اگر slice تغییرپذیر باشد
+و عناصرش بازنویسی شوند (مثلاً <code>slice[0] = 15</code>)، چون کش فرزندان از
+<em>اشاره‌گر</em> تشکیل شده، داده‌های جدید در آن مکان حافظه را منعکس می‌کنند.</p>
+<p>برعکس، اگر <code>data_ptr</code> تغییر کرده باشد، یعنی به مکان جدیدی در حافظه اشاره می‌کند،
+اشاره‌گرهای فرزند نامعتبرند و کش باید پاک شود.
+اگر <code>length</code> تغییر کرده باشد، باید کش را پاک کنیم تا تعداد جدید فرزندان منعکس شود.
+اگر <code>length</code> تغییر کرده اما <code>data_ptr</code>
+نکرده باشد، می‌توان فرزندان قدیمی را در خود <code>SyntheticProvider</code> ذخیره کرد (مثلاً
+<code>list[SBValue]</code>) و آن‌ها را به‌جای تولید از ابتدا تحویل داد، و فقط در صورتی فرزندان جدید ساخت که
+از پیش در فهرست <code>SyntheticProvider</code> وجود نداشته باشند.</p>
+<p>برای توضیح بیشتر، <a href="https://discourse.llvm.org/t/when-is-it-safe-to-cache-syntheticprovider-update/88608">این بحث</a> را ببینید</p>
+<blockquote>
+<p>نکته: هنگام آزمودن رفتار کش، به اکتشاف (heuristic) LLDB برای ماندگار کردن متغیرها هنگام
+گام برداشتن تکیه نکنید. در عوض، متغیر را در یک شیء Python ذخیره کنید (مثلاً <code>v = lldb.frame.var("var_name")</code>)،
+جلو بروید و سپس متغیر ذخیره‌شده را بررسی کنید.</p>
+</blockquote>
+<h3 id="optional-has_children"><a class="header" href="#optional-has_children">(اختیاری) <code>has_children</code></a></h3>
+<blockquote>
+<p><code>SBValue.MightHaveChildren</code> را بازنویسی می‌کند</p>
+</blockquote>
+<p>این میان‌بری است که LLDB برای بررسی اینکه آیا مقدار <em>اصلاً</em> فرزند دارد به کار می‌برد، بدون انجام
+محاسبات بالقوه گران برای تعیین تعداد فرزندان (مثلاً لیست پیوندی).
+اغلب، این یک تک‌خطی <code>return True</code>/<code>return False</code> یا
+<code>return self.valobj.MightHaveChildren()</code> خواهد بود.</p>
+<h3 id="optional-num_children"><a class="header" href="#optional-num_children">(اختیاری) <code>num_children</code></a></h3>
+<blockquote>
+<p><code>SBValue.GetNumChildren</code> را بازنویسی می‌کند</p>
+</blockquote>
+<p>تعداد کل فرزندانی را برمی‌گرداند که LLDB هنگام چاپ نوع باید سعی کند به آن‌ها دسترسی یابد.
+این عدد <strong>لازم نیست</strong> با تعداد کل فرزندان synthetic برابر باشد.</p>
+<p>اگر محاسبهٔ تعداد فرزندان می‌تواند گران باشد، می‌توان آرگومان <code>max_children</code> را برگرداند
+(مثلاً لیست پیوندی). اگر این ملاحظه‌ای نیست، <code>max_children</code> را می‌توان از امضای
+تابع حذف کرد.</p>
+<p>افزون بر این، می‌توان فیلدها را عمداً از LLDB «پنهان» کرد در حالی که همچنان برای
+کاربر در دسترس‌اند.
+برای مثال، ممکن است بخواهید <code>vec![1, 2, 3]</code> فقط عناصرش را نمایش دهد، اما همچنان
+مقادیر <code>len</code> و <code>capacity</code> در صورت درخواست در دسترس باشند.
+با برگرداندن <code>3</code> از <code>num_children</code>، می‌توان
+LLDB را محدود کرد که فقط <code>[1, 2, 3]</code> را نمایش دهد، در حالی که کاربران همچنان مستقیماً به <code>v.len</code> و
+<code>v.capacity</code> دسترسی دارند.
+برای دیدن پیاده‌سازی این، <a href="#example-provider-vect">ارائه‌دهندهٔ نمونه: Vec&lt;T&gt;</a> را ببینید.</p>
+<h3 id="get_child_index"><a class="header" href="#get_child_index"><code>get_child_index</code></a></h3>
+<blockquote>
+<p><code>SBValue.GetIndexOfChildWithName</code> را بازنویسی می‌کند</p>
+<p><code>SBValue.GetChildMemberWithName</code> را تحت تأثیر قرار می‌دهد</p>
+</blockquote>
+<p>با گرفتن یک نام، اندیسی را برمی‌گرداند که فرزند باید در آن اندیس دسترسی شود.
+انتظار می‌رود مقدار بازگشتی این تابع مستقیماً به <code>get_child_at_index</code> داده شود.
+مانند <code>num_children</code>،
+مقادیر بازگشتی در اینجا <em>می‌توانند</em> دلبخواه باشند، به شرط اینکه به‌درستی با
+<code>get_child_at_index</code> هماهنگ شوند.</p>
+<p>یک مقدار ویژه <code>$$dereference$$</code> است.
+در نظر گرفتن این شبه‌فیلد به LLDB اجازه می‌دهد
+<code>SBValue</code> برگردانده‌شده از <code>get_child_at_index</code> را به‌عنوان نتیجهٔ یک dereference از طریق
+تجزیه‌گر عبارت LLDB به کار ببرد (مثلاً <code>*val</code> و <code>val-&gt;field</code>)</p>
+<h3 id="get_child_at_index"><a class="header" href="#get_child_at_index"><code>get_child_at_index</code></a></h3>
+<blockquote>
+<p><code>SBValue.GetChildAtIndex</code> را بازنویسی می‌کند</p>
+</blockquote>
+<p>با گرفتن یک اندیس، یک <code>SBValue</code> فرزند برمی‌گرداند.
+اغلب این‌ها با
+<code>SBValue.CreateValueFromAddress</code> تولید می‌شوند، اما کمتر با <code>SBValue.CreateChildAtOffset</code>،
+<code>SBValue.CreateValueFromExpression</code> و <code>SBValue.CreateValueFromData</code>.
+این توابع می‌توانند کمی
+وسواسی باشند، پس ممکن است لازم باشد برای گرفتن خروجی دلخواه با آن‌ها ور بروید.</p>
+<p>در برخی موارد <code>SBValue.Clone</code> مناسب است.
+فرزند جدیدی می‌سازد که نسخهٔ دقیق یک فرزند موجود اما با نام جدید است.
+این برای مواردی مانند tupleها مفید است که نام فیلدهایی از
+سبک <code>__0</code>، <code>__1</code>، … دارند در حالی که ترجیح می‌دهیم <code>0</code>، <code>1</code>، … نام بگیرند</p>
+<p>پیش از برگرداندن فرزند حاصل، می‌توان تغییرات کوچکی در آن داد.
+این برای <code>&amp;str</code>/<code>String</code> مفید است، که ترجیح می‌دهیم فرزندان به‌صورت
+<code>lldb.eFormatBytesWithASCII</code> نمایش داده شوند نه فقط به‌صورت مقدار دهدهی.</p>
+<h3 id="optional-get_type_name"><a class="header" href="#optional-get_type_name">(اختیاری) <code>get_type_name</code></a></h3>
+<blockquote>
+<p><code>SBValue.GetDisplayTypeName</code> را بازنویسی می‌کند</p>
+</blockquote>
+<p>نام نمایش‌داده‌شدهٔ یک نوع را بازنویسی می‌کند.
+برای یک <code>SBValue</code> مصنوعی که نام نوعش بازنویسی شده،
+نام نوع اصلی همچنان از <code>SBValue.GetTypeName()</code> و
+<code>SBValue.GetType().GetName()</code> قابل بازیابی است</p>
+<p>این می‌تواند در کوتاه کردن نام نوع‌های رایج کتابخانهٔ استاندارد مفید باشد (مثلاً
+<code>std::collections::hash::map::HashMap&lt;K, V, std::hash::random::RandomState&gt;</code> -&gt; <code>HashMap&lt;K, V&gt;</code>)، یا
+در نرمال‌سازی نام نوع‌های MSVC (مثلاً <code>ref$&lt;str$&gt;</code> -&gt; <code>&amp;str</code>).</p>
+<p>دستکاری رشته می‌تواند کمی پیچیده باشد، به‌ویژه در MSVC که نمی‌توانیم به‌راحتی
+به پارامترهای جنریک نوع دسترسی داشته باشیم.</p>
+<h3 id="optional-get_value"><a class="header" href="#optional-get_value">(اختیاری) <code>get_value</code></a></h3>
+<blockquote>
+<p><code>SBValue.GetValue()</code>، <code>SBValue.GetValueAsUnsigned()</code>، <code>SBValue.GetValueAsSigned()</code>، <code>SBValue.GetValueAsAddress()</code> را بازنویسی می‌کند،</p>
+</blockquote>
+<p>انتظار می‌رود <code>SBValue</code> برگردانده‌شده یک نوع اولیه یا اشاره‌گر باشد و در عبارت‌ها به‌عنوان مقدار
+متغیر در نظر گرفته می‌شود.</p>
+<blockquote>
+<p>مهم: <code>SBValue</code> برگردانده‌شده <strong>باید در <code>SyntheticProvider</code> ذخیره شود</strong>.
+تا <!-- date-check --> نوامبر ۲۰۲۵،
+باگی وجود دارد که اگر <code>SBValue</code> درون <code>get_value</code> به دست آید و جایی ذخیره نشود،
+Python هنگامی که LLDB سعی می‌کند به مقدار دسترسی یابد segfault می‌کند.</p>
+</blockquote>
+<h2 id="summary-providers"><a class="header" href="#summary-providers">ارائه‌دهنده‌های خلاصه (Summary Providers)</a></h2>
+<p>Summary providerها توابع Python با شکل زیر هستند:</p>
+<pre><code class="language-python">def SummaryProvider(valobj: SBValue, _lldb_internal) -&gt; str: ...
+</code></pre>
+<p>رشتهٔ برگردانده‌شده کلمه‌به‌کلمه به کاربر داده می‌شود.
+اگر مقدار برگردانده‌شده رشته نباشد،
+به‌ساده‌ترین شکل به رشته تبدیل می‌شود (مثلاً <code>return None</code> رشتهٔ <code>"None"</code> را چاپ می‌کند، نه رشتهٔ خالی).</p>
+<p>اگر <code>SBValue</code> ورودی از نوعی باشد که Synthetic Provider دارد، <code>valobj.IsSynthetic()</code>
+<code>True</code> برمی‌گرداند و توابع متناظر synthetic به کار می‌روند.
+اگر این نامطلوب است، می‌توان مقدار اصلی را با <code>valobj.GetNonSyntheticValue()</code> بازیابی کرد.
+این می‌تواند در مواردی
+مانند <code>String</code> مفید باشد، که فراخوانی جداگانهٔ <code>GetChildAtIndex</code> در یک حلقه بسیار کندتر از دسترسی به
+اشاره‌گر heap، خواندن کل آرایهٔ بایت مستقیماً از حافظهٔ debuggee و استفاده از
+<code>bytes.decode()</code> در Python است.</p>
+<h3 id="instance-summaries"><a class="header" href="#instance-summaries">خلاصه‌های نمونه (Instance Summaries)</a></h3>
+<p>توابع معمولی <code>SummaryProvider</code> یک <code>SBValue</code> مات (opaque) می‌گیرند.
+آن <code>SBValue</code> در صورت وجود
+<code>SyntheticProvider</code> نوع را منعکس می‌کند، اما نمی‌توانیم به خود نمونهٔ <code>SyntheticProvider</code> یا
+هیچ‌یک از جزئیات پیاده‌سازی درونی‌اش دسترسی داشته باشیم.
+این در مواردی که برای تکمیل خلاصه به برخی از
+آن جزئیات درونی نیاز داریم زیان‌بار است.
+تا <!-- date-check --> نوامبر ۲۰۲۵، در synthetic فقط
+مقدار غیر-synthetic را از synthetic provider عبور می‌دهیم
+(<code>synth = SyntheticProvider(valobj.GetNonSyntheticValue(), _dict)</code>)، اما این آشکارا
+بهینه نیست و برنامه‌هایی برای استفاده از روش شرح‌داده‌شده در ادامه وجود دارد.</p>
+<p>در عوض می‌توانیم از وضعیت ماژول Python برای امکان خلاصه‌های نمونه بهره ببریم.
+سابقهٔ
+این تکنیک در <a href="https://github.com/vadimcn/codelldb/blob/cf9574977b80e29c6de2c44d12f1071a53a54caf/formatters/rust.py#L110">اسکریپت‌های قدیمی visualizer مربوط به Rust در CodeLLDB</a> وجود دارد.</p>
+<p>به‌اختصار: تابع <code>__init__</code> هر Synthetic Provider یک شناسهٔ یکتا و یک ارجاع ضعیف به
+<code>self</code> را در یک دیکشنری سراسری ذخیره می‌کند.
+کلاس Synthetic Provider همچنین یک تابع <code>get_summary</code> پیاده‌سازی می‌کند.
+<code>SummaryProvider</code> نوع تابعی است که شناسهٔ یکتا را در این دیکشنری می‌یابد
+و سپس <code>get_summary</code> را روی نمونه‌ای که بازیابی می‌کند فراخوانی می‌کند.</p>
+<pre><code class="language-python">import weakref
+
+SYNTH_BY_ID = weakref.WeakValueDictionary()
+
+class SyntheticProvider:
+    valobj: SBValue
+
+    # slots requires opting-in to __weakref__
+    __slots__ = ("valobj", "__weakref__")
+
+    def __init__(valobj: SBValue, _dict):
+        SYNTH_BY_ID[valobj.GetID()] = self
+        self.valobj = valobj
+
+    def get_summary(self) -&gt; str:
+        ...
+
+def InstanceSummaryProvider(valobj: SBValue, _dict) -&gt; str:
+    # GetNonSyntheticValue should never fail as InstanceSummaryProvider implies an instance of a
+    # `SyntheticProvider`. No non-synthetic types should ever have this summary assigned to them
+    # We use GetNonSyntheticValue because the synthetic vaobj has its own unique ID
+    return SYNTH_BY_ID[valobj.GetNonSyntheticValue().GetID()].get_summary()
+</code></pre>
+<p>برای مثال، ممکن است این را برای synthetic provider مربوط به Enum به کار ببرید.
+خلاصه می‌خواهد به
+نام گونه دسترسی یابد، اما راه مناسبی برای بازتاب این از طریق نام نوع یا مقادیر فرزند
+synthetic نیست.
+با پیاده‌سازی یک instance summary، می‌توانیم نام گونه را از طریق
+<code>self.variant.GetTypeName()</code> و مقداری دستکاری رشته بازیابی کنیم.</p>
+<h1 id="writing-visualizer-scripts"><a class="header" href="#writing-visualizer-scripts">نوشتن اسکریپت‌های visualizer</a></h1>
+<blockquote>
+<p>مهم: برخلاف GDB و CDB، LLDB می‌تواند فایل‌های اجرایی با اطلاعات اشکال‌زدایی DWARF یا PDB را اشکال‌زدایی کند.
+visualizerها باید تا حد امکان با در نظر گرفتن هر دو قالب نوشته شوند. برای مرور تفاوت‌ها
+<a href="./rust-codegen.html#dwarf-vs-pdb">rust-codegen</a> را ببینید</p>
+</blockquote>
+<p>اسکریپت‌ها از طریق دستور CLI ‏<code>command script import &lt;path-to-script&gt;.py</code> به LLDB تزریق می‌شوند.
+پس از
+تزریق، می‌توان کلاس‌ها و توابع را به‌ترتیب با <code>type synthetic add</code>
+و <code>type summary add</code> به مخزن synthetic/summary اضافه کرد.
+خلاصه‌ها و syntheticها را می‌توان با یک
+«دسته (category)» مرتبط کرد که معمولاً به نام زبانی نام‌گذاری می‌شود که providerها برای آن در نظر گرفته شده‌اند.
+دسته‌ای که ما به کار می‌بریم <code>Rust</code> نام دارد.</p>
+<blockquote>
+<p>نکته: همهٔ دستورهای LLDB را می‌توان با <code>help</code> پیشوند داد (مثلاً <code>help type synthetic add</code>) تا توضیح کوتاه،
+فهرست آرگومان‌ها و مثال‌ها نشان داده شود.</p>
+</blockquote>
+<p>در گذشته از <code>command source ...</code> استفاده می‌کردیم که مجموعه‌ای از دستورهای CLI را از
+فایل <code>lldb_commands</code> برای افزودن providerها اجرا می‌کرد.
+این فایل تا حدی دست‌وپاگیر بود
+و با معادل API پایتون که در ادامه شرح داده شده جایگزین شده است.</p>
+<h2 id="__lldb_init_module"><a class="header" href="#__lldb_init_module"><code>__lldb_init_module</code></a></h2>
+<p>این یک تابع اختیاری با شکل زیر است:</p>
+<pre><code class="language-python">def __lldb_init_module(debugger: SBDebugger, _lldb_internal) -&gt; None: ...
+</code></pre>
+<p>این تابع در پایان <code>command script import ...</code> اما پیش از بازگشت کنترل
+به CLI فراخوانی می‌شود.
+به اسکریپت اجازه می‌دهد وضعیت خودش را مقداردهی اولیه کند.</p>
+<p>نکتهٔ حیاتی این است که یک ارجاع به خود debugger به آن داده می‌شود.
+این به ما اجازه می‌دهد دستهٔ <code>Rust</code> را بسازیم و providerها را به آن اضافه کنیم.
+همچنین می‌تواند به ما اجازه دهد به‌صورت شرطی تغییر دهیم کدام providerها را
+بسته به نسخه‌ای از LLDB که اسکریپت تشخیص می‌دهد به کار ببریم.
+این برای سازگاری با گذشته حیاتی است
+وقتی استفاده از recognizer functionها را آغاز کنیم، چون recognizerها در lldb 19.0 اضافه شدند.</p>
+<h2 id="visualizer-resolution"><a class="header" href="#visualizer-resolution">حل visualizer</a></h2>
+<p>ترتیب حل visualizerها <a href="https://lldb.llvm.org/use/variable.html#finding-formatters-101">اینجا</a> فهرست شده است.
+به‌اختصار:</p>
+<ul>
+<li>اگر تطابق دقیقی وجود دارد (نام بدون regex، recognizer function، یا نوعی که از پیش با
+provider تطبیق یافته)، از آن استفاده کن</li>
+<li>اگر شیء اشاره‌گر/ارجاع است، سعی کن از formatter نوع dereference‌شده استفاده کنی</li>
+<li>اگر شیء typedef است، formatter نوع زیرین را بررسی کن</li>
+<li>اگر هیچ‌یک از موارد بالا کار نکرد، matcherهای نوع regex را پیمایش کن</li>
+</ul>
+<p>در هر یک از این گام‌ها، <strong>پیمایش به‌صورت معکوس انجام می‌شود</strong> تا دستورهای جدید بتوانند دستورهای قدیمی را «بازنویسی» کنند.
+این برای مواردی مانند <code>Box&lt;str&gt;</code> در برابر <code>Box&lt;T&gt;</code> مهم است، که می‌خواهیم برای اولی یک synthetic
+تخصصی و برای دومی یک synthetic عمومی‌تر داشته باشیم.</p>
+<h2 id="minutiae"><a class="header" href="#minutiae">ریزه‌کاری‌ها</a></h2>
+<p>API مربوط به LLDB بسیار قدرتمند است، اما چند «دام» و رفتار غیرشهودی دارد که برخی از آن‌ها
+در ادامه شرح داده می‌شود.
+پیاده‌سازی Python را می‌توان در مسیری که دستور CLI ‏<code>lldb -P</code> برمی‌گرداند
+در <code>lldb\__init__.py</code> دید.
+افزون بر
+<a href="https://github.com/llvm/llvm-project/tree/main/lldb/examples/synthetic">مثال‌های مخزن lldb</a>، <a href="https://github.com/llvm/llvm-project/tree/main/lldb/source/Plugins/Language/CPlusPlus">visualizerهای C++</a> نیز هستند که می‌توان
+به‌عنوان مرجع به کار برد (مثلاً <a href="https://github.com/llvm/llvm-project/blob/main/lldb/source/Plugins/Language/CPlusPlus/LibCxxVector.cpp">LibCxxVector، معادل <code>Vec&lt;T&gt;</code></a>). هرچند
+visualizerهای C++ با C++ نوشته شده‌اند و به درونیات LLDB دسترسی دارند، API و رویه‌های عمومی
+بسیار شبیه‌اند.</p>
+<h3 id="sbvalue"><a class="header" href="#sbvalue"><code>SBValue</code></a></h3>
+<ul>
+<li><code>SBValue</code>های اشاره‌گر/ارجاع در برخی موارد در عمل «auto-deref» می‌کنند و طوری رفتار می‌کنند که گویی
+فرزندان شیء اشاره‌شده فرزندان خودشان‌اند.</li>
+<li>فیلدهای غیرتابع معمولاً فیلدهای <a href="https://docs.python.org/3/library/functions.html#property"><code>property()</code></a> هستند که به‌هرحال مستقیماً به
+تابع اشاره می‌کنند (مثلاً <code>SBValue.type = property(GetType, None)</code>). دسترسی از طریق این میان‌برها
+اندکی کندتر از فراخوانی مستقیم تابع است، پس باید از آن‌ها پرهیز کرد.
+برخی
+از propertyها اشیای ویژه‌ای با ویژگی‌های ویژه برمی‌گردانند (مثلاً <code>SBValue.member</code> شیئی برمی‌گرداند
+که مانند <code>dict[str, SBValue]</code> برای دسترسی به فرزندان عمل می‌کند).
+در درون، بسیاری از این اشیای
+ویژه فقط یک نمونهٔ کلاس جدید تخصیص می‌دهند و به‌هرحال تابع را روی <code>SBValue</code> فراخوانی می‌کنند که به
+افت عملکرد بیشتر می‌انجامد (مثلاً <code>SBValue.member</code> در درون فقط <code>__getitem__</code> را پیاده‌سازی می‌کند که
+تک‌خطی <code>return self.valobj.GetChildMemberWithName(name)</code> است)</li>
+<li><code>SBValue.GetID</code> برای هر مقدار تا پایان جلسهٔ اشکال‌زدایی یک <code>int</code> یکتا برمی‌گرداند.
+<code>SBValue</code>های synthetic شناسه‌ای متفاوت از <code>SBValue</code> زیرین خود دارند.
+شناسهٔ زیرین را می‌توان با <code>SBValue.GetNonSyntheticValue().GetID()</code> بازیابی کرد.</li>
+<li>هنگام محاسبهٔ دستی یک نشانی، <code>SBValue.GetValueAsAddress</code> باید بر
+<code>SBValue.GetValueAsUnsigned</code> ترجیح داده شود، به‌دلیل <a href="https://lldb.llvm.org/python_api/lldb.SBValue.html#lldb.SBValue.GetValueAsAddress">رفتار مختص هدف</a></li>
+<li>گرفتن نمایش رشته‌ای یک <code>SBValue</code> می‌تواند دشوار باشد چون <code>GetSummary</code> به
+summary provider نیاز دارد و <code>GetValue</code> نیاز دارد نوع با یک نوع اولیه قابل نمایش باشد.
+تقریباً در همهٔ
+مواردی که هیچ‌یک از آن شرایط برقرار نیست، نوع یک struct تعریف‌شده توسط کاربر است که می‌توان آن را از
+<code>StructSummaryProvider</code> عبور داد.</li>
+</ul>
+<h3 id="sbtype"><a class="header" href="#sbtype"><code>SBType</code></a></h3>
+<ul>
+<li>«نوع تجمیعی (Aggregate type)» یعنی struct/class/union غیراولیه</li>
+<li>«Template» معادل «Generic» است</li>
+<li>نوع‌ها را می‌توان با نامشان از طریق <code>SBTarget.FindFirstType(type_name)</code> جستجو کرد.
+<code>SBTarget</code> را می‌توان از <code>SBValue.GetTarget</code> به دست آورد</li>
+<li><code>SBType.template_args</code> اگر نوع جنریک نداشته باشد به‌جای فهرست خالی <code>None</code> برمی‌گرداند</li>
+<li>گاهی لازم است نوعی را از طریق توابعی مانند
+<code>SBType.GetArrayType</code> و <code>SBType.GetPointerType</code> به نوع دلخواه تبدیل کنید.
+این توابع نمی‌توانند شکست بخورند.
+آن‌ها نوع را از افزونهٔ زیرین <code>TypeSystem</code> مربوط به LLDB می‌پرسند و اطلاعات اشکال‌زدایی را کاملاً دور می‌زنند.
+حتی اگر
+نوع اصلاً در اطلاعات اشکال‌زدایی وجود نداشته باشد، این توابع می‌توانند نوع مناسب را بسازند.</li>
+<li><code>SBType.GetCanonicalType</code> در عمل <code>SBType.GetTypedefedType</code> + <code>SBType.GetUnqualifiedType</code> است.
+برخلاف <code>SBType.GetTypedefedType</code>، همیشه یک <code>SBType</code> معتبر برمی‌گرداند، صرف‌نظر از اینکه
+<code>SBType</code> اصلی typedef باشد یا نه.</li>
+<li><code>SBType.GetStaticFieldWithName</code> در LLDB 18 اضافه شد. متأسفانه سازگاری با گذشته
+همیشه ممکن نیست چون در غیر این صورت فیلدهای static کاملاً غیرقابل‌دسترس‌اند.</li>
+</ul>
+<h1 id="example-provider-vect"><a class="header" href="#example-provider-vect">ارائه‌دهندهٔ نمونه: <code>Vec&lt;T&gt;</code></a></h1>
+<h2 id="syntheticprovider"><a class="header" href="#syntheticprovider">SyntheticProvider</a></h2>
+<p>با مقدمهٔ معمول شروع می‌کنیم و چون فیلدهای شناخته‌شده داریم از <code>__slots__</code> استفاده می‌کنیم.
+افزون بر
+خود شیء، باید نوع عناصر را هم ذخیره کنیم چون اشاره‌گر heap مربوط به <code>Vec</code>
+یک <code>*mut u8</code> است نه <code>*mut T</code>.
+Rust زبانی با نوع‌دهی ایستاست، پس نوع <code>T</code> هرگز تغییر نمی‌کند.
+یعنی می‌توانیم آن را هنگام مقداردهی اولیه ذخیره کنیم.
+اما اشاره‌گر heap، طول و ظرفیت <em>می‌توانند</em> تغییر کنند و بنابراین در اینجا با مقدار پیش‌فرض مقداردهی اولیه می‌شوند.</p>
+<pre><code class="language-python">import lldb
+
+class VecSyntheticProvider:
+    valobj: SBValue
+    data_ptr: SBValue
+    len: int
+    cap: int
+    element_type: SBType
+
+    __slots__ = (
+        "valobj",
+        "data_ptr",
+        "len",
+        "cap",
+        "element_type",
+        "__weakref__",
+    )
+
+    def __init__(valobj: SBValue, _dict) -&gt; None:
+        self.valobj = valobj
+        # invalid type is a better default than `None`
+        self.element_type = SBType()
+
+        # special handling to account for DWARF/PDB differences
+        if (arg := valobj.GetType().GetTemplateArgumentType(0)):
+            self.element_type = arg
+        else:
+            arg_name = next(get_template_args(valobj.GetTypeName()))
+            self.element_type = resolve_msvc_template_arg(arg_name, valobj.GetTarget())
+</code></pre>
+<p>برای پیاده‌سازی <code>get_template_args</code> و <code>resolve_msvc_template_arg</code>، لطفاً
+<a href="https://github.com/rust-lang/rust/blob/main/src/etc/lldb_providers.py#L136"><code>lldb_providers.py</code></a> را ببینید.</p>
+<p>سپس، تابع update.
+بررسی می‌کنیم آیا اشاره‌گر یا طول تغییر کرده‌اند.
+می‌توانیم بررسی
+ظرفیت را حذف کنیم، چون تعداد فرزندان تا وقتی <code>len</code> تغییر نکند یکسان می‌ماند.
+اگر تغییر ظرفیت به تخصیص مجدد بینجامد، نشانی <code>data_ptr</code> متفاوت خواهد بود.</p>
+<p>اگر <code>data_ptr</code> و <code>length</code> تغییر نکرده باشند، می‌توانیم از کش LLDB بهره ببریم و زودتر
+برگردیم.
+اگر تغییر کرده باشند، مقادیر جدید را ذخیره می‌کنیم و به LLDB می‌گوییم کش را پاک کند.</p>
+<pre><code class="language-python">def update(self):
+    ptr = self.valobj.GetChildMemberWithName("data_ptr")
+    len = self.valobj.GetChildMemberWithName("length").GetValueAsUnsigned()
+
+    if (
+        self.data_ptr.GetValueAsAddress() == ptr.GetValueAsAddress()
+        and self.len == len
+    ):
+        # Our child address offsets and child count are still valid
+        # so we can reuse cached children
+        return True
+
+    self.data_ptr = ptr
+    self.len = len
+
+    return False
+</code></pre>
+<p><code>has_children</code> و <code>num_children</code> هر دو سرراست‌اند:</p>
+<pre><code class="language-python">def has_children(self) -&gt; bool:
+    return True
+
+def num_children(self) -&gt; int:
+    return self.len
+</code></pre>
+<p>هنگام دسترسی به عناصر، انتظار مقادیری با قالب <code>[0]</code>، <code>[1]</code> و غیره داریم تا اندیس‌گذاری را تقلید کنند.
+افزون بر این، همچنان می‌خواهیم کاربر بتواند به‌سرعت به طول و ظرفیت دسترسی یابد، چون
+می‌توانند هنگام اشکال‌زدایی بسیار مفید باشند.
+به این مقادیر به‌ترتیب <code>u32::MAX - 1</code> و <code>u32::MAX - 2</code>
+را اختصاص می‌دهیم، چون تقریباً مطمئناً می‌توانیم تضمین کنیم با مقادیر عناصر همپوشانی نخواهند داشت.
+توجه کنید که می‌توانیم هم نام کامل و هم نام کوتاه <code>capacity</code> را در نظر بگیریم.</p>
+<pre><code class="language-python">    def get_child_index(self, name: str) -&gt; int:
+        index = name.lstrip("[").rstrip("]")
+        if index.isdigit():
+            return int(index)
+        if name == "len":
+            return lldb.UINT32_MAX - 1
+        if name == "cap" or name == "capacity":
+            return lldb.UINT32_MAX - 2
+
+        return -1
+</code></pre>
+<p>اکنون باید <code>get_child_at_index</code> را به‌درستی هماهنگ کنیم تا عناصر، طول و ظرفیت
+همگی در دسترس باشند.</p>
+<pre><code class="language-python">def get_child_at_index(self, index: int) -&gt; SBValue:
+    if index == UINT32_MAX - 1:
+        return self.valobj.GetChildMemberWithName("len")
+    if index == UINT32_MAX - 2:
+        return (
+            self.valobj.GetChildMemberWithName("buf")
+            .GetChildMemberWithName("inner")
+            .GetChildMemberWithName("cap")
+            .GetChildAtIndex(0)
+            .Clone("capacity")
+        )
+    addr = self.data_ptr.GetValueAsAddress()
+    addr += index * self.element_type.GetByteSize()
+    return self.valobj.CreateValueFromAddress(f"[{index}]", addr, self.element_type)
+</code></pre>
+<p>برای نام نمایشی نوع، می‌توانیم qualifier مسیر را حذف کنیم.
+نوع‌های تعریف‌شده توسط کاربر به نام <code>Vec</code> در نهایت کاملاً qualified می‌شوند، پس نباید ابهامی باشد.
+همچنین می‌توانیم جنریک allocator را حذف کنیم، چون به‌ندرت مفید است.
+به سه دلیل از <code>get_template_args</code> به‌جای <code>self.element_type.GetName()</code> استفاده می‌کنیم:</p>
+<ol>
+<li>اگر به هر دلیلی نتوانیم نوع عنصر را حل کنیم، نام نوع <code>self.valobj</code> همچنان می‌تواند
+به کاربر بگوید نوع واقعی عنصر چیست</li>
+<li>نام نوع‌ها تابع محدودیت‌های گره‌های DWARF و PDB نیستند، پس نوع template در
+نام چیزهایی مانند <code>*const</code>/<code>*mut</code> و <code>&amp;</code>/<code>&amp;mut</code> را منعکس می‌کند.</li>
+<li>تا <!-- date-check --> نوامبر ۲۰۲۵،
+نام نوع‌های MSVC را نرمال نمی‌کنیم، اما وقتی بکنیم، به‌هرحال لازم خواهد بود با
+نام‌های رشته‌ای نوع‌ها کار کنیم.
+همچنین کش کردن تبدیل رشته-به-رشته بسیار آسان‌تر است در مقایسه
+با تبدیل <code>SBType</code>-به-رشته.</li>
+</ol>
+<pre><code class="language-python">def get_type_name(self) -&gt; str:
+    return f"Vec&lt;{next(get_template_args(self.valobj))}&gt;"
+</code></pre>
+<p>مقدار اولیهٔ مناسبی برای نمایش یک <code>Vec</code> وجود ندارد، پس تابع <code>get_value</code>
+را صرفاً حذف می‌کنیم.</p>
+<h2 id="summaryprovider"><a class="header" href="#summaryprovider">SummaryProvider</a></h2>
+<p>summary provider به‌لطف synthetic provider ما بسیار ساده است.
+تنها مشکل واقعی این است که
+<code>GetSummary</code> فقط وقتی مقداری برمی‌گرداند که نوع شیء یک <code>SummaryProvider</code> داشته باشد.
+اگر نداشته باشد، یک رشتهٔ خالی برمی‌گرداند که ایده‌آل نیست.
+در یک مجموعهٔ کامل اسکریپت‌های visualizer، می‌توانیم اطمینان یابیم
+که هر نوعی که <code>GetSummary()</code> یا <code>GetValue()</code> ندارد یک struct است و سپس به
+یک <code>StructSummaryProvider</code> عمومی واگذار کنیم.
+برای این نمایش، از آن جزئیات چشم‌پوشی می‌کنم.</p>
+<pre><code class="language-python">def VecSummaryProvider(valobj: SBValue, _lldb_internal) -&gt; str:
+    children = []
+    for i in range(valobj.GetNumChildren()):
+        child = valobj.GetChildAtIndex(i)
+        summary = child.GetSummary()
+        if summary is None:
+            summary = child.GetValue()
+            if summary is None:
+                summary = "{...}"
+
+        children.append(summary)
+
+    return f"vec![{", ".join(children)}]"
+</code></pre>
+<h2 id="enabling-the-providers"><a class="header" href="#enabling-the-providers">فعال کردن providerها</a></h2>
+<p>فرض کنید این synthetic در <code>lldb_lookup.py</code> import شده است</p>
+<p>با دستورهای CLI:</p>
+<pre><code class="language-txt">type synthetic add -l lldb_lookup.synthetic_lookup -x "^(alloc::([a-z_]+::)+)Vec&lt;.+&gt;$" --category Rust
+type summary add -F lldb_lookup.summary_lookup -x "^(alloc::([a-z_]+::)+)Vec&lt;.+&gt;$" --category Rust
+</code></pre>
+<p>با <code>__lldb_init_module</code>:</p>
+<pre><code class="language-python">def __lldb_init_module(debugger: SBDebugger, _dict: LLDBOpaque):
+    # Ensure the category exists and is enabled
+    rust_cat = debugger.GetCategory("Rust")
+
+    if not rust_cat.IsValid():
+        rust_cat = debugger.CreateCategory("Rust")
+
+    rust_cat.SetEnabled(True)
+
+    # Register Vec providers
+    vec_regex = r"^(alloc::([a-z_]+::)+)Vec&lt;.+&gt;$"
+    sb_name = lldb.SBTypeNameSpecifier(vec_regex, is_regex=True)
+
+    sb_synth = lldb.SBTypeSynthetic.CreateWithClassName("lldb_lookup.VecSyntheticProvider")
+    sb_synth.SetOptions(lldb.eTypeOptionCascade)
+
+    sb_summary = lldb.SBTypeSummary.CreateWithFunctionName("lldb_lookup.VecSummaryProvider")
+    sb_summary.SetOptions(lldb.eTypeOptionCascade)
+
+    rust_cat.AddTypeSynthetic(sb_name, sb_synth)
+    rust_cat.AddSummary(sb_name, sb_summary)
+</code></pre>
+<h2 id="output"><a class="header" href="#output">خروجی</a></h2>
+<p>بدون providerها:</p>
+<pre><code class="language-text">(lldb) v vec_v
+(alloc::vec::Vec&lt;int, alloc::alloc::Global&gt;) vec_v = {
+  buf = {
+    inner = {
+      ptr = {
+        pointer = (pointer = "\n")
+        _marker = {}
+      }
+      cap = (__0 = 5)
+      alloc = {}
+    }
+    _marker = {}
+  }
+  len = 5
+}
+(lldb) v vec_v[0]
+error: &lt;user expression 0&gt;:1:6: subscripted value is not an array or pointer
+   1 | vec_v[0]
+     | ^
+</code></pre>
+<p>با providerها (<code>v &lt;var_name&gt;</code> خلاصه و سپس فهرست همهٔ فرزندان را چاپ می‌کند):</p>
+<pre><code class="language-text">(lldb) v vec_v
+(Vec&lt;int&gt;) vec_v = vec![10, 20, 30, 40, 50] {
+  [0] = 10
+  [1] = 20
+  [2] = 30
+  [3] = 40
+  [4] = 50
+}
+(lldb) v vec_v[0]
+(int) vec_v[0] = 10
+</code></pre>
+<p>همچنین می‌توانیم تأیید کنیم که طول و ظرفیت «پنهان» همچنان در دسترس‌اند:</p>
+<pre><code class="language-text">(lldb) v vec_v.len
+(unsigned long long) vec_v.len = 5
+(lldb) v vec_v.capacity
+(unsigned long long) vec_v.capacity = 5
+(lldb) v vec_v.cap
+(unsigned long long) vec_v.cap = 5
+</code></pre><nav class="page-nav"><a href="debugger-visualizers.html">→ نمایش‌دهنده‌های دیباگر</a><a href="gdb-visualizers.html">GDB - ارائه‌دهنده‌های Python ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

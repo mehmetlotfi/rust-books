@@ -1,0 +1,544 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>الگوهای درخت نحو — کتاب Clippy</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="development/proposals/syntax-tree-patterns"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../index.html" style="color:inherit;text-decoration:none">کتاب Clippy</a><small class="en-title" dir="ltr">The Clippy Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><ul>
+<li>نام قابلیت: syntax-tree-patterns</li>
+<li>تاریخ شروع: 2019-03-12</li>
+<li>PR مربوط به RFC: <a href="https://github.com/rust-lang/rust-clippy/pull/3875">#3875</a></li>
+</ul>
+<h1 id="summary"><a class="header" href="#summary">خلاصه</a></h1>
+<p>معرفی یک زبان خاص‌دامنه (domain-specific language) شبیه عبارت‌های منظم (regular expressions) که امکان توصیف lintها را با استفاده از <em>الگوهای درخت نحو</em> فراهم می‌کند.</p>
+<h1 id="motivation"><a class="header" href="#motivation">انگیزه</a></h1>
+<p>یافتن بخش‌هایی از یک درخت نحو (AST، HIR و …) که ویژگی‌های مشخصی دارند (مثلاً «<em>یک if که یک بلوک به‌عنوان شرط دارد</em>») هنگام نوشتن lintها کار اصلی است. برای lintهای غیرپیش‌پاافتاده، اغلب به تطبیق الگوی تودرتوی گره‌های AST / HIR نیاز دارد. برای مثال، آزمودن اینکه یک عبارت یک لیترال بولی است بررسی‌های زیر را لازم دارد:</p>
+<pre><code class="language-rust ignore">if let ast::ExprKind::Lit(lit) = &amp;expr.node {
+    if let ast::LitKind::Bool(_) = &amp;lit.node {
+        ...
+    }
+}</code></pre>
+<p>نوشتن این نوع کد تطبیق به‌سرعت به کاری پیچیده تبدیل می‌شود و کد حاصل اغلب درک‌کردنش دشوار است. کد زیر نسخهٔ ساده‌شدهٔ تطبیق الگوی لازم برای lint ‏<code>collapsible_if</code> را نشان می‌دهد:</p>
+<pre><code class="language-rust ignore">// simplified version of the collapsible_if lint
+if let ast::ExprKind::If(check, then, None) = &amp;expr.node {
+    if then.stmts.len() == 1 {
+        if let ast::StmtKind::Expr(inner) | ast::StmtKind::Semi(inner) = &amp;then.stmts[0].node {
+            if let ast::ExprKind::If(check_inner, content, None) = &amp;inner.node {
+                ...
+            }
+        }
+    }
+}</code></pre>
+<p>ماکروی <code>if_chain</code> می‌تواند با مسطح کردن دستورهای <code>if</code> تودرتو خوانایی را بهبود دهد، اما کد حاصل هنوز خواندنش بسیار دشوار است:</p>
+<pre><code class="language-rust">// simplified version of the collapsible_if lint
+if_chain! {
+    if let ast::ExprKind::If(check, then, None) = &amp;expr.node;
+    if then.stmts.len() == 1;
+    if let ast::StmtKind::Expr(inner) | ast::StmtKind::Semi(inner) = &amp;then.stmts[0].node;
+    if let ast::ExprKind::If(check_inner, content, None) = &amp;inner.node;
+    then {
+        ...
+    }
+}</code></pre>
+<p>کد بالا عبارت‌های if را تطبیق می‌دهد که فقط شامل یک عبارت if دیگر هستند (که هیچ‌یک از دو if شاخهٔ else ندارند). توضیح اینکه lint چه کاری می‌کند آسان است، اما دیدن آن از روی نمونه‌کدهای بالا دشوار است.</p>
+<p>با توجه به انگیزهٔ بالا، نخستین هدف این RFC <strong>ساده‌سازی نوشتن و خواندن lintها</strong> است.</p>
+<p>بخش دوم انگیزه، وابستگی clippy به ساختارهای دادهٔ ناپایدار داخلی کامپایلر است. lintهای Clippy در حال حاضر بر پایهٔ AST / HIR کامپایلر نوشته می‌شوند، که یعنی حتی تغییرات کوچک در این ساختارهای داده ممکن است تعداد زیادی lint را خراب کند. هدف دوم این RFC <strong>مستقل کردن lintها از ساختارهای دادهٔ AST / HIR کامپایلر</strong> است.</p>
+<h1 id="approach"><a class="header" href="#approach">رویکرد</a></h1>
+<p>به نظر می‌رسد بخش زیادی از پیچیدگی نوشتن lintها در حال حاضر از این می‌آید که باید منطق تطبیق را به‌صورت دستی پیاده‌سازی کنیم (نمونه‌کدهای بالا را ببینید). این سبکی دستوری (imperative) است که توصیف می‌کند <em>چگونه</em> یک گرهٔ درخت نحو را تطبیق دهیم، به‌جای اینکه به‌صورت اعلانی (declarative) مشخص کند <em>چه چیزی</em> باید تطبیق داده شود. در حوزه‌های دیگر، استفاده از الگوهای اعلانی برای توصیف اطلاعات مطلوب و واگذاشتن تطبیق واقعی به پیاده‌سازی رایج است. یک نمونهٔ شناخته‌شده از این رویکرد <a href="https://en.wikipedia.org/wiki/Regular_expression">عبارت‌های منظم</a> هستند. به‌جای نوشتن کدی که دنباله‌های کاراکتری مشخصی را تشخیص دهد، می‌توان یک الگوی جستجو را با یک زبان خاص‌دامنه توصیف کرد و با آن الگو دنبال تطبیق‌ها گشت. مزیت استفاده از یک زبان اعلانی خاص‌دامنه این است که دامنهٔ محدود آن (مثلاً تطبیق دنباله‌های کاراکتری در مورد عبارت‌های منظم) اجازه می‌دهد موجودیت‌های آن دامنه به شیوه‌ای بسیار طبیعی و گویا بیان شوند.</p>
+<p>عبارت‌های منظم برای جستجوی الگو در دنباله‌های کاراکتری تخت بسیار مفیدند، اما به‌آسانی نمی‌توان آن‌ها را روی ساختارهای دادهٔ سلسله‌مراتبی مانند درخت‌های نحو به کار برد. بنابراین این RFC یک سامانهٔ تطبیق الگو پیشنهاد می‌کند که از عبارت‌های منظم الهام گرفته و برای درخت‌های نحو سلسله‌مراتبی طراحی شده است.</p>
+<h1 id="guide-level-explanation"><a class="header" href="#guide-level-explanation">توضیح در سطح راهنما</a></h1>
+<p>این پیشنهاد یک ماکروی <code>pattern!</code> اضافه می‌کند که می‌توان با آن یک الگوی درخت نحو را برای جستجو مشخص کرد. یک الگوی ساده در زیر نشان داده شده است:</p>
+<pre><code class="language-rust">pattern!{
+    my_pattern: Expr =
+        Lit(Bool(false))
+}</code></pre>
+<p>این فراخوانی ماکرو الگویی به نام <code>my_pattern</code> تعریف می‌کند که می‌توان آن را با یک گرهٔ درخت نحو از نوع <code>Expr</code> تطبیق داد. الگوی واقعی (در اینجا <code>Lit(Bool(false))</code>) تعیین می‌کند کدام درخت‌های نحو با الگو تطبیق پیدا می‌کنند. این الگو با عبارت‌هایی تطبیق پیدا می‌کند که لیترال بولی با مقدار <code>false</code> هستند.</p>
+<p>سپس می‌توان از الگو برای پیاده‌سازی lintها به این روش استفاده کرد:</p>
+<pre><code class="language-rust ignore">...
+
+impl EarlyLintPass for MyAwesomeLint {
+    fn check_expr(&amp;mut self, cx: &amp;EarlyContext, expr: &amp;syntax::ast::Expr) {
+
+        if my_pattern(expr).is_some() {
+            cx.span_lint(
+                MY_AWESOME_LINT,
+                expr.span,
+                "This is a match for a simple pattern. Well done!",
+            );
+        }
+
+    }
+}</code></pre>
+<p>فراخوانی ماکروی <code>pattern!</code> به تابعی به نام <code>my_pattern</code> گسترش می‌یابد که یک عبارت درخت نحو را به‌عنوان آرگومان می‌گیرد و یک <code>Option</code> برمی‌گرداند که نشان می‌دهد آیا الگو تطبیق پیدا کرده است یا نه.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>نکته: نوع نتیجه در <a href="#the-result-type">بخشی بعدتر</a> با جزئیات بیشتر توضیح داده شده است. فعلاً همین‌قدر کافی است که بدانیم اگر الگو تطبیق پیدا کند نتیجه <code>Some</code> است و در غیر این صورت <code>None</code>.</p>
+</blockquote>
+<h2 id="pattern-syntax"><a class="header" href="#pattern-syntax">نحو الگو</a></h2>
+<p>مثال‌های زیر نحو الگو را نشان می‌دهند:</p>
+<h4 id="any-_"><a class="header" href="#any-_">هر چیز (<code>_</code>)</a></h4>
+<p>ساده‌ترین الگو، الگوی «هر چیز» است. با هر چیزی تطبیق پیدا می‌کند و بنابراین شبیه <code>*</code> در regex است.</p>
+<pre><code class="language-rust">pattern!{
+    // matches any expression
+    my_pattern: Expr =
+        _
+}</code></pre>
+<h4 id="node-node-nameargs"><a class="header" href="#node-node-nameargs">گره (<code>&lt;node-name&gt;(&lt;args&gt;)</code>)</a></h4>
+<p>گره‌ها برای تطبیق یک حالت مشخص از یک گرهٔ AST به کار می‌روند. هر گره یک نام و تعدادی آرگومان دارد که به نوع گره بستگی دارد. برای مثال، گرهٔ <code>Lit</code> یک آرگومان دارد که نوع لیترال را توصیف می‌کند. به‌عنوان مثالی دیگر، گرهٔ <code>If</code> سه آرگومان دارد که شرط <code>if</code>، بلوک then و بلوک else را توصیف می‌کنند.</p>
+<pre><code class="language-rust">pattern!{
+    // matches any expression that is a literal
+    my_pattern: Expr =
+        Lit(_)
+}
+
+pattern!{
+    // matches any expression that is a boolean literal
+    my_pattern: Expr =
+        Lit(Bool(_))
+}
+
+pattern!{
+    // matches if expressions that have a boolean literal in their condition
+    // Note: The `_?` syntax here means that the else branch is optional and can be anything.
+    //       This is discussed in more detail in the section `Repetition`.
+    my_pattern: Expr =
+        If( Lit(Bool(_)) , _, _?)
+}</code></pre>
+<h4 id="literal-lit"><a class="header" href="#literal-lit">لیترال (<code>&lt;lit&gt;</code>)</a></h4>
+<p>یک الگو می‌تواند لیترال‌های Rust را هم در بر داشته باشد. این لیترال‌ها با خودشان تطبیق پیدا می‌کنند.</p>
+<pre><code class="language-rust">pattern!{
+    // matches the boolean literal false
+    my_pattern: Expr =
+        Lit(Bool(false))
+}
+
+pattern!{
+    // matches the character literal 'x'
+    my_pattern: Expr =
+        Lit(Char('x'))
+}</code></pre>
+<h4 id="alternations-a--b"><a class="header" href="#alternations-a--b">انتخاب‌ها (<code>a | b</code>)</a></h4>
+<pre><code class="language-rust">pattern!{
+    // matches if the literal is a boolean or integer literal
+    my_pattern: Lit =
+        Bool(_) | Int(_)
+}
+
+pattern!{
+    // matches if the expression is a char literal with value 'x' or 'y'
+    my_pattern: Expr =
+        Lit( Char('x' | 'y') )
+}</code></pre>
+<h4 id="empty-"><a class="header" href="#empty-">تهی (<code>()</code>)</a></h4>
+<p>الگوی تهی یک دنبالهٔ خالی یا حالت <code>None</code> از یک مقدار اختیاری را نشان می‌دهد.</p>
+<pre><code class="language-rust">pattern!{
+    // matches if the expression is an empty array
+    my_pattern: Expr =
+        Array( () )
+}
+
+pattern!{
+    // matches if expressions that don't have an else clause
+    my_pattern: Expr =
+        If(_, _, ())
+}</code></pre>
+<h4 id="sequence-a-b"><a class="header" href="#sequence-a-b">دنباله (<code>&lt;a&gt; &lt;b&gt;</code>)</a></h4>
+<pre><code class="language-rust">pattern!{
+    // matches the array [true, false]
+    my_pattern: Expr =
+        Array( Lit(Bool(true)) Lit(Bool(false)) )
+}</code></pre>
+<h4 id="repetition-a-a-a-an-anm-an"><a class="header" href="#repetition-a-a-a-an-anm-an">تکرار (<code>&lt;a&gt;*</code>, <code>&lt;a&gt;+</code>, <code>&lt;a&gt;?</code>, <code>&lt;a&gt;{n}</code>, <code>&lt;a&gt;{n,m}</code>, <code>&lt;a&gt;{n,}</code>)</a></h4>
+<p>عناصر را می‌توان تکرار کرد. نحو تعیین تکرارها با <a href="https://docs.rs/regex/1.1.2/regex/#repetitions">نحو regex</a> یکسان است.</p>
+<pre><code class="language-rust">pattern!{
+    // matches arrays that contain 2 'x's as their last or second-last elements
+    // Examples:
+    //     ['x', 'x']                         match
+    //     ['x', 'x', 'y']                    match
+    //     ['a', 'b', 'c', 'x', 'x', 'y']     match
+    //     ['x', 'x', 'y', 'z']               no match
+    my_pattern: Expr =
+        Array( _* Lit(Char('x')){2} _? )
+}
+
+pattern!{
+    // matches if expressions that **may or may not** have an else block
+    // Attn: `If(_, _, _)` matches only ifs that **have** an else block
+    //
+    //              | if with else block | if without else block
+    // If(_, _, _)  |       match        |       no match
+    // If(_, _, _?) |       match        |        match
+    // If(_, _, ()) |      no match      |        match
+    my_pattern: Expr =
+        If(_, _, _?)
+}</code></pre>
+<h4 id="named-submatch-aname"><a class="header" href="#named-submatch-aname">زیرتطبیق نام‌دار (<code>&lt;a&gt;#&lt;name&gt;</code>)</a></h4>
+<pre><code class="language-rust">pattern!{
+    // matches character literals and gives the literal the name foo
+    my_pattern: Expr =
+        Lit(Char(_)#foo)
+}
+
+pattern!{
+    // matches character literals and gives the char the name bar
+    my_pattern: Expr =
+        Lit(Char(_#bar))
+}
+
+pattern!{
+    // matches character literals and gives the expression the name baz
+    my_pattern: Expr =
+        Lit(Char(_))#baz
+}</code></pre>
+<p>دلیل استفاده از زیرتطبیق‌های نام‌دار در بخش <a href="#the-result-type">نوع نتیجه</a> توضیح داده شده است.</p>
+<h3 id="summary-1"><a class="header" href="#summary-1">خلاصه</a></h3>
+<p>جدول زیر خلاصه‌ای از نحو الگو را ارائه می‌دهد:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>نحو</th><th>مفهوم</th><th>مثال‌ها</th></tr>
+</thead>
+<tbody>
+<tr><td><code>_</code></td><td>هر چیز</td><td><code>_</code></td></tr>
+<tr><td><code>&lt;node-name&gt;(&lt;args&gt;)</code></td><td>گره</td><td><code>Lit(Bool(true))</code>, <code>If(_, _, _)</code></td></tr>
+<tr><td><code>&lt;lit&gt;</code></td><td>لیترال</td><td><code>'x'</code>, <code>false</code>, <code>101</code></td></tr>
+<tr><td><code>&lt;a&gt; | &lt;b&gt;</code></td><td>انتخاب</td><td><code>Char(_) | Bool(_)</code></td></tr>
+<tr><td><code>()</code></td><td>تهی</td><td><code>Array( () )</code></td></tr>
+<tr><td><code>&lt;a&gt; &lt;b&gt;</code></td><td>دنباله</td><td><code>Tuple( Lit(Bool(_)) Lit(Int(_)) Lit(_) )</code></td></tr>
+<tr><td><code>&lt;a&gt;*</code> <br> <code>&lt;a&gt;+</code> <br> <code>&lt;a&gt;?</code> <br> <code>&lt;a&gt;{n}</code> <br> <code>&lt;a&gt;{n,m}</code> <br> <code>&lt;a&gt;{n,}</code></td><td>تکرار <br> <br> <br> <br> <br><br></td><td><code>Array( _* )</code>, <br> <code>Block( Semi(_)+ )</code>, <br> <code>If(_, _, Block(_)?)</code>, <br> <code>Array( Lit(_){10} )</code>, <br> <code>Lit(_){5,10}</code>, <br> <code>Lit(Bool(_)){10,}</code></td></tr>
+<tr><td><code>&lt;a&gt;#&lt;name&gt;</code></td><td>زیرتطبیق نام‌دار</td><td><code>Lit(Int(_))#foo</code> <code>Lit(Int(_#bar))</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="the-result-type"><a class="header" href="#the-result-type">نوع نتیجه</a></h2>
+<p>بسیاری از lintها به بررسی‌هایی نیاز دارند که فراتر از چیزی است که نحو الگوی توصیف‌شده در بالا می‌تواند بیان کند. برای مثال، یک lint ممکن است بخواهد بررسی کند آیا یک گره در نتیجهٔ گسترش ماکرو ساخته شده است یا اینکه بالای یک گره هیچ توضیحی (comment) وجود ندارد. مثال دیگر lintی است که می‌خواهد دو گره را که مقدار یکسانی دارند تطبیق دهد (مانند آنچه lintهایی مثل <code>almost_swapped</code> لازم دارند). به‌جای اینکه به کاربران اجازه دهد این بررسی‌ها را مستقیماً در الگو بنویسند (که ممکن است خواندن الگوها را دشوار کند)، راه‌حل پیشنهادی به کاربران اجازه می‌دهد به بخش‌هایی از یک عبارت الگو نام بدهند. هنگام تطبیق یک الگو با یک گرهٔ درخت نحو، مقدار بازگشتی شامل ارجاع به همهٔ گره‌هایی خواهد بود که با این زیرالگوهای نام‌دار تطبیق پیدا کرده‌اند. این شبیه گروه‌های ضبط (capture groups) در عبارت‌های منظم است.</p>
+<p>برای مثال، با توجه به الگوی زیر</p>
+<pre><code class="language-rust">pattern!{
+    // matches character literals
+    my_pattern: Expr =
+        Lit(Char(_#val_inner)#val)#val_outer
+}</code></pre>
+<p>می‌توان به این روش به گره‌هایی که با زیرالگوها تطبیق پیدا کرده‌اند ارجاع گرفت:</p>
+<pre><code class="language-rust ignore">...
+fn check_expr(expr: &amp;syntax::ast::Expr) {
+    if let Some(result) = my_pattern(expr) {
+        result.val_inner  // type: &amp;char
+        result.val        // type: &amp;syntax::ast::Lit
+        result.val_outer  // type: &amp;syntax::ast::Expr
+    }
+}</code></pre>
+<p>نوع‌های درون ساختار <code>result</code> به الگو بستگی دارند. برای مثال، الگوی زیر</p>
+<pre><code class="language-rust">pattern!{
+    // matches arrays of character literals
+    my_pattern_seq: Expr =
+        Array( Lit(_)*#foo )
+}</code></pre>
+<p>با آرایه‌هایی تطبیق پیدا می‌کند که از هر تعداد عبارت لیترال تشکیل شده‌اند. چون این عبارت‌ها <code>foo</code> نام دارند، ساختار نتیجه یک ویژگی <code>foo</code> دارد که برداری از عبارت‌هاست:</p>
+<pre><code class="language-rust ignore">...
+if let Some(result) = my_pattern_seq(expr) {
+    result.foo        // type: Vec&lt;&amp;syntax::ast::Expr&gt;
+}</code></pre>
+<p>نوع نتیجهٔ دیگر زمانی پیش می‌آید که یک نام فقط در یکی از شاخه‌های یک انتخاب تعریف شده باشد:</p>
+<pre><code class="language-rust">pattern!{
+    // matches if expression is a boolean or integer literal
+    my_pattern_alt: Expr =
+        Lit( Bool(_#bar) | Int(_) )
+}</code></pre>
+<p>در الگوی بالا، نام <code>bar</code> فقط زمانی تعریف می‌شود که الگو با یک لیترال بولی تطبیق پیدا کند. اگر با لیترال صحیح تطبیق پیدا کند، نام تنظیم نمی‌شود. برای رعایت این موضوع، ویژگی <code>bar</code> در ساختار نتیجه از نوع اختیاری (option) است:</p>
+<pre><code class="language-rust ignore">...
+if let Some(result) = my_pattern_alt(expr) {
+    result.bar        // type: Option&lt;&amp;bool&gt;
+}</code></pre>
+<p>همچنین می‌توان یک نام را در چند شاخهٔ انتخاب به کار برد، به شرط آنکه نوع‌های سازگار داشته باشند:</p>
+<pre><code class="language-rust ignore">pattern!{
+    // matches if expression is a boolean or integer literal
+    my_pattern_mult: Expr =
+        Lit(_#baz) | Array( Lit(_#baz) )
+}
+...
+if let Some(result) = my_pattern_mult(expr) {
+    result.baz        // type: &amp;syntax::ast::Lit
+}</code></pre>
+<p>زیرتطبیق‌های نام‌دار یک فضای نام <strong>تخت</strong> هستند و این عمدی است. در مثال بالا، دو زیرساختار متفاوت به یک نام تخت اختصاص داده شده‌اند. انتظار دارم برای بیشتر lintها یک فضای نام تخت کافی باشد و کار کردن با آن از فضای نام سلسله‌مراتبی آسان‌تر باشد.</p>
+<h4 id="two-stages"><a class="header" href="#two-stages">دو مرحله</a></h4>
+<p>با استفاده از زیرالگوهای نام‌دار، کاربران می‌توانند lintها را در دو مرحله بنویسند. نخست، یک انتخاب درشت از تطبیق‌های ممکن با نحو الگو تولید می‌شود. در مرحلهٔ دوم، ارجاع‌های زیرالگوهای نام‌دار را می‌توان برای انجام آزمون‌های بیشتر به کار برد، مانند تأیید اینکه یک گره در نتیجهٔ گسترش ماکرو ساخته نشده است.</p>
+<h2 id="implementing-clippy-lints-using-patterns"><a class="header" href="#implementing-clippy-lints-using-patterns">پیاده‌سازی lintهای Clippy با استفاده از الگوها</a></h2>
+<p>به‌عنوان یک مثال «دنیای واقعی»، lint ‏<code>collapsible_if</code> را با استفاده از الگوها دوباره پیاده‌سازی کردم. کد را می‌توان <a href="https://github.com/fkohlgrueber/rust-clippy-pattern/blob/039b07ecccaf96d6aa7504f5126720d2c9cceddd/clippy_lints/src/collapsible_if.rs#L88-L163">اینجا</a> یافت. نسخهٔ مبتنی بر الگو همهٔ آزمون‌هایی را که برای <code>collapsible_if</code> نوشته شده بود با موفقیت می‌گذراند.</p>
+<h1 id="reference-level-explanation"><a class="header" href="#reference-level-explanation">توضیح در سطح مرجع</a></h1>
+<h2 id="overview"><a class="header" href="#overview">نمای کلی</a></h2>
+<p>نمودار زیر وابستگی‌های میان بخش‌های اصلی راه‌حل پیشنهادی را نشان می‌دهد:</p>
+<pre><code>                          Pattern syntax
+                                |
+                                |  parsing / lowering
+                                v
+                           PatternTree
+                                ^
+                                |
+                                |
+                          IsMatch trait
+                                |
+                                |
+             +---------------+-----------+---------+
+             |               |           |         |
+             v               v           v         v
+        syntax::ast     rustc::hir      syn       ...
+</code></pre>
+<p>نحو الگوی توصیف‌شده در بخش پیشین تجزیه / پایین‌آوری (lowering) می‌شود و به ساختار دادهٔ موسوم به <em>PatternTree</em> تبدیل می‌شود که یک الگوی معتبر درخت نحو را نشان می‌دهد. تطبیق یک <em>PatternTree</em> با یک درخت نحو واقعی (مثلاً AST / HIR زبان Rust یا AST کتابخانهٔ syn و …) با استفاده از صفت <em>IsMatch</em> انجام می‌شود.</p>
+<p><em>PatternTree</em> و صفت <em>IsMatch</em> در بخش‌های بعدی با جزئیات بیشتر معرفی می‌شوند.</p>
+<h2 id="patterntree"><a class="header" href="#patterntree">PatternTree</a></h2>
+<p>ساختار دادهٔ اصلی این RFC <strong>PatternTree</strong> است.</p>
+<p>این ساختار دادهٔ شبیه AST / HIR زبان Rust است، اما با تفاوت‌های زیر:</p>
+<ul>
+<li>PatternTree اطلاعات تجزیه مانند <code>Span</code>ها را شامل نمی‌شود</li>
+<li>PatternTree می‌تواند حالت‌های جایگزین، دنباله‌ها و اختیاری‌ها را نشان دهد</li>
+</ul>
+<p>کد زیر نسخهٔ ساده‌شدهٔ PatternTree فعلی را نشان می‌دهد:</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>نکته: پیاده‌سازی فعلی را می‌توان <a href="https://github.com/fkohlgrueber/pattern-matching/blob/dfb3bc9fbab69cec7c91e72564a63ebaa2ede638/pattern-match/src/pattern_tree.rs#L50-L96">اینجا</a> یافت.</p>
+</blockquote>
+<pre><code class="language-rust">pub enum Expr {
+    Lit(Alt&lt;Lit&gt;),
+    Array(Seq&lt;Expr&gt;),
+    Block_(Alt&lt;BlockType&gt;),
+    If(Alt&lt;Expr&gt;, Alt&lt;BlockType&gt;, Opt&lt;Expr&gt;),
+    IfLet(
+        Alt&lt;BlockType&gt;,
+        Opt&lt;Expr&gt;,
+    ),
+}
+
+pub enum Lit {
+    Char(Alt&lt;char&gt;),
+    Bool(Alt&lt;bool&gt;),
+    Int(Alt&lt;u128&gt;),
+}
+
+pub enum Stmt {
+    Expr(Alt&lt;Expr&gt;),
+    Semi(Alt&lt;Expr&gt;),
+}
+
+pub enum BlockType {
+    Block(Seq&lt;Stmt&gt;),
+}</code></pre>
+<p>ساختارهای <code>Alt</code>، <code>Seq</code> و <code>Opt</code> به این شکل هستند:</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>نکته: پیاده‌سازی فعلی را می‌توان <a href="https://github.com/fkohlgrueber/pattern-matching/blob/dfb3bc9fbab69cec7c91e72564a63ebaa2ede638/pattern-match/src/matchers.rs#L35-L60">اینجا</a> یافت.</p>
+</blockquote>
+<pre><code class="language-rust ignore">pub enum Alt&lt;T&gt; {
+    Any,
+    Elmt(Box&lt;T&gt;),
+    Alt(Box&lt;Self&gt;, Box&lt;Self&gt;),
+    Named(Box&lt;Self&gt;, ...)
+}
+
+pub enum Opt&lt;T&gt; {
+    Any,  // anything, but not None
+    Elmt(Box&lt;T&gt;),
+    None,
+    Alt(Box&lt;Self&gt;, Box&lt;Self&gt;),
+    Named(Box&lt;Self&gt;, ...)
+}
+
+pub enum Seq&lt;T&gt; {
+    Any,
+    Empty,
+    Elmt(Box&lt;T&gt;),
+    Repeat(Box&lt;Self&gt;, RepeatRange),
+    Seq(Box&lt;Self&gt;, Box&lt;Self&gt;),
+    Alt(Box&lt;Self&gt;, Box&lt;Self&gt;),
+    Named(Box&lt;Self&gt;, ...)
+}
+
+pub struct RepeatRange {
+    pub start: usize,
+    pub end: Option&lt;usize&gt;  // exclusive
+}</code></pre>
+<h2 id="parsing--lowering"><a class="header" href="#parsing--lowering">تجزیه / پایین‌آوری</a></h2>
+<p>ورودی یک فراخوانی ماکروی <code>pattern!</code> ابتدا به یک <code>ParseTree</code> تجزیه می‌شود و سپس به یک <code>PatternTree</code> پایین‌آورده می‌شود.</p>
+<p>الگوهای معتبر به تعریف‌های <em>PatternTree</em> بستگی دارند. برای مثال، الگوی <code>Lit(Bool(_)*)</code> معتبر نیست، چون نوع پارامتر حالت <code>Lit</code> از شمارش <code>Expr</code> برابر <code>Any&lt;Lit&gt;</code> است و بنابراین از تکرار (<code>*</code>) پشتیبانی نمی‌کند. به‌عنوان مثالی دیگر، <code>Array( Lit(_)* )</code> الگویی معتبر است، چون پارامتر <code>Array</code> از نوع <code>Seq&lt;Expr&gt;</code> است که دنباله‌ها و تکرارها را مجاز می‌کند.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>نکته: نام‌ها در نحو الگو با <strong>حالت‌های</strong> شمارش <em>PatternTree</em> متناظرند. برای مثال، <code>Lit</code> در الگوی بالا به حالت <code>Lit</code> از شمارش <code>Expr</code> (یعنی <code>Expr::Lit</code>) اشاره دارد، نه شمارش <code>Lit</code>.</p>
+</blockquote>
+<h2 id="the-ismatch-trait"><a class="header" href="#the-ismatch-trait">صفت IsMatch</a></h2>
+<p>نحو الگو و <em>PatternTree</em> از پیاده‌سازی‌های مشخص درخت نحو (AST / HIR زبان Rust، syn و …) مستقل هستند. با نگاه به مثال‌های مختلف الگو در بخش‌های پیشین می‌توان دید که الگوها هیچ اطلاعاتی مختص یک پیاده‌سازی مشخص از درخت نحو در بر ندارند. در مقابل، lintهای Clippy در حال حاضر با گره‌های درخت نحو AST / HIR تطبیق می‌دهند و بنابراین مستقیماً به پیاده‌سازی آن‌ها وابسته‌اند.</p>
+<p>پیوند میان <em>PatternTree</em> و پیاده‌سازی‌های مشخص درخت نحو، صفت <code>IsMatch</code> است. این صفت تعریف می‌کند چگونه گره‌های <em>PatternTree</em> را با گره‌های مشخص درخت نحو تطبیق دهیم. پیاده‌سازی ساده‌شده‌ای از صفت <code>IsMatch</code> در زیر نشان داده شده است:</p>
+<pre><code class="language-rust ignore">pub trait IsMatch&lt;O&gt; {
+    fn is_match(&amp;self, other: &amp;'o O) -&gt; bool;
+}</code></pre>
+<p>این صفت باید روی هر شمارش از <em>PatternTree</em> پیاده‌سازی شود (برای نوع‌های متناظر درخت نحو). برای مثال، پیاده‌سازی <code>IsMatch</code> برای تطبیق <code>ast::LitKind</code> با شمارش <code>Lit</code> در <em>PatternTree</em> ممکن است به این شکل باشد:</p>
+<pre><code class="language-rust">impl IsMatch&lt;ast::LitKind&gt; for Lit {
+    fn is_match(&amp;self, other: &amp;ast::LitKind) -&gt; bool {
+        match (self, other) {
+            (Lit::Char(i), ast::LitKind::Char(j)) =&gt; i.is_match(j),
+            (Lit::Bool(i), ast::LitKind::Bool(j)) =&gt; i.is_match(j),
+            (Lit::Int(i), ast::LitKind::Int(j, _)) =&gt; i.is_match(j),
+            _ =&gt; false,
+        }
+    }
+}</code></pre>
+<p>همهٔ پیاده‌سازی‌های <code>IsMatch</code> برای تطبیق <em>PatternTree</em> فعلی با <code>syntax::ast</code> را می‌توان <a href="https://github.com/fkohlgrueber/pattern-matching/blob/dfb3bc9fbab69cec7c91e72564a63ebaa2ede638/pattern-match/src/ast_match.rs">اینجا</a> یافت.</p>
+<h1 id="drawbacks"><a class="header" href="#drawbacks">معایب</a></h1>
+<h4 id="performance"><a class="header" href="#performance">کارایی</a></h4>
+<p>کد تطبیق الگو در حال حاضر برای کارایی بهینه نشده است، بنابراین ممکن است از کد تطبیق دست‌نویس کندتر باشد. افزون بر این، رویکرد دو مرحله‌ای (ابتدا تطبیق با الگوی درشت و سپس بررسی ویژگی‌های اضافی) ممکن است از روش فعلی، یعنی بررسی ساختار و ویژگی‌های اضافی در یک گذر، کندتر باشد. برای مثال، lint زیر</p>
+<pre><code class="language-rust ignore">pattern!{
+    pat_if_without_else: Expr =
+        If(
+            _,
+            Block(
+                Expr( If(_, _, ())#inner )
+                | Semi( If(_, _, ())#inner )
+            )#then,
+            ()
+        )
+}
+...
+fn check_expr(&amp;mut self, cx: &amp;EarlyContext&lt;'_&gt;, expr: &amp;ast::Expr) {
+    if let Some(result) = pat_if_without_else(expr) {
+        if !block_starts_with_comment(cx, result.then) {
+            ...
+        }
+}</code></pre>
+<p>ابتدا با الگو تطبیق می‌دهد و سپس بررسی می‌کند که بلوک <code>then</code> با یک comment شروع نشده باشد. با رویکرد فعلی clippy می‌توان این شرط‌ها را زودتر بررسی کرد:</p>
+<pre><code class="language-rust ignore">fn check_expr(&amp;mut self, cx: &amp;EarlyContext&lt;'_&gt;, expr: &amp;ast::Expr) {
+    if_chain! {
+        if let ast::ExprKind::If(ref check, ref then, None) = expr.node;
+        if !block_starts_with_comment(cx, then);
+        if let Some(inner) = expr_block(then);
+        if let ast::ExprKind::If(ref check_inner, ref content, None) = inner.node;
+        then {
+            ...
+        }
+    }
+}</code></pre>
+<p>اینکه این موضوع به افت کارایی منجر شود یا نه به الگوهای واقعی بستگی دارد. اگر معلوم شد مشکل‌ساز است، الگوریتم‌های تطبیق الگو را می‌توان گسترش داد تا «فیلتر کردن زودهنگام» ممکن شود (بخش <a href="#early-filtering">فیلتر کردن زودهنگام</a> در امکانات آینده را ببینید).</p>
+<p>با این حال، هیچ محدودیت مفهومی‌ای دربارهٔ کارایی تطبیق الگو نمی‌بینم.</p>
+<h4 id="applicability"><a class="header" href="#applicability">کاربردپذیری</a></h4>
+<p>حتی اگر انتظار داشته باشم بسیاری از lintها را بتوان با نحو الگوی پیشنهادی نوشت، بعید است همهٔ lintها را بتوان با الگوها بیان کرد. گمان می‌کنم همچنان lintهایی خواهند بود که باید با نوشتن کد تطبیق الگوی سفارشی پیاده‌سازی شوند. این به ترکیبی در کدبیس clippy می‌انجامد که در آن برخی lintها با الگوها پیاده‌سازی شده‌اند و برخی نه. این ناهمگونی ممکن است یک عیب به حساب بیاید.</p>
+<h1 id="rationale-and-alternatives"><a class="header" href="#rationale-and-alternatives">منطق و جایگزین‌ها</a></h1>
+<p>مشخص کردن lintها با الگوهای درخت نحو در مقایسه با رویکرد فعلی نوشتن دستی کد تطبیق، چند مزیت دارد. نخست، الگوهای درخت نحو به کاربران اجازه می‌دهند الگوها را به شیوه‌ای ساده و گویا توصیف کنند. این نوشتن lintهای جدید را هم برای تازه‌کارها و هم برای متخصصان آسان‌تر می‌کند و همچنین خواندن / تغییر lintهای موجود را ساده‌تر می‌کند.</p>
+<p>مزیت دیگر این است که lintها از پیاده‌سازی‌های مشخص درخت نحو (مثلاً AST / HIR و …) مستقل می‌شوند. وقتی این پیاده‌سازی‌های درخت نحو تغییر می‌کنند، فقط پیاده‌سازی‌های صفت <code>IsMatch</code> باید اصلاح شوند و lintهای موجود می‌توانند بدون تغییر بمانند. این همچنین یعنی اگر پیاده‌سازی‌های صفت <code>IsMatch</code> در کامپایلر ادغام شوند، به‌روزرسانی پیاده‌سازی‌های <code>IsMatch</code> برای کامپایل موفق کامپایلر الزامی خواهد بود. این می‌تواند تعداد دفعاتی را که Clippy به‌خاطر تغییرات کامپایلر خراب می‌شود کاهش دهد. مزیت دیگر استقلال الگو این است که تبدیل یک lint از نوع <code>EarlyLintPass</code> به <code>LatePassLint</code> به بازنویسی کل کد تطبیق الگو نیاز ندارد. در واقع، ممکن است الگو بدون هیچ تغییری کاملاً خوب کار کند.</p>
+<h2 id="alternatives"><a class="header" href="#alternatives">جایگزین‌ها</a></h2>
+<h3 id="rust-like-pattern-syntax"><a class="header" href="#rust-like-pattern-syntax">نحو الگوی شبیه Rust</a></h3>
+<p>نحو الگوی پیشنهادی از کاربران می‌خواهد ساختار <code>PatternTree</code> (که بسیار شبیه ساختار AST / HIR است) و همچنین نحو الگو را بدانند. یک جایگزین، معرفی نحو الگویی است که شبیه نحو واقعی Rust باشد (احتمالاً مانند ماکروی <code>quote!</code>). برای مثال، الگویی که عبارت‌های <code>if</code> با <code>false</code> در شرط را تطبیق می‌دهد می‌تواند این شکلی باشد:</p>
+<pre><code class="language-rust ignore">if false {
+    #[*]
+}</code></pre>
+<h4 id="problems"><a class="header" href="#problems">مشکلات</a></h4>
+<p>گسترش نحو Rust (که خودش کاملاً پیچیده است) با نحو اضافی لازم برای مشخص کردن الگوها (انتخاب‌ها، دنباله‌ها، تکرارها، زیرتطبیق‌های نام‌دار و …) ممکن است خواندن را دشوار و تجزیهٔ درست را واقعاً سخت کند.</p>
+<p>برای مثال، الگویی که یک عملیات دودویی با <code>0</code> در دو طرف را تطبیق می‌دهد ممکن است این شکلی باشد:</p>
+<pre><code>0 #[*:BinOpKind] 0
+</code></pre>
+<p>حالا این مثال کمی پیچیده‌تر را در نظر بگیرید:</p>
+<pre><code>1 + 0 #[*:BinOpKind] 0
+</code></pre>
+<p>تجزیه‌گر باید تقدم <code>#[*:BinOpKind]</code> را بداند، چون بر ساختار AST حاصل اثر می‌گذارد. <code>1 + 0 + 0</code> به‌صورت <code>(1 + 0) + 0</code> تجزیه می‌شود، در حالی که <code>1 + 0 * 0</code> به‌صورت <code>1 + (0 * 0)</code> تجزیه می‌شود. چون الگو می‌تواند هر <code>BinOpKind</code> باشد، تقدم را نمی‌توان از پیش دانست.</p>
+<p>مثال دیگری از مشکل، زیرتطبیق‌های نام‌دار است. به این الگو نگاه کنید:</p>
+<pre><code class="language-rust ignore">fn test() {
+    1 #foo
+}</code></pre>
+<p><code>#foo</code> به کدام گره اشاره دارد؟ <code>int</code>، <code>ast::Lit</code>، <code>ast::Expr</code> یا <code>ast::Stmt</code>؟ نام‌گذاری زیرالگوها در نحوی شبیه Rust دشوار است، چون بسیاری از گره‌های AST عنصر نحوی‌ای ندارند که بتوان برچسب نام را روی آن گذاشت. در این موارد، تنها گزینهٔ معقول این است که برچسب نام به بیرونی‌ترین گره (در مثال بالا <code>ast::Stmt</code>) اختصاص یابد، چون اطلاعات همهٔ گره‌های فرزند را می‌توان از طریق بیرونی‌ترین گره به دست آورد. مشکل این کار آن خواهد بود که دسترسی به گره‌های درونی (مانند <code>ast::Lit</code>) دوباره به تطبیق الگوی دستی نیاز خواهد داشت.</p>
+<p>به‌طور کلی، نحو Rust ساختار کد را به‌صورت ضمنی در بر دارد. این ساختار هنگام تجزیه بازسازی می‌شود (مثلاً عملیات دودویی با تقدم عملگرها و چپ‌به‌راست بازسازی می‌شوند) و یکی از دلایل پیچیده بودن تجزیه است. مزیت این رویکرد آن است که نوشتن کد برای کاربران ساده‌تر می‌شود.</p>
+<p>هنگام نوشتن <em>الگوهای درخت نحو</em>، هر عنصر از سلسله‌مراتب ممکن است جایگزین‌ها، تکرارها و غیره داشته باشد. رعایت این موضوع و در عین حال حفظ نحوی انسان‌پسند که ساختار را به‌صورت ضمنی در بر دارد، واقعاً پیچیده، اگر نگوییم غیرممکن، به نظر می‌رسد.</p>
+<p>توسعهٔ چنین نحوی همچنین نیازمند نگهداری یک تجزیه‌گر سفارشی است که دست‌کم به پیچیدگی خود تجزیه‌گر Rust باشد. افزون بر این، تغییرات آیندهٔ نحو Rust ممکن است با چنین نحوی ناسازگار باشند.</p>
+<p>در مجموع، فکر می‌کنم توسعهٔ چنین نحوی پیچیدگی زیادی برای حل یک مشکل نسبتاً کوچک وارد می‌کند.</p>
+<p>مسئلهٔ ناآشنا بودن کاربران با ساختار <em>PatternTree</em> را می‌توان با ابزاری حل کرد که با گرفتن یک برنامهٔ Rust، الگویی تولید کند که فقط با همان برنامه تطبیق پیدا کند (شبیه lint ‏author در Clippy).</p>
+<p>برای برخی موارد ساده (مانند نخستین مثال بالا)، شاید بتوان با موفقیت نحو Rust و نحو الگو را ترکیب کرد. این حوزه را می‌توان در یک توسعهٔ آینده بیشتر کاوید.</p>
+<h1 id="prior-art"><a class="header" href="#prior-art">پیشینه</a></h1>
+<p>نحو الگو به‌شدت از عبارت‌های منظم (تکرارها، جایگزین‌ها، دنباله‌ها و …) الهام گرفته است.</p>
+<p>تا آنجا که تاکنون دیده‌ام، دیگر linterها هم lintهایی پیاده‌سازی می‌کنند که مستقیماً روی ساختارهای دادهٔ درخت نحو کار می‌کنند، درست مثل Clippy در حال حاضر. بنابراین نحو الگو را <em>جدید</em> می‌دانم، اما لطفاً اگر اشتباه می‌کنم اصلاحم کنید.</p>
+<h1 id="unresolved-questions"><a class="header" href="#unresolved-questions">پرسش‌های حل‌نشده</a></h1>
+<h4 id="how-to-handle-multiple-matches"><a class="header" href="#how-to-handle-multiple-matches">چگونه چند تطبیق را مدیریت کنیم؟</a></h4>
+<p>هنگام تطبیق یک گرهٔ درخت نحو با یک الگو، ممکن است چند روش برای تطبیق الگو وجود داشته باشد. یک مثال ساده از این وضعیت، الگوی زیر است:</p>
+<pre><code class="language-rust">pattern!{
+    my_pattern: Expr =
+        Array( _* Lit(_)+#literals)
+}</code></pre>
+<p>این الگو با آرایه‌هایی تطبیق پیدا می‌کند که دست‌کم با یک لیترال پایان می‌یابند. حالا با آرایهٔ <code>[x, 1, 2]</code>، آیا <code>1</code> باید جزو بخش <code>_*</code> تطبیق داده شود یا جزو بخش <code>Lit(_)+</code> الگو؟ این تفاوت مهم است، چون زیرتطبیق نام‌دار <code>#literals</code> بسته به نحوهٔ تطبیق الگو ۱ یا ۲ عنصر خواهد داشت. در عبارت‌های منظم، این مشکل با تطبیق «حریصانه» (greedy) به‌صورت پیش‌فرض و تطبیق «غیرحریصانه» (non-greedy) به‌صورت اختیاری حل می‌شود.</p>
+<p>هنوز زیاد به این موضوع نپرداخته‌ام، چون نمی‌دانم برای بیشتر lintها چقدر اهمیت دارد. پیاده‌سازی فعلی فقط نخستین تطبیقی را که پیدا کند برمی‌گرداند.</p>
+<h1 id="future-possibilities"><a class="header" href="#future-possibilities">امکانات آینده</a></h1>
+<h4 id="implement-rest-of-rust-syntax"><a class="header" href="#implement-rest-of-rust-syntax">پیاده‌سازی بقیهٔ نحو Rust</a></h4>
+<p>پروژهٔ فعلی فقط بخش کوچکی از نحو Rust را پیاده‌سازی می‌کند. در آینده باید این به‌تدریج به نحو بیشتری گسترش یابد تا پیاده‌سازی lintهای بیشتر ممکن شود. پیاده‌سازی بخش بیشتری از نحو Rust نیازمند گسترش پیاده‌سازی‌های <code>PatternTree</code> و <code>IsMatch</code> است، اما باید نسبتاً سرراست باشد.</p>
+<h4 id="early-filtering"><a class="header" href="#early-filtering">فیلتر کردن زودهنگام</a></h4>
+<p>همان‌طور که در بخش <em>معایب/کارایی</em> توضیح داده شد، امکان انجام بررسی‌های اضافی در حین تطبیق الگو ممکن است سودمند باشد.</p>
+<p>الگوی زیر نشان می‌دهد این کار چه شکلی می‌تواند داشته باشد:</p>
+<pre><code class="language-rust">pattern!{
+    pat_if_without_else: Expr =
+        If(
+            _,
+            Block(
+                Expr( If(_, _, ())#inner )
+                | Semi( If(_, _, ())#inner )
+            )#then,
+            ()
+        )
+    where
+        !in_macro(#then.span);
+}</code></pre>
+<p>تفاوت آن با فیلتر کردن دو مرحله‌ای پیشنهادی فعلی این است که با فیلتر کردن زودهنگام، شرط (در اینجا <code>!in_macro(#then.span)</code>) به محض تطبیق <code>Block(_)#then</code> ارزیابی می‌شود.</p>
+<p>ایدهٔ دیگر در این زمینه، معرفی نحوی برای ارجاع‌های برگشتی (backreference) است. از آن‌ها می‌توان برای الزام اینکه چند بخش از یک الگو باید با مقدار یکسانی تطبیق پیدا کنند استفاده کرد. برای مثال، lint ‏<code>assign_op_pattern</code> که دنبال <code>a = a op b</code> می‌گردد و تغییر آن به <code>a op= b</code> را توصیه می‌کند، لازم دارد که هر دو رخداد <code>a</code> یکسان باشند. با استفاده از <code>=#...</code> به‌عنوان نحو ارجاع‌های برگشتی، lint را می‌توان به این شکل پیاده‌سازی کرد:</p>
+<pre><code class="language-rust ignore">pattern!{
+    assign_op_pattern: Expr =
+        Assign(_#target, Binary(_, =#target, _)
+}</code></pre>
+<h4 id="match-descendant"><a class="header" href="#match-descendant">تطبیق نوادگان</a></h4>
+<p>بسیاری از lintها در حال حاضر بازدیدکننده‌های (visitor) سفارشی پیاده‌سازی می‌کنند که بررسی می‌کنند آیا زیردرختی (که ممکن است فرزند مستقیم نباشد) از گرهٔ جاری ویژگی‌هایی دارد یا نه. این را با نحو الگوی پیشنهادی نمی‌توان بیان کرد. گسترش نحو الگو برای امکان‌دادن به الگوهایی مانند «تابعی که دست‌کم دو دستور return دارد» می‌تواند افزودنی کاربردی باشد.</p>
+<h4 id="negation-operator-for-alternatives"><a class="header" href="#negation-operator-for-alternatives">عملگر نقیض برای انتخاب‌ها</a></h4>
+<p>برای الگوهایی مانند «لیترالی که لیترال بولی نیست»، در حال حاضر باید همهٔ جایگزین‌ها به‌جز حالت بولی را فهرست کرد. معرفی عملگر نقیضی که اجازه دهد <code>Lit(!Bool(_))</code> نوشته شود ایدهٔ خوبی به نظر می‌رسد. این الگو معادل <code>Lit( Char(_) | Int(_) )</code> خواهد بود (با توجه به اینکه در حال حاضر فقط سه نوع لیترال پیاده‌سازی شده است).</p>
+<h4 id="functional-composition"><a class="header" href="#functional-composition">ترکیب تابعی</a></h4>
+<p>الگوها در حال حاضر هیچ مفهومی از ترکیب (composition) ندارند. این به تکرار در درون الگوها منجر می‌شود. برای مثال، یکی از الگوهای collapsible-if در حال حاضر باید به این شکل نوشته شود:</p>
+<pre><code class="language-rust">pattern!{
+    pat_if_else: Expr =
+        If(
+            _,
+            _,
+            Block_(
+                Block(
+                    Expr((If(_, _, _?) | IfLet(_, _?))#else_) |
+                    Semi((If(_, _, _?) | IfLet(_, _?))#else_)
+                )#block_inner
+            )#block
+        ) |
+        IfLet(
+            _,
+            Block_(
+                Block(
+                    Expr((If(_, _, _?) | IfLet(_, _?))#else_) |
+                    Semi((If(_, _, _?) | IfLet(_, _?))#else_)
+                )#block_inner
+            )#block
+        )
+}</code></pre>
+<p>اگر الگوها از تعریف توابعی از زیرالگوها پشتیبانی می‌کردند، کد را می‌شد به این شکل ساده کرد:</p>
+<pre><code class="language-rust">pattern!{
+    fn expr_or_semi(expr: Expr) -&gt; Stmt {
+        Expr(expr) | Semi(expr)
+    }
+    fn if_or_if_let(then: Block, else: Opt&lt;Expr&gt;) -&gt; Expr {
+        If(_, then, else) | IfLet(then, else)
+    }
+    pat_if_else: Expr =
+        if_or_if_let(
+            _,
+            Block_(
+                Block(
+                    expr_or_semi( if_or_if_let(_, _?)#else_ )
+                )#block_inner
+            )#block
+        )
+}</code></pre>
+<p>افزون بر این، الگوهای رایجی مانند <code>expr_or_semi</code> را می‌توان میان lintهای مختلف به اشتراک گذاشت.</p>
+<h4 id="clippy-pattern-author"><a class="header" href="#clippy-pattern-author">نویسندهٔ الگوی Clippy</a></h4>
+<p>بهبود دیگر می‌تواند ساخت ابزاری باشد که با گرفتن نحو معتبر Rust، الگویی تولید کند که دقیقاً با همین نحو تطبیق پیدا کند. این کار شروع نوشتن یک الگو را آسان‌تر می‌کند. کاربر می‌تواند به الگوهای تولیدشده برای چند نمونه‌کد Rust نگاه کند و از آن اطلاعات برای نوشتن الگویی استفاده کند که با همهٔ آن‌ها تطبیق پیدا کند.</p>
+<p>این شبیه lint ‏author در clippy است.</p>
+<h4 id="supporting-other-syntaxes"><a class="header" href="#supporting-other-syntaxes">پشتیبانی از نحوهای دیگر</a></h4>
+<p>بیشتر سامانهٔ پیشنهادی مستقل از زبان است. برای مثال، نحو الگو را می‌توان برای توصیف الگوها در زبان‌های برنامه‌نویسی دیگر هم به کار برد.</p>
+<p>برای پشتیبانی از نحو زبان‌های دیگر، باید <code>PatternTree</code> دیگری پیاده‌سازی کرد که AST آن زبان‌ها را به‌قدر کافی توصیف کند، و <code>IsMatch</code> را برای این <code>PatternTree</code> و AST آن زبان‌ها پیاده‌سازی کرد.</p>
+<p>یکی از جنبه‌های این کار آن است که حتی می‌توان lintهایی نوشت که روی خود نحو الگو کار کنند. برای مثال، هنگام نوشتن الگوی زیر</p>
+<pre><code class="language-rust">pattern!{
+    my_pattern: Expr =
+        Array( Lit(Bool(false)) Lit(Bool(false)) )
+}</code></pre>
+<p>یک lint که روی AST نحو الگو کار می‌کند می‌تواند پیشنهاد کند به‌جای آن از این الگو استفاده شود:</p>
+<pre><code class="language-rust">pattern!{
+    my_pattern: Expr =
+        Array( Lit(Bool(false)){2} )
+}</code></pre>
+<p>در آینده، Clippy می‌تواند از این سامانه برای فراهم کردن lint برای نحوهای سفارشی، مانند آنچه در ماکروها یافت می‌شود، نیز استفاده کند.</p><nav class="page-nav"><a href="roadmap-2021.html">→ نقشهٔ راه ۲۰۲۱</a><a href="../the_team.html">تیم ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../clippy/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

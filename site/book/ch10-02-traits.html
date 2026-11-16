@@ -1,0 +1,396 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>تعریف رفتار مشترک با صفت‌ها — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch10-02-traits"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><!-- Old headings. Do not remove or links may break. -->
+<p><a id="traits-defining-shared-behavior"></a></p>
+<h2 id="defining-shared-behavior-with-traits"><a class="header" href="#defining-shared-behavior-with-traits">ویژگی‌ها (Traits): تعریف رفتار مشترک</a></h2>
+<p>یک <em>ویژگی</em> (trait) عملکردی را که یک نوع خاص دارد تعریف می‌کند و می‌تواند با انواع دیگر به اشتراک بگذارد. ما می‌توانیم از traitها برای تعریف رفتار مشترک به صورت انتزاعی استفاده کنیم. همچنین می‌توانیم از <em>محدودیت‌های ویژگی</em> (trait bounds) برای مشخص کردن اینکه یک نوع جنریک می‌تواند هر نوعی باشد که رفتار خاصی دارد، استفاده کنیم.</p>
+<blockquote>
+<p>توجه: ویژگی‌ها شبیه به مفهومی هستند که اغلب در زبان‌های دیگر به نام <em>interfaces</em> شناخته می‌شود، البته با برخی تفاوت‌ها.</p>
+</blockquote>
+<h3 id="defining-a-trait"><a class="header" href="#defining-a-trait">تعریف یک trait</a></h3>
+<p>رفتار یک نوع شامل متدهایی است که می‌توانیم روی آن نوع فراخوانی کنیم. انواع مختلف یک رفتار مشترک دارند اگر بتوانیم همان متدها را روی تمام آن انواع فراخوانی کنیم. تعریف ویژگی‌ها راهی برای گروه‌بندی امضاهای متدها با هم است تا مجموعه‌ای از رفتارها را که برای دستیابی به یک هدف خاص ضروری است، تعریف کنیم.</p>
+<p>برای مثال، فرض کنید چندین <code>struct</code> داریم که انواع مختلفی از متن با اندازه‌های متفاوت را نگهداری می‌کنند: یک ساختار <code>NewsArticle</code> که یک خبر را در مکان خاصی نگهداری می‌کند، و یک <code>SocialPost</code> که حداکثر می‌تواند ۲۸۰ کاراکتر داشته باشد به‌همراه متاداده‌ای که مشخص می‌کند آیا پست جدید، بازنشر (repost)، یا پاسخ به پست دیگری بوده است.</p>
+<p>ما می‌خواهیم یک crate کتابخانه‌ای برای جمع‌آوری رسانه‌ها به نام <code>aggregator</code> بسازیم که بتواند خلاصه‌هایی از داده‌هایی که ممکن است در نمونه‌هایی از <code>NewsArticle</code> یا <code>SocialPost</code> ذخیره شده باشند را نمایش دهد. برای انجام این کار، به یک خلاصه از هر نوع نیاز داریم، و این خلاصه را با فراخوانی متد <code>summarize</code> روی یک نمونه درخواست خواهیم کرد. لیستینگ 10-12 تعریف یک trait عمومی به نام <code>Summary</code> را نشان می‌دهد که این رفتار را بیان می‌کند.</p>
+<figure class="listing" id="listing-10-12">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">pub trait Summary {
+    fn summarize(&amp;self) -&gt; String;
+}</code></pre>
+<figcaption><a href="#listing-10-12">لیست ۱۰-۱۲</a>: ویژگی &lt;code&gt;&lt;/x-listing&gt;Summary&lt;/code&gt; که شامل رفتار ارائه‌شده توسط یک متد &lt;code&gt;summarize&lt;/code&gt; است</figcaption>
+</figure>
+<p>در اینجا، یک ویژگی با استفاده از کلیدواژه <code>trait</code> و سپس نام ویژگی، که در اینجا <code>Summary</code> است، اعلام می‌کنیم. همچنین ویژگی را به عنوان <code>pub</code> اعلام می‌کنیم تا کرایت‌هایی که به این کرایت وابسته هستند نیز بتوانند از این ویژگی استفاده کنند، همانطور که در چند مثال خواهیم دید. در داخل آکولادها، امضاهای متدی را اعلام می‌کنیم که رفتارهای نوع‌هایی که این ویژگی را پیاده‌سازی می‌کنند توصیف می‌کنند، که در این مورد <code>fn summarize(&amp;self) -&gt; String</code> است.</p>
+<p>بعد از امضای متد، به جای ارائه یک پیاده‌سازی در داخل آکولادها، از یک نقطه‌ویرگول استفاده می‌کنیم. هر نوعی که این ویژگی را پیاده‌سازی می‌کند باید رفتار سفارشی خود را برای بدنه متد ارائه دهد. کامپایلر اطمینان خواهد داد که هر نوعی که ویژگی <code>Summary</code> را دارد، متد <code>summarize</code> را دقیقاً با این امضا تعریف خواهد کرد.</p>
+<p>یک ویژگی می‌تواند چندین متد در بدنه خود داشته باشد: امضاهای متدها به صورت یک خط در هر خط فهرست می‌شوند و هر خط با یک نقطه‌ویرگول پایان می‌یابد.</p>
+<h3 id="implementing-a-trait-on-a-type"><a class="header" href="#implementing-a-trait-on-a-type">پیاده‌سازی یک ویژگی (trait) روی یک نوع</a></h3>
+<p>حالا که امضاهای مورد نظر برای متدهای trait به نام <code>Summary</code> را تعریف کرده‌ایم، می‌توانیم آن را روی نوع‌های موجود در گردآورنده‌ی رسانه‌ای‌مان پیاده‌سازی کنیم. لیستینگ 10-13 پیاده‌سازی trait <code>Summary</code> را روی <code>struct</code>ای به نام <code>NewsArticle</code> نشان می‌دهد، که از عنوان (headline)، نویسنده (author)، و مکان (location) برای ایجاد مقدار بازگشتی متد <code>summarize</code> استفاده می‌کند. برای ساختار <code>SocialPost</code>، متد <code>summarize</code> را به‌گونه‌ای تعریف می‌کنیم که ابتدا نام کاربری بیاید و سپس تمام متن پست نمایش داده شود، با این فرض که محتوای پست از پیش به ۲۸۰ کاراکتر محدود شده است.</p>
+<figure class="listing" id="listing-10-13">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">pub trait Summary {
+</span><span class="boring">    fn summarize(&amp;self) -&gt; String;
+</span><span class="boring">}
+</span><span class="boring">
+</span>pub struct NewsArticle {
+    pub headline: String,
+    pub location: String,
+    pub author: String,
+    pub content: String,
+}
+
+impl Summary for NewsArticle {
+    fn summarize(&amp;self) -&gt; String {
+        format!("{}, by {} ({})", self.headline, self.author, self.location)
+    }
+}
+
+pub struct SocialPost {
+    pub username: String,
+    pub content: String,
+    pub reply: bool,
+    pub repost: bool,
+}
+
+impl Summary for SocialPost {
+    fn summarize(&amp;self) -&gt; String {
+        format!("{}: {}", self.username, self.content)
+    }
+}</code></pre>
+<figcaption><a href="#listing-10-13">لیست ۱۰-۱۳</a>: پیاده‌سازی trait به نام &lt;code&gt;&lt;/x-listing&gt;Summary&lt;/code&gt; روی نوع‌های &lt;code&gt;NewsArticle&lt;/code&gt; و &lt;code&gt;SocialPost&lt;/code&gt;</figcaption>
+</figure>
+<p>پیاده‌سازی یک ویژگی روی یک نوع مشابه پیاده‌سازی متدهای معمولی است. تفاوت این است که بعد از <code>impl</code>، نام ویژگی‌ای که می‌خواهیم پیاده‌سازی کنیم را قرار می‌دهیم، سپس از کلمه کلیدی <code>for</code> استفاده می‌کنیم و سپس نام نوعی که می‌خواهیم ویژگی را برای آن پیاده‌سازی کنیم مشخص می‌کنیم. درون بلوک <code>impl</code>، امضاهای متدی که تعریف ویژگی مشخص کرده‌اند را قرار می‌دهیم. به جای اضافه کردن یک نقطه‌ویرگول بعد از هر امضا، از آکولادها استفاده می‌کنیم و بدنه متد را با رفتار خاصی که می‌خواهیم متدهای ویژگی برای نوع خاص داشته باشند پر می‌کنیم.</p>
+<p>حالا که کتابخانه ویژگی <code>Summary</code> را روی <code>NewsArticle</code> و <code>SocialPost</code> پیاده‌سازی کرده است، کاربران این crate می‌توانند متدهای Trait را روی نمونه‌های <code>NewsArticle</code> و <code>SocialPost</code> مانند متدهای معمولی فراخوانی کنند. تنها تفاوت این است که کاربر باید Trait را همراه نوع‌ها وارد محدوده کند. نمونهٔ زیر نشان می‌دهد یک crate باینری چگونه از crate کتابخانه‌ای <code>aggregator</code> استفاده می‌کند:</p>
+<pre><code class="language-rust ignore">use aggregator::{SocialPost, Summary};
+
+fn main() {
+    let post = SocialPost {
+        username: String::from("horse_ebooks"),
+        content: String::from(
+            "of course, as you probably already know, people",
+        ),
+        reply: false,
+        repost: false,
+    };
+
+    println!("1 new post: {}", post.summarize());
+}</code></pre>
+<p>این کد <code>1 new post: horse_ebooks: of course, as you probably already know, people</code> را چاپ می‌کند.</p>
+<p>سایر crateهایی که به crate <code>aggregator</code> وابسته‌اند نیز می‌توانند trait به نام <code>Summary</code> را وارد دامنه کنند تا <code>Summary</code> را روی نوع‌های خودشان پیاده‌سازی کنند. یک محدودیت که باید به آن توجه کرد این است که یک trait را فقط وقتی می‌توانیم روی یک نوع پیاده‌سازی کنیم که trait یا نوع، یا هر دو، محلی (local) crate ما باشند. برای مثال، می‌توانیم traitهای کتابخانهٔ استاندارد مانند <code>Display</code> را روی یک نوع سفارشی مانند <code>SocialPost</code> به‌عنوان بخشی از قابلیت‌های crate <code>aggregator</code> پیاده‌سازی کنیم، چون نوع <code>SocialPost</code> محلی crate <code>aggregator</code> ماست. همچنین می‌توانیم <code>Summary</code> را روی <code>Vec&lt;T&gt;</code> در crate <code>aggregator</code> پیاده‌سازی کنیم، چون trait به نام <code>Summary</code> محلی crate <code>aggregator</code> ماست.</p>
+<p>اما نمی‌توانیم ویژگی‌های خارجی را روی نوع‌های خارجی پیاده‌سازی کنیم. برای مثال، نمی‌توانیم ویژگی <code>Display</code> را روی <code>Vec&lt;T&gt;</code> در کرایت <code>aggregator</code> پیاده‌سازی کنیم زیرا <code>Display</code> و <code>Vec&lt;T&gt;</code> هر دو در کتابخانه استاندارد تعریف شده‌اند و به کرایت <code>aggregator</code> محلی نیستند. این محدودیت بخشی از خاصیتی به نام <em>انسجام</em> (coherence) و به طور خاص‌تر <em>قانون یتیم</em> (orphan rule) است، که به این دلیل نامگذاری شده است که نوع والد وجود ندارد. این قانون اطمینان می‌دهد که کد دیگران نمی‌تواند کد شما را خراب کند و برعکس. بدون این قانون، دو کرایت می‌توانستند همان ویژگی را برای همان نوع پیاده‌سازی کنند و Rust نمی‌دانست کدام پیاده‌سازی را استفاده کند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="default-implementations"></a></p>
+<h3 id="using-default-implementations"><a class="header" href="#using-default-implementations">پیاده‌سازی‌های پیش‌فرض</a></h3>
+<p>گاهی اوقات مفید است که رفتار پیش‌فرضی برای برخی یا همه متدهای یک ویژگی داشته باشید به جای اینکه پیاده‌سازی‌ها برای تمام متدها در هر نوع اجباری باشند. سپس، وقتی ویژگی را روی یک نوع خاص پیاده‌سازی می‌کنیم، می‌توانیم رفتار پیش‌فرض هر متد را نگه داریم یا جایگزین کنیم.</p>
+<p>در لیست ۱۰-۱۴، یک رشته پیش‌فرض برای متد <code>summarize</code> ویژگی <code>Summary</code> مشخص می‌کنیم به جای اینکه فقط امضای متد را تعریف کنیم، همانطور که در لیست ۱۰-۱۲ انجام دادیم.</p>
+<figure class="listing" id="listing-10-14">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">pub trait Summary {
+    fn summarize(&amp;self) -&gt; String {
+        String::from("(Read more...)")
+    }
+}
+<span class="boring">
+</span><span class="boring">pub struct NewsArticle {
+</span><span class="boring">    pub headline: String,
+</span><span class="boring">    pub location: String,
+</span><span class="boring">    pub author: String,
+</span><span class="boring">    pub content: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Summary for NewsArticle {}
+</span><span class="boring">
+</span><span class="boring">pub struct SocialPost {
+</span><span class="boring">    pub username: String,
+</span><span class="boring">    pub content: String,
+</span><span class="boring">    pub reply: bool,
+</span><span class="boring">    pub repost: bool,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Summary for SocialPost {
+</span><span class="boring">    fn summarize(&amp;self) -&gt; String {
+</span><span class="boring">        format!("{}: {}", self.username, self.content)
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-10-14">لیست ۱۰-۱۴</a>: تعریف ویژگی &lt;code&gt;&lt;/x-listing&gt;Summary&lt;/code&gt; با یک پیاده‌سازی پیش‌فرض برای متد &lt;code&gt;summarize&lt;/code&gt;</figcaption>
+</figure>
+<p>برای استفاده از یک پیاده‌سازی پیش‌فرض برای خلاصه کردن نمونه‌های <code>NewsArticle</code>، یک بلوک <code>impl</code> خالی با <code>impl Summary for NewsArticle {}</code> مشخص می‌کنیم.</p>
+<p>اگرچه دیگر متد <code>summarize</code> را مستقیماً روی <code>NewsArticle</code> تعریف نمی‌کنیم، یک پیاده‌سازی پیش‌فرض ارائه داده‌ایم و مشخص کرده‌ایم که <code>NewsArticle</code> ویژگی <code>Summary</code> را پیاده‌سازی می‌کند. در نتیجه، همچنان می‌توانیم متد <code>summarize</code> را روی یک نمونه از <code>NewsArticle</code> فراخوانی کنیم، مانند این:</p>
+<pre><code class="language-rust ignore"><span class="boring">use aggregator::{self, NewsArticle, Summary};
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span>    let article = NewsArticle {
+        headline: String::from("Penguins win the Stanley Cup Championship!"),
+        location: String::from("Pittsburgh, PA, USA"),
+        author: String::from("Iceburgh"),
+        content: String::from(
+            "The Pittsburgh Penguins once again are the best \
+             hockey team in the NHL.",
+        ),
+    };
+
+    println!("New article available! {}", article.summarize());
+<span class="boring">}</span></code></pre>
+<p>این کد <code>New article available! (Read more...)</code> را چاپ می‌کند.</p>
+<p>ایجاد یک پیاده‌سازی پیش‌فرض (default) نیازی به تغییر در پیاده‌سازی trait <code>Summary</code> برای <code>SocialPost</code> در لیستینگ 10-13 ندارد. دلیل آن این است که سینتکس بازنویسی (override) یک پیاده‌سازی پیش‌فرض، دقیقاً همان سینتکسی است که برای پیاده‌سازی یک متد از trait که پیاده‌سازی پیش‌فرض ندارد استفاده می‌شود.</p>
+<p>پیاده‌سازی‌های پیش‌فرض می‌توانند متدهای دیگر را در همان ویژگی فراخوانی کنند، حتی اگر آن متدهای دیگر پیاده‌سازی پیش‌فرض نداشته باشند. به این روش، یک ویژگی می‌تواند مقدار زیادی عملکرد مفید ارائه دهد و فقط از پیاده‌سازان بخواهد که بخشی از آن را مشخص کنند. برای مثال، می‌توانیم ویژگی <code>Summary</code> را به گونه‌ای تعریف کنیم که یک متد <code>summarize_author</code> داشته باشد که پیاده‌سازی آن الزامی است و سپس یک متد <code>summarize</code> تعریف کنیم که یک پیاده‌سازی پیش‌فرض دارد و متد <code>summarize_author</code> را فراخوانی می‌کند:</p>
+<pre><code class="language-rust noplayground">pub trait Summary {
+    fn summarize_author(&amp;self) -&gt; String;
+
+    fn summarize(&amp;self) -&gt; String {
+        format!("(Read more from {}...)", self.summarize_author())
+    }
+}
+<span class="boring">
+</span><span class="boring">pub struct SocialPost {
+</span><span class="boring">    pub username: String,
+</span><span class="boring">    pub content: String,
+</span><span class="boring">    pub reply: bool,
+</span><span class="boring">    pub repost: bool,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Summary for SocialPost {
+</span><span class="boring">    fn summarize_author(&amp;self) -&gt; String {
+</span><span class="boring">        format!("@{}", self.username)
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<p>برای استفاده از این نسخه از <code>Summary</code>، فقط باید <code>summarize_author</code> را هنگامی که ویژگی را روی یک نوع پیاده‌سازی می‌کنیم، تعریف کنیم:</p>
+<pre><code class="language-rust ignore"><span class="boring">pub trait Summary {
+</span><span class="boring">    fn summarize_author(&amp;self) -&gt; String;
+</span><span class="boring">
+</span><span class="boring">    fn summarize(&amp;self) -&gt; String {
+</span><span class="boring">        format!("(Read more from {}...)", self.summarize_author())
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct SocialPost {
+</span><span class="boring">    pub username: String,
+</span><span class="boring">    pub content: String,
+</span><span class="boring">    pub reply: bool,
+</span><span class="boring">    pub repost: bool,
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Summary for SocialPost {
+    fn summarize_author(&amp;self) -&gt; String {
+        format!("@{}", self.username)
+    }
+}</code></pre>
+<p>پس از این‌که <code>summarize_author</code> را تعریف کردیم، می‌توانیم متد <code>summarize</code> را روی نمونه‌هایی از <code>struct</code> به نام <code>SocialPost</code> فراخوانی کنیم، و پیاده‌سازی پیش‌فرض متد <code>summarize</code>، از پیاده‌سازی‌ای که برای <code>summarize_author</code> ارائه داده‌ایم استفاده خواهد کرد. از آن‌جا که ما <code>summarize_author</code> را پیاده‌سازی کرده‌ایم، trait به نام <code>Summary</code> رفتار متد <code>summarize</code> را بدون نیاز به نوشتن کد اضافی در اختیار ما قرار داده است. در اینجا نمونه‌ای از این وضعیت آمده است:</p>
+<pre><code class="language-rust ignore"><span class="boring">use aggregator::{self, SocialPost, Summary};
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span>    let post = SocialPost {
+        username: String::from("horse_ebooks"),
+        content: String::from(
+            "of course, as you probably already know, people",
+        ),
+        reply: false,
+        repost: false,
+    };
+
+    println!("1 new post: {}", post.summarize());
+<span class="boring">}</span></code></pre>
+<p>این کد <code>1 new post: (Read more from @horse_ebooks...)</code> را چاپ می‌کند.</p>
+<p>نمی‌توان پیاده‌سازی پیش‌فرض یک متد را از داخل پیاده‌سازی بازنویسی‌شدهٔ همان متد فراخوانی کرد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="traits-as-parameters"></a></p>
+<h3 id="using-traits-as-parameters"><a class="header" href="#using-traits-as-parameters">استفاده از Traitها به‌عنوان پارامتر</a></h3>
+<p>اکنون که تعریف و پیاده‌سازی Traitها را می‌دانید، می‌توانیم با کمک آن‌ها توابعی تعریف کنیم که نوع‌های گوناگون را می‌پذیرند. از Traitِ <code>Summary</code> که در فهرست ۱۰-۱۳ برای <code>NewsArticle</code> و <code>SocialPost</code> پیاده‌سازی کردیم استفاده می‌کنیم تا تابع <code>notify</code> را بسازیم. این تابع متد <code>summarize</code> را روی پارامتر <code>item</code> فراخوانی می‌کند؛ پارامتری از نوعی که <code>Summary</code> را پیاده‌سازی کرده است. برای این کار نگارش <code>impl Trait</code> را به کار می‌بریم:</p>
+<pre><code class="language-rust ignore"><span class="boring">pub trait Summary {
+</span><span class="boring">    fn summarize(&amp;self) -&gt; String;
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct NewsArticle {
+</span><span class="boring">    pub headline: String,
+</span><span class="boring">    pub location: String,
+</span><span class="boring">    pub author: String,
+</span><span class="boring">    pub content: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Summary for NewsArticle {
+</span><span class="boring">    fn summarize(&amp;self) -&gt; String {
+</span><span class="boring">        format!("{}, by {} ({})", self.headline, self.author, self.location)
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct SocialPost {
+</span><span class="boring">    pub username: String,
+</span><span class="boring">    pub content: String,
+</span><span class="boring">    pub reply: bool,
+</span><span class="boring">    pub repost: bool,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Summary for SocialPost {
+</span><span class="boring">    fn summarize(&amp;self) -&gt; String {
+</span><span class="boring">        format!("{}: {}", self.username, self.content)
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>pub fn notify(item: &amp;impl Summary) {
+    println!("Breaking news! {}", item.summarize());
+}</code></pre>
+<p>به جای استفاده از یک نوع مشخص برای پارامتر <code>item</code>،<br> از کلیدواژه‌ی <code>impl</code> و نام trait استفاده می‌کنیم.<br> این پارامتر هر نوعی را می‌پذیرد که trait مشخص‌شده را پیاده‌سازی کرده باشد.<br> در بدنه‌ی تابع <code>notify</code>، می‌توانیم هر متدی از trait <code>Summary</code> را روی <code>item</code> فراخوانی کنیم،<br> مانند متد <code>summarize</code>.<br> می‌توانیم <code>notify</code> را فراخوانی کرده و هر نمونه‌ای از <code>NewsArticle</code> یا <code>SocialPost</code> را به آن پاس دهیم.<br> کدی که تابع را با نوعی دیگر، مانند <code>String</code> یا <code>i32</code>، فراخوانی کند کامپایل نخواهد شد،<br> زیرا این نوع‌ها trait <code>Summary</code> را پیاده‌سازی نکرده‌اند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="fixing-the-largest-function-with-trait-bounds"></a></p>
+<h4 id="trait-bound-syntax"><a class="header" href="#trait-bound-syntax">نحو Trait Bound</a></h4>
+<p>نحو <code>impl Trait</code> برای موارد ساده مناسب است اما در واقع یک شکل کوتاه‌شده از یک فرم طولانی‌تر به نام <em>محدودیت ویژگی</em> (trait bound) است؛ به این صورت:</p>
+<pre><code class="language-rust ignore">pub fn notify&lt;T: Summary&gt;(item: &amp;T) {
+    println!("Breaking news! {}", item.summarize());
+}</code></pre>
+<p>این فرم طولانی معادل مثال بخش قبلی است اما مفصل‌تر است. ما محدودیت‌های ویژگی را با اعلام پارامتر نوع جنریک بعد از یک دو‌نقطه و داخل پرانتزهای زاویه‌ای قرار می‌دهیم.</p>
+<p>نحو <code>impl Trait</code> در موارد ساده مناسب است و کد را مختصرتر می‌کند، در حالی که نحو کامل‌تر محدودیت ویژگی می‌تواند پیچیدگی بیشتری را در موارد دیگر بیان کند. برای مثال، می‌توانیم دو پارامتر داشته باشیم که ویژگی <code>Summary</code> را پیاده‌سازی می‌کنند. انجام این کار با نحو <code>impl Trait</code> به این صورت است:</p>
+<pre><code class="language-rust ignore">pub fn notify(item1: &amp;impl Summary, item2: &amp;impl Summary) {</code></pre>
+<p>استفاده از <code>impl Trait</code> مناسب است اگر بخواهیم این تابع اجازه دهد <code>item1</code> و <code>item2</code> انواع مختلفی داشته باشند (به شرطی که هر دو نوع ویژگی <code>Summary</code> را پیاده‌سازی کنند). اما اگر بخواهیم هر دو پارامتر یک نوع یکسان داشته باشند، باید از محدودیت ویژگی استفاده کنیم، مانند این:</p>
+<pre><code class="language-rust ignore">pub fn notify&lt;T: Summary&gt;(item1: &amp;T, item2: &amp;T) {</code></pre>
+<p>نوع جنریک <code>T</code> که به عنوان نوع پارامترهای <code>item1</code> و <code>item2</code> مشخص شده است، تابع را محدود می‌کند به این صورت که نوع مشخص مقدار پاس‌داده‌شده به عنوان آرگومان برای <code>item1</code> و <code>item2</code> باید یکسان باشد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="specifying-multiple-trait-bounds-with-the--syntax"></a></p>
+<h4 id="multiple-trait-bounds-with-the--syntax"><a class="header" href="#multiple-trait-bounds-with-the--syntax">مشخص کردن محدودیت‌های ویژگی چندگانه با نحو <code>+</code></a></h4>
+<p>ما همچنین می‌توانیم بیش از یک محدودیت ویژگی مشخص کنیم. فرض کنید می‌خواهیم <code>notify</code> از فرمت‌بندی نمایش (display formatting) و همچنین <code>summarize</code> روی <code>item</code> استفاده کند: در تعریف <code>notify</code> مشخص می‌کنیم که <code>item</code> باید هر دو ویژگی <code>Display</code> و <code>Summary</code> را پیاده‌سازی کند. این کار را می‌توانیم با نحو <code>+</code> انجام دهیم:</p>
+<pre><code class="language-rust ignore">pub fn notify(item: &amp;(impl Summary + Display)) {</code></pre>
+<p>نحو <code>+</code> همچنین با محدودیت ویژگی روی انواع جنریک معتبر است:</p>
+<pre><code class="language-rust ignore">pub fn notify&lt;T: Summary + Display&gt;(item: &amp;T) {</code></pre>
+<p>با مشخص کردن این دو محدودیت ویژگی، بدنه <code>notify</code> می‌تواند متد <code>summarize</code> را فراخوانی کند و از <code>{}</code> برای فرمت‌بندی <code>item</code> استفاده کند.</p>
+<h4 id="clearer-trait-bounds-with-where-clauses"><a class="header" href="#clearer-trait-bounds-with-where-clauses">محدودیت‌های ویژگی واضح‌تر با بندهای <code>where</code></a></h4>
+<p>استفاده از تعداد زیادی محدودیت ویژگی معایب خود را دارد. هر جنریک محدودیت‌های ویژگی مخصوص به خود را دارد، بنابراین توابعی با چندین پارامتر نوع جنریک می‌توانند شامل اطلاعات زیادی درباره محدودیت‌های ویژگی بین نام تابع و لیست پارامترهای آن باشند، که باعث سخت شدن خواندن امضای تابع می‌شود. به همین دلیل، Rust نحو جایگزینی برای مشخص کردن محدودیت‌های ویژگی در داخل یک بند <code>where</code> پس از امضای تابع ارائه می‌دهد. بنابراین، به جای نوشتن این:</p>
+<pre><code class="language-rust ignore">fn some_function&lt;T: Display + Clone, U: Clone + Debug&gt;(t: &amp;T, u: &amp;U) -&gt; i32 {</code></pre>
+<p>می‌توانیم از یک بند <code>where</code> به این صورت استفاده کنیم:</p>
+<pre><code class="language-rust ignore">fn some_function&lt;T, U&gt;(t: &amp;T, u: &amp;U) -&gt; i32
+where
+    T: Display + Clone,
+    U: Clone + Debug,
+{
+<span class="boring">    unimplemented!()
+</span><span class="boring">}</span></code></pre>
+<p>امضای این تابع کمتر شلوغ است: نام تابع، لیست پارامترها، و نوع بازگشتی به هم نزدیک‌تر هستند، مشابه یک تابع بدون محدودیت‌های ویژگی زیاد.</p>
+<h3 id="returning-types-that-implement-traits"><a class="header" href="#returning-types-that-implement-traits">بازگرداندن نوع‌هایی که ویژگی‌ها را پیاده‌سازی می‌کنند</a></h3>
+<p>ما همچنین می‌توانیم از نحو <code>impl Trait</code> در موقعیت بازگشتی استفاده کنیم تا مقداری از نوعی که یک ویژگی را پیاده‌سازی می‌کند بازگردانیم، همانطور که در اینجا نشان داده شده است:</p>
+<pre><code class="language-rust ignore"><span class="boring">pub trait Summary {
+</span><span class="boring">    fn summarize(&amp;self) -&gt; String;
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct NewsArticle {
+</span><span class="boring">    pub headline: String,
+</span><span class="boring">    pub location: String,
+</span><span class="boring">    pub author: String,
+</span><span class="boring">    pub content: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Summary for NewsArticle {
+</span><span class="boring">    fn summarize(&amp;self) -&gt; String {
+</span><span class="boring">        format!("{}, by {} ({})", self.headline, self.author, self.location)
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct SocialPost {
+</span><span class="boring">    pub username: String,
+</span><span class="boring">    pub content: String,
+</span><span class="boring">    pub reply: bool,
+</span><span class="boring">    pub repost: bool,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Summary for SocialPost {
+</span><span class="boring">    fn summarize(&amp;self) -&gt; String {
+</span><span class="boring">        format!("{}: {}", self.username, self.content)
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn returns_summarizable() -&gt; impl Summary {
+    SocialPost {
+        username: String::from("horse_ebooks"),
+        content: String::from(
+            "of course, as you probably already know, people",
+        ),
+        reply: false,
+        repost: false,
+    }
+}</code></pre>
+<p>با استفاده از <code>impl Summary</code> برای نوع بازگشتی، مشخص می‌کنیم که تابع <code>returns_summarizable</code> مقداری را بازمی‌گرداند که trait <code>Summary</code> را پیاده‌سازی می‌کند، بدون اینکه نوع مشخص آن را نام ببریم. در این حالت، <code>returns_summarizable</code> یک <code>SocialPost</code> را بازمی‌گرداند، اما کدی که این تابع را فراخوانی می‌کند نیازی به دانستن این موضوع ندارد.</p>
+<p>توانایی مشخص کردن یک نوع بازگشتی تنها بر اساس ویژگی‌ای که پیاده‌سازی می‌کند، به ویژه در زمینه closures و iterators مفید است، که در فصل ۱۳ به آن‌ها می‌پردازیم. closures و iterators نوع‌هایی ایجاد می‌کنند که تنها کامپایلر آن‌ها را می‌شناسد یا نوع‌هایی که بسیار طولانی هستند تا مشخص شوند. نحو <code>impl Trait</code> به شما اجازه می‌دهد که به طور مختصر مشخص کنید یک تابع نوعی که ویژگی <code>Iterator</code> را پیاده‌سازی می‌کند بازمی‌گرداند، بدون نیاز به نوشتن یک نوع بسیار طولانی.</p>
+<p>با این حال، تنها زمانی می‌توانید از <code>impl Trait</code> استفاده کنید که قرار است فقط یک نوع خاص را بازگردانید. برای مثال، کدی که بسته به شرایط، یا یک <code>NewsArticle</code> یا یک <code>SocialPost</code> بازمی‌گرداند و نوع بازگشتی آن به صورت <code>impl Summary</code> مشخص شده، کار نخواهد کرد:</p>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">pub trait Summary {
+</span><span class="boring">    fn summarize(&amp;self) -&gt; String;
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct NewsArticle {
+</span><span class="boring">    pub headline: String,
+</span><span class="boring">    pub location: String,
+</span><span class="boring">    pub author: String,
+</span><span class="boring">    pub content: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Summary for NewsArticle {
+</span><span class="boring">    fn summarize(&amp;self) -&gt; String {
+</span><span class="boring">        format!("{}, by {} ({})", self.headline, self.author, self.location)
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct SocialPost {
+</span><span class="boring">    pub username: String,
+</span><span class="boring">    pub content: String,
+</span><span class="boring">    pub reply: bool,
+</span><span class="boring">    pub repost: bool,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Summary for SocialPost {
+</span><span class="boring">    fn summarize(&amp;self) -&gt; String {
+</span><span class="boring">        format!("{}: {}", self.username, self.content)
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn returns_summarizable(switch: bool) -&gt; impl Summary {
+    if switch {
+        NewsArticle {
+            headline: String::from(
+                "Penguins win the Stanley Cup Championship!",
+            ),
+            location: String::from("Pittsburgh, PA, USA"),
+            author: String::from("Iceburgh"),
+            content: String::from(
+                "The Pittsburgh Penguins once again are the best \
+                 hockey team in the NHL.",
+            ),
+        }
+    } else {
+        SocialPost {
+            username: String::from("horse_ebooks"),
+            content: String::from(
+                "of course, as you probably already know, people",
+            ),
+            reply: false,
+            repost: false,
+        }
+    }
+}</code></pre>
+<p>بازگرداندن یکی از نوع‌های <code>NewsArticle</code> یا <code>SocialPost</code> مجاز نیست، به دلیل محدودیت‌هایی که در پیاده‌سازی نحوه عملکرد نحوی <code>impl Trait</code> در کامپایلر وجود دارد. نحوه نوشتن تابعی با چنین رفتاری را در بخش <a href="ch18-02-trait-objects.html#using-trait-objects-to-abstract-over-shared-behavior">«استفاده از trait objectهایی که امکان داشتن مقادیر با نوع‌های مختلف را می‌دهند»</a><!-- ignore --> از فصل ۱۸ بررسی خواهیم کرد.</p>
+<h3 id="using-trait-bounds-to-conditionally-implement-methods"><a class="header" href="#using-trait-bounds-to-conditionally-implement-methods">استفاده از محدودیت‌های ویژگی برای پیاده‌سازی شرطی متدها</a></h3>
+<p>با استفاده از یک محدودیت ویژگی در یک بلوک <code>impl</code> که از پارامترهای نوع جنریک استفاده می‌کند، می‌توانیم متدها را به طور شرطی برای نوع‌هایی که ویژگی‌های مشخص‌شده را پیاده‌سازی می‌کنند پیاده‌سازی کنیم. برای مثال، نوع <code>Pair&lt;T&gt;</code> در لیست ۱۰-۱۵ همیشه تابع <code>new</code> را پیاده‌سازی می‌کند تا یک نمونه جدید از <code>Pair&lt;T&gt;</code> بازگرداند (به یاد داشته باشید از بخش <a href="ch05-03-method-syntax.html#method-syntax">“تعریف متدها”</a><!-- ignore --> در فصل ۵ که <code>Self</code> یک نام مستعار برای نوع بلوک <code>impl</code> است که در اینجا <code>Pair&lt;T&gt;</code> است). اما در بلوک <code>impl</code> بعدی، <code>Pair&lt;T&gt;</code> فقط متد <code>cmp_display</code> را پیاده‌سازی می‌کند اگر نوع داخلی <code>T</code> ویژگی <code>PartialOrd</code> که مقایسه را ممکن می‌کند <em>و</em> ویژگی <code>Display</code> که چاپ را ممکن می‌کند، پیاده‌سازی کند.</p>
+<figure class="listing" id="listing-10-15">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">use std::fmt::Display;
+
+struct Pair&lt;T&gt; {
+    x: T,
+    y: T,
+}
+
+impl&lt;T&gt; Pair&lt;T&gt; {
+    fn new(x: T, y: T) -&gt; Self {
+        Self { x, y }
+    }
+}
+
+impl&lt;T: Display + PartialOrd&gt; Pair&lt;T&gt; {
+    fn cmp_display(&amp;self) {
+        if self.x &gt;= self.y {
+            println!("The largest member is x = {}", self.x);
+        } else {
+            println!("The largest member is y = {}", self.y);
+        }
+    }
+}</code></pre>
+<figcaption><a href="#listing-10-15">لیست ۱۰-۱۵</a>: پیاده‌سازی شرطی متدها روی یک نوع جنریک بر اساس محدودیت‌های ویژگی</figcaption>
+</figure>
+<p>ما همچنین می‌توانیم یک ویژگی را به طور شرطی برای هر نوعی که ویژگی دیگری را پیاده‌سازی می‌کند، پیاده‌سازی کنیم. پیاده‌سازی‌های یک ویژگی روی هر نوعی که محدودیت‌های ویژگی را برآورده می‌کند <em>پیاده‌سازی‌های کلی</em> (blanket implementations) نامیده می‌شوند و به طور گسترده در کتابخانه استاندارد Rust استفاده می‌شوند. برای مثال، کتابخانه استاندارد ویژگی <code>ToString</code> را روی هر نوعی که ویژگی <code>Display</code> را پیاده‌سازی می‌کند، پیاده‌سازی می‌کند. بلوک <code>impl</code> در کتابخانه استاندارد شبیه به این کد است:</p>
+<pre><code class="language-rust ignore">impl&lt;T: Display&gt; ToString for T {
+    // --snip--
+}</code></pre>
+<p>از آنجا که کتابخانهٔ استاندارد این پیاده‌سازی فراگیر (blanket implementation) را دارد، می‌توانیم متد <code>to_string</code> را که trait به نام <code>ToString</code> تعریف می‌کند روی هر نوعی که trait به نام <code>Display</code> را پیاده‌سازی کرده باشد فراخوانی کنیم. برای مثال، چون اعداد صحیح <code>Display</code> را پیاده‌سازی می‌کنند، می‌توانیم آن‌ها را به این شکل به مقادیر <code>String</code> متناظرشان تبدیل کنیم:</p>
+<pre><code class="language-rust">let s = 3.to_string();</code></pre>
+<p>پیاده‌سازی‌های کلی در مستندات ویژگی در بخش “Implementors” ظاهر می‌شوند.</p>
+<p>ویژگی‌ها و محدودیت‌های ویژگی به ما امکان می‌دهند که کدی بنویسیم که از پارامترهای نوع جنریک برای کاهش تکرار استفاده کند اما همچنین به کامپایلر مشخص کند که می‌خواهیم نوع جنریک رفتار خاصی داشته باشد. سپس کامپایلر می‌تواند از اطلاعات محدودیت ویژگی استفاده کند تا بررسی کند که تمام نوع‌های مشخص استفاده‌شده با کد ما رفتار صحیح را ارائه می‌دهند. در زبان‌های تایپ‌گذاری پویا، ما هنگام اجرا خطا دریافت می‌کنیم اگر یک متد روی یک نوع که آن متد را تعریف نکرده فراخوانی کنیم. اما Rust این خطاها را به زمان کامپایل منتقل می‌کند تا ما مجبور شویم مشکلات را قبل از اینکه کد ما اجرا شود برطرف کنیم. علاوه بر این، نیازی به نوشتن کدی نداریم که رفتار را در زمان اجرا بررسی کند زیرا قبلاً آن را در زمان کامپایل بررسی کرده‌ایم. این کار عملکرد را بهبود می‌بخشد بدون اینکه انعطاف‌پذیری جنریک‌ها را قربانی کند.</p><nav class="page-nav"><a href="ch10-01-syntax.html">→ نوع‌های داده جنریک</a><a href="ch10-03-lifetime-syntax.html">اعتبارسنجی ارجاع‌ها با طول عمر ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

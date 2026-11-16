@@ -1,0 +1,77 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>بررسی‌نشده — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="unchecked-uninit"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="unchecked-uninitialized-memory"><a class="header" href="#unchecked-uninitialized-memory">حافظهٔ مقداردهی‌نشدهٔ بررسی‌نشده</a></h1>
+<p>یک استثنای جالب برای این قاعده، کار با آرایه‌هاست. Safe Rust اجازه نمی‌دهد یک آرایه را به‌طور جزئی مقداردهی اولیه کنید. وقتی یک آرایه را مقداردهی اولیه می‌کنید، یا می‌توانید همهٔ مقدارها را با <code>let x = [val; N]</code> روی یک چیز یکسان تنظیم کنید، یا می‌توانید هر عضو را جداگانه با <code>let x = [val1, val2, val3]</code> مشخص کنید. متأسفانه این کار کاملاً سفت و سخت است، به‌ویژه اگر لازم باشد آرایه‌تان را به شیوه‌ای تدریجی‌تر یا پویاتر مقداردهی کنید.</p>
+<p>Unsafe Rust ابزار قدرتمندی برای رسیدگی به این مسئله به ما می‌دهد: <a href="https://doc.rust-lang.org/core/mem/union.MaybeUninit.html"><code>MaybeUninit</code></a>. از این نوع می‌توان برای مدیریت حافظه‌ای که هنوز به‌طور کامل مقداردهی اولیه نشده است استفاده کرد.</p>
+<p>با <code>MaybeUninit</code> می‌توانیم یک آرایه را عنصر به عنصر به‌صورت زیر مقداردهی اولیه کنیم:</p>
+<pre><code class="language-rust">use std::mem::{self, MaybeUninit};
+
+// Size of the array is hard-coded but easy to change (meaning, changing just
+// the constant is sufficient). This means we can't use [a, b, c] syntax to
+// initialize the array, though, as we would have to keep that in sync
+// with `SIZE`!
+const SIZE: usize = 10;
+
+let x = {
+    // Create an uninitialized array of `MaybeUninit`.
+    let mut x = [const { MaybeUninit::uninit() }; SIZE];
+
+    // Dropping a `MaybeUninit` does nothing. Thus using raw pointer
+    // assignment instead of `ptr::write` does not cause the old
+    // uninitialized value to be dropped.
+    // Exception safety is not a concern because Box can't panic
+    for i in 0..SIZE {
+        x[i] = MaybeUninit::new(Box::new(i as u32));
+    }
+
+    // Everything is initialized. Transmute the array to the
+    // initialized type.
+    unsafe { mem::transmute::&lt;_, [Box&lt;u32&gt;; SIZE]&gt;(x) }
+};
+
+println!("{x:?}");</code></pre>
+<p>این کد در سه گام پیش می‌رود:</p>
+<ol>
+<li>
+<p>یک آرایه از <code>MaybeUninit&lt;T&gt;</code> ایجاد کنید.</p>
+</li>
+<li>
+<p>آرایه را مقداردهی اولیه کنید. نکتهٔ ظریف این است که معمولاً وقتی از <code>=</code> برای انتساب به مقداری استفاده می‌کنیم که بررسی‌کنندهٔ نوع Rust آن را از قبل مقداردهی شده می‌داند (مثل <code>x[i]</code>)، مقدار قدیمی ذخیره‌شده در سمت چپ drop می‌شود. این فاجعه می‌شد. اما در این مورد، نوع سمت چپ <code>MaybeUninit&lt;Box&lt;u32&gt;&gt;</code> است و drop شدن آن هیچ کاری نمی‌کند! برای بحث بیشتر دربارهٔ این مسئلهٔ <code>drop</code> به پایین نگاه کنید.</p>
+</li>
+<li>
+<p>سرانجام، باید نوع آرایه‌مان را تغییر دهیم تا <code>MaybeUninit</code> برداشته شود. با Rust پایدار فعلی، این به یک <code>transmute</code> نیاز دارد. این transmute قانونی است چون در حافظه، <code>MaybeUninit&lt;T&gt;</code> همان شکل <code>T</code> را دارد.</p>
+<p>با این حال، توجه کنید که در حالت کلی، <code>Container&lt;MaybeUninit&lt;T&gt;&gt;&gt;</code> <em>شبیه</em> <code>Container&lt;T&gt;</code> نیست! تصور کنید <code>Container</code> برابر <code>Option</code> بود و <code>T</code> برابر <code>bool</code>؛ آنگاه <code>Option&lt;bool&gt;</code> از این بهره می‌برد که <code>bool</code> فقط دو مقدار معتبر دارد، اما <code>Option&lt;MaybeUninit&lt;bool&gt;&gt;</code> نمی‌تواند این کار را بکند چون <code>bool</code> لازم نیست مقداردهی اولیه شده باشد.</p>
+<p>پس اینکه آیا برداشتن <code>MaybeUninit</code> با transmute مجاز است یا نه به <code>Container</code> بستگی دارد. برای آرایه‌ها مجاز است (و در نهایت کتابخانهٔ استاندارد با ارائهٔ متدهای مناسب این را به رسمیت خواهد شناخت).</p>
+</li>
+</ol>
+<p>ارزش دارد کمی بیشتر روی حلقهٔ میانی وقت بگذاریم، و به‌طور خاص روی عملگر انتساب و برهم‌کنش آن با <code>drop</code>. اگر چیزی شبیه این می‌نوشتیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">*x[i].as_mut_ptr() = Box::new(i as u32); // WRONG!</code></pre>
+<p>در واقع یک <code>Box&lt;u32&gt;</code> را بازنویسی می‌کردیم که به <code>drop</code> شدن داده‌ای مقداردهی‌نشده می‌انجامید و غم و درد فراوانی ببار می‌آورد.</p>
+<p>جایگزین درست، اگر به هر دلیلی نتوانیم از <code>MaybeUninit::new</code> استفاده کنیم، این است که از ماژول <a href="https://doc.rust-lang.org/core/ptr/index.html"><code>ptr</code></a> استفاده کنیم. به‌طور خاص، این ماژول سه تابع فراهم می‌کند که به ما اجازه می‌دهند بایت‌ها را بدون drop کردن مقدار قدیمی به یک مکان از حافظه اختصاص دهیم: <a href="https://doc.rust-lang.org/core/ptr/fn.write.html"><code>write</code></a>، <a href="https://doc.rust-lang.org/std/ptr/fn.copy.html"><code>copy</code></a> و <a href="https://doc.rust-lang.org/std/ptr/fn.copy_nonoverlapping.html"><code>copy_nonoverlapping</code></a>.</p>
+<ul>
+<li><code>ptr::write(ptr, val)</code> یک <code>val</code> می‌گیرد و آن را به آدرسی که <code>ptr</code> به آن اشاره می‌کند منتقل می‌کند.</li>
+<li><code>ptr::copy(src, dest, count)</code> بیت‌هایی را که <code>count</code> آیتم از نوع T اشغال می‌کنند از src به dest کپی می‌کند. (این معادل memmove در C است – توجه کنید که ترتیب آرگومان‌ها برعکس است!)</li>
+<li><code>ptr::copy_nonoverlapping(src, dest, count)</code> همان کاری را می‌کند که <code>copy</code> می‌کند، اما با فرض اینکه دو بازهٔ حافظه هم‌پوشانی ندارند کمی سریع‌تر. (این معادل memcpy در C است – توجه کنید که ترتیب آرگومان‌ها برعکس است!)</li>
+</ul>
+<p>نیازی به گفتن نیست که این تابع‌ها در صورت سوءاستفاده، آشوبی جدی یا مستقیماً رفتار تعریف‌نشده ایجاد می‌کنند. تنها الزام <em>خود</em> این تابع‌ها این است که مکان‌هایی که می‌خواهید بخوانید و بنویسید تخصیص یافته و به‌درستی تراز شده باشند. با این حال، راه‌هایی که نوشتن بیت‌های دلخواه در مکان‌های دلخواه حافظه می‌تواند چیزها را خراب کند اساساً بی‌شمارند!</p>
+<p>شایان ذکر است که لازم نیست نگران ترفندهای سبک <code>ptr::write</code> با نوع‌هایی باشید که <code>Drop</code> را پیاده‌سازی نمی‌کنند یا نوع‌های <code>Drop</code> در خود ندارند، چون Rust می‌داند که نباید سعی کند آن‌ها را drop کند. این همان چیزی بود که در مثال بالا به آن تکیه کردیم.</p>
+<p>با این حال هنگام کار با حافظهٔ مقداردهی‌نشده باید همیشه مراقب باشید که Rust سعی نکند مقادیری را که این‌گونه می‌سازید پیش از مقداردهی کامل drop کند. اگر یک متغیر نابودگر دارد، هر مسیر کنترلی که از حوزهٔ آن متغیر می‌گذرد باید پیش از پایان آن مقدار را مقداردهی اولیه کند. <em><a href="unwinding.html">این شامل panic کردن کد هم می‌شود</a></em>. <code>MaybeUninit</code> اینجا کمی کمک می‌کند، چون محتوایش را به‌طور ضمنی drop نمی‌کند - اما در صورت panic، همهٔ این‌ها در واقع فقط به این معناست که به‌جای double-free بخش‌های هنوز مقداردهی‌نشده، با نشت حافظهٔ بخش‌هایی که از قبل مقداردهی شده‌اند مواجه می‌شوید.</p>
+<p>توجه کنید که برای استفاده از متدهای <code>ptr</code>، ابتدا باید یک <em>اشاره‌گر خام</em> به داده‌ای که می‌خواهید مقداردهی اولیه کنید به‌دست آورید. ساختن یک <em>ارجاع</em> به داده‌ٔ مقداردهی‌نشده غیرقانونی است، که یعنی هنگام به‌دست آوردن آن اشاره‌گر خام باید مراقب باشید:</p>
+<ul>
+<li>برای یک آرایه از <code>T</code> می‌توانید از <code>base_ptr.add(idx)</code> استفاده کنید، که در آن <code>base_ptr: *mut T</code>، تا آدرس اندیس <code>idx</code> آرایه را محاسبه کنید. این به نحوهٔ چیده شدن آرایه‌ها در حافظه تکیه دارد.</li>
+<li>اما برای یک struct، در حالت کلی نمی‌دانیم چگونه چیده شده است، و همچنین نمی‌توانیم از <code>&amp;mut base_ptr.field</code> استفاده کنیم چون این یک ارجاع می‌سازد. بنابراین باید با دقت از نحو <a href="../reference/types/pointer.html#r-type.pointer.raw.constructor">ارجاع خام</a> استفاده کنید. این نحو بدون ساختن ارجاع میانی، یک اشاره‌گر خام به فیلد می‌سازد:</li>
+</ul>
+<pre><code class="language-rust">use std::{ptr, mem::MaybeUninit};
+
+struct Demo {
+    field: bool,
+}
+
+let mut uninit = MaybeUninit::&lt;Demo&gt;::uninit();
+// `&amp;uninit.as_mut().field` would create a reference to an uninitialized `bool`,
+// and thus be Undefined Behavior!
+let f1_ptr = unsafe { &amp;raw mut (*uninit.as_mut_ptr()).field };
+unsafe { f1_ptr.write(true); }
+
+let init = unsafe { uninit.assume_init() };</code></pre>
+<p>یک نکتهٔ پایانی: هنگام خواندن کد قدیمی Rust، ممکن است به تابع منسوخ‌شدهٔ <code>mem::uninitialized</code> برخورد کنید. آن تابع زمانی تنها راه کار با حافظهٔ مقداردهی‌نشده روی پشته بود، اما معلوم شد که ادغام درست آن با بقیهٔ زبان ناممکن است. همیشه در کد جدید به‌جای آن از <code>MaybeUninit</code> استفاده کنید و هرگاه فرصت کردید کد قدیمی را منتقل کنید.</p>
+<p>و کار با حافظهٔ مقداردهی‌نشده تقریباً همین است! اساساً هیچ چیزی در هیچ جا انتظار ندارد حافظهٔ مقداردهی‌نشده به آن داده شود، پس اگر قرار است آن را اصلاً جابه‌جا کنید، حتماً <em>واقعاً</em> مراقب باشید.</p><nav class="page-nav"><a href="drop-flags.html">→ پرچم‌های Drop</a><a href="obrm.html">مدیریت منابع مبتنی بر مالکیت ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

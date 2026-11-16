@@ -1,0 +1,198 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>THIR (بازنمایی میانی سطح بالای نوع‌دار) — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="thir"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="the-thir"><a class="header" href="#the-thir">THIR</a></h1>
+<p>THIR («Typed High-Level Intermediate Representation»)، که پیش‌تر HAIR یعنی «High-Level Abstract IR» نام داشت، IR دیگری است که rustc استفاده می‌کند و پس از <a href="./hir-typeck/summary.html">بررسی نوع</a> تولید می‌شود. (تا <!-- date-check --> اکتبر 2026) برای
+<a href="./mir/construction.html">ساخت MIR</a>، <a href="./pat-exhaustive-checking.html">بررسی جامع‌بودن (exhaustiveness)</a>، <a href="./unsafety-checking.html">بررسی unsafety</a> و <a href="https://github.com/rust-lang/rust/issues/112788">بررسی tail call صریح</a> به‌کار می‌رود.</p>
+<p>همان‌طور که نام نشان می‌دهد، THIR نسخهٔ lower‌شدهٔ <a href="./hir.html">HIR</a> است که در آن همهٔ نوع‌ها پر شده‌اند، که پس از تکمیل بررسی نوع ممکن است.
+اما ویژگی‌های جالب دیگری هم دارد که آن را از HIR متمایز می‌کند:</p>
+<ul>
+<li>
+<p>مثل MIR، THIR فقط بدنه‌ها را نمایش می‌دهد، یعنی «کد اجرایی»؛ این شامل بدنهٔ توابع، و همچنین مثلاً مقداردهی‌های اولیهٔ <code>const</code> است.
+به‌طور مشخص، برای همهٔ <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/enum.BodyOwnerKind.html">مالکان بدنه (body owners)</a> THIR ساخته می‌شود.
+در نتیجه، THIR نمایشی برای آیتم‌هایی مثل <code>struct</code>ها یا <code>trait</code>ها ندارد.</p>
+</li>
+<li>
+<p>هر بدنهٔ THIR فقط موقتاً ذخیره می‌شود و به‌محض اینکه دیگر لازم نباشد رها می‌شود،
+برخلاف ذخیره‌شدن تا پایان فرایند کامپایل (که با HIR انجام می‌شود).</p>
+</li>
+<li>
+<p>علاوه بر در دسترس قرار‌دادن نوع همهٔ گره‌ها،
+THIR نسبت به HIR desugaring اضافی هم دارد.
+برای مثال، ارجاع‌ها و dereferenceهای خودکار صریح می‌شوند،
+و فراخوانی متدها و عملگرهای سربارگذاری‌شده به فراخوانی توابع ساده تبدیل می‌شوند.
+دامنه‌های تخریب (destruction scopes) هم صریح می‌شوند.</p>
+</li>
+<li>
+<p>دستورها، عبارت‌ها، بازوهای match، بلوک‌ها و پارامترها جداگانه ذخیره می‌شوند.
+برای مثال،
+دستورها در آرایهٔ <code>stmts</code> با اندیسشان (که با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/thir/struct.ExprId.html"><code>ExprId</code></a> نمایش داده می‌شود) در آرایهٔ <code>exprs</code> به عبارت‌ها ارجاع می‌دهند.</p>
+</li>
+</ul>
+<p>THIR در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/thir/index.html"><code>rustc_middle::thir</code></a> قرار دارد.
+برای ساخت <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/thir/struct.Expr.html"><code>thir::Expr</code></a> می‌توانید کوئری <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.TyCtxt.html#method.thir_body"><code>thir_body</code></a> را به‌کار ببرید.
+THIR پس از بررسی unsafety آزاد می‌شود تا اوج مصرف حافظه تحت کنترل بماند.
+داشتن نمایش THIR برای همهٔ بدنه‌های یک crate هم‌زمان در حافظه بسیار سنگین خواهد بود.</p>
+<p>می‌توانید با دادن پرچم <code>-Zunpretty=thir-flat</code> به <code>rustc</code> نمایش اشکال‌زدایی THIR را بگیرید.</p>
+<p>برای نمایش، از این مثال استفاده می‌کنیم:</p>
+<pre><code class="language-rust">fn main() {
+    let x = 1 + 2;
+}</code></pre>
+<p>این است نحوهٔ نمایش آن در THIR (تا <!-- date-check --> اکتبر 2026):</p>
+<pre><code class="language-rust no_run">DefId(0:3 ~ main[26fd]::main):
+Thir {
+    body_type: Fn(
+        fn(),
+    ),
+    loop_hint_attrs: {},
+    // no match arms
+    arms: [],
+    blocks: [
+        Block {
+            targeted_by_break: false,
+            region_scope: Node(1),
+            span: main.rs:1:11: 3:2 (#0),
+            stmts: [
+                s0,
+            ],
+            expr: None,
+            safety_mode: Safe,
+        },
+    ],
+    exprs: [
+        // expression 0, a literal with a value of 1
+        Expr {
+            kind: Literal {
+                lit: Spanned {
+                    node: Int(
+                        Pu128(
+                            1,
+                        ),
+                        Unsuffixed,
+                    ),
+                    span: main.rs:2:13: 2:14 (#0),
+                },
+                neg: false,
+            },
+            ty: i32,
+            temp_scope_id: 4,
+            span: main.rs:2:13: 2:14 (#0),
+        },
+        // expression 1, scope surrounding literal 1
+        Expr {
+            kind: Scope {
+                region_scope: Node(4),
+                hir_id: HirId(DefId(0:3 ~ main[26fd]::main).4),
+                // reference to expression 0 above
+                value: e0,
+            },
+            ty: i32,
+            temp_scope_id: 4,
+            span: main.rs:2:13: 2:14 (#0),
+        },
+        // expression 2, literal 2
+        Expr {
+            kind: Literal {
+                lit: Spanned {
+                    node: Int(
+                        Pu128(
+                            2,
+                        ),
+                        Unsuffixed,
+                    ),
+                    span: main.rs:2:17: 2:18 (#0),
+                },
+                neg: false,
+            },
+            ty: i32,
+            temp_scope_id: 5,
+            span: main.rs:2:17: 2:18 (#0),
+        },
+        // expression 3, scope surrounding literal 2
+        Expr {
+            kind: Scope {
+                region_scope: Node(5),
+                hir_id: HirId(DefId(0:3 ~ main[26fd]::main).5),
+                // reference to expression 2 above
+                value: e2,
+            },
+            ty: i32,
+            temp_scope_id: 5,
+            span: main.rs:2:17: 2:18 (#0),
+        },
+        // expression 4, represents 1 + 2
+        Expr {
+            kind: Binary {
+                op: Add,
+                // references to scopes surrounding literals above
+                lhs: e1,
+                rhs: e3,
+            },
+            ty: i32,
+            temp_scope_id: 3,
+            span: main.rs:2:13: 2:18 (#0),
+        },
+        // expression 5, scope surrounding expression 4
+        Expr {
+            kind: Scope {
+                region_scope: Node(3),
+                hir_id: HirId(DefId(0:3 ~ main[26fd]::main).3),
+                value: e4,
+            },
+            ty: i32,
+            temp_scope_id: 3,
+            span: main.rs:2:13: 2:18 (#0),
+        },
+        // expression 6, block around statement
+        Expr {
+            kind: Block {
+                block: b0,
+            },
+            ty: (),
+            temp_scope_id: 8,
+            span: main.rs:1:11: 3:2 (#0),
+        },
+        // expression 7, scope around block in expression 6
+        Expr {
+            kind: Scope {
+                region_scope: Node(8),
+                hir_id: HirId(DefId(0:3 ~ main[26fd]::main).8),
+                value: e6,
+            },
+            ty: (),
+            temp_scope_id: 8,
+            span: main.rs:1:11: 3:2 (#0),
+        },
+    ],
+    stmts: [
+        Stmt {
+            kind: Let {
+                remainder_scope: Remainder { block: 1, first_statement_index: 0},
+                init_scope: Node(2),
+                pattern: Pat {
+                    ty: i32,
+                    span: main.rs:2:9: 2:10 (#0),
+                    extra: None,
+                    kind: Binding {
+                        name: "x",
+                        mode: BindingMode(
+                            No,
+                            Not,
+                        ),
+                        var: LocalVarId(
+                            HirId(DefId(0:3 ~ main[26fd]::main).7),
+                        ),
+                        ty: i32,
+                        subpattern: None,
+                        is_primary: true,
+                        is_shorthand: false,
+                    },
+                },
+                initializer: Some(
+                    e5,
+                ),
+                else_block: None,
+                hir_id: HirId(DefId(0:3 ~ main[26fd]::main).6),
+                span: main.rs:2:5: 2:18 (#0),
+            },
+        },
+    ],
+    params: [],
+}</code></pre><nav class="page-nav"><a href="ambig-unambig-ty-and-consts.html">→ نوع‌ها و ثابت‌های Ambig/Unambig</a><a href="mir/index.html">MIR (بازنمایی میانی سطح میانی) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,115 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>تعریف lint — کتاب Clippy</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="development/defining_lints"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Clippy</a><small class="en-title" dir="ltr">The Clippy Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="define-new-lints"><a class="header" href="#define-new-lints">تعریف lintهای جدید</a></h1>
+<p>نخستین گام در مسیر یک lint جدید، تعریف و ثبت lint در کدبیس Clippy است. می‌توانیم برای انجام این گام از ابزارهای توسعهٔ Clippy استفاده کنیم، چون راه‌اندازی lint مستلزم مقداری کد تکراری (boilerplate) است.</p>
+<h4 id="lint-types"><a class="header" href="#lint-types">نوع‌های lint</a></h4>
+<p>نوع lint، دستهٔ آیتم‌ها و عبارت‌هایی است که lint شما روی آن‌ها تمرکز دارد.</p>
+<p>در زمان نگارش این به‌روزرسانی مستندات، علاوه بر lintهای مستقل فراوانی که در <code>clippy_lints/src/</code> قرار دارند، ۱۱ <em>نوع</em> lint وجود دارد:</p>
+<ul>
+<li><code>cargo</code></li>
+<li><code>casts</code></li>
+<li><code>functions</code></li>
+<li><code>loops</code></li>
+<li><code>matches</code></li>
+<li><code>methods</code></li>
+<li><code>misc_early</code></li>
+<li><code>operators</code></li>
+<li><code>transmute</code></li>
+<li><code>types</code></li>
+<li><code>unit_types</code></li>
+</ul>
+<p>این نوع‌ها lintهایی را که رفتارهای مشترکی دارند با هم گروه‌بندی می‌کنند. برای مثال، <code>functions</code> lintهایی را گروه‌بندی می‌کند که با برخی جنبه‌های توابع در Rust سروکار دارند، مانند تعریف‌ها، امضاها و attributeها.</p>
+<p>برای اطلاعات بیشتر، می‌توانید فایل‌های lint در هر دسته را با <a href="https://rust-lang.github.io/rust-clippy/main/">همهٔ lintهای Clippy</a> مقایسه کنید یا از یکی از نگهدارندگان بپرسید.</p>
+<h2 id="lint-name"><a class="header" href="#lint-name">نام lint</a></h2>
+<p>یک نام خوب برای lint مهم است؛ حتماً <a href="https://rust-lang.github.io/rfcs/0344-conventions-galore.html#lints">راهنمای نام‌گذاری lint</a> را بررسی کنید. نگران نباشید، اگر نام lint مناسب نباشد، یکی از اعضای تیم Clippy در فرایند PR به شما اطلاع می‌دهد.</p>
+<hr>
+<p>ما lint نمونهٔ خود را که توابعی با نام «foo» را شناسایی می‌کند <code>foo_functions</code> می‌نامیم. برای اینکه ببینید چرا این نام منطقی است، <a href="https://rust-lang.github.io/rfcs/0344-conventions-galore.html#lints">راهنمای نام‌گذاری lint</a> را بررسی کنید.</p>
+<h2 id="add-and-register-the-lint"><a class="header" href="#add-and-register-the-lint">افزودن و ثبت lint</a></h2>
+<p>اکنون که نام انتخاب شد، باید <code>foo_functions</code> را به‌عنوان یک lint در کدبیس ثبت کنیم. برای ثبت یک lint دو راه وجود دارد.</p>
+<h3 id="standalone"><a class="header" href="#standalone">مستقل</a></h3>
+<p>اگر معتقدید این lint جدید یک lint مستقل است (و به هیچ <a href="#lint-types">نوع</a> خاصی مانند <code>functions</code> یا <code>loops</code> تعلق ندارد)، می‌توانید دستور زیر را در پروژهٔ Clippy خود اجرا کنید:</p>
+<pre><code class="language-sh">$ cargo dev new_lint --name=lint_name --pass=late --category=pedantic
+</code></pre>
+<p>در اینجا دو نکته وجود دارد:</p>
+<ol>
+<li><code>--pass</code>: در این دستور <code>--pass=late</code> را تنظیم می‌کنیم تا یک گذر lint از نوع late انجام شود. جایگزین آن گذر lint از نوع <code>early</code> است. دربارهٔ این تفاوت در فصل <a href="lint_passes.html">گذرهای lint</a> صحبت خواهیم کرد.</li>
+<li><code>--category</code>: اگر مشخص نشود، <code>category</code> این lint جدید به‌طور پیش‌فرض <code>nursery</code> خواهد بود.</li>
+</ol>
+<p>دستور <code>cargo dev new_lint</code> یک فایل جدید به نام <code>clippy_lints/src/foo_functions.rs</code> ایجاد می‌کند و همچنین <a href="#lint-registration">lint را ثبت می‌کند</a>.</p>
+<p>در مجموع، باید ببینید که فایل‌های زیر تغییر کرده یا ایجاد شده‌اند:</p>
+<pre><code class="language-sh">$ git status
+On branch foo_functions
+Changes not staged for commit:
+  (use "git add &lt;file&gt;..." to update what will be committed)
+  (use "git restore &lt;file&gt;..." to discard changes in working directory)
+	modified:   CHANGELOG.md
+	modified:   clippy_lints/src/lib.register_lints.rs
+	modified:   clippy_lints/src/lib.register_pedantic.rs
+	modified:   clippy_lints/src/lib.rs
+
+Untracked files:
+  (use "git add &lt;file&gt;..." to include in what will be committed)
+	clippy_lints/src/foo_functions.rs
+	tests/ui/foo_functions.rs
+</code></pre>
+<h3 id="specific-type"><a class="header" href="#specific-type">نوع مشخص</a></h3>
+<blockquote>
+<p><strong>توجه</strong>: نوع‌های lint در بخش <a href="#lint-types">“نوع‌های lint”</a> فهرست شده‌اند</p>
+</blockquote>
+<p>اگر معتقدید این lint جدید به نوع خاصی از lintها تعلق دارد، می‌توانید <code>cargo dev new_lint</code> را با گزینهٔ <code>--type</code> اجرا کنید.</p>
+<p>از آنجا که lint ما یعنی <code>foo_functions</code> به فراخوانی توابع مربوط است، می‌توان استدلال کرد که باید آن را در گروهی از lintها قرار دهیم که برخی رفتارهای توابع را شناسایی می‌کنند؛ پس می‌توانیم آن را در گروه <code>functions</code> بگذاریم.</p>
+<p>بیایید دستور زیر را در پروژهٔ Clippy خود اجرا کنیم:</p>
+<pre><code class="language-sh">$ cargo dev new_lint --name=foo_functions --type=functions --category=pedantic
+</code></pre>
+<p>این دستور، از جمله، یک فایل جدید ایجاد می‌کند: <code>clippy_lints/src/{type}/foo_functions.rs</code>. در مورد ما، مسیر آن <code>clippy_lints/src/functions/foo_functions.rs</code> خواهد بود.</p>
+<p>توجه کنید که این دستور به جای <code>--pass</code> یک پرچم <code>--type</code> دارد. برخلاف تعریف مستقل، این lint به معنای سنتی ثبت نمی‌شود. در عوض، شما lint خود را از درون گذر lint آن نوع که در <code>clippy_lints/src/{type}/mod.rs</code> قرار دارد فراخوانی می‌کنید.</p>
+<p>یک <em>نوع</em> فقط نام یک پوشه در <code>clippy_lints/src</code> است، مانند <code>functions</code> در دستور نمونه. Clippy برخی lintها را که رفتارهای مشترکی دارند با هم گروه‌بندی می‌کند، پس اگر lint شما در یکی از آن‌ها جا می‌گیرد، بهتر است آن را به همان نوع اضافه کنید.</p>
+<p>در مجموع، باید ببینید که فایل‌های زیر تغییر کرده یا ایجاد شده‌اند:</p>
+<pre><code class="language-sh">$ git status
+On branch foo_functions
+Changes not staged for commit:
+  (use "git add &lt;file&gt;..." to update what will be committed)
+  (use "git restore &lt;file&gt;..." to discard changes in working directory)
+	modified:   CHANGELOG.md
+	modified:   clippy_lints/src/declared_lints.rs
+	modified:   clippy_lints/src/functions/mod.rs
+
+Untracked files:
+  (use "git add &lt;file&gt;..." to include in what will be committed)
+	clippy_lints/src/functions/foo_functions.rs
+	tests/ui/foo_functions.rs
+</code></pre>
+<h2 id="the-declare_clippy_lint-macro"><a class="header" href="#the-declare_clippy_lint-macro">ماکروی <code>declare_clippy_lint</code></a></h2>
+<p>پس از <code>cargo dev new_lint</code>، باید ماکرویی با نام <code>declare_clippy_lint</code> ببینید. اگر یک lint مستقل تعریف کرده باشید، در همان فایل قرار دارد و اگر یک lint مختص یک نوع تعریف کرده باشید، در <code>mod.rs</code> خواهد بود.</p>
+<p>این ماکرو چیزی شبیه به این است:</p>
+<pre><code class="language-rust">declare_clippy_lint! {
+    /// ### What it does
+    ///
+    /// // Describe here what does the lint do.
+    ///
+    /// Triggers when detects...
+    ///
+    /// ### Why is this bad?
+    ///
+    /// // Describe why this pattern would be bad
+    ///
+    /// It can lead to...
+    ///
+    /// ### Example
+    /// ```rust
+    /// // example code where Clippy issues a warning
+    /// ```
+    /// Use instead:
+    /// ```rust
+    /// // example code which does not raise Clippy warning
+    /// ```
+    #[clippy::version = "1.70.0"] // &lt;- In which version was this implemented, keep it up to date!
+    pub LINT_NAME, // &lt;- The lint name IN_ALL_CAPS
+    pedantic, // &lt;- The lint group
+    "default lint description" // &lt;- A lint description, e.g. "A function has an unit return type."
+}</code></pre>
+<h2 id="lint-registration"><a class="header" href="#lint-registration">ثبت lint</a></h2>
+<p>اگر دستور <code>cargo dev new_lint</code> را برای یک lint جدید اجرا کنیم، lint به‌طور خودکار ثبت می‌شود و کار دیگری لازم نیست.</p>
+<p>با این حال، گاهی ممکن است بخواهیم یک lint جدید را دستی اعلام کنیم. در این صورت، پس از آن از دستور <code>cargo dev update_lints</code> استفاده می‌کنیم.</p>
+<p>وقتی یک lint به‌صورت دستی اعلام می‌شود، ممکن است لازم باشد گذر lint را نیز دستی ثبت کنیم؛ برای این کار یک ورودی به فراخوانی ماکروی <code>late_lint_methods!</code> در <code>clippy_lints/src/lib.rs</code> و در محل نشانگر <code>// add late passes here</code> اضافه می‌کنیم:</p>
+<pre><code class="language-rust">FooFunctions: foo_functions::FooFunctions = foo_functions::FooFunctions,</code></pre>
+<p>همان‌طور که شاید حدس زده باشید، جایی که چیزی «late» هست، چیزی «early» هم هست: در Clippy ماکروی <code>early_lint_methods!</code> نیز وجود دارد. اطلاعات بیشتر دربارهٔ گذرهای early در برابر late را در فصل <a href="lint_passes.html">گذرهای lint</a> ببینید.</p>
+<p>بدون یک ورودی در <code>early_lint_methods!</code> یا <code>late_lint_methods!</code>، گذر lint موردنظر اجرا نخواهد شد.</p><nav class="page-nav"><a href="adding_lints.html">→ افزودن lint</a><a href="writing_tests.html">نوشتن آزمون ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../clippy/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

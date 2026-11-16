@@ -1,0 +1,147 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>کامپایل افزایشی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="queries/incremental-compilation"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="incremental-compilation"><a class="header" href="#incremental-compilation">Incremental compilation</a></h1>
+<p>طرح کامپایل افزایشی در اصل
+افزونه‌ای شگفت‌آور ساده بر سامانهٔ کلی کوئری است.
+با توصیف نسخه‌ای کمی ساده‌شده از نمونهٔ واقعی شروع می‌کنیم — «الگوریتم پایه» —
+و سپس برخی بهبودهای ممکن را توضیح می‌دهیم.</p>
+<h2 id="the-basic-algorithm"><a class="header" href="#the-basic-algorithm">الگوریتم پایه</a></h2>
+<p>الگوریتم پایه <strong>red-green</strong> نام دارد<sup class="footnote-reference" id="fr-salsa-1"><a href="#footnote-salsa">1</a></sup>.
+ایدهٔ سطح بالا این است که پس از هر اجرای کامپایلر، نتایج همهٔ
+کوئری‌هایی را که انجام دادیم ذخیره می‌کنیم، و همچنین <strong>DAG کوئری</strong> را.
+<strong>DAG کوئری</strong> یک <a href="https://en.wikipedia.org/wiki/Directed_acyclic_graph">DAG</a> است که نمایه می‌کند کدام کوئری‌ها کدام کوئری‌های دیگر را اجرا کردند.
+پس برای مثال، یک <a href="https://en.wikipedia.org/wiki/Glossary_of_graph_theory_terms#edge">یال</a> از کوئری Q1
+به کوئری دیگر Q2 خواهد بود اگر محاسبهٔ Q1 نیازمند محاسبهٔ Q2 بوده باشد (توجه کنید
+چون کوئری‌ها نمی‌توانند به خودشان وابسته باشند، نتیجه DAG است نه گراف کلی).</p>
+<blockquote>
+<p><strong>نکته</strong>: ممکن است کوئری را صرفاً تعریف یک کوئری بپندارید.
+چیزی که می‌توانید فراخوانی‌اش کنید، کمی شبیه یک تابع،
+و یا نتیجهٔ cache‌شده برمی‌گرداند یا واقعاً کد را اجرا می‌کند.</p>
+<p>اگر به کوئری‌ها این‌طور فکر می‌کنید،
+خوب است بدانید در متن زیر گفته می‌شود کوئری‌ها رنگ دارند.
+اما به یاد داشته باشید اینجا کلمهٔ کوئری به فراخوانی مشخصی از
+کوئری برای ورودی مشخصی هم اشاره دارد. همان‌طور که بعداً می‌خوانید، کوئری‌ها بر اساس
+آرگومان‌هایشان اثر انگشت (fingerprint) می‌گیرند. نتیجهٔ یک کوئری ممکن است وقتی یک آرگومان می‌دهیم تغییر کند
+و قرمز شود، در حالی که برای آرگومان دیگر یکسان بماند و در نتیجه سبز باشد.</p>
+<p>به‌طور خلاصه، کلمهٔ کوئری اینجا فقط به معنای تعریف کوئری نیست،
+بلکه برای نمونهٔ مشخصی از آن کوئری با آرگومان‌های داده‌شده هم به‌کار می‌رود.</p>
+</blockquote>
+<p>در اجرای بعدی کامپایلر، گاهی می‌توانیم این نتایج کوئری را دوباره استفاده کنیم تا از اجرای مجدد کوئری پرهیز کنیم.
+این کار را با اختصاص <strong>رنگ</strong> به هر کوئری انجام می‌دهیم:</p>
+<ul>
+<li>اگر کوئری <strong>قرمز</strong> باشد،
+یعنی نتیجهٔ آن در این کامپایل نسبت به کامپایل قبلی <strong>تغییر کرده</strong> است.</li>
+<li>اگر کوئری <strong>سبز</strong> باشد،
+یعنی نتیجهٔ آن با کامپایل قبلی <strong>یکسان</strong> است.</li>
+</ul>
+<p>دو بینش کلیدی اینجا هست:</p>
+<ul>
+<li>اول، اگر همهٔ ورودی‌های کوئری Q سبز باشند،
+آن‌گاه کوئری Q <strong>باید</strong> همان مقدار دفعهٔ قبل را بدهد و در نتیجه
+نیازی به اجرای مجدد نیست (در غیر این صورت کامپایلر قطعی (deterministic) نیست).</li>
+<li>Second, even if some inputs to a query changes,
+it may be that it <strong>still</strong> produces the same result as the previous compilation.
+In particular, the query may only use part of its input.
+<ul>
+<li>بنابراین، پس از اجرای یک کوئری،
+همیشه بررسی می‌کنیم آیا همان نتیجهٔ قبلی را تولید کرده است.
+<strong>اگر کرده باشد،</strong> همچنان می‌توانیم کوئری را سبز علامت بزنیم،
+و در نتیجه از اجرای مجدد کوئری‌های وابسته پرهیز کنیم.</li>
+</ul>
+</li>
+</ul>
+<h3 id="the-try-mark-green-algorithm"><a class="header" href="#the-try-mark-green-algorithm">الگوریتم try-mark-green</a></h3>
+<p>در هستهٔ کامپایل افزایشی الگوریتمی به نام «try-mark-green» است.
+کارش تعیین رنگ یک کوئری داده‌شده Q است (که نباید هنوز اجرا شده باشد).
+در مواردی که Q ورودی قرمز دارد، تعیین رنگ Q ممکن است شامل اجرای مجدد Q باشد تا
+بتوانیم خروجی آن را مقایسه کنیم، اما اگر همهٔ ورودی‌های Q سبز باشند،
+می‌توانیم نتیجه بگیریم Q باید سبز باشد بدون اجرای مجدد آن یا بازرسی مقدارش.
+در کامپایلر، این اجازه می‌دهد وقتی به نتیجه نیاز نداریم از deserialize کردن آن از دیسک پرهیز کنیم،
+و در واقع
+گاهی اجازه می‌دهد <em>serialize</em> کردن نتیجه را هم رد کنیم (بخش بهبودها را در ادامه ببینید).</p>
+<p>try-mark-green این‌طور کار می‌کند:</p>
+<ul>
+<li>First check if the query Q was executed during the previous compilation.
+<ul>
+<li>اگر نه، می‌توانیم کوئری را مثل معمول دوباره اجرا کنیم و رنگ قرمز به آن بدهیم.</li>
+</ul>
+</li>
+<li>اگر بله، «کوئری‌های وابستهٔ» Q را بارگذاری کنید.</li>
+<li>If there is a saved result, then we load the <code>reads(Q)</code> vector from the query DAG.
+The “reads” is the set of queries that Q executed during its execution.
+<ul>
+<li>For each query R in <code>reads(Q)</code>, we recursively demand the color of R using try-mark-green.
+<ul>
+<li>نکته: مهم است که هر گره در <code>reads(Q)</code> را به همان ترتیبی که
+در کامپایل اصلی رخ داد ببینیم.
+<a href="#dag">بخش DAG کوئری را در ادامه</a> ببینید.</li>
+<li>If <strong>any</strong> of the nodes in <code>reads(Q)</code> wind up colored <strong>red</strong>, then Q is dirty.
+<ul>
+<li>Q را دوباره اجرا می‌کنیم و هش نتیجه‌اش را با هش
+نتیجهٔ کامپایل قبلی مقایسه می‌کنیم.</li>
+<li>اگر هش تغییر نکرده، می‌توانیم Q را <strong>سبز</strong> علامت بزنیم و برگردیم.</li>
+</ul>
+</li>
+<li>در غیر این صورت، <strong>همهٔ</strong> گره‌های <code>reads(Q)</code> باید <strong>سبز</strong> باشند.
+در آن صورت، می‌توانیم Q را <strong>سبز</strong> رنگ کنیم و برگردیم.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p><a id="dag"></a></p>
+<h3 id="the-query-dag"><a class="header" href="#the-query-dag">DAG کوئری</a></h3>
+<p>کد DAG کوئری در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/dep_graph/index.html"><code>compiler/rustc_middle/src/dep_graph</code></a> قرار دارد.
+ساخت DAG با instrument کردن اجرای کوئری انجام می‌شود.</p>
+<p>نکتهٔ کلیدی این است که DAG کوئری ترتیب را هم ردیابی می‌کند؛ یعنی برای هر کوئری Q،
+نه‌فقط کوئری‌هایی را که Q می‌خواند ردیابی می‌کنیم،
+بلکه <strong>ترتیب</strong> خواندن آن‌ها را هم.
+این اجازه می‌دهد try-mark-green آن کوئری‌ها را به همان ترتیب دوباره پیمایش کند.
+این مهم است چون وقتی یک زیرکوئری قرمز برگشت،
+دیگر نمی‌توانیم مطمئن باشیم Q همان مسیر قبلی را ادامه می‌دهد.
+یعنی کوئری‌ای مثل این را تصور کنید:</p>
+<pre><code class="language-rust ignore">fn main_query(tcx) {
+    if tcx.subquery1() {
+        tcx.subquery2()
+    } else {
+        tcx.subquery3()
+    }
+}</code></pre>
+<p>اکنون تصور کنید در کامپایل اول، <code>main_query</code> با اجرای <code>subquery1</code> شروع می‌کند،
+و این true برمی‌گرداند.
+در آن صورت کوئری بعدی که <code>main_query</code> اجرا می‌کند <code>subquery2</code> خواهد بود،
+و <code>subquery3</code> اصلاً اجرا نمی‌شود.</p>
+<p>اما اکنون تصور کنید در کامپایل <strong>بعدی</strong>،
+ورودی تغییر کرده و <code>subquery1</code> مقدار <strong>false</strong> برمی‌گرداند.
+در این صورت، <code>subquery2</code> هرگز اجرا نمی‌شد.
+اگر try-mark-green بخواهد <code>reads(main_query)</code> را بدون ترتیب ببیند،
+ممکن است <code>subquery2</code> را پیش از <code>subquery1</code> ببیند و در نتیجه آن را اجرا کند.
+این می‌تواند به ICE و مشکلات دیگر در کامپایلر بینجامد.</p>
+<h2 id="improvements-to-the-basic-algorithm"><a class="header" href="#improvements-to-the-basic-algorithm">بهبودها در الگوریتم پایه</a></h2>
+<p>در توضیح الگوریتم پایه گفتیم در پایان
+کامپایل نتایج همهٔ کوئری‌هایی را که انجام شده‌اند ذخیره می‌کنیم.
+در عمل، این می‌تواند بسیار اتلاف‌آمیز باشد — بسیاری از آن نتایج محاسبهٔ مجددشان بسیار ارزان است،
+و serialize و deserialize کردن آن‌ها سود چندانی ندارد.
+در عمل، کاری که می‌کنیم ذخیرهٔ <strong>هش‌های</strong> همهٔ زیرکوئری‌هایی است که انجام شده.
+سپس، در موارد منتخب، <strong>نتایج</strong> را هم ذخیره می‌کنیم.</p>
+<p>به همین دلیل الگوریتم افزایشی محاسبهٔ <strong>رنگ</strong> یک گره،
+که اغلب نیازی به مقدار آن ندارد، را از محاسبهٔ <strong>نتیجهٔ</strong> گره جدا می‌کند.
+محاسبهٔ نتیجه با الگوریتمی ساده مثل زیر انجام می‌شود:</p>
+<ul>
+<li>بررسی کنید آیا نتیجهٔ ذخیره‌شده‌ای برای Q موجود است.
+اگر بله، رنگ Q را محاسبه کنید.
+اگر Q سبز است، نتیجهٔ ذخیره‌شده را deserialize و برگردانید.</li>
+<li>Otherwise, execute Q.
+<ul>
+<li>سپس می‌توانیم هش نتیجه را مقایسه کنیم و اگر تغییر نکرده بود Q را سبز رنگ کنیم.</li>
+</ul>
+</li>
+</ul>
+<h2 id="resources"><a class="header" href="#resources">Resources</a></h2>
+<p>سند طراحی اولیه را <a href="https://github.com/nikomatsakis/rustc-on-demand-incremental-design-doc/blob/master/0000-rustc-on-demand-and-incremental.md">اینجا</a> می‌یابید، که
+جزئیات memoization را بسط می‌دهد و نمای کلی سطح بالا و انگیزهٔ این سامانه را ارائه می‌دهد.</p>
+<h1 id="footnotes"><a class="header" href="#footnotes">Footnotes</a></h1>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-salsa">
+<p>مدت‌هاست می‌خواهم نامش را الگوریتم Salsa بگذارم، اما جا نیفتاد. -@nikomatsakis <a href="#fr-salsa-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="query-evaluation-model-in-detail.html">→ مدل ارزیابی Query به تفصیل</a><a href="incremental-compilation-in-detail.html">کامپایل افزایشی به تفصیل ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

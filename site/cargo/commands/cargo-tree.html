@@ -1,0 +1,476 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>cargo tree — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="commands/cargo-tree"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="cargo-tree1"><a class="header" href="#cargo-tree1">cargo-tree(1)</a></h1>
+<h2 id="name"><a class="header" href="#name">نام</a></h2>
+<p>cargo-tree — نمایش درختی گراف وابستگی‌ها</p>
+<h2 id="synopsis"><a class="header" href="#synopsis">خلاصه</a></h2>
+<p><code>cargo tree</code> [<em>options</em>]</p>
+<h2 id="description"><a class="header" href="#description">توضیحات</a></h2>
+<p>این دستور درختی از وابستگی‌ها را در ترمینال نمایش می‌دهد. نمونه‌ای از یک پروژهٔ ساده که به بستهٔ «rand» وابسته است:</p>
+<pre><code>myproject v0.1.0 (/myproject)
+└── rand v0.7.3
+    ├── getrandom v0.1.14
+    │   ├── cfg-if v0.1.10
+    │   └── libc v0.2.68
+    ├── libc v0.2.68 (*)
+    ├── rand_chacha v0.2.2
+    │   ├── ppv-lite86 v0.2.6
+    │   └── rand_core v0.5.1
+    │       └── getrandom v0.1.14 (*)
+    └── rand_core v0.5.1 (*)
+[build-dependencies]
+└── cc v1.0.50
+</code></pre>
+<p>بسته‌هایی که با <code>(*)</code> علامت خورده‌اند «حذف تکرار» شده‌اند. وابستگی‌های این بسته پیش‌تر در جای دیگری از گراف نمایش داده شده‌اند و بنابراین دوباره تکرار نمی‌شوند. برای تکرار موارد تکراری از گزینهٔ <code>--no-dedupe</code> استفاده کنید.</p>
+<p>از پرچم <code>-e</code> می‌توان برای انتخاب انواع وابستگی‌هایی که باید نمایش داده شوند استفاده کرد. نوع «features» خروجی را طوری تغییر می‌دهد که featureهای فعال‌شده توسط هر وابستگی را نشان دهد. برای نمونه، <code>cargo tree -e features</code>:</p>
+<pre><code>myproject v0.1.0 (/myproject)
+└── log feature "serde"
+    └── log v0.4.8
+        ├── serde v1.0.106
+        └── cfg-if feature "default"
+            └── cfg-if v0.1.10
+</code></pre>
+<p>در این درخت، <code>myproject</code> به <code>log</code> با feature به نام <code>serde</code> وابسته است. <code>log</code> نیز به نوبهٔ خود به <code>cfg-if</code> با featureهای «default» وابسته است. هنگام استفاده از <code>-e features</code> ممکن است به‌کار بردن پرچم <code>-i</code> برای نمایش اینکه featureها چگونه به یک بسته می‌رسند مفید باشد. برای جزئیات بیشتر، مثال‌های زیر را ببینید.</p>
+<h3 id="feature-unification"><a class="header" href="#feature-unification">یکپارچه‌سازی feature</a></h3>
+<p>این دستور گرافی را نشان می‌دهد که بسیار به گراف featureهای یکپارچه‌شده‌ای که Cargo می‌سازد نزدیک‌تر است تا به آنچه شما در <code>Cargo.toml</code> فهرست می‌کنید. برای مثال، اگر یک وابستگی را هم در <code>[dependencies]</code> و هم در <code>[dev-dependencies]</code> اما با featureهای متفاوت مشخص کنید، این دستور ممکن است همهٔ featureها را ادغام کند و روی یکی از وابستگی‌ها علامت <code>(*)</code> بگذارد تا تکراری بودن را نشان دهد.</p>
+<p>در نتیجه، برای نمایی تقریباً معادل با کاری که <code>cargo build</code> انجام می‌دهد، <code>cargo tree -e normal,build</code> بسیار نزدیک است؛ و برای نمایی تقریباً معادل با کاری که <code>cargo test</code> انجام می‌دهد، <code>cargo tree</code> بسیار نزدیک است. با این حال، این دستور معادل بودن دقیق با آنچه Cargo قرار است بسازد را تضمین نمی‌کند، زیرا کامپایل پیچیده است و به عوامل بسیار متفاوتی بستگی دارد.</p>
+<p>برای آشنایی بیشتر با یکپارچه‌سازی feature، این <a href="../reference/features.html#feature-unification">بخش اختصاصی</a> را ببینید.</p>
+<h2 id="options"><a class="header" href="#options">گزینه‌ها</a></h2>
+<h3 id="tree-options"><a class="header" href="#tree-options">گزینه‌های درخت</a></h3>
+<dl>
+<dt class="option-term" id="option-cargo-tree--i"><a class="option-anchor" href="#option-cargo-tree--i"><code>-i</code> <em>spec</em></a></dt>
+
+<dt class="option-term" id="option-cargo-tree---invert"><a class="option-anchor" href="#option-cargo-tree---invert"><code>--invert</code> <em>spec</em></a></dt>
+
+<dd class="option-desc">
+<p>وابستگی‌های معکوس بستهٔ داده‌شده را نشان می‌دهد. این پرچم درخت را وارونه می‌کند و
+بسته‌هایی را که به بستهٔ داده‌شده وابسته‌اند نمایش می‌دهد.</p>
+
+<p>توجه کنید که در یک workspace، به‌طور پیش‌فرض فقط وابستگی‌های معکوس بسته درون درخت
+عضو workspace در دایرکتوری فعلی نمایش داده می‌شود. می‌توان با پرچم <code>--workspace</code> آن را
+گسترش داد تا وابستگی‌های معکوس بسته در کل workspace نمایش داده شود. پرچم <code>-p</code> را
+می‌توان برای نمایش وابستگی‌های معکوس بسته فقط در زیردرخت بستهٔ داده‌شده به <code>-p</code>
+به کار برد.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---prune"><a class="option-anchor" href="#option-cargo-tree---prune"><code>--prune</code> <em>spec</em></a></dt>
+
+<dd class="option-desc">
+<p>بستهٔ داده‌شده را از نمایش درخت وابستگی‌ها هرس می‌کند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---depth"><a class="option-anchor" href="#option-cargo-tree---depth"><code>--depth</code> <em>depth</em></a></dt>
+
+<dd class="option-desc">
+<p>بیشینهٔ عمق نمایش درخت وابستگی‌ها. برای مثال، عمق ۱ وابستگی‌های مستقیم را نشان می‌دهد.</p>
+
+<p>اگر مقدار داده‌شده <code>workspace</code> باشد، به‌جای آن فقط وابستگی‌هایی را نشان می‌دهد که عضو
+workspace فعلی هستند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---no-dedupe"><a class="option-anchor" href="#option-cargo-tree---no-dedupe"><code>--no-dedupe</code></a></dt>
+
+<dd class="option-desc">
+<p>وابستگی‌های تکراری را حذف نمی‌کند. معمولاً وقتی بسته‌ای پیش‌تر وابستگی‌هایش را
+نمایش داده باشد، در دفعات بعدی دوباره وابستگی‌هایش نمایش داده نمی‌شود و علامت <code>(*)</code>
+می‌گیرد تا نشان دهد پیش‌تر نمایش داده شده است. این پرچم باعث می‌شود آن موارد تکراری
+دوباره نمایش داده شوند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree--d"><a class="option-anchor" href="#option-cargo-tree--d"><code>-d</code></a></dt>
+
+<dt class="option-term" id="option-cargo-tree---duplicates"><a class="option-anchor" href="#option-cargo-tree---duplicates"><code>--duplicates</code></a></dt>
+
+<dd class="option-desc">
+<p>فقط وابستگی‌هایی را نشان می‌دهد که در چند نسخه وجود دارند (مستلزم <code>--invert</code> است).
+وقتی همراه با پرچم <code>-p</code> به کار رود، فقط موارد تکراری درون زیردرخت بستهٔ داده‌شده را
+نشان می‌دهد.</p>
+
+<p>پرهیز از ساخت چندبارهٔ یک بسته می‌تواند برای زمان ساخت و اندازهٔ فایل‌های اجرایی
+سودمند باشد. این پرچم می‌تواند به شناسایی بسته‌های مسئله‌ساز کمک کند. سپس می‌توانید
+بررسی کنید که آیا بسته‌ای که به نسخهٔ قدیمی‌تر مورد تکراری وابسته است می‌تواند به
+نسخهٔ جدیدتر به‌روزرسانی شود تا فقط یک نمونه ساخته شود.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree--e"><a class="option-anchor" href="#option-cargo-tree--e"><code>-e</code> <em>kinds</em></a></dt>
+
+<dt class="option-term" id="option-cargo-tree---edges"><a class="option-anchor" href="#option-cargo-tree---edges"><code>--edges</code> <em>kinds</em></a></dt>
+
+<dd class="option-desc">
+<p>انواع وابستگی‌هایی که باید نمایش داده شوند. فهرستی از مقادیر جداشده با ویرگول می‌گیرد:</p>
+
+<ul>
+<li><code>all</code> — همهٔ انواع یال را نشان می‌دهد.</li>
+
+<li><code>normal</code> — وابستگی‌های معمولی را نشان می‌دهد.</li>
+
+<li><code>build</code> — وابستگی‌های ساخت را نشان می‌دهد.</li>
+
+<li><code>dev</code> — وابستگی‌های توسعه را نشان می‌دهد.</li>
+
+<li><code>features</code> — featureهای فعال‌شده توسط هر وابستگی را نشان می‌دهد. اگر این تنها
+نوع داده‌شده باشد، به‌طور خودکار انواع دیگر وابستگی را هم شامل می‌شود.</li>
+
+<li><code>no-normal</code> — وابستگی‌های معمولی را شامل نمی‌شود.</li>
+
+<li><code>no-build</code> — وابستگی‌های ساخت را شامل نمی‌شود.</li>
+
+<li><code>no-dev</code> — وابستگی‌های توسعه را شامل نمی‌شود.</li>
+
+<li><code>no-proc-macro</code> — وابستگی‌های ماکروی رویه‌ای را شامل نمی‌شود.</li>
+
+</ul>
+
+<p>انواع وابستگی <code>normal</code>، <code>build</code>، <code>dev</code> و <code>all</code> را نمی‌توان با انواع
+<code>no-normal</code>، <code>no-build</code> یا <code>no-dev</code> ترکیب کرد.</p>
+
+<p>مقدار پیش‌فرض <code>normal,build,dev</code> است.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---target"><a class="option-anchor" href="#option-cargo-tree---target"><code>--target</code> <em>tuple</em></a></dt>
+
+<dd class="option-desc">
+<p>وابستگی‌هایی را که با <a href="../appendix/glossary.html#target">tuple هدف</a> داده‌شده مطابقت دارند فیلتر می‌کند.
+مقدار پیش‌فرض، پلتفرم میزبان است. برای شامل کردن <em>همهٔ</em> هدف‌ها از مقدار <code>all</code> استفاده کنید.</p>
+
+</dd>
+
+</dl>
+
+<h3 id="tree-formatting-options"><a class="header" href="#tree-formatting-options">گزینه‌های قالب‌بندی درخت</a></h3>
+<dl>
+<dt class="option-term" id="option-cargo-tree---charset"><a class="option-anchor" href="#option-cargo-tree---charset"><code>--charset</code> <em>charset</em></a></dt>
+
+<dd class="option-desc">
+<p>مجموعه نویسه‌ای را که برای درخت به کار می‌رود انتخاب می‌کند. مقادیر معتبر «utf8» یا
+«ascii» هستند. اگر مشخص نشود، cargo خودش یک مقدار را برمی‌گزیند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree--f"><a class="option-anchor" href="#option-cargo-tree--f"><code>-f</code> <em>format</em></a></dt>
+
+<dt class="option-term" id="option-cargo-tree---format"><a class="option-anchor" href="#option-cargo-tree---format"><code>--format</code> <em>format</em></a></dt>
+
+<dd class="option-desc">
+<p>رشتهٔ قالب هر بسته را تعیین می‌کند. مقدار پیش‌فرض «{p}» است.</p>
+
+<p>این یک رشتهٔ دلخواه است که برای نمایش هر بسته به کار می‌رود. رشته‌های زیر با مقدار
+متناظرشان جایگزین می‌شوند:</p>
+
+<ul>
+<li><code>{p}</code>، <code>{package}</code> — نام بسته.</li>
+
+<li><code>{l}</code>، <code>{license}</code> — مجوز بسته.</li>
+
+<li><code>{r}</code>، <code>{repository}</code> — نشانی URL مخزن بسته.</li>
+
+<li><code>{f}</code>، <code>{features}</code> — فهرست featureهای فعال بسته، جداشده با ویرگول.</li>
+
+<li><code>{lib}</code> — نامِ کتابخانهٔ بسته، همان‌گونه که در دستور <code>use</code> به کار می‌رود.</li>
+
+</ul>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---prefix"><a class="option-anchor" href="#option-cargo-tree---prefix"><code>--prefix</code> <em>prefix</em></a></dt>
+
+<dd class="option-desc">
+<p>نحوهٔ نمایش هر خط را تعیین می‌کند. مقدار <em>prefix</em> می‌تواند یکی از موارد زیر باشد:</p>
+
+<ul>
+<li><code>indent</code> (پیش‌فرض) — هر خط را به‌صورت درختی و با تورفتگی نشان می‌دهد.</li>
+
+<li><code>depth</code> — به‌صورت فهرست نشان می‌دهد و عمق عددی را پیش از هر مورد چاپ می‌کند.</li>
+
+<li><code>none</code> — به‌صورت فهرست مسطح نشان می‌دهد.</li>
+
+</ul>
+
+</dd>
+
+</dl>
+
+<h3 id="package-selection"><a class="header" href="#package-selection">انتخاب بسته</a></h3>
+<p>به‌طور پیش‌فرض، وقتی هیچ گزینهٔ انتخاب بسته‌ای داده نشده باشد، بسته‌های انتخاب‌شده به فایل manifest انتخاب‌شده بستگی دارند (اگر <code>--manifest-path</code> داده نشده باشد، بر اساس دایرکتوری کاری فعلی). اگر manifest ریشهٔ یک workspace باشد، اعضای پیش‌فرض workspace انتخاب می‌شوند؛ در غیر این صورت فقط بسته‌ای که manifest تعریف می‌کند انتخاب خواهد شد.</p>
+<p>اعضای پیش‌فرض یک workspace را می‌توان با کلید <code>workspace.default-members</code> در manifest ریشه به‌صراحت تعیین کرد. اگر این کلید تنظیم نشده باشد، یک workspace مجازی همهٔ اعضای workspace را شامل می‌شود (معادل دادن <code>--workspace</code>) و یک workspace غیرمجازی فقط خود crate ریشه را شامل می‌شود.</p>
+<dl>
+<dt class="option-term" id="option-cargo-tree--p"><a class="option-anchor" href="#option-cargo-tree--p"><code>-p</code> <em>spec</em>…</a></dt>
+
+<dt class="option-term" id="option-cargo-tree---package"><a class="option-anchor" href="#option-cargo-tree---package"><code>--package</code> <em>spec</em>…</a></dt>
+
+<dd class="option-desc">
+<p>فقط بسته‌های مشخص‌شده را نمایش می‌دهد. برای قالب SPEC، <a href="cargo-pkgid.html">cargo-pkgid(1)</a>
+را ببینید. این پرچم را می‌توان چندین بار مشخص کرد و از الگوهای glob رایج یونیکس مانند
+<code>*</code>، <code>?</code> و <code>[]</code> پشتیبانی می‌کند. با این حال، برای اینکه shell شما پیش از رسیدن
+الگوها به Cargo به‌طور ناخواسته آن‌ها را باز نکند، باید دور هر الگو از نقل‌قول تکی یا
+دوتایی استفاده کنید.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---workspace"><a class="option-anchor" href="#option-cargo-tree---workspace"><code>--workspace</code></a></dt>
+
+<dd class="option-desc">
+<p>همهٔ اعضای workspace را نمایش می‌دهد.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---exclude"><a class="option-anchor" href="#option-cargo-tree---exclude"><code>--exclude</code> <em>SPEC</em>…</a></dt>
+
+<dd class="option-desc">
+<p>بسته‌های مشخص‌شده را کنار می‌گذارد. باید همراه با پرچم
+<code>--workspace</code> استفاده شود. این پرچم را می‌توان چندین بار مشخص کرد و از
+الگوهای glob رایج یونیکس مانند <code>*</code>، <code>?</code> و <code>[]</code> پشتیبانی می‌کند. با این حال، برای اینکه shell شما
+پیش از رسیدن الگوها به Cargo به‌طور ناخواسته آن‌ها را باز نکند، باید دور هر
+الگو از نقل‌قول تکی یا دوتایی استفاده کنید.</p>
+
+</dd>
+
+</dl>
+
+<h3 id="manifest-options"><a class="header" href="#manifest-options">گزینه‌های manifest</a></h3>
+<dl>
+<dt class="option-term" id="option-cargo-tree---manifest-path"><a class="option-anchor" href="#option-cargo-tree---manifest-path"><code>--manifest-path</code> <em>path</em></a></dt>
+
+<dd class="option-desc">
+<p>مسیر فایل <code>Cargo.toml</code>. به‌طور پیش‌فرض، Cargo فایل <code>Cargo.toml</code> را در دایرکتوری
+فعلی یا هر دایرکتوری والد جست‌وجو می‌کند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---locked"><a class="option-anchor" href="#option-cargo-tree---locked"><code>--locked</code></a></dt>
+
+<dd class="option-desc">
+<p>تأیید می‌کند که دقیقاً همان وابستگی‌ها و نسخه‌هایی به کار رفته‌اند که هنگام تولید
+اولیهٔ فایل <code>Cargo.lock</code> موجود استفاده شده بودند. Cargo در یکی از دو حالت زیر
+با خطا خارج می‌شود:</p>
+
+<ul>
+<li>فایل قفل وجود نداشته باشد.</li>
+
+<li>Cargo به‌دلیل تفاوت در حل وابستگی‌ها بخواهد فایل قفل را تغییر دهد.</li>
+
+</ul>
+
+<p>می‌توان آن را در محیط‌هایی که ساخت‌های قطعی (deterministic) مطلوب است، مانند
+خط لوله‌های CI، به کار برد.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---offline"><a class="option-anchor" href="#option-cargo-tree---offline"><code>--offline</code></a></dt>
+
+<dd class="option-desc">
+<p>مانع می‌شود Cargo به هر دلیلی به شبکه دسترسی پیدا کند. بدون این پرچم، اگر Cargo
+نیاز به دسترسی به شبکه داشته باشد و شبکه در دسترس نباشد، با خطا متوقف می‌شود. با
+این پرچم، Cargo در صورت امکان بدون شبکه ادامه می‌دهد.</p>
+
+<p>توجه داشته باشید که این ممکن است به حل وابستگی‌هایی متفاوت از حالت آنلاین منجر شود.
+Cargo خود را به crateهایی محدود می‌کند که به‌صورت محلی دانلود شده‌اند، حتی اگر
+بر پایهٔ نسخهٔ محلی index نسخهٔ جدیدتری وجود داشته باشد. برای دانلود وابستگی‌ها
+پیش از آفلاین شدن، دستور <a href="cargo-fetch.html">cargo-fetch(1)</a> را ببینید.</p>
+
+<p>همچنین می‌توان آن را با <a href="../reference/config.html">مقدار پیکربندی</a> <code>net.offline</code> مشخص کرد.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---frozen"><a class="option-anchor" href="#option-cargo-tree---frozen"><code>--frozen</code></a></dt>
+
+<dd class="option-desc">
+<p>معادل مشخص کردن هر دو پرچم <code>--locked</code> و <code>--offline</code> است.</p>
+
+</dd>
+
+</dl>
+
+<h3 id="feature-selection"><a class="header" href="#feature-selection">انتخاب feature</a></h3>
+<p>پرچم‌های feature به شما اجازه می‌دهند کنترل کنید کدام featureها فعال شوند. وقتی هیچ گزینهٔ featureای داده نشده باشد، feature به نام <code>default</code> برای هر بستهٔ انتخاب‌شده فعال می‌شود.</p>
+<p>برای جزئیات بیشتر، <a href="../reference/features.html#command-line-feature-options">مستندات featureها</a> را ببینید.</p>
+<dl>
+<dt class="option-term" id="option-cargo-tree--F"><a class="option-anchor" href="#option-cargo-tree--F"><code>-F</code> <em>features</em></a></dt>
+
+<dt class="option-term" id="option-cargo-tree---features"><a class="option-anchor" href="#option-cargo-tree---features"><code>--features</code> <em>features</em></a></dt>
+
+<dd class="option-desc">
+<p>فهرست featureهای قابل فعال‌سازی، جداشده با فاصله یا ویرگول. featureهای اعضای
+workspace را می‌توان با نحو <code>package-name/feature-name</code> فعال کرد. این پرچم را می‌توان
+چندین بار مشخص کرد که همهٔ featureهای مشخص‌شده را فعال می‌کند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---all-features"><a class="option-anchor" href="#option-cargo-tree---all-features"><code>--all-features</code></a></dt>
+
+<dd class="option-desc">
+<p>همهٔ featureهای موجود همهٔ بسته‌های انتخاب‌شده را فعال می‌کند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---no-default-features"><a class="option-anchor" href="#option-cargo-tree---no-default-features"><code>--no-default-features</code></a></dt>
+
+<dd class="option-desc">
+<p>feature به نام <code>default</code> بسته‌های انتخاب‌شده را فعال نمی‌کند.</p>
+
+</dd>
+
+</dl>
+
+<h3 id="display-options"><a class="header" href="#display-options">گزینه‌های نمایش</a></h3>
+<dl>
+<dt class="option-term" id="option-cargo-tree--v"><a class="option-anchor" href="#option-cargo-tree--v"><code>-v</code></a></dt>
+
+<dt class="option-term" id="option-cargo-tree---verbose"><a class="option-anchor" href="#option-cargo-tree---verbose"><code>--verbose</code></a></dt>
+
+<dd class="option-desc">
+<p>از خروجی مفصل استفاده می‌کند. می‌توان آن را دو بار مشخص کرد تا خروجی «بسیار مفصل»
+شامل خروجی‌های اضافی مانند هشدارهای وابستگی‌ها و خروجی build scriptها تولید شود.
+همچنین می‌توان آن را با <a href="../reference/config.html">مقدار پیکربندی</a> <code>term.verbose</code> مشخص کرد.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree--q"><a class="option-anchor" href="#option-cargo-tree--q"><code>-q</code></a></dt>
+
+<dt class="option-term" id="option-cargo-tree---quiet"><a class="option-anchor" href="#option-cargo-tree---quiet"><code>--quiet</code></a></dt>
+
+<dd class="option-desc">
+<p>پیام‌های گزارش cargo را چاپ نمی‌کند.
+همچنین می‌توان آن را با <a href="../reference/config.html">مقدار پیکربندی</a> <code>term.quiet</code> مشخص کرد.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---color"><a class="option-anchor" href="#option-cargo-tree---color"><code>--color</code> <em>when</em></a></dt>
+
+<dd class="option-desc">
+<p>تعیین می‌کند خروجی رنگی چه زمانی استفاده شود. مقادیر معتبر:</p>
+
+<ul>
+<li><code>auto</code> (پیش‌فرض): به‌طور خودکار تشخیص می‌دهد که ترمینال از رنگ پشتیبانی می‌کند یا نه.</li>
+
+<li><code>always</code>: همیشه رنگ‌ها را نمایش می‌دهد.</li>
+
+<li><code>never</code>: هرگز رنگ‌ها را نمایش نمی‌دهد.</li>
+
+</ul>
+
+<p>همچنین می‌توان آن را با <a href="../reference/config.html">مقدار پیکربندی</a> <code>term.color</code> مشخص کرد.</p>
+
+</dd>
+
+</dl>
+
+<h3 id="common-options"><a class="header" href="#common-options">گزینه‌های رایج</a></h3>
+<dl>
+<dt class="option-term" id="option-cargo-tree-+toolchain"><a class="option-anchor" href="#option-cargo-tree-+toolchain"><code>+</code><em>toolchain</em></a></dt>
+
+<dd class="option-desc">
+<p>اگر Cargo با rustup نصب شده باشد و اولین آرگومان <code>cargo</code> با <code>+</code> شروع شود،
+به‌عنوان نام یک toolchain در rustup تفسیر می‌شود (مانند <code>+stable</code> یا <code>+nightly</code>).
+برای اطلاعات بیشتر دربارهٔ نحوهٔ کار بازنویسی toolchain، به
+<a href="https://rust-lang.github.io/rustup/overrides.html">مستندات rustup</a> مراجعه کنید.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree---config"><a class="option-anchor" href="#option-cargo-tree---config"><code>--config</code> <em>KEY=VALUE</em> یا <em>PATH</em></a></dt>
+
+<dd class="option-desc">
+<p>یک مقدار پیکربندی Cargo را بازنویسی می‌کند. آرگومان باید با نحو TOML به شکل <code>KEY=VALUE</code> باشد،
+یا به‌صورت مسیر یک فایل پیکربندی اضافی داده شود. این پرچم را می‌توان چندین بار مشخص کرد.
+برای اطلاعات بیشتر، <a href="../reference/config.html#command-line-overrides">بخش بازنویسی‌های خط فرمان</a> را ببینید.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree--C"><a class="option-anchor" href="#option-cargo-tree--C"><code>-C</code> <em>PATH</em></a></dt>
+
+<dd class="option-desc">
+<p>پیش از اجرای هر عملیات مشخص‌شده، دایرکتوری کاری فعلی را تغییر می‌دهد. این موضوع بر مواردی
+مانند محل جست‌وجوی پیش‌فرض cargo برای manifest پروژه (<code>Cargo.toml</code>) و نیز دایرکتوری‌هایی
+که برای یافتن <code>.cargo/config.toml</code> جست‌وجو می‌شوند اثر می‌گذارد. این گزینه باید پیش از
+نام دستور بیاید، برای مثال <code>cargo -C path/to/my-project build</code>.</p>
+
+<p>این گزینه فقط روی <a href="../../book/appendix-07-nightly-rust.html">کانال
+nightly</a> در دسترس است و
+برای فعال شدن به پرچم <code>-Z unstable-options</code> نیاز دارد (<a href="https://github.com/rust-lang/cargo/issues/10098">#10098</a> را ببینید).</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree--h"><a class="option-anchor" href="#option-cargo-tree--h"><code>-h</code></a></dt>
+
+<dt class="option-term" id="option-cargo-tree---help"><a class="option-anchor" href="#option-cargo-tree---help"><code>--help</code></a></dt>
+
+<dd class="option-desc">
+<p>اطلاعات راهنما را چاپ می‌کند.</p>
+
+</dd>
+
+<dt class="option-term" id="option-cargo-tree--Z"><a class="option-anchor" href="#option-cargo-tree--Z"><code>-Z</code> <em>flag</em></a></dt>
+
+<dd class="option-desc">
+<p>پرچم‌های ناپایدار (فقط nightly) برای Cargo. برای جزئیات <code>cargo -Z help</code> را اجرا کنید.</p>
+
+</dd>
+
+</dl>
+
+<h2 id="environment"><a class="header" href="#environment">متغیرهای محیطی</a></h2>
+<p>برای جزئیات متغیرهای محیطی که Cargo می‌خواند، <a href="../reference/environment-variables.html">مرجع</a> را ببینید.</p>
+<h2 id="exit-status"><a class="header" href="#exit-status">وضعیت خروج</a></h2>
+<ul>
+<li><code>0</code>: Cargo موفق بود.</li>
+<li><code>101</code>: Cargo نتوانست کار را کامل کند.</li>
+</ul>
+<h2 id="examples"><a class="header" href="#examples">مثال‌ها</a></h2>
+<ol>
+<li>
+<p>نمایش درخت بستهٔ موجود در دایرکتوری فعلی:</p>
+<pre><code>cargo tree
+</code></pre>
+</li>
+<li>
+<p>نمایش همهٔ بسته‌هایی که به بستهٔ <code>syn</code> وابسته‌اند:</p>
+<pre><code>cargo tree -i syn
+</code></pre>
+</li>
+<li>
+<p>نمایش featureهای فعال‌شده روی هر بسته:</p>
+<pre><code>cargo tree --format "{p} {f}"
+</code></pre>
+</li>
+<li>
+<p>نمایش همهٔ بسته‌هایی که چندین بار ساخته می‌شوند. این اتفاق می‌تواند زمانی بیفتد که چند نسخهٔ ناسازگار از نظر semver در درخت ظاهر شوند (مانند 1.0.0 و 2.0.0).</p>
+<pre><code>cargo tree -d
+</code></pre>
+</li>
+<li>
+<p>توضیح اینکه چرا featureها برای بستهٔ <code>syn</code> فعال شده‌اند:</p>
+<pre><code>cargo tree -e features -i syn
+</code></pre>
+<p>پرچم <code>-e features</code> برای نمایش featureها به کار می‌رود. پرچم <code>-i</code> برای وارونه کردن گراف به کار می‌رود تا بسته‌هایی را که به <code>syn</code> وابسته‌اند نمایش دهد. نمونه‌ای از آنچه این دستور نمایش می‌دهد:</p>
+<pre><code>syn v1.0.17
+├── syn feature "clone-impls"
+│   └── syn feature "default"
+│       └── rustversion v1.0.2
+│           └── rustversion feature "default"
+│               └── myproject v0.1.0 (/myproject)
+│                   └── myproject feature "default" (command-line)
+├── syn feature "default" (*)
+├── syn feature "derive"
+│   └── syn feature "default" (*)
+├── syn feature "full"
+│   └── rustversion v1.0.2 (*)
+├── syn feature "parsing"
+│   └── syn feature "default" (*)
+├── syn feature "printing"
+│   └── syn feature "default" (*)
+├── syn feature "proc-macro"
+│   └── syn feature "default" (*)
+└── syn feature "quote"
+    ├── syn feature "printing" (*)
+    └── syn feature "proc-macro" (*)
+</code></pre>
+<p>برای خواندن این گراف، می‌توانید زنجیرهٔ هر feature را از ریشه دنبال کنید تا ببینید چرا شامل شده است. برای مثال، feature به نام «full» توسط crate به نام <code>rustversion</code> اضافه شده است که از <code>myproject</code> (با featureهای پیش‌فرض) می‌آید، و <code>myproject</code> بسته‌ای است که در خط فرمان انتخاب شده است. همهٔ featureهای دیگر <code>syn</code> توسط feature «default» اضافه شده‌اند («quote» توسط «printing» و «proc-macro» اضافه شده است که هر دو featureهای پیش‌فرض هستند).</p>
+<p>اگر در تطبیق ارجاعی موارد <code>(*)</code>ی حذف‌تکرارشده مشکل دارید، با پرچم <code>--no-dedupe</code> امتحان کنید تا خروجی کامل را بگیرید.</p>
+</li>
+</ol>
+<h2 id="see-also"><a class="header" href="#see-also">همچنین ببینید</a></h2>
+<p><a href="cargo.html">cargo(1)</a>, <a href="cargo-metadata.html">cargo-metadata(1)</a></p><nav class="page-nav"><a href="cargo-remove.html">→ cargo remove</a><a href="cargo-update.html">cargo update ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

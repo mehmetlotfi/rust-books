@@ -1,0 +1,205 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>حل صفت — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="traits/resolution"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="trait-resolution-old-style"><a class="header" href="#trait-resolution-old-style">حل صفت (سبک قدیمی)</a></h1>
+<p>این فصل فرایند کلی <em>حل صفت (trait resolution)</em> را توضیح می‌دهد و به
+چند نکتهٔ غیربدیهی اشاره می‌کند.</p>
+<p><strong>نکته:</strong> این فصل (و زیرفصل‌هایش) توضیح می‌دهند حل‌کنندهٔ صفت
+<strong>در حال حاضر</strong> چگونه کار می‌کند. با این حال، در حال
+طراحی یک حل‌کنندهٔ صفت جدید هستیم. اگر ترجیح می‌دهید دربارهٔ <em>آن</em> بخوانید،
+<a href="./chalk.html"><em>این</em> زیرفصل</a> را ببینید.</p>
+<h2 id="major-concepts"><a class="header" href="#major-concepts">مفاهیم اصلی</a></h2>
+<p>حل صفت فرایند جفت کردن یک impl با هر
+ارجاع به یک صفت است. پس برای مثال، اگر تابع جنریکی مانند این وجود داشته باشد:</p>
+<pre><code class="language-rust ignore">fn clone_slice&lt;T:Clone&gt;(x: &amp;[T]) -&gt; Vec&lt;T&gt; { ... }</code></pre>
+<p>و سپس فراخوانی آن تابع:</p>
+<pre><code class="language-rust ignore">let v: Vec&lt;isize&gt; = clone_slice(&amp;[1, 2, 3])</code></pre>
+<p>کار حل صفت این است که بفهمد آیا impl‌ای از
+(در این مورد) <code>isize : Clone</code> وجود دارد یا نه.</p>
+<p>توجه کنید که در برخی موارد، مانند توابع جنریک، ممکن است نتوانیم
+impl مشخصی پیدا کنیم، اما می‌توانیم نتیجه بگیریم که فراخواننده باید
+یک impl فراهم کند. برای مثال، بدنهٔ <code>clone_slice</code> را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">fn clone_slice&lt;T:Clone&gt;(x: &amp;[T]) -&gt; Vec&lt;T&gt; {
+    let mut v = Vec::new();
+    for e in &amp;x {
+        v.push((*e).clone()); // (*)
+    }
+}</code></pre>
+<p>خطی که با <code>(*)</code> علامت‌گذاری شده فقط در صورتی مجاز است که <code>T</code> (نوع <code>*e</code>)
+صفت <code>Clone</code> را پیاده‌سازی کند. طبیعتاً چون نمی‌دانیم <code>T</code>
+چیست، نمی‌توانیم impl مشخص را پیدا کنیم؛ اما بر پایهٔ کران <code>T:Clone</code>
+می‌توانیم بگوییم impl‌ای وجود دارد که فراخواننده باید فراهم کند.</p>
+<p>اصطلاح <em>تعهد (obligation)</em> را برای اشاره به ارجاع صفتی به کار می‌بریم که به
+یک impl نیاز دارد. در اصل، سامانهٔ حل صفت یک تعهد را
+با اثبات اینکه impl مناسب واقعاً وجود دارد حل می‌کند.</p>
+<p>در طول بررسی نوع، نتایج انتخاب صفت (trait selection) را ذخیره نمی‌کنیم.
+فقط می‌خواهیم وارسی کنیم انتخاب صفت موفق خواهد بود. سپس
+بعداً، در زمان codegen، وقتی همهٔ نوع‌های مشخص در دسترس‌اند،
+می‌توانیم انتخاب صفت را تکرار کنیم تا پیاده‌سازی واقعی انتخاب شود، که
+سپس در باینری خروجی تولید می‌شود.</p>
+<h2 id="overview"><a class="header" href="#overview">نمای کلی</a></h2>
+<p>حل صفت از سه بخش اصلی تشکیل شده است:</p>
+<ul>
+<li>
+<p><strong>انتخاب (Selection)</strong>: تصمیم‌گیری دربارهٔ اینکه یک تعهد مشخص چگونه حل شود. برای
+مثال، انتخاب ممکن است تصمیم بگیرد یک تعهد مشخص را
+می‌توان با به‌کارگیری impl‌ای که با نوع <code>Self</code> مطابقت دارد، یا با استفاده از
+یک کران پارامتر (مثلاً <code>T: Trait</code>) حل کرد. در مورد یک impl، انتخاب یک
+تعهد می‌تواند به‌دلیل where clauseهای
+خود impl <em>تعهدهای تودرتو</em> بسازد. ممکن است ارزیابی آن
+تعهدهای تودرتو را هم برای رفع ابهام‌ها لازم داشته باشد.</p>
+</li>
+<li>
+<p><strong>برآورده‌سازی (Fulfillment)</strong>: کد fulfillment همان چیزی است که پیگیری می‌کند تعهدها
+به‌طور کامل برآورده شده‌اند. در اصل یک فهرست کار (worklist) از تعهدهاست
+که باید انتخاب شوند: هنگامی که انتخاب موفق شد، تعهد
+از فهرست کار حذف می‌شود و هر تعهد تودرتو در صف قرار می‌گیرد.
+Fulfillment متغیرهای استنتاج را مقید می‌کند.</p>
+</li>
+<li>
+<p><strong>ارزیابی (Evaluation)</strong>: بررسی می‌کند آیا تعهدها برقرارند، بدون اینکه
+هیچ متغیر استنتاجی را مقید کند. توسط selection استفاده می‌شود.</p>
+</li>
+</ul>
+<h2 id="selection"><a class="header" href="#selection">انتخاب (Selection)</a></h2>
+<p>انتخاب فرایند تصمیم‌گیری دربارهٔ این است که آیا یک تعهد می‌تواند
+حل شود و اگر می‌تواند، چگونه حل شود (از طریق impl، where clause و غیره).
+رابط اصلی تابع <code>select()</code> است که یک تعهد می‌گیرد
+و <code>SelectionResult</code> برمی‌گرداند. سه نتیجهٔ ممکن وجود دارد:</p>
+<ul>
+<li>
+<p><code>Ok(Some(selection))</code> – بله، تعهد را می‌توان حل کرد و
+<code>selection</code> نشان می‌دهد چگونه. اگر تعهد از طریق یک impl حل شده باشد،
+<code>selection</code> ممکن است تعهدهای تودرتویی را هم که impl
+لازم دارد نشان دهد.</p>
+</li>
+<li>
+<p><code>Ok(None)</code> – هنوز مطمئن نیستیم تعهد قابل حل است یا نه.
+این بیشتر وقتی رخ می‌دهد که تعهد
+متغیرهای نوع بدون مقدار داشته باشد.</p>
+</li>
+<li>
+<p><code>Err(err)</code> – تعهد قطعاً نمی‌تواند حل شود، به‌دلیل
+یک خطای نوع یا چون هیچ impl‌ای وجود ندارد که بتواند اعمال شود.</p>
+</li>
+</ul>
+<p>الگوریتم پایهٔ انتخاب به دو فاز بزرگ تقسیم می‌شود:
+جمع‌آوری کاندیداها (candidate assembly) و تأیید (confirmation).</p>
+<p>توجه کنید که به‌دلیل نحوهٔ کار استنتاج طول عمر، نمی‌توان
+بازخورد فوری دربارهٔ برقرار بودن یا نبودن یک یکسان‌سازی یا رابطهٔ زیرنوع
+میان طول عمرها داد. بنابراین تطبیق
+طول عمر در حین انتخاب <em>در نظر گرفته نمی‌شود</em>. این در
+این واقعیت منعکس می‌شود که انتساب زیرناحیه (subregion) شکست‌ناپذیر است. این ممکن است
+قیدهای طول عمری ایجاد کند که بعداً معلوم می‌شود خطا هستند (در
+مقابل، قیدهای غیر طول عمر پیش‌تر
+در حین انتخاب بررسی شده‌اند و هرگز نمی‌توانند خطا ایجاد کنند، هرچند طبیعتاً
+ممکن است به خطاهای دیگری در پایین‌دست بینجامند).</p>
+<h3 id="candidate-assembly"><a class="header" href="#candidate-assembly">جمع‌آوری کاندیداها (Candidate assembly)</a></h3>
+<p><strong>TODO</strong>: دربارهٔ اینکه <em>چرا</em> کاندیداهای مختلف داریم و چرا باید در یک probe رخ دهد صحبت شود.</p>
+<p>به جستجوی impl‌ها/where-clauseها/و غیره می‌پردازد که ممکن است
+برای برآورده کردن تعهد به کار روند. هر یک از آن‌ها
+یک کاندیدا نامیده می‌شود. برای پرهیز از ابهام، می‌خواهیم دقیقاً یک
+کاندیدا پیدا کنیم که به‌طور قطعی قابل اعمال باشد. در برخی موارد ممکن است
+ندانیم یک impl/where-clause اعمال می‌شود یا نه – این وقتی رخ می‌دهد که
+تعهد متغیرهای استنتاج بدون مقدار داشته باشد.</p>
+<p>زیربرنامه‌هایی که تصمیم می‌گیرند یک impl/where-clause/و غیره مشخص بر یک تعهد مشخص اعمال می‌شود
+در مجموع فرایند
+<em>تطبیق (matching)</em> نامیده می‌شوند. برای کاندیداهای <code>impl</code> <!-- date-check: Oct 2022 -->،
+این به یکسان‌سازی سرایند impl (نوع <code>Self</code> و آرگومان‌های صفت)
+با چشم‌پوشی از تعهدهای تودرتو می‌انجامد. اگر تطبیق موفق شود آن را به
+مجموعه‌ای از کاندیداها اضافه می‌کنیم. هنگام جمع‌آوری کاندیداها برای
+صفت‌های توکار مانند <code>Copy</code>، <code>Sized</code> و <code>CoerceUnsized</code> قواعد دیگری هم وجود دارد.</p>
+<p>پس از پایان این گذر نخست، می‌توانیم مجموعهٔ کاندیداها را بررسی کنیم. اگر
+مجموعه‌ای تک‌عضوی باشد، کار تمام است: این تنها impl در
+دامنه است که ممکن است اعمال شود. در غیر این صورت، می‌توانیم مجموعهٔ کاندیداها را
+با استفاده از where clauseها و شرط‌های دیگر <strong>غربال (winnow)</strong> کنیم. غربال کردن از
+<code>evaluate_candidate</code> استفاده می‌کند تا بررسی کند آیا تعهدهای تودرتو ممکن است اعمال شوند.
+اگر این باز هم بیش از ۱ کاندیدا باقی بگذارد، از <code> fn candidate_should_be_dropped_in_favor_of</code>
+استفاده می‌کنیم تا برخی کاندیداها را بر برخی دیگر ترجیح دهیم.</p>
+<p>اگر این مجموعهٔ کاهش‌یافته یک مدخل واحد و بدون ابهام بدهد، کار درست است،
+در غیر این صورت نتیجه مبهم در نظر گرفته می‌شود.</p>
+<h4 id="winnowing-resolving-ambiguities"><a class="header" href="#winnowing-resolving-ambiguities">غربال کردن (Winnowing): رفع ابهام‌ها</a></h4>
+<p>اما اگر چند impl وجود داشته باشد که در همهٔ آن‌ها نوع‌ها
+یکسان‌سازی شوند چه می‌شود؟ این مثال را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">trait Get {
+    fn get(&amp;self) -&gt; Self;
+}
+
+impl&lt;T: Copy&gt; Get for T {
+    fn get(&amp;self) -&gt; T {
+        *self
+    }
+}
+
+impl&lt;T: Get&gt; Get for Box&lt;T&gt; {
+    fn get(&amp;self) -&gt; Box&lt;T&gt; {
+        Box::new(&lt;T&gt;::get(self))
+    }
+}</code></pre>
+<p>مثلاً وقتی <code>get(&amp;Box::new(1_u16))</code> را فراخوانی می‌کنیم چه می‌شود؟ در این
+مورد، نوع <code>Self</code> برابر <code>Box&lt;u16&gt;</code> است – که با هر دو impl یکسان‌سازی می‌شود،
+چون اولی بر همهٔ نوع‌های <code>T</code> اعمال می‌شود و دومی بر همهٔ
+<code>Box&lt;T&gt;</code>. برای اینکه این بدون ابهام باشد، کامپایلر یک گذر <em>غربال‌کردن</em>
+انجام می‌دهد که <code>where</code> clauseها را در نظر می‌گیرد
+و می‌کوشد کاندیداها را حذف کند. در این مورد، impl نخست فقط
+در صورتی اعمال می‌شود که <code>Box&lt;u16&gt; : Copy</code> برقرار باشد که برقرار نیست. پس از غربال کردن،
+فقط یک کاندیدا باقی می‌ماند، بنابراین می‌توانیم ادامه دهیم.</p>
+<h4 id="where-clauses"><a class="header" href="#where-clauses"><code>where</code> clauseها</a></h4>
+<p>جز impl، راه اصلی دیگر برای حل یک تعهد از طریق یک
+where clause است. به فرایند انتخاب همیشه یک <a href="../typing-parameter-envs.html">محیط
+پارامتر (parameter environment)</a> داده می‌شود که فهرستی از where clauseها دارد، که
+اساساً تعهدهایی‌اند که می‌توانیم فرض کنیم برآورده‌شدنی‌اند. روی
+آن فهرست پیمایش می‌کنیم و بررسی می‌کنیم آیا تعهد فعلی ما در
+آن فهرست یافت می‌شود. اگر بود، برآورده‌شده در نظر گرفته می‌شود. دقیق‌تر، می‌خواهیم
+بررسی کنیم آیا تعهد where-clauseای وجود دارد که برای
+همان صفت (یا یک زیرصفت) باشد و بتواند با تعهد تطبیق یابد.</p>
+<p>این مثال ساده را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">trait A1 {
+    fn do_a1(&amp;self);
+}
+trait A2 : A1 { ... }
+
+trait B {
+    fn do_b(&amp;self);
+}
+
+fn foo&lt;X:A2+B&gt;(x: X) {
+    x.do_a1(); // (*)
+    x.do_b();  // (#)
+}</code></pre>
+<p>در بدنهٔ <code>foo</code>، آشکارا می‌توانیم از متدهای <code>A1</code>، <code>A2</code> یا <code>B</code>
+روی متغیر <code>x</code> استفاده کنیم. خط علامت‌گذاری‌شده با <code>(*)</code> تعهد <code>X: A1</code> ایجاد می‌کند،
+در حالی که خط علامت‌گذاری‌شده با <code>(#)</code> تعهد <code>X: B</code> ایجاد می‌کند. در همین حال،
+محیط پارامتر دو where-clause خواهد داشت: <code>X : A2</code> و <code>X : B</code>.
+پس برای هر تعهد، این فهرست where-clauseها را جستجو می‌کنیم.
+تعهد <code>X: B</code> به‌سادگی با where-clause به شکل <code>X: B</code> تطبیق می‌یابد.
+برای حل تعهد <code>X:A1</code>، توجه می‌کنیم که <code>X:A2</code> مستلزم <code>X:A1</code> است.</p>
+<h3 id="confirmation"><a class="header" href="#confirmation">تأیید (Confirmation)</a></h3>
+<p><em>تأیید (Confirmation)</em> پارامترهای نوع خروجی صفت را با
+مقادیر یافت‌شده در تعهد یکسان‌سازی می‌کند و احتمالاً خطای نوع می‌دهد.</p>
+<p>فرض کنید گونه‌ای از مثال <code>Convert</code> را در
+بخش پیشین داریم، به این شکل:</p>
+<pre><code class="language-rust ignore">trait Convert&lt;Target&gt; {
+    fn convert(&amp;self) -&gt; Target;
+}
+
+impl Convert&lt;usize&gt; for isize { ... } // isize -&gt; usize
+impl Convert&lt;isize&gt; for usize { ... } // usize -&gt; isize
+
+let x: isize = ...;
+let y: char = x.convert(); // NOTE: `y: char` now!</code></pre>
+<p>تأیید جایی است که خطا گزارش می‌شود، چون impl مشخص کرده بود
+<code>Target</code> برابر <code>usize</code> خواهد بود، اما تعهد <code>char</code> را گزارش کرد. بنابراین
+نتیجهٔ انتخاب یک خطا خواهد بود.</p>
+<p>توجه کنید که impl کاندیدا بر پایهٔ نوع <code>Self</code> انتخاب می‌شود، اما
+تأیید بر پایهٔ (در این مورد) پارامتر نوع <code>Target</code> انجام می‌شود.</p>
+<h3 id="selection-during-codegen"><a class="header" href="#selection-during-codegen">انتخاب در حین codegen</a></h3>
+<p>همان‌طور که در بالا گفته شد، در طول بررسی نوع، نتایج انتخاب صفت را ذخیره نمی‌کنیم.
+در زمان codegen، انتخاب صفت را تکرار می‌کنیم تا برای هر فراخوانی متد
+impl مشخصی انتخاب شود. این کار با <code>fn codegen_select_candidate</code> انجام می‌شود.
+در این انتخاب دوم، هیچ where-clauseای را در دامنه در نظر نمی‌گیریم
+چون می‌دانیم هر حل به یک impl مشخص حل می‌شود.</p>
+<p>یک پیچ جالب به تعهدهای تودرتو مربوط است. در حالت کلی، در codegen
+فقط باید بفهمیم کدام کاندیدا اعمال می‌شود و به تعهدهای تودرتو اهمیت نمی‌دهیم،
+چون از قبل فرض می‌شود درست‌اند. با این حال، در حال حاضر <em>همهٔ</em> آن‌ها را برآورده می‌کنیم.
+دلیلش این است که گاهی می‌تواند نتایج استنتاج نوع را تحت تأثیر قرار دهد.
+یعنی جایگزین‌های کامل بر حسب متغیرهای نوع
+impl در دسترس ما نیست، پس باید انتخاب صفت را اجرا کنیم تا
+همه‌چیز را بفهمیم.</p><nav class="page-nav"><a href="../type-inference.html">→ استنتاج نوع</a><a href="hrtb.html">کران‌های صفت مرتبهٔ بالاتر ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

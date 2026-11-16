@@ -1,0 +1,28 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Transmuteها — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="transmutes"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="transmutes"><a class="header" href="#transmutes">تبدیل‌های transmute</a></h1>
+<p>از سر راه ما کنار برو سیستم نوع! ما این بیت‌ها را بازتفسیر می‌کنیم یا در راه آن می‌میریم! هرچند کل این کتاب دربارهٔ انجام کارهای ناایمن است، واقعاً نمی‌توانم به اندازهٔ کافی تأکید کنم که باید عمیقاً به یافتن راهی دیگر به‌جای عملیاتی که در این بخش پوشش داده می‌شود فکر کنید. این واقعاً و به‌راستی هولناک‌ترین کار ناایمنی است که می‌توانید در Rust انجام دهید. نرده‌های محافظ اینجا از جنس نخ دندان هستند.</p>
+<p><a href="https://doc.rust-lang.org/std/mem/fn.transmute.html"><code>mem::transmute&lt;T, U&gt;</code></a> مقداری از نوع <code>T</code> را می‌گیرد و آن را طوری بازتفسیر می‌کند که نوع <code>U</code> داشته باشد. تنها محدودیت این است که بررسی می‌شود <code>T</code> و <code>U</code> اندازهٔ یکسانی داشته باشند. راه‌هایی که با این تابع می‌توان رفتار تعریف‌نشده ایجاد کرد شگفت‌انگیزند.</p>
+<ul>
+<li>
+<p>پیش از هر چیز، ساختن نمونه‌ای از <em>هر</em> نوعی با حالت نامعتبر هرج‌ومرج دلخواهی ایجاد می‌کند که واقعاً قابل پیش‌بینی نیست. <code>3</code> را به <code>bool</code> تبدیل (transmute) نکنید. حتی اگر هرگز با آن <code>bool</code> کاری <em>نکنید</em>. فقط این کار را نکنید.</p>
+</li>
+<li>
+<p>transmute نوع بازگشتی سربارگذاری‌شده دارد. اگر نوع بازگشتی را مشخص نکنید ممکن است برای ارضای استنتاج نوعی غافلگیرکننده تولید کند.</p>
+</li>
+<li>
+<p>تبدیل یک <code>&amp;</code> به <code>&amp;mut</code> با transmute رفتار تعریف‌نشده است. هرچند ممکن است برخی کاربردها ایمن <em>به نظر برسند</em>، توجه کنید که بهینه‌ساز Rust آزاد است فرض کند ارجاع مشترک در طول عمرش تغییر نمی‌کند و در نتیجه چنین تبدیلی با آن فرض‌ها برخورد خواهد کرد. بنابراین:</p>
+<ul>
+<li>تبدیل یک <code>&amp;</code> به <code>&amp;mut</code> با transmute <em>همیشه</em> رفتار تعریف‌نشده است.</li>
+<li>نه، نمی‌توانید این کار را بکنید.</li>
+<li>نه، شما استثنا نیستید.</li>
+</ul>
+</li>
+<li>
+<p>تبدیل به یک ارجاع بدون طول عمر صریحاً مشخص‌شده، یک <a href="./unbounded-lifetimes.html">طول عمر بی‌کران</a> تولید می‌کند.</p>
+</li>
+<li>
+<p>هنگام تبدیل میان نوع‌های مرکب مختلف، باید مطمئن شوید که چیدمان آن‌ها یکسان است! اگر چیدمان‌ها متفاوت باشند، فیلدهای نادرست با داده‌های نادرست پر می‌شوند که شما را ناراضی می‌کند و همچنین می‌تواند رفتار تعریف‌نشده باشد (به بالا نگاه کنید).</p>
+<p>پس چگونه بفهمید چیدمان‌ها یکسان‌اند؟ برای نوع‌های <code>repr(C)</code> و نوع‌های <code>repr(transparent)</code>، چیدمان دقیقاً تعریف شده است. اما برای <code>repr(Rust)</code> معمولی شما، این‌طور نیست. حتی نمونه‌های مختلف یک نوع جنریک یکسان هم می‌توانند چیدمان‌های بسیار متفاوتی داشته باشند. <code>Vec&lt;i32&gt;</code> و <code>Vec&lt;u32&gt;</code> <em>ممکن است</em> فیلدهایشان را به یک ترتیب داشته باشند، یا ممکن است نداشته باشند. جزئیات اینکه دقیقاً چه چیزی دربارهٔ چیدمان داده تضمین شده و چه چیزی نشده هنوز <a href="https://rust-lang.github.io/unsafe-code-guidelines/layout.html">در UCG WG</a> در حال بررسی است.</p>
+</li>
+</ul>
+<p><a href="https://doc.rust-lang.org/std/mem/fn.transmute_copy.html"><code>mem::transmute_copy&lt;T, U&gt;</code></a> به‌نحوی موفق می‌شود <em>حتی بیشتر</em> از این بی‌پروا ناایمن باشد. این تابع <code>size_of&lt;U&gt;</code> بایت را از یک <code>&amp;T</code> کپی می‌کند و آن‌ها را به ‌صورت یک <code>U</code> تفسیر می‌کند. بررسی اندازه‌ای که <code>mem::transmute</code> دارد در اینجا وجود ندارد (چون ممکن است کپی کردن یک پیشوند معتبر باشد)، هرچند بزرگ‌تر بودن <code>U</code> از <code>T</code> رفتار تعریف‌نشده است.</p>
+<p>همچنین البته می‌توانید با تبدیل‌های اشاره‌گر خام یا <code>union</code>‌ها به همهٔ قابلیت‌های این تابع‌ها برسید، اما بدون هیچ‌یک از lint‌ها یا بررسی‌های سلامت عقل پایه. تبدیل‌های اشاره‌گر خام و <code>union</code>‌ها به‌طور جادویی از قاعده‌های بالا مستثنا نیستند.</p><nav class="page-nav"><a href="casts.html">→ تبدیل‌های صریح (Cast)</a><a href="uninitialized.html">حافظهٔ مقداردهی‌نشده ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

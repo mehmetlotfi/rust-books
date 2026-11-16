@@ -1,0 +1,131 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>توابع و closureهای پیشرفته — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch20-04-advanced-functions-and-closures"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="advanced-functions-and-closures"><a class="header" href="#advanced-functions-and-closures">توابع پیشرفته و Closureها</a></h2>
+<p>این بخش به بررسی برخی از ویژگی‌های پیشرفته مربوط به توابع و Closureها می‌پردازد، از جمله Pointerهای تابع و بازگرداندن Closureها.</p>
+<h3 id="function-pointers"><a class="header" href="#function-pointers">Pointerهای تابع</a></h3>
+<p>ما درباره نحوهٔ ارسال کلوزرها به توابع صحبت کردیم؛ همچنین می‌توانید توابع معمولی را نیز به توابع دیگر ارسال کنید! این تکنیک زمانی مفید است که بخواهید تابعی را که از قبل تعریف کرده‌اید ارسال کنید، به‌جای آن‌که یک کلوزر جدید تعریف کنید. توابع به نوع <code>fn</code> (با f کوچک) تبدیل می‌شوند، که نباید با <code>Fn</code> که یک <code>trait</code> برای کلوزرهاست، اشتباه گرفته شود. نوع <code>fn</code> یک <em>پویتر به تابع</em> نامیده می‌شود. ارسال توابع با استفاده از پویترهای تابع این امکان را می‌دهد که از توابع به‌عنوان آرگومان به توابع دیگر استفاده کنید.</p>
+<p>نحو مشخص‌کردن اینکه یک پارامتر از نوع پویتر تابع است، مشابه نحوهٔ تعریف کلوزرهاست؛ همان‌طور که در لیست 20-28 نشان داده شده است. در آنجا تابعی به نام <code>add_one</code> تعریف کرده‌ایم که ۱ واحد به پارامتر خود اضافه می‌کند. تابع <code>do_twice</code> دو پارامتر می‌گیرد: یک پویتر به تابعی که یک پارامتر از نوع <code>i32</code> می‌گیرد و مقدار <code>i32</code> برمی‌گرداند، و یک مقدار <code>i32</code>. تابع <code>do_twice</code> تابع <code>f</code> را دو بار با مقدار <code>arg</code> فراخوانی می‌کند، سپس نتایج این دو فراخوانی را با هم جمع می‌زند. تابع <code>main</code> تابع <code>do_twice</code> را با آرگومان‌های <code>add_one</code> و <code>5</code> فراخوانی می‌کند.</p>
+<figure class="listing" id="listing-20-28">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn add_one(x: i32) -&gt; i32 {
+    x + 1
+}
+
+fn do_twice(f: fn(i32) -&gt; i32, arg: i32) -&gt; i32 {
+    f(arg) + f(arg)
+}
+
+fn main() {
+    let answer = do_twice(add_one, 5);
+
+    println!("The answer is: {answer}");
+}</code></pre>
+<figcaption><a href="#listing-20-28">لیست ۲۰-۲۸</a>: استفاده از نوع &lt;code&gt;&lt;/x-listing&gt;fn&lt;/code&gt; برای پذیرش یک اشاره‌گر (Pointer) تابع به عنوان آرگومان</figcaption>
+</figure>
+<p>این کد مقدار <code>The answer is: 12</code> را چاپ می‌کند. ما مشخص کرده‌ایم که پارامتر <code>f</code> در <code>do_twice</code> یک <code>fn</code> است که یک پارامتر از نوع <code>i32</code> می‌گیرد و یک <code>i32</code> باز می‌گرداند. سپس می‌توانیم <code>f</code> را در بدنه تابع <code>do_twice</code> فراخوانی کنیم. در <code>main</code>، می‌توانیم نام تابع <code>add_one</code> را به عنوان آرگومان اول به <code>do_twice</code> ارسال کنیم.</p>
+<p>برخلاف Closureها <code>fn</code> یک نوع است و نه یک ویژگی، بنابراین ما <code>fn</code> را به طور مستقیم به عنوان نوع پارامتر مشخص می‌کنیم، به جای اعلام یک پارامتر جنریک با یکی از ویژگی‌های <code>Fn</code> به عنوان محدودیت ویژگی.</p>
+<p>Pointerهای تابع تمام سه ویژگی Closureها (<code>Fn</code>، <code>FnMut</code>، و <code>FnOnce</code>) را پیاده‌سازی می‌کنند، به این معنی که شما همیشه می‌توانید یک اشاره‌گر (Pointer) تابع را به عنوان آرگومان برای یک تابع که انتظار یک Closureها را دارد ارسال کنید. بهتر است توابع را با استفاده از یک نوع جنریک و یکی از ویژگی‌های Closureها بنویسید تا توابع شما بتوانند هم توابع و هم Closureها را بپذیرند.</p>
+<p>با این حال، یک مثال از جایی که ممکن است بخواهید فقط <code>fn</code> را بپذیرید و نه Closureها زمانی است که با کد خارجی که Closureها ندارد تعامل می‌کنید: توابع C می‌توانند توابع را به عنوان آرگومان بپذیرند، اما C Closureها ندارد.</p>
+<p>به‌عنوان مثالی از جایی که می‌توانید از یک کلوزر تعریف‌شده به‌صورت درجا یا از یک تابع نام‌گذاری‌شده استفاده کنید، بیایید نگاهی بیندازیم به یک استفاده از متد <code>map</code> که توسط <code>Iterator</code> در کتابخانه استاندارد فراهم شده است. برای استفاده از متد <code>map</code> به‌منظور تبدیل یک <code>vector</code> از اعداد به یک <code>vector</code> از رشته‌ها، می‌توانیم از یک کلوزر استفاده کنیم، همان‌طور که در لیست 20-29 نشان داده شده است.</p>
+<figure class="listing" id="listing-20-29">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let list_of_numbers = vec![1, 2, 3];
+    let list_of_strings: Vec&lt;String&gt; =
+        list_of_numbers.iter().map(|i| i.to_string()).collect();
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-20-29">لیست ۲۰-۲۹</a>: استفاده از یک کلوزر با متد &lt;code&gt;&lt;/x-listing&gt;map&lt;/code&gt; برای تبدیل اعداد به رشته‌ها</figcaption>
+</figure>
+<p>یا می‌توانیم به‌جای کلوزر، یک تابع را به‌عنوان آرگومان به <code>map</code> بدهیم. لیست 20-30 نشان می‌دهد که این کار چگونه انجام می‌شود.</p>
+<figure class="listing" id="listing-20-30">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let list_of_numbers = vec![1, 2, 3];
+    let list_of_strings: Vec&lt;String&gt; =
+        list_of_numbers.iter().map(ToString::to_string).collect();
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-20-30">لیست ۲۰-۳۰</a>: استفاده از تابع &lt;code&gt;&lt;/x-listing&gt;String::to_string&lt;/code&gt; با متد &lt;code&gt;map&lt;/code&gt; برای تبدیل اعداد به رشته‌ها</figcaption>
+</figure>
+<p>توجه داشته باشید که باید از سینتکس کاملاً مشخصی که در بخش <a href="ch20-02-advanced-traits.html#advanced-traits">«ویژگی‌های پیشرفته»</a><!-- ignore --> درباره آن صحبت کردیم استفاده کنیم، زیرا توابع متعددی با نام <code>to_string</code> وجود دارند.</p>
+<p>در این‌جا، از تابع <code>to_string</code> استفاده می‌کنیم که در <code>trait</code> به نام <code>ToString</code> تعریف شده و کتابخانه استاندارد آن را برای هر نوعی که <code>Display</code> را پیاده‌سازی کرده باشد، پیاده‌سازی کرده است.</p>
+<p>به یاد بیاورید که در بخش <a href="ch06-01-defining-an-enum.html#enum-values">«مقادیر enum»</a><!-- ignore --> از فصل ۶ اشاره کردیم که نام هر واریانت <code>enum</code> که تعریف می‌کنیم، همچنین تبدیل به یک تابع سازنده (initializer function) می‌شود. ما می‌توانیم این توابع سازنده را به‌عنوان فانکشن‌پوینترهایی که <code>closure trait</code>‌ها را پیاده‌سازی می‌کنند استفاده کنیم؛ این یعنی می‌توانیم این توابع سازنده را به‌عنوان آرگومان برای متدهایی که کلوزر دریافت می‌کنند مشخص کنیم، همان‌طور که در لیست 31-20 مشاهده می‌کنید.</p>
+<figure class="listing" id="listing-20-31">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    enum Status {
+        Value(u32),
+        Stop,
+    }
+
+    let list_of_statuses: Vec&lt;Status&gt; = (0u32..20).map(Status::Value).collect();
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-20-31">لیست ۲۰-۳۱</a>: استفاده از سازنده enum با متد &lt;code&gt;&lt;/x-listing&gt;map&lt;/code&gt; برای ایجاد نمونه‌ای از &lt;code&gt;Status&lt;/code&gt; از روی اعداد</figcaption>
+</figure>
+<p>در این‌جا، با استفاده از تابع سازنده <code>Status::Value</code>، برای هر مقدار <code>u32</code> در بازه‌ای که <code>map</code> روی آن فراخوانی شده، نمونه‌هایی از <code>Status::Value</code> ایجاد می‌کنیم. برخی افراد این سبک را ترجیح می‌دهند و برخی دیگر ترجیح می‌دهند از کلوزرها استفاده کنند. هر دو روش به یک کد کامپایل می‌شوند، پس از هر سبکی که برای شما واضح‌تر است استفاده کنید.</p>
+<h3 id="returning-closures"><a class="header" href="#returning-closures">بازگرداندن closureها</a></h3>
+<p>کلوزرها توسط <code>trait</code>ها نمایش داده می‌شوند، به این معنا که نمی‌توان آن‌ها را مستقیماً به عنوان مقدار بازگشتی برگرداند. در بیشتر مواردی که ممکن است بخواهید یک <code>trait</code> را برگردانید، می‌توانید به جای آن از نوع مشخصی که آن <code>trait</code> را پیاده‌سازی می‌کند به‌عنوان مقدار بازگشتی تابع استفاده کنید. اما معمولاً نمی‌توانید این کار را با کلوزرها انجام دهید، چون آن‌ها نوع مشخصی ندارند که قابل بازگشت باشد؛ برای مثال، اگر کلوزری مقداری از اسکوپ خود را کپچر کند، مجاز به استفاده از نوع اشاره‌گر تابع <code>fn</code> به‌عنوان نوع بازگشتی نیستید.</p>
+<p>در عوض، معمولاً از سینتکس <code>impl Trait</code> که در فصل ۱۰ یاد گرفتیم استفاده می‌شود. می‌توانید هر نوع تابعی را با استفاده از <code>Fn</code>، <code>FnOnce</code> و <code>FnMut</code> بازگردانید. برای مثال، کدی که در لیست 20-32 آمده است، بدون مشکل کامپایل می‌شود.</p>
+<figure class="listing" id="listing-20-32">
+<pre><code class="language-rust">fn returns_closure() -&gt; impl Fn(i32) -&gt; i32 {
+    |x| x + 1
+}</code></pre>
+<figcaption><a href="#listing-20-32">لیست ۲۰-۳۲</a>: بازگرداندن یک کلوزر از تابع با استفاده از سینتکس &lt;code&gt;&lt;/x-listing&gt;impl Trait&lt;/code&gt;</figcaption>
+</figure>
+<p>با این حال، همان‌طور که در بخش <a href="ch13-01-closures.html#closure-type-inference-and-annotation">“استنباط نوع کلوزر و حاشیه‌نویسی”</a><!-- ignore --> در فصل ۱۳ اشاره شد، هر کلوزر همچنین نوع خاص خودش را دارد. اگر نیاز دارید با چندین تابع که امضای یکسانی دارند اما پیاده‌سازی متفاوتی دارند کار کنید، باید از یک آبجکت <code>trait</code> برای آن‌ها استفاده کنید. ببینید چه اتفاقی می‌افتد اگر کدی مشابه لیست 20-33 بنویسید.</p>
+<figure class="listing" id="listing-20-33">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">fn main() {
+    let handlers = vec![returns_closure(), returns_initialized_closure(123)];
+    for handler in handlers {
+        let output = handler(5);
+        println!("{output}");
+    }
+}
+
+fn returns_closure() -&gt; impl Fn(i32) -&gt; i32 {
+    |x| x + 1
+}
+
+fn returns_initialized_closure(init: i32) -&gt; impl Fn(i32) -&gt; i32 {
+    move |x| x + init
+}</code></pre>
+<figcaption><a href="#listing-20-33">لیست ۲۰-۳۳</a>: ایجاد یک &lt;code&gt;&lt;/x-listing&gt;Vec&lt;T&gt;&lt;/code&gt; از کلوزرهایی که توسط توابعی بازگردانده می‌شوند که نوع &lt;code&gt;impl Fn&lt;/code&gt; دارند</figcaption>
+</figure>
+<p>در این‌جا دو تابع داریم به نام‌های <code>returns_closure</code> و <code>returns_initialized_closure</code>، که هر دو مقدار <code>impl Fn(i32) -&gt; i32</code> را بازمی‌گردانند. توجه داشته باشید که کلوزرهایی که این توابع بازمی‌گردانند با یکدیگر متفاوت‌اند، حتی اگر هر دو <code>trait</code> یکسانی را پیاده‌سازی کنند. اگر سعی کنیم این کد را کامپایل کنیم، Rust به ما اطلاع می‌دهد که این کار امکان‌پذیر نیست:</p>
+<pre><code class="language-text">$ cargo build
+   Compiling functions-example v0.1.0 (file:///projects/functions-example)
+error[E0308]: mismatched types
+  --&gt; src/main.rs:2:44
+   |
+ 2 |     let handlers = vec![returns_closure(), returns_initialized_closure(123)];
+   |                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected opaque type, found a different opaque type
+...
+ 9 | fn returns_closure() -&gt; impl Fn(i32) -&gt; i32 {
+   |                         ------------------- the expected opaque type
+...
+13 | fn returns_initialized_closure(init: i32) -&gt; impl Fn(i32) -&gt; i32 {
+   |                                              ------------------- the found opaque type
+   |
+   = note: expected opaque type `impl Fn(i32) -&gt; i32`
+              found opaque type `impl Fn(i32) -&gt; i32`
+   = note: distinct uses of `impl Trait` result in different opaque types
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `functions-example` (bin "functions-example") due to 1 previous error
+</code></pre>
+<p>پیام خطا به ما می‌گوید که هر بار یک <code>impl Trait</code> برگردانیم، Rust یک <em>نوع مبهم (opaque type)</em> منحصربه‌فرد می‌سازد؛ نوعی که نمی‌توانیم جزئیات آنچه Rust برایمان می‌سازد را ببینیم و نمی‌توانیم نوعی را هم که Rust تولید خواهد کرد حدس بزنیم تا خودمان بنویسیم. بنابراین، حتی با اینکه این توابع closureهایی برمی‌گردانند که trait یکسانی یعنی <code>Fn(i32) -&gt; i32</code> را پیاده‌سازی می‌کنند، نوع‌های مبهمی که Rust برای هر کدام تولید می‌کند متمایزند. (این شبیه روشی است که Rust برای بلوک‌های async متمایز، نوع‌های مشخص متفاوتی تولید می‌کند، حتی وقتی نوع خروجی یکسانی دارند، همان‌طور که در <a href="ch17-03-more-futures.html">«نوع <code>Pin</code> و trait با نام <code>Unpin</code>»</a><!-- ignore --> در فصل ۱۷ دیدیم.) اکنون چندین بار راه‌حلی برای این مشکل دیده‌ایم: می‌توانیم از یک trait object استفاده کنیم، مانند فهرست ۲۰-۳۴.</p>
+<figure class="listing" id="listing-20-34">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span><span class="boring">    let handlers = vec![returns_closure(), returns_initialized_closure(123)];
+</span><span class="boring">    for handler in handlers {
+</span><span class="boring">        let output = handler(5);
+</span><span class="boring">        println!("{output}");
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn returns_closure() -&gt; Box&lt;dyn Fn(i32) -&gt; i32&gt; {
+    Box::new(|x| x + 1)
+}
+
+fn returns_initialized_closure(init: i32) -&gt; Box&lt;dyn Fn(i32) -&gt; i32&gt; {
+    Box::new(move |x| x + init)
+}</code></pre>
+<figcaption><a href="#listing-20-34">لیست ۲۰-۳۴</a>: ساخت یک &lt;code&gt;&lt;/x-listing&gt;Vec&lt;T&gt;&lt;/code&gt; از کلوزرهایی که توسط توابعی بازمی‌گردند که مقدار &lt;code&gt;Box&lt;dyn Fn&gt;&lt;/code&gt; را برمی‌گردانند تا نوع آن‌ها یکسان باشد</figcaption>
+</figure>
+<p>این کد بدون مشکل کامپایل خواهد شد. برای اطلاعات بیشتر در مورد trait object‌ها، به بخش <a href="ch18-02-trait-objects.html">“استفاده از trait objectهایی که اجازه استفاده از مقادیر با نوع‌های متفاوت را می‌دهند”</a><!-- ignore --> در فصل ۱۸ مراجعه کنید.</p>
+<p>حال بیایید نگاهی به ماکروها بیندازیم!</p><nav class="page-nav"><a href="ch20-03-advanced-types.html">→ نوع‌های پیشرفته</a><a href="ch20-05-macros.html">ماکروها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

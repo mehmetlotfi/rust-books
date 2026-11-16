@@ -1,0 +1,347 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>روال‌های کاری پیشنهادی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="building/suggested"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="suggested-workflows"><a class="header" href="#suggested-workflows">Suggested workflows</a></h1>
+<p>فرایند کامل بوت‌استرپ (bootstrapping) زمان زیادی می‌برد.
+در ادامه چند پیشنهاد برای راحت‌تر‌کردن کار آمده است.</p>
+<h2 id="installing-a-pre-push-hook"><a class="header" href="#installing-a-pre-push-hook">نصب hook از نوع pre-push</a></h2>
+<p>اگر ساخت شما از <code>tidy</code> (ابزار داخلی ما برای تضمین کیفیت کد) عبور نکند، CI به‌طور خودکار آن را شکست‌خورده اعلام می‌کند.
+در صورت تمایل می‌توانید یک <a href="https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks">Git hook</a> نصب کنید که
+در هر push به‌طور خودکار <code>./x test tidy</code> را اجرا کند تا از مناسب‌بودن کدتان مطمئن شوید.
+اگر hook شکست خورد، <code>./x test tidy --bless</code> را اجرا کنید و تغییرات را commit کنید.
+اگر بعداً تصمیم گرفتید رفتار pre-push مطلوب نیست،
+می‌توانید فایل <code>pre-push</code> را در <code>.git/hooks</code> حذف کنید.</p>
+<p>یک git hook آماده در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/etc/pre-push.sh"><code>src/etc/pre-push.sh</code></a> قرار دارد.
+آن را می‌توان با نام <code>pre-push</code> (بدون پسوند <code>.sh</code>!) در پوشهٔ <code>.git/hooks</code> کپی کرد.</p>
+<p>همچنین می‌توانید hook را به‌عنوان یکی از گام‌های اجرای <code>./x setup</code> نصب کنید!</p>
+<h2 id="config-extensions"><a class="header" href="#config-extensions">Config extensions</a></h2>
+<p>هنگام کار روی وظایف مختلف ممکن است لازم شود بین پیکربندی‌های مختلف bootstrap جابه‌جا شوید.
+گاهی می‌خواهید پیکربندی قدیمی را برای استفادهٔ آینده نگه دارید.
+اما ذخیرهٔ مقادیر خام پیکربندی در
+فایل‌های پراکنده و کپی و paste دستی آن‌ها می‌تواند سریعاً درهم‌ریخته شود،
+به‌ویژه اگر سابقهٔ طولانی از پیکربندی‌های مختلف داشته باشید.</p>
+<p>برای ساده‌کردن مدیریت چند پیکربندی، می‌توانید افزونه‌های پیکربندی (config extensions) بسازید.</p>
+<p>برای مثال می‌توانید یک فایل پیکربندی ساده به نام <code>cross.toml</code> بسازید:</p>
+<pre><code class="language-toml">[build]
+build = "x86_64-unknown-linux-gnu"
+host = ["i686-unknown-linux-gnu"]
+target = ["i686-unknown-linux-gnu"]
+
+
+[llvm]
+download-ci-llvm = false
+
+[target.x86_64-unknown-linux-gnu]
+llvm-config = "/path/to/llvm-19/bin/llvm-config"
+</code></pre>
+<p>سپس آن را در <code>bootstrap.toml</code> خود include کنید:</p>
+<pre><code class="language-toml">include = ["cross.toml"]
+</code></pre>
+<p>همچنین می‌توانید افزونه‌ها را به‌صورت بازگشتی درون افزونه‌ها include کنید.</p>
+<p><strong>نکته:</strong> در فیلد <code>include</code>، منطق بازنویسی از راست به چپ است.
+برای مثال،
+در <code>include = ["a.toml", "b.toml"]</code>، افزونهٔ <code>b.toml</code> بر <code>a.toml</code> غلبه می‌کند.
+همچنین افزونه‌های والد همیشه بر افزونه‌های درونی غلبه می‌کنند.</p>
+<h2 id="configuring-rust-analyzer-for-rustc"><a class="header" href="#configuring-rust-analyzer-for-rustc">پیکربندی <code>rust-analyzer</code> برای <code>rustc</code></a></h2>
+<h3 id="checking-the-library-tree"><a class="header" href="#checking-the-library-tree">بررسی درخت «library»</a></h3>
+<p>بررسی درخت «library» به کامپایلر stage1 نیاز دارد که روی برخی رایانه‌ها می‌تواند سنگین باشد.
+به همین دلیل bootstrap پرچمی به نام <code>--skip-std-check-if-no-download-rustc</code> دارد که اگر
+<code>rust.download-rustc</code> در دسترس نباشد، بررسی درخت «library» را رد می‌کند.
+اگر می‌خواهید از بار سنگین <code>rust-analyzer</code> روی رایانه‌تان پرهیز کنید،
+می‌توانید پرچم <code>--skip-std-check-if-no-download-rustc</code> را به دستور <code>./x check</code> در
+پیکربندی <code>rust-analyzer</code> اضافه کنید.</p>
+<h3 id="project-local-rust-analyzer-setup"><a class="header" href="#project-local-rust-analyzer-setup">Project-local rust-analyzer setup</a></h3>
+<p><code>rust-analyzer</code> می‌تواند هر بار که فایلی را ذخیره می‌کنید کد شما را بررسی و قالب‌بندی کند.
+به‌طور پیش‌فرض <code>rust-analyzer</code> دستورهای <code>cargo check</code> و <code>rustfmt</code> را اجرا می‌کند،
+اما هنگام کار روی <code>rustc</code> می‌توانید این دستورها را با نسخه‌های مناسب‌تر این ابزارها بازنویسی کنید.
+با پیکربندی سفارشی، <code>rust-analyzer</code> می‌تواند از <code>./x check</code> برای بررسی منابع
+و از rustfmt مرحلهٔ stage 0 برای قالب‌بندی آن‌ها استفاده کند.</p>
+<p>دستور پیش‌فرض <code>rust-analyzer.check.overrideCommand</code> همهٔ crateها و ابزارهای مخزن را بررسی می‌کند.
+اگر روی بخش مشخصی کار می‌کنید،
+می‌توانید دستور را بازنویسی کنید تا فقط همان بخش را بررسی کند و زمان بررسی کم شود.
+برای مثال، اگر روی کامپایلر کار می‌کنید،
+می‌توانید دستور را به <code>x check compiler --json-output</code> تغییر دهید تا فقط بخش کامپایلر بررسی شود.
+با اجرای <code>x check --help --verbose</code> می‌توانید بخش‌های موجود را ببینید.</p>
+<p>اجرای <code>./x setup editor</code> از شما می‌خواهد یک فایل پیکربندی LSP محلی پروژه
+برای یکی از ویرایشگرهای پشتیبانی‌شده بسازید.
+همچنین می‌توانید فایل پیکربندی را به‌عنوان یکی از گام‌های اجرای <code>./x setup</code> بسازید.</p>
+<h3 id="using-a-shared-build-directory-for-rust-analyzer"><a class="header" href="#using-a-shared-build-directory-for-rust-analyzer">استفاده از پوشهٔ ساخت مشترک برای rust-analyzer</a></h3>
+<p>به‌طور پیش‌فرض، وقتی rust-analyzer یک دستور bootstrap را اجرا می‌کند،
+از پوشهٔ ساختی جدا از ساخت‌های دستی خط فرمان استفاده می‌کند.
+اگر بخواهید در فضای دیسک صرفه‌جویی کنید می‌توانید این را در فایل پیکربندی LSP تولیدشده بازنویسی کنید.</p>
+<p>اما این توصیه نمی‌شود:</p>
+<ul>
+<li>هر ساخت پوشهٔ ساخت را قفل می‌کند و دیگری را به انتظار وامی‌دارد،
+پس اجرای ساخت‌های خط فرمان در حالی که rust-analyzer دستورها را در پس‌زمینه اجرا می‌کند غیرممکن می‌شود.</li>
+<li>خطر بیشتری وجود دارد که یکی از ساخت‌ها آرتیفکت‌های ساخته‌شدهٔ قبلی را به‌دلیل
+پرچم‌های متضاد کامپایلر یا تنظیمات دیگر حذف کند،
+که در برخی موارد بازسازی‌های اضافی را ناگزیر می‌کند.</li>
+</ul>
+<h3 id="visual-studio-code"><a class="header" href="#visual-studio-code">Visual Studio Code</a></h3>
+<p>انتخاب <code>vscode</code> در <code>./x setup editor</code> از شما می‌خواهد فایل
+<code>.vscode/settings.json</code> را بسازید که Visual Studio Code را پیکربندی می‌کند.
+تنظیمات توصیه‌شدهٔ <code>rust-analyzer</code> در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/etc/rust_analyzer_settings.json"><code>src/etc/rust_analyzer_settings.json</code></a> قرار دارند.</p>
+<p>اگر اجرای <code>./x check</code> هنگام ذخیره ناخوشایند است، در VS Code می‌توانید به‌جای آن از <a href="https://code.visualstudio.com/docs/editor/tasks">Build Task</a> استفاده کنید:</p>
+<pre><code class="language-JSON">// .vscode/tasks.json
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "./x check",
+            "command": "./x check",
+            "type": "shell",
+            "problemMatcher": "$rustc",
+            "presentation": { "clear": true },
+            "group": { "kind": "build", "isDefault": true }
+        }
+    ]
+}
+</code></pre>
+<h3 id="neovim"><a class="header" href="#neovim">Neovim</a></h3>
+<p>برای کاربران Neovim چند گزینه وجود دارد:</p>
+<ol>
+<li>ساده‌ترین راه استفاده از <a href="https://github.com/folke/neoconf.nvim/">neoconf.nvim</a> است، اما
+این از API منسوخ <code>require('lspconfig')</code> استفاده می‌کند که در neovim 0.11 به بعد هشدار نمایش می‌دهد.</li>
+<li>استفاده از <code>coc.nvim</code> گزینهٔ دیگری است، اما نیاز دارد node.js نصب باشد.</li>
+<li>استفاده از یک اسکریپت سفارشی برای بارگذاری تنظیمات rust-analyzer.</li>
+</ol>
+<h4 id="neoconfnvim"><a class="header" href="#neoconfnvim">neoconf.nvim</a></h4>
+<p><a href="https://github.com/folke/neoconf.nvim/">neoconf.nvim</a> فایل‌های پیکربندی محلی پروژه را با LSP بومی ممکن می‌کند.
+گام‌های استفاده از آن در ادامه آمده است.
+توجه کنید که نیاز دارند rust-analyzer از قبل با Neovim پیکربندی شده باشد.
+گام‌های این کار را می‌توان <a href="https://rust-analyzer.github.io/book/other_editors.html#nvim-lsp">اینجا یافت</a>.</p>
+<ol>
+<li>ابتدا افزونه را نصب کنید.
+این کار با دنبال‌کردن گام‌های README ممکن است.</li>
+<li><code>./x setup editor</code> را اجرا کنید و <code>vscode</code> را برای ساخت فایل <code>.vscode/settings.json</code> انتخاب کنید.
+<code>neoconf</code> وقتی این فایل تشخیص داده شود می‌تواند تنظیمات
+rust-analyzer را هنگام باز‌شدن پروژه به‌طور خودکار بخواند و به‌روز کند.
+Neovim متغیر <code>${workspaceFolder}</code> در VS Code را گسترش نمی‌دهد،
+پس هر مورد آن را در فایل تولیدشده با مسیر مطلق مخزن rust خود جایگزین کنید.</li>
+</ol>
+<h4 id="cocnvim"><a class="header" href="#cocnvim">coc.nvim</a></h4>
+<p>اگر از <code>coc.nvim</code> استفاده می‌کنید،
+می‌توانید <code>./x setup editor</code> را اجرا کنید و <code>vim</code> را برای ساخت <code>.vim/coc-settings.json</code> انتخاب کنید.
+تنظیمات را می‌توان با <code>:CocLocalConfig</code> ویرایش کرد.
+تنظیمات توصیه‌شده در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/etc/rust_analyzer_settings.json"><code>src/etc/rust_analyzer_settings.json</code></a> قرار دارند.</p>
+<h4 id="custom-lsp-settings"><a class="header" href="#custom-lsp-settings">Custom LSP settings</a></h4>
+<p>اگر neovim 0.11 به بعد را اجرا می‌کنید، می‌توانید rust-analyzer را فقط با
+<a href="https://github.com/neovim/nvim-lspconfig">nvim-lspconfig</a> و یک اسکریپت سفارشی پیکربندی کنید.</p>
+<ol>
+<li>مطمئن شوید <a href="https://rust-analyzer.github.io/book/other_editors.html#nvim-lsp">rust-analyzer LSP</a> راه‌اندازی شده است</li>
+<li>فایل <code>$HOME/.config/nvim/after/plugged/rust_analyzer.lua</code> را با محتوای زیر بسازید:</li>
+</ol>
+<pre><code class="language-lua">-- Capture the default functions from nvim-lspconfig/lsp/rust_analyzer.lua before overriding it.
+-- This file is in after/plugin to guarantee nvim-lspconfig has been initialised already.
+local default_root_dir = vim.lsp.config["rust_analyzer"].root_dir
+local default_before_init = vim.lsp.config["rust_analyzer"].before_init
+
+vim.lsp.config("rust_analyzer", {
+    cmd = { "rust-analyzer" },
+    filetypes = { "rust" },
+    -- To support rust-lang/rust, we need to detect when we're in the rust repo and use the git root
+    -- instead of cargo project root.
+    root_dir = function(bufnr, on_dir)
+        local git_root = vim.fs.root(bufnr, { ".git" })
+        if git_root then
+            if vim.uv.fs_stat(vim.fs.joinpath(git_root, "src/etc/rust_analyzer_zed.json")) then
+                on_dir(git_root)
+                return
+            end
+        end
+        -- For anything that doesn't match rust-lang/rust, fallback to default root_dir
+        default_root_dir(bufnr, on_dir)
+    end,
+    before_init = function(init_params, config)
+        -- When inside rust-lang/rust, we need to use the special rust-analyzer settings.
+        local settings = vim.fs.joinpath(config.root_dir, "src/etc/rust_analyzer_zed.json")
+        if vim.uv.fs_stat(settings) then
+            local file = io.open(settings)
+            -- nvim 0.12+ supports comments otherwise you'll need content:gsub("//[^\n]*", "").
+            local json = vim.json.decode(file:read("*a"), { skip_comments = true })
+            file:close()
+            config.settings["rust-analyzer"] = vim.tbl_deep_extend(
+                "force", -- Overwrite with the special settings when there is a conflict.
+                config.settings["rust-analyzer"] or {},
+                json.lsp["rust-analyzer"].initialization_options
+            )
+        end
+        default_before_init(init_params, config)
+    end,
+})
+
+vim.lsp.enable("rust_analyzer")
+</code></pre>
+<p>اگر می‌خواهید از build task که بالا توضیح داده شد استفاده کنید، می‌توانید
+در پیکربندی خود دستور خودتان را بسازید، یا افزونه‌ای مثل
+<a href="https://github.com/stevearc/overseer.nvim">overseer.nvim</a> نصب کنید که می‌تواند <a href="https://github.com/stevearc/overseer.nvim/blob/master/doc/guides.md#vs-code-tasks">فایل‌های <code>task.json</code> در VSCode را بخواند</a>،
+و همان دستورالعمل‌های بالا را دنبال کنید.</p>
+<h3 id="emacs"><a class="header" href="#emacs">Emacs</a></h3>
+<p>Emacs از طریق <a href="https://www.gnu.org/software/emacs/manual/html_node/eglot/">Eglot</a> از rust-analyzer با پیکربندی محلی پروژه پشتیبانی می‌کند.
+گام‌های راه‌اندازی Eglot با rust-analyzer را می‌توان <a href="https://rust-analyzer.github.io/manual.html#eglot">اینجا یافت</a>.
+پس از راه‌اندازی Emacs و Eglot برای توسعهٔ Rust به‌طور کلی،
+می‌توانید <code>./x setup editor</code> را اجرا کنید و <code>emacs</code> را انتخاب کنید،
+که از شما می‌خواهد فایل <code>.dir-locals.el</code> را با پیکربندی توصیه‌شده برای Eglot بسازید.
+تنظیمات توصیه‌شده در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/etc/rust_analyzer_eglot.el"><code>src/etc/rust_analyzer_eglot.el</code></a> قرار دارند.
+برای اطلاعات بیشتر دربارهٔ پیکربندی Eglot مخصوص پروژه <a href="https://www.gnu.org/software/emacs/manual/html_node/eglot/Project_002dspecific-configuration.html">راهنما</a> را ببینید.</p>
+<h3 id="helix"><a class="header" href="#helix">Helix</a></h3>
+<p>Helix با LSP و پشتیبانی rust-analyzer داخلی می‌آید.
+می‌توان آن را با <code>languages.toml</code> پیکربندی کرد،
+همان‌طور که <a href="https://docs.helix-editor.com/languages.html">اینجا</a> توضیح داده شده است.
+می‌توانید <code>./x setup editor</code> را اجرا کنید و <code>helix</code> را انتخاب کنید،
+که از شما می‌خواهد <code>languages.toml</code> را با پیکربندی توصیه‌شده برای Helix بسازید.
+تنظیمات توصیه‌شده در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/etc/rust_analyzer_helix.toml"><code>src/etc/rust_analyzer_helix.toml</code></a> قرار دارند.</p>
+<h3 id="zed"><a class="header" href="#zed">Zed</a></h3>
+<p>Zed با LSP و پشتیبانی rust-analyzer داخلی می‌آید.
+می‌توان آن را با <code>.zed/settings.json</code> پیکربندی کرد،
+همان‌طور که <a href="https://zed.dev/docs/configuring-languages">اینجا</a> توضیح داده شده است.
+انتخاب <code>zed</code> در <code>./x setup editor</code> از شما می‌خواهد فایل <code>.zed/settings.json</code>
+را بسازید که Zed را با پیکربندی توصیه‌شده تنظیم می‌کند.
+تنظیمات توصیه‌شدهٔ <code>rust-analyzer</code> در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/etc/rust_analyzer_zed.json"><code>src/etc/rust_analyzer_zed.json</code></a> قرار دارند.</p>
+<h2 id="check-check-and-check-again"><a class="header" href="#check-check-and-check-again">بررسی کنید، بررسی کنید، و دوباره بررسی کنید</a></h2>
+<p>هنگام بازآرایی (refactoring) ساده، می‌تواند مفید باشد <code>./x check</code> را پیوسته اجرا کنید.
+اگر <code>rust-analyzer</code> را مطابق بالا راه‌اندازی کرده باشید،
+این کار هر بار که فایلی را ذخیره می‌کنید برایتان انجام می‌شود.
+در اینجا فقط بررسی می‌کنید که کامپایلر <strong>ساخته می‌شود</strong>، اما اغلب فقط همین لازم است (مثلاً هنگام تغییر نام یک
+متد).
+سپس می‌توانید وقتی واقعاً لازم شد تست‌ها را اجرا کنید، با <code>./x build</code>.</p>
+<p>در واقع گاهی مفید است حتی وقتی صددرصد مطمئن نیستید کد کار می‌کند، تست‌ها را به تعویق بیندازید.
+سپس می‌توانید commitهای بازآرایی را پشت سر هم بسازید و تست‌ها را بعداً اجرا کنید.
+آن‌گاه می‌توانید با <code>git bisect</code> <strong>دقیقاً</strong> پیدا کنید کدام commit مشکل را ایجاد کرده است.
+یک اثر جانبی خوب این سبک
+این است که در پایان مجموعه‌ای ریزدانه از commitها دارید که
+همگی ساخته می‌شوند و تست‌ها را می‌گذرانند.
+این اغلب به بازبینی کمک می‌کند.</p>
+<h2 id="configuring-rustup-to-use-nightly"><a class="header" href="#configuring-rustup-to-use-nightly">پیکربندی <code>rustup</code> برای استفاده از nightly</a></h2>
+<p>برخی بخش‌های فرایند bootstrap از نسخه‌های nightly سنجاق‌شدهٔ ابزارهایی مثل rustfmt استفاده می‌کنند.
+برای اینکه کارهایی مثل <code>cargo fmt</code> در مخزن شما درست کار کنند،
+یک toolchain از نوع nightly را با rustup <a href="https://rust-lang.github.io/rustup/concepts/channels.html?highlight=nightl#working-with-nightly-rust">نصب کنید</a> و سپس این دستور را اجرا کنید:</p>
+<pre><code class="language-console">cd &lt;path to rustc repo&gt;
+rustup override set nightly
+</code></pre>
+<p>فراموش نکنید این کار را برای همهٔ پوشه‌هایی که <a href="./suggested.html#working-on-multiple-branches-at-the-same-time">برایشان worktree ساخته‌اید</a> انجام دهید.
+ممکن است لازم باشد از نسخهٔ nightly سنجاق‌شده در <code>src/stage0</code> استفاده کنید،
+اما اغلب کانال معمولی <code>nightly</code> هم کار می‌کند.</p>
+<p><strong>نکته:</strong> برای اینکه ببینید چگونه با rustfmt واقعی‌ای که <code>x</code> استفاده می‌کند پیکربندی شود <a href="suggested.html#configuring-rust-analyzer-for-rustc">بخش مربوط به vscode</a> را ببینید،
+و برای راه‌اندازی toolchain در <code>rustup</code> برای کامپایلر bootstrap‌شدهٔ خود <a href="how-to-build-and-run.html">بخش مربوط به rustup</a> را ببینید.</p>
+<p><strong>نکته:</strong> این کار به شما اجازه <em>نمی‌دهد</em> <code>rustc</code> را مستقیماً با cargo بسازید.
+همچنان باید برای کار روی کامپایلر یا کتابخانهٔ استاندارد از <code>x</code> استفاده کنید،
+این فقط به شما اجازه می‌دهد از <code>cargo fmt</code> استفاده کنید.</p>
+<h2 id="faster-builds-with-ci-rustc"><a class="header" href="#faster-builds-with-ci-rustc">ساخت سریع‌تر با CI-rustc</a></h2>
+<p>اگر روی کامپایلر کار نمی‌کنید، اغلب نیازی نیست درخت کامپایلر را بسازید.
+برای مثال،
+می‌توانید ساخت کامپایلر را رد کنید و فقط درخت <code>library</code> یا ابزارهای زیر <code>src/tools</code> را بسازید.
+برای این کار،
+باید گزینهٔ <code>download-rustc</code> را در پیکربندی خود تنظیم کنید.
+این به bootstrap می‌گوید برای گام‌های <code>stage &gt; 0</code> از جدیدترین کامپایلر nightly استفاده کند،
+یعنی دو کامپایلر از پیش ساخته‌شده خواهد داشت: کامپایلر stage0 و کامپایلر <code>download-rustc</code>
+برای گام‌های <code>stage &gt; 0</code>.
+به این ترتیب هرگز نیازی به ساخت کامپایلر درون‌درختی نخواهد بود.
+در نتیجه زمان ساخت شما با نساختن کامپایلر درون‌درختی به‌طور چشمگیری کاهش می‌یابد.</p>
+<h2 id="faster-rebuilds-with---keep-stage-std"><a class="header" href="#faster-rebuilds-with---keep-stage-std">بازسازی سریع‌تر با <code>--keep-stage-std</code></a></h2>
+<p>گاهی فقط بررسی اینکه کامپایلر ساخته می‌شود کافی نیست.
+مثال رایج این است که باید یک دستور <code>debug!</code> اضافه کنید تا مقدار
+برخی حالت‌ها را بررسی کنید یا مسئله را بهتر بفهمید.
+در آن صورت واقعاً به ساخت کامل نیاز ندارید.
+با دور‌زدن ابطال cache در bootstrap، اغلب می‌توانید این ساخت‌ها را سریع‌تر تمام کنید.
+تنها نکته این است که این کار کمی دستکاری لازم دارد و ممکن است کامپایلرهایی تولید کند که کار نمی‌کنند (اما
+این به‌آسانی تشخیص و رفع می‌شود).</p>
+<p>ترتیب دستورهای مورد نیاز به این شکل است:</p>
+<ul>
+<li>Initial build: <code>./x build library</code></li>
+<li>Subsequent builds: <code>./x build library --keep-stage-std=1</code></li>
+</ul>
+<p>همان‌طور که گفته شد، اثر <code>--keep-stage-std=1</code> این است که فقط <em>فرض می‌کنیم</em>
+کتابخانهٔ استاندارد قدیمی قابل‌استفادهٔ مجدد است.
+اگر کامپایلر را ویرایش می‌کنید، این اغلب درست است: شما که
+کتابخانهٔ استاندارد را تغییر نداده‌اید.
+اما گاهی درست نیست: برای مثال، اگر بخش «فراداده» (metadata) کامپایلر را ویرایش می‌کنید،
+که نحوهٔ رمزگذاری نوع‌ها و حالت‌های دیگر در فایل‌های <code>rlib</code> را کنترل می‌کند،
+یا اگر چیزهایی را ویرایش می‌کنید که در فراداده قرار می‌گیرند (مثل تعریف MIR).</p>
+<p>یعنی ممکن است هنگام استفاده از <code>--keep-stage-std=1</code> رفتار عجیبی از کامپایل ببینید،
+مثلاً <a href="../appendix/glossary.html#ice">ICE</a>های عجیب یا panicهای دیگر.
+در آن صورت باید به‌سادگی <code>--keep-stage-std=1</code> را از دستور حذف کنید و دوباره بسازید.</p>
+<p>همچنین می‌توانید هنگام اجرای تست‌ها از <code>--keep-stage-std=1</code> استفاده کنید.
+چیزی شبیه این:</p>
+<ul>
+<li>Initial test run: <code>./x test tests/ui</code></li>
+<li>Subsequent test run: <code>./x test tests/ui --keep-stage-std=1</code></li>
+</ul>
+<h2 id="using-incremental-compilation"><a class="header" href="#using-incremental-compilation">استفاده از کامپایل افزایشی</a></h2>
+<p>می‌توانید برای صرفه‌جویی بیشتر در زمان بازسازی‌های بعدی، پرچم <code>--incremental</code> را هم فعال کنید:</p>
+<pre><code class="language-bash">./x test tests/ui --incremental --test-args issue-1234
+</code></pre>
+<p>اگر نمی‌خواهید پرچم را در هر دستور بیاورید، می‌توانید آن را در <code>bootstrap.toml</code> فعال کنید:</p>
+<pre><code class="language-toml">[rust]
+incremental = true
+</code></pre>
+<p>توجه کنید که کامپایل افزایشی بیش از حد معمول فضای دیسک مصرف می‌کند.
+اگر فضای دیسک برایتان مهم است،
+شاید بخواهید هر از چند گاهی اندازهٔ پوشهٔ <code>build</code> را بررسی کنید.</p>
+<h2 id="fine-tuning-optimizations"><a class="header" href="#fine-tuning-optimizations">Fine-tuning optimizations</a></h2>
+<p>تنظیم <code>optimize = false</code> کامپایلر را برای تست‌ها بیش از حد کند می‌کند.
+اما برای بهبود چرخهٔ تست،
+می‌توانید بهینه‌سازی‌ها را به‌صورت انتخابی فقط برای crateهایی که باید دوباره بسازید غیرفعال کنید
+(<a href="https://rust-lang.zulipchat.com/#narrow/stream/131828-t-compiler/topic/incremental.20compilation.20question/near/202712165">منبع</a>).
+برای مثال هنگام کار روی <code>rustc_mir_build</code>،
+crateهای <code>rustc_mir_build</code> و <code>rustc_driver</code> بیشترین زمان را برای بازسازی افزایشی می‌گیرند.
+بنابراین می‌توانید موارد زیر را در <code>Cargo.toml</code> ریشه قرار دهید:</p>
+<pre><code class="language-toml">[profile.release.package.rustc_mir_build]
+opt-level = 0
+[profile.release.package.rustc_driver]
+opt-level = 0
+</code></pre>
+<h2 id="working-on-multiple-branches-at-the-same-time"><a class="header" href="#working-on-multiple-branches-at-the-same-time">کار روی چند شاخه (branch) به‌طور همزمان</a></h2>
+<p>کار موازی روی چند شاخه می‌تواند کمی آزاردهنده باشد،
+چون ساخت کامپایلر روی یک شاخه باعث بازنویسی ساخت قبلی و cache کامپایل افزایشی می‌شود.
+یک راه‌حل داشتن چند clone از مخزن است،
+اما این یعنی ذخیرهٔ فراداده Git چندین بار،
+و لزوم به‌روزرسانی جداگانهٔ هر clone.</p>
+<p>خوشبختانه Git راه‌حل بهتری به نام <a href="https://git-scm.com/docs/git-worktree">worktree</a> دارد.
+این به شما اجازه می‌دهد چند «درخت کاری» بسازید که همگی پایگاه‌دادهٔ Git یکسانی دارند.
+علاوه بر این،
+چون همهٔ worktreeها پایگاه‌دادهٔ شیء مشترکی دارند، اگر یک شاخه (مثلاً <code>main</code>) را در هر کدام به‌روز کنید، می‌توانید از commitهای جدید در هر یک از
+worktreeها استفاده کنید.
+یک نکته این است که زیرماژول‌ها به اشتراک گذاشته نمی‌شوند.
+آن‌ها همچنان چندین بار clone می‌شوند.</p>
+<p>با فرض اینکه در پوشهٔ ریشهٔ مخزن Rust خود هستید،
+می‌توانید با اجرای دستور زیر یک «درخت کاری پیوندی» در پوشهٔ جدید «rust2» بسازید:</p>
+<pre><code class="language-bash">git worktree add ../rust2
+</code></pre>
+<p>ساخت worktree جدید برای شاخهٔ جدیدی بر پایهٔ <code>main</code> به این شکل است:</p>
+<pre><code class="language-bash">git worktree add -b my-feature ../rust2 main
+</code></pre>
+<p>سپس می‌توانید از پوشهٔ rust2 به‌عنوان workspace جداگانه برای تغییر و ساخت <code>rustc</code> استفاده کنید!</p>
+<h2 id="working-with-nix"><a class="header" href="#working-with-nix">کار با nix</a></h2>
+<p>چند پیکربندی nix در <code>src/tools/nix-dev-shell</code> تعریف شده است.</p>
+<p>اگر از direnv استفاده می‌کنید، می‌توانید یک پیوند نمادین (symbolic link) به <code>src/tools/nix-dev-shell/envrc-flake</code> یا <code>src/tools/nix-dev-shell/envrc-shell</code> بسازید</p>
+<pre><code class="language-bash">ln -s ./src/tools/nix-dev-shell/envrc-flake ./.envrc # Use flake
+</code></pre>
+<p>or</p>
+<pre><code class="language-bash">ln -s ./src/tools/nix-dev-shell/envrc-shell ./.envrc # Use nix-shell
+</code></pre>
+<p>اگر از flake استفاده می‌کنید، حتماً آن را با دستور زیر هم به‌روز کنید:</p>
+<pre><code>nix flake update --flake ./src/tools/nix-dev-shell
+</code></pre>
+<p>shell دستوری به نام <code>x</code> می‌سازد که اسکریپت <code>./x.py</code> را با همهٔ وابستگی‌های درست تنظیم‌شده اجرا می‌کند.</p>
+<h3 id="note"><a class="header" href="#note">Note</a></h3>
+<p>توجه کنید که هنگام استفاده از nix در توزیعی غیر از NixOS،
+ممکن است لازم باشد <strong><code>build.patch-binaries-for-nix = true</code> را در <code>bootstrap.toml</code></strong> تنظیم کنید.
+Bootstrap سعی می‌کند تشخیص دهد که در nix اجرا می‌شود یا نه و patch‌کردن را خودکار فعال کند،
+اما این تشخیص ممکن است false negative داشته باشد.</p>
+<p>همچنین می‌توانید از shell در nix برای مدیریت <code>bootstrap.toml</code> استفاده کنید:</p>
+<pre><code class="language-nix">let
+  config = pkgs.writeText "rustc-config" ''
+    # Your bootstrap.toml content goes here
+  ''
+pkgs.mkShell {
+  /* ... */
+  # This environment variable tells bootstrap where our bootstrap.toml is.
+  RUST_BOOTSTRAP_CONFIG = config;
+}
+</code></pre>
+<h2 id="shell-completions"><a class="header" href="#shell-completions">Shell Completions</a></h2>
+<p>اگر از Bash، Zsh، Fish یا PowerShell استفاده می‌کنید،
+می‌توانید اسکریپت‌های تکمیل خودکار تولیدشدهٔ <code>./x</code> را در
+<a href="https://github.com/rust-lang/rust/tree/HEAD/src/etc/completions"><code>src/etc/completions</code></a> بیابید.</p>
+<p>می‌توانید از <code>source ./src/etc/completions/x.&lt;extension&gt;</code> برای بارگذاری تکمیل‌ها
+برای shell انتخابی خود، یا <code>&amp; .\src\etc\completions\x.ps1</code> برای PowerShell استفاده کنید.
+افزودن این به اسکریپت راه‌اندازی shell (مثلاً <code>.bashrc</code>) این تکمیل را به‌طور خودکار
+بارگذاری می‌کند.</p><nav class="page-nav"><a href="prerequisites.html">→ پیش‌نیازها</a><a href="build-install-distribution-artifacts.html">آرتیفکت‌های توزیع ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,254 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>استفاده از نخ‌ها برای اجرای همزمان کد — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch16-01-threads"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="using-threads-to-run-code-simultaneously"><a class="header" href="#using-threads-to-run-code-simultaneously">استفاده از نخ‌ها برای اجرای همزمان کد</a></h2>
+<p>در اغلب سیستم‌عامل‌های امروزی، کدی که در یک برنامه اجرا می‌شود در قالب یک <em>پروسه (process)</em> اجرا می‌شود، و سیستم‌عامل به‌طور هم‌زمان چندین پروسه را مدیریت می‌کند.<br> در درون یک برنامه، می‌توان بخش‌های مستقلی نیز داشت که به‌صورت هم‌زمان اجرا می‌شوند. ویژگی‌هایی که این بخش‌های مستقل را اجرا می‌کنند، <em>ترد (thread)</em> نام دارند.<br> برای مثال، یک وب‌سرور می‌تواند چندین ترد داشته باشد تا بتواند هم‌زمان به چندین درخواست پاسخ دهد.</p>
+<p>تقسیم محاسبات در برنامه شما به چندین نخ برای اجرای چندین کار به طور همزمان می‌تواند عملکرد را بهبود بخشد، اما همچنین پیچیدگی را افزایش می‌دهد. از آنجایی که نخ‌ها می‌توانند به طور همزمان اجرا شوند، هیچ تضمینی برای ترتیب اجرای بخش‌های کد در نخ‌های مختلف وجود ندارد. این موضوع می‌تواند به مشکلاتی منجر شود، مانند:</p>
+<ul>
+<li>شرایط رقابتی (Race conditions)، زمانی که تردها به داده‌ها یا منابع به‌صورت نامنظم و ناسازگار دسترسی پیدا می‌کنند</li>
+<li>بن‌بست‌ها (Deadlocks)، زمانی که دو ترد منتظر یکدیگر هستند و هیچ‌کدام نمی‌توانند به اجرای خود ادامه دهند</li>
+<li>باگ‌هایی که تنها در شرایط خاصی رخ می‌دهند و بازتولید و رفع آن‌ها به‌صورت قابل‌اعتماد دشوار است</li>
+</ul>
+<p>Rust تلاش می‌کند اثرات منفی استفاده از نخ‌ها را کاهش دهد، اما برنامه‌نویسی در یک زمینه چندنخی همچنان نیاز به تفکر دقیق و ساختاری متفاوت از برنامه‌های تک‌نخی دارد.</p>
+<p>زبان‌های برنامه‌نویسی، پیاده‌سازی تردها را به روش‌های مختلفی انجام می‌دهند و بسیاری از سیستم‌عامل‌ها یک API برای ایجاد تردهای جدید در اختیار زبان برنامه‌نویسی قرار می‌دهند. کتابخانه استاندارد Rust از مدل پیاده‌سازی ترد <strong>1:1</strong> استفاده می‌کند؛ به‌عبارت دیگر، هر ترد زبان، متناظر با یک ترد سیستم‌عامل است. کتابخانه‌هایی (crate) نیز وجود دارند که مدل‌های دیگری از تردینگ را پیاده‌سازی می‌کنند و نسبت به مدل 1:1، مصالحه‌ها و ویژگی‌های متفاوتی دارند. (سیستم async در Rust، که در فصل بعدی آن را خواهیم دید، نیز رویکردی دیگر برای هم‌زمانی ارائه می‌دهد.)</p>
+<h3 id="creating-a-new-thread-with-spawn"><a class="header" href="#creating-a-new-thread-with-spawn">ایجاد یک نخ جدید با <code>spawn</code></a></h3>
+<p>برای ایجاد یک ترد جدید، از تابع <code>thread::spawn</code> استفاده می‌کنیم و یک closure (که در فصل ۱۳ درباره آن صحبت کردیم) را به آن می‌دهیم که حاوی کدی است که می‌خواهیم در ترد جدید اجرا شود. مثال موجود در لیستینگ 16-1، متنی را از ترد اصلی چاپ می‌کند و متنی دیگر را از یک ترد جدید.</p>
+<figure class="listing" id="listing-16-1">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::thread;
+use std::time::Duration;
+
+fn main() {
+    thread::spawn(|| {
+        for i in 1..10 {
+            println!("hi number {i} from the spawned thread!");
+            thread::sleep(Duration::from_millis(1));
+        }
+    });
+
+    for i in 1..5 {
+        println!("hi number {i} from the main thread!");
+        thread::sleep(Duration::from_millis(1));
+    }
+}</code></pre>
+<figcaption><a href="#listing-16-1">لیست ۱۶-۱</a>: ایجاد یک نخ جدید برای چاپ یک چیز در حالی که نخ اصلی چیز دیگری چاپ می‌کند</figcaption>
+</figure>
+<p>توجه داشته باشید که وقتی نخ اصلی یک برنامه Rust تکمیل می‌شود، تمام نخ‌های ایجادشده متوقف می‌شوند، چه آن‌ها اجرای خود را تکمیل کرده باشند یا نه. خروجی این برنامه ممکن است هر بار کمی متفاوت باشد، اما به صورت مشابه زیر خواهد بود:</p>
+<!-- Not extracting output because changes to this output aren't significant;
+the changes are likely to be due to the threads running differently rather than
+changes in the compiler -->
+<pre><code class="language-text">hi number 1 from the main thread!
+hi number 1 from the spawned thread!
+hi number 2 from the main thread!
+hi number 2 from the spawned thread!
+hi number 3 from the main thread!
+hi number 3 from the spawned thread!
+hi number 4 from the main thread!
+hi number 4 from the spawned thread!
+hi number 5 from the spawned thread!
+</code></pre>
+<p>فراخوانی‌های <code>thread::sleep</code> باعث می‌شوند یک ترد اجرای خود را برای مدت کوتاهی متوقف کند و به ترد دیگری اجازه اجرای کد را بدهد. احتمالاً تردها به نوبت اجرا خواهند شد، اما این موضوع تضمین‌شده نیست: این‌که کدام ترد اجرا شود بستگی به نحوه زمان‌بندی (scheduling) تردها توسط سیستم‌عامل دارد. در این اجرا، ترد اصلی زودتر چاپ کرد، با این‌که دستور چاپ ترد جدید زودتر در کد آمده است. و حتی با این‌که به ترد جدید گفتیم تا زمانی که مقدار <code>i</code> به <code>9</code> برسد چاپ کند، فقط تا مقدار <code>5</code> اجرا شد پیش از آن‌که ترد اصلی متوقف شود.</p>
+<p>اگر این کد را اجرا کردید و فقط خروجی نخ اصلی را دیدید یا هیچ تداخل زمانی مشاهده نکردید، سعی کنید اعداد موجود در بازه‌ها را افزایش دهید تا فرصت بیشتری برای سیستم‌عامل ایجاد شود تا بین نخ‌ها جابه‌جا شود.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="waiting-for-all-threads-to-finish-using-join-handles"></a></p>
+<h3 id="waiting-for-all-threads-to-finish"><a class="header" href="#waiting-for-all-threads-to-finish">منتظر ماندن برای پایان همهٔ نخ‌ها</a></h3>
+<p>کد موجود در لیستینگ 16-1 نه تنها بیشتر اوقات نخ ایجادشده را به دلیل پایان نخ اصلی زودتر از موعد متوقف می‌کند، بلکه به دلیل اینکه هیچ تضمینی برای ترتیب اجرای نخ‌ها وجود ندارد، نمی‌توانیم اطمینان حاصل کنیم که نخ ایجادشده اجرا خواهد شد!</p>
+<p>ما می‌توانیم مشکل اجرا نشدن ترد جدید یا پایان زودهنگام آن را با ذخیره مقدار بازگشتی <code>thread::spawn</code> در یک متغیر حل کنیم. نوع بازگشتی <code>thread::spawn</code> برابر است با <code>JoinHandle&lt;T&gt;</code>. یک <code>JoinHandle&lt;T&gt;</code> یک مقدار مالک (owned) است که وقتی متد <code>join</code> را روی آن فراخوانی کنیم، منتظر می‌ماند تا اجرای ترد مربوطه به پایان برسد. در فهرست 16-2 نشان داده شده است که چگونه از <code>JoinHandle&lt;T&gt;</code> تردی که در فهرست 16-1 ایجاد کردیم استفاده کنیم و چگونه با فراخوانی <code>join</code> اطمینان حاصل کنیم که ترد جدید پیش از خروج <code>main</code> به پایان می‌رسد.</p>
+<figure class="listing" id="listing-16-2">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::thread;
+use std::time::Duration;
+
+fn main() {
+    let handle = thread::spawn(|| {
+        for i in 1..10 {
+            println!("hi number {i} from the spawned thread!");
+            thread::sleep(Duration::from_millis(1));
+        }
+    });
+
+    for i in 1..5 {
+        println!("hi number {i} from the main thread!");
+        thread::sleep(Duration::from_millis(1));
+    }
+
+    handle.join().unwrap();
+}</code></pre>
+<figcaption><a href="#listing-16-2">لیست ۱۶-۲</a>: ذخیره یک &lt;code&gt;&lt;/x-listing&gt;JoinHandle&lt;T&gt;&lt;/code&gt; از &lt;code&gt;thread::spawn&lt;/code&gt; برای تضمین اجرای کامل ترد</figcaption>
+</figure>
+<p>فراخوانی <code>join</code> روی handle نخ جاری را مسدود می‌کند تا زمانی که نخ نمایانده‌شده توسط handle خاتمه یابد. <em>مسدود کردن</em> یک نخ به این معناست که آن نخ از انجام کار یا خروج جلوگیری می‌شود. چون فراخوانی <code>join</code> را بعد از حلقه <code>for</code> نخ اصلی قرار داده‌ایم، اجرای لیستینگ 16-2 باید خروجی مشابه زیر تولید کند:</p>
+<!-- Not extracting output because changes to this output aren't significant;
+the changes are likely to be due to the threads running differently rather than
+changes in the compiler -->
+<pre><code class="language-text">hi number 1 from the main thread!
+hi number 2 from the main thread!
+hi number 1 from the spawned thread!
+hi number 3 from the main thread!
+hi number 2 from the spawned thread!
+hi number 4 from the main thread!
+hi number 3 from the spawned thread!
+hi number 4 from the spawned thread!
+hi number 5 from the spawned thread!
+hi number 6 from the spawned thread!
+hi number 7 from the spawned thread!
+hi number 8 from the spawned thread!
+hi number 9 from the spawned thread!
+</code></pre>
+<p>دو نخ همچنان به صورت متناوب اجرا می‌شوند، اما نخ اصلی به دلیل فراخوانی <code>handle.join()</code> منتظر می‌ماند و تا زمانی که نخ ایجادشده تکمیل نشود پایان نمی‌یابد.</p>
+<p>اما بیایید ببینیم چه اتفاقی می‌افتد اگر <code>handle.join()</code> را قبل از حلقه <code>for</code> در <code>main</code> منتقل کنیم، به این صورت:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::thread;
+use std::time::Duration;
+
+fn main() {
+    let handle = thread::spawn(|| {
+        for i in 1..10 {
+            println!("hi number {i} from the spawned thread!");
+            thread::sleep(Duration::from_millis(1));
+        }
+    });
+
+    handle.join().unwrap();
+
+    for i in 1..5 {
+        println!("hi number {i} from the main thread!");
+        thread::sleep(Duration::from_millis(1));
+    }
+}</code></pre>
+</figure>
+<p>نخ اصلی منتظر می‌ماند تا نخ ایجادشده خاتمه یابد و سپس حلقه <code>for</code> خود را اجرا می‌کند، بنابراین خروجی دیگر به صورت متناوب نخواهد بود، همان‌طور که در اینجا نشان داده شده است:</p>
+<!-- Not extracting output because changes to this output aren't significant;
+the changes are likely to be due to the threads running differently rather than
+changes in the compiler -->
+<pre><code class="language-text">hi number 1 from the spawned thread!
+hi number 2 from the spawned thread!
+hi number 3 from the spawned thread!
+hi number 4 from the spawned thread!
+hi number 5 from the spawned thread!
+hi number 6 from the spawned thread!
+hi number 7 from the spawned thread!
+hi number 8 from the spawned thread!
+hi number 9 from the spawned thread!
+hi number 1 from the main thread!
+hi number 2 from the main thread!
+hi number 3 from the main thread!
+hi number 4 from the main thread!
+</code></pre>
+<p>جزئیات کوچک، مانند مکان فراخوانی <code>join</code>، می‌توانند بر اینکه نخ‌های شما همزمان اجرا می‌شوند یا خیر تأثیر بگذارند.</p>
+<h3 id="using-move-closures-with-threads"><a class="header" href="#using-move-closures-with-threads">استفاده از Closureهای <code>move</code> با نخ‌ها</a></h3>
+<p>ما اغلب از کلمه کلیدی <code>move</code> همراه با closuresهایی که به <code>thread::spawn</code> داده می‌شوند استفاده می‌کنیم، زیرا در این صورت closure مالکیت مقادیری که از محیط استفاده می‌کند را به خود می‌گیرد، و به این ترتیب مالکیت آن مقادیر از یک ترد به ترد دیگر منتقل می‌شود. در بخش <a href="ch13-01-closures.html#capturing-references-or-moving-ownership">«گرفتن رفرنس یا انتقال مالکیت»</a><!-- ignore --> در فصل 13، <code>move</code> را در زمینه‌ی closures بررسی کردیم. اکنون تمرکز بیشتری بر تعامل بین <code>move</code> و <code>thread::spawn</code> خواهیم داشت.</p>
+<p>در فهرست 16-1 توجه کنید که closureیی که به <code>thread::spawn</code> می‌دهیم هیچ آرگومانی نمی‌گیرد: ما در کد ترد ایجاد شده از هیچ داده‌ای از ترد اصلی استفاده نمی‌کنیم. برای استفاده از داده‌های ترد اصلی در ترد جدید، closure در ترد جدید باید مقادیری را که نیاز دارد capture کند. فهرست 16-3 تلاشی را برای ایجاد یک vector در ترد اصلی و استفاده از آن در ترد ایجاد شده نشان می‌دهد. با این حال، همان‌طور که در ادامه خواهید دید، این کد هنوز کار نخواهد کرد.</p>
+<figure class="listing" id="listing-16-3">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">use std::thread;
+
+fn main() {
+    let v = vec![1, 2, 3];
+
+    let handle = thread::spawn(|| {
+        println!("Here's a vector: {v:?}");
+    });
+
+    handle.join().unwrap();
+}</code></pre>
+<figcaption><a href="#listing-16-3">لیست ۱۶-۳</a>: تلاش برای استفاده از یک بردار ایجادشده توسط نخ اصلی در یک نخ دیگر</figcaption>
+</figure>
+<p>این closure از <code>v</code> استفاده می‌کند، بنابراین <code>v</code> را می‌گیرد و آن را بخشی از محیط closure می‌کند. از آنجا که <code>thread::spawn</code> این closure را در یک نخ جدید اجرا می‌کند، باید بتوانیم به <code>v</code> در داخل آن نخ جدید دسترسی داشته باشیم. اما وقتی این مثال را کامپایل می‌کنیم، خطای زیر را دریافت می‌کنیم:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling threads v0.1.0 (file:///projects/threads)
+error[E0373]: closure may outlive the current function, but it borrows `v`, which is owned by the current function
+ --&gt; src/main.rs:6:32
+  |
+6 |     let handle = thread::spawn(|| {
+  |                                ^^ may outlive borrowed value `v`
+7 |         println!("Here's a vector: {v:?}");
+  |                                     - `v` is borrowed here
+  |
+note: function requires argument type to outlive `'static`
+ --&gt; src/main.rs:6:18
+  |
+6 |       let handle = thread::spawn(|| {
+  |  __________________^
+7 | |         println!("Here's a vector: {v:?}");
+8 | |     });
+  | |______^
+help: to force the closure to take ownership of `v` (and any other referenced variables), use the `move` keyword
+  |
+6 |     let handle = thread::spawn(move || {
+  |                                ++++
+
+For more information about this error, try `rustc --explain E0373`.
+error: could not compile `threads` (bin "threads") due to 1 previous error
+</code></pre>
+<p>زبان Rust به صورت خودکار <em>تشخیص</em> می‌دهد که چگونه باید مقدار <code>v</code> را capture کند، و از آن‌جا که <code>println!</code> تنها به یک رفرنس به <code>v</code> نیاز دارد، closure تلاش می‌کند تا <code>v</code> را قرض بگیرد (borrow کند). اما مشکلی وجود دارد: Rust نمی‌تواند تشخیص دهد که ترد ایجادشده چه مدت اجرا خواهد شد، بنابراین نمی‌داند که آیا رفرنس به <code>v</code> همیشه معتبر خواهد ماند یا نه.</p>
+<p>فهرست 16-4 سناریویی را نشان می‌دهد که احتمال نامعتبر بودن رفرنس به <code>v</code> در آن بیشتر است.</p>
+<figure class="listing" id="listing-16-4">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">use std::thread;
+
+fn main() {
+    let v = vec![1, 2, 3];
+
+    let handle = thread::spawn(|| {
+        println!("Here's a vector: {v:?}");
+    });
+
+    drop(v); // oh no!
+
+    handle.join().unwrap();
+}</code></pre>
+<figcaption><a href="#listing-16-4">لیست ۱۶-۴</a>: یک نخ با closureی که سعی می‌کند یک ارجاع به &lt;code&gt;&lt;/x-listing&gt;v&lt;/code&gt; را از نخ اصلی که &lt;code&gt;v&lt;/code&gt; را حذف می‌کند بگیرد</figcaption>
+</figure>
+<p>اگر Rust اجازه اجرای این کد را به ما می‌داد، این احتمال وجود داشت که ترد ایجادشده بلافاصله به پس‌زمینه منتقل شود بدون آن‌که اجرا شود. این ترد ایجادشده، یک رفرنس به <code>v</code> در درون خود دارد، اما ترد اصلی بلافاصله <code>v</code> را drop می‌کند، با استفاده از تابع <code>drop</code> که در فصل ۱۵ درباره‌اش صحبت کردیم. سپس، زمانی که ترد ایجادشده شروع به اجرا کند، دیگر <code>v</code> وجود ندارد، بنابراین رفرنسی که به آن اشاره دارد نیز نامعتبر خواهد بود. اوه نه!</p>
+<p>برای رفع خطای کامپایل در لیستینگ 16-3، می‌توانیم از مشاوره پیام خطا استفاده کنیم:</p>
+<!-- manual-regeneration
+after automatic regeneration, look at listings/ch16-fearless-concurrency/listing-16-03/output.txt and copy the relevant part
+-->
+<pre><code class="language-text">help: to force the closure to take ownership of `v` (and any other referenced variables), use the `move` keyword
+  |
+6 |     let handle = thread::spawn(move || {
+  |                                ++++
+</code></pre>
+<p>با اضافه‌کردن کلمه‌ی کلیدی <code>move</code> قبل از closure، ما closure را مجبور می‌کنیم که مالکیت مقادیری را که استفاده می‌کند، بگیرد، به‌جای آن‌که اجازه دهیم Rust به‌طور ضمنی نتیجه بگیرد که باید آن مقادیر را قرض بگیرد. اصلاحات اعمال‌شده روی Listing 16-3 که در Listing 16-5 نشان داده شده‌اند، همان‌گونه که انتظار داریم کامپایل شده و اجرا خواهند شد.</p>
+<figure class="listing" id="listing-16-5">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::thread;
+
+fn main() {
+    let v = vec![1, 2, 3];
+
+    let handle = thread::spawn(move || {
+        println!("Here's a vector: {v:?}");
+    });
+
+    handle.join().unwrap();
+}</code></pre>
+<figcaption><a href="#listing-16-5">لیست ۱۶-۵</a>: استفاده از کلمه کلیدی &lt;code&gt;&lt;/x-listing&gt;move&lt;/code&gt; برای مجبور کردن یک closure به گرفتن مالکیت مقادیری که استفاده می‌کند</figcaption>
+</figure>
+<p>ممکن است وسوسه شویم که همین کار را برای رفع کد در لیستینگ 16-4 که نخ اصلی <code>drop</code> را فراخوانی می‌کند با استفاده از یک closure <code>move</code> انجام دهیم. با این حال، این راه‌حل کار نخواهد کرد زیرا آنچه لیستینگ 16-4 تلاش می‌کند انجام دهد به دلیل دیگری مجاز نیست. اگر <code>move</code> را به closure اضافه کنیم، <code>v</code> را به محیط closure منتقل می‌کنیم و دیگر نمی‌توانیم <code>drop</code> را در نخ اصلی روی آن فراخوانی کنیم. در عوض، این خطای کامپایل را دریافت خواهیم کرد:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling threads v0.1.0 (file:///projects/threads)
+error[E0382]: use of moved value: `v`
+  --&gt; src/main.rs:10:10
+   |
+ 4 |     let v = vec![1, 2, 3];
+   |         - move occurs because `v` has type `Vec&lt;i32&gt;`, which does not implement the `Copy` trait
+ 5 |
+ 6 |     let handle = thread::spawn(move || {
+   |                                ------- value moved into closure here
+ 7 |         println!("Here's a vector: {v:?}");
+   |                                     - variable moved due to use in closure
+...
+10 |     drop(v); // oh no!
+   |          ^ value used here after move
+   |
+help: consider cloning the value before moving it into the closure
+   |
+ 6 ~     let value = v.clone();
+ 7 ~     let handle = thread::spawn(move || {
+ 8 ~         println!("Here's a vector: {value:?}");
+   |
+
+For more information about this error, try `rustc --explain E0382`.
+error: could not compile `threads` (bin "threads") due to 1 previous error
+</code></pre>
+<p>قوانین مالکیت Rust باز هم ما را نجات دادند! در کد موجود در Listing 16-3 خطا دریافت کردیم، زیرا Rust به‌صورت محافظه‌کارانه عمل کرده و تنها <code>v</code> را برای thread قرض گرفته بود، که این یعنی thread اصلی می‌توانست به‌طور نظری رفرنسی که thread ایجادشده به آن نیاز دارد را نامعتبر کند. با گفتن این موضوع به Rust که مالکیت <code>v</code> را به thread جدید منتقل کند (<code>move</code>)، ما این تضمین را به Rust می‌دهیم که thread اصلی دیگر از <code>v</code> استفاده نخواهد کرد. اگر Listing 16-4 را هم به همین شکل تغییر دهیم، در واقع داریم قوانین مالکیت را با تلاش برای استفاده از <code>v</code> در thread اصلی نقض می‌کنیم. کلمه‌ی کلیدی <code>move</code> رفتار پیش‌فرض محافظه‌کارانه‌ی Rust را که قرض‌گیری است، لغو می‌کند؛ اما اجازه نمی‌دهد قوانین مالکیت را زیر پا بگذاریم.</p>
+<p>اکنون که درک خوبی از چیستی threadها و متدهای ارائه‌شده توسط API مربوط به thread داریم، بیایید به بررسی برخی موقعیت‌ها بپردازیم که می‌توانیم در آن‌ها از threadها استفاده کنیم.</p><nav class="page-nav"><a href="ch16-00-concurrency.html">→ همروندی بی‌واهمه</a><a href="ch16-02-message-passing.html">انتقال داده بین نخ‌ها با ارسال پیام ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

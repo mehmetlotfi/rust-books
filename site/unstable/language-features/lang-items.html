@@ -1,0 +1,77 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>lang-items — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/lang-items"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="lang_items"><a class="header" href="#lang_items"><code>lang_items</code></a></h1>
+<p>مسئلهٔ پیگیری (tracking issue) این ویژگی: ندارد.</p>
+<hr>
+<p>کامپایلر <code>rustc</code> عملیات «قابل اتصال» (pluggable) مشخصی دارد؛ یعنی قابلیت‌هایی که در خود زبان به‌صورت سخت‌کد (hard-coded) تعریف نشده‌اند، بلکه در کتابخانه‌ها پیاده‌سازی می‌شوند و با یک نشانگر ویژه به کامپایلر اطلاع داده می‌شود که وجود دارند. این نشانگر attribute به شکل <code>#[lang = "..."]</code> است و <code>...</code> مقادیر مختلفی می‌گیرد، یعنی «lang itemهای» مختلف. بیشتر آن‌ها را فقط یک بار می‌توان تعریف کرد.</p>
+<p>کامپایلر lang itemها را به‌صورت تنبل (lazy) بارگذاری می‌کند؛ مثلاً اگر هرگز از <code>Box</code> استفاده نکنید، لازم نیست تابعی برای <code>exchange_malloc</code> تعریف کنید. <code>rustc</code> وقتی به آیتمی نیاز باشد اما در crate فعلی یا crateهای مورد وابستگی آن یافت نشود، خطا صادر می‌کند.</p>
+<p>برخی از قابلیت‌هایی که lang itemها فراهم می‌کنند:</p>
+<ul>
+<li>سربارگذاری عملگرها از طریق صفت‌ها (trait): صفت‌های متناظر با عملگرهای <code>==</code>، <code>&lt;</code>، dereference (<code>*</code>) و <code>+</code> (و غیره) همگی با lang item علامت‌گذاری شده‌اند؛ آن چهار مورد مشخص به ترتیب <code>eq</code>، <code>partial_ord</code>، <code>deref</code>/<code>deref_mut</code> و <code>add</code> هستند.</li>
+<li>panic کردن: lang itemهای <code>panic</code> و <code>panic_impl</code> و موارد دیگر.</li>
+<li>بازکردن پشته (stack unwinding): lang item به نام <code>eh_personality</code> تابعی است که سازوکارهای شکست (failure) کامپایلر از آن استفاده می‌کنند. این اغلب به تابع personality در GCC نگاشت می‌شود (برای اطلاعات بیشتر <a href="https://github.com/rust-lang/rust/blob/HEAD/library/std/src/sys/personality/gcc.rs">پیاده‌سازی <code>std</code></a> را ببینید)، اما برنامه‌هایی که panic ایجاد نمی‌کنند می‌توانند مطمئن باشند که این تابع هرگز فراخوانی نمی‌شود.</li>
+<li>صفت‌های موجود در <code>core::marker</code> که برای نشان دادن انواع مختلف نوع‌ها به کار می‌روند؛ مثلاً lang itemهای <code>sized</code>، <code>sync</code> و <code>copy</code>.</li>
+<li>تخصیص حافظه، که در ادامه آمده است.</li>
+</ul>
+<p>بیشتر lang itemها در <code>core</code> تعریف شده‌اند، اما اگر بخواهید یک فایل اجرایی را بدون crate به نام <code>std</code> بسازید، ممکن است به تعریف lang itemها نیاز پیدا کنید.</p>
+<h2 id="example-implementing-a-box"><a class="header" href="#example-implementing-a-box">مثال: پیاده‌سازی <code>Box</code></a></h2>
+<p>اشاره‌گرهای <code>Box</code> به دو lang item نیاز دارند: یکی برای خود نوع و دیگری برای تخصیص حافظه. برنامهٔ مستقل (freestanding) زیر از شکر نحوی <code>Box</code> برای تخصیص پویا از طریق <code>malloc</code> و <code>free</code> استفاده می‌کند:</p>
+<pre><code class="language-rust ignore (libc-is-finicky)">#![feature(lang_items, core_intrinsics, rustc_private, panic_unwind, rustc_attrs)]
+#![allow(internal_features)]
+#![no_std]
+#![no_main]
+
+extern crate libc;
+extern crate unwind;
+
+use core::ffi::{c_int, c_void};
+use core::intrinsics;
+use core::panic::PanicInfo;
+use core::ptr::NonNull;
+
+pub struct Global; // the global allocator
+struct Unique&lt;T&gt;(NonNull&lt;T&gt;);
+
+#[lang = "owned_box"]
+pub struct Box&lt;T, A = Global&gt;(Unique&lt;T&gt;, A);
+
+impl&lt;T&gt; Box&lt;T&gt; {
+    pub fn new(x: T) -&gt; Self {
+        #[rustc_box]
+        Box::new(x)
+    }
+}
+
+impl&lt;T, A&gt; Drop for Box&lt;T, A&gt; {
+    fn drop(&amp;mut self) {
+        unsafe {
+            libc::free(self.0.0.as_ptr() as *mut c_void);
+        }
+    }
+}
+
+#[lang = "exchange_malloc"]
+unsafe fn allocate(size: usize, _align: usize) -&gt; *mut u8 {
+    let p = libc::malloc(size) as *mut u8;
+
+    // Check if `malloc` failed:
+    if p.is_null() {
+        intrinsics::abort_immediate();
+    }
+
+    p
+}
+
+#[no_mangle]
+extern "C" fn main(_argc: c_int, _argv: *const *const u8) -&gt; c_int {
+    let _x = Box::new(1);
+
+    0
+}
+
+#[lang = "eh_personality"]
+fn rust_eh_personality() {}
+
+#[panic_handler]
+fn panic_handler(_info: &amp;PanicInfo) -&gt; ! { intrinsics::abort_immediate() }</code></pre>
+<p>به استفاده از <code>abort</code> توجه کنید: فرض بر این است که lang item به نام <code>exchange_malloc</code> یک اشاره‌گر معتبر برمی‌گرداند، و بنابراین باید بررسی را در درون خود انجام دهد.</p>
+<h2 id="list-of-all-language-items"><a class="header" href="#list-of-all-language-items">فهرست همهٔ lang itemها</a></h2>
+<p>فهرست به‌روز همهٔ lang itemها را می‌توانید <a href="https://github.com/rust-lang/rust/blob/ac62df9b49f9b9036af2a4957db70bf3850785e1/compiler/rustc_attr_ir/src/lang_items.rs#L158">اینجا</a> در کد کامپایلر بیابید.</p><nav class="page-nav"><a href="../../unstable/language-features/intrinsics.html">→ intrinsics</a><a href="../../unstable/language-features/link-arg-attribute.html">link-arg-attribute ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,64 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>amdgcn-amd-amdhsa — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="platform-support/amdgcn-amd-amdhsa"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="amdgcn-amd-amdhsa"><a class="header" href="#amdgcn-amd-amdhsa"><code>amdgcn-amd-amdhsa</code></a></h1>
+<p><strong>سطح: 3</strong></p>
+<p>هدف GPU شرکت AMD برای محاسبات/HSA (Heterogeneous System Architecture).</p>
+<h2 id="target-maintainers"><a class="header" href="#target-maintainers">نگهدارندگان هدف</a></h2>
+<p><a href="https://github.com/Flakebi">@Flakebi</a></p>
+<h2 id="requirements"><a class="header" href="#requirements">الزامات</a></h2>
+<p>می‌توان GPUهای AMD را از طریق کامپایل متقاطع هدف قرار داد. GPUهای پشتیبانی‌شده به نسخهٔ LLVM مورد استفادهٔ Rust بستگی دارند. به‌طور کلی، بیشتر GPUها از gfx7 (Sea Islands/CI) به بعد به‌عنوان هدف کامپایل پشتیبانی می‌شوند، هرچند GPUهای قدیمی‌تر توسط جدیدترین runtime میزبان پشتیبانی نمی‌شوند. جزئیات GPUهای پشتیبانی‌شده را می‌توان در <a href="https://llvm.org/docs/AMDGPUUsage.html#processors">مستندات LLVM</a> و <a href="https://rocmdocs.amd.com">مستندات ROCm</a> یافت.</p>
+<p>فایل‌های دودویی را می‌توان توسط <a href="https://rocm.docs.amd.com/projects/HIP/">HIP</a> یا توسط runtime مربوط به HSA که در <a href="https://github.com/ROCm/ROCR-Runtime">ROCR-Runtime</a> پیاده‌سازی شده بارگذاری کرد. قالب فایل‌های دودویی یک ELF پیوندخورده است.</p>
+<p>فایل‌های دودویی باید با no-std ساخته شوند. آن‌ها می‌توانند از <code>core</code> و <code>alloc</code> استفاده کنند (<code>alloc</code> فقط در صورتی که یک تخصیص‌دهنده فراهم شود). دست‌کم یک تابع باید از قرارداد فراخوانی <code>"gpu-kernel"</code> استفاده کند و با <code>no_mangle</code> یا <code>export_name</code> علامت‌گذاری شود. توابعی که از قرارداد فراخوانی <code>"gpu-kernel"</code> استفاده می‌کنند، نقاط ورود کرنل هستند و می‌توان آن‌ها را از runtime میزبان راه‌اندازی کرد.</p>
+<h2 id="building-the-target"><a class="header" href="#building-the-target">ساخت هدف</a></h2>
+<p>این هدف در rustc گنجانده شده است.</p>
+<h2 id="building-rust-programs"><a class="header" href="#building-rust-programs">ساخت برنامه‌های Rust</a></h2>
+<p>هدف amdgpu از نسل‌های سخت‌افزاری بسیاری پشتیبانی می‌کند که به فایل‌های دودویی متفاوتی نیاز دارند. این نسل‌ها در backend به‌صورت target-cpuهای مختلف ارائه می‌شوند. از آنجا که تعداد آن‌ها زیاد است، Rust کتابخانه‌های از پیش کامپایل‌شده‌ای برای این هدف ارائه نمی‌کند. بنابراین باید با استفاده از <code>cargo -Zbuild-std=core</code> یا روشی مشابه، نسخهٔ خودتان از <code>core</code> را بسازید.</p>
+<p>یک تخصیص‌دهنده و پشتیبانی از <code>println!()</code> توسط crate با نام <a href="https://crates.io/crates/amdgpu-device-libs"><code>amdgpu-device-libs</code></a> فراهم می‌شود. هر دو ویژگی به runtime مربوط به <a href="https://rocm.docs.amd.com/projects/HIP/">HIP</a> وابسته‌اند.</p>
+<p>برای ساخت یک فایل دودویی، یک کتابخانهٔ no-std ایجاد کنید:</p>
+<pre><code class="language-rust ignore (platform-specific)">// src/lib.rs
+#![feature(abi_gpu_kernel)]
+#![no_std]
+
+#[panic_handler]
+fn panic(_: &amp;core::panic::PanicInfo) -&gt; ! {
+    loop {}
+}
+
+#[no_mangle]
+pub extern "gpu-kernel" fn kernel(/* Arguments */) {
+    // Code
+}</code></pre>
+<p>کتابخانه را به‌صورت <code>cdylib</code> بسازید:</p>
+<pre><code class="language-toml"># Cargo.toml
+[lib]
+crate-type = ["cdylib"]
+</code></pre>
+<p>target-cpu<sup class="footnote-reference" id="fr-1-1"><a href="#footnote-1">1</a></sup> باید از فهرست <a href="https://llvm.org/docs/AMDGPUUsage.html#processors">پشتیبانی‌شده توسط LLVM</a> باشد (یا با <code>rustc --target amdgcn-amd-amdhsa --print target-cpus</code> چاپ شود). نسخهٔ GPU روی سیستم فعلی را می‌توان مثلاً با <a href="https://github.com/ROCm/rocminfo"><code>rocminfo</code></a> یافت. برای سری‌ای از GPUها که پشتیبانی xnack دارد اما GPU هدف آن را ندارد، باید target-feature با نام <code>-xnack-support</code> فعال شود. یعنی اگر اطلاعات ISA که با <a href="https://github.com/ROCm/rocminfo"><code>rocminfo</code></a> چاپ می‌شود چیزی دربارهٔ <code>xnack-</code> بگوید، مثلاً <code>gfx1010:xnack-</code>، گزینهٔ <code>-Ctarget-feature=-xnack-support</code> را به rustflags اضافه کنید.</p>
+<p>نمونه فایل <code>.cargo/config.toml</code> برای تعیین هدف و نسل GPU:</p>
+<pre><code class="language-toml"># .cargo/config.toml
+[build]
+target = "amdgcn-amd-amdhsa"
+rustflags = ["-Ctarget-cpu=gfx1100"]
+# Add "-Ctarget-feature=-xnack-support" for xnack- GPUs (see above)
+
+[unstable]
+build-std = ["core"] # Optional: "alloc"
+</code></pre>
+<h2 id="running-rust-programs"><a class="header" href="#running-rust-programs">اجرای برنامه‌های Rust</a></h2>
+<p>برای اجرای یک فایل دودویی روی GPU شرکت AMD، به یک runtime میزبان نیاز است. در Linux و Windows می‌توان از <a href="https://rocm.docs.amd.com/projects/HIP/">HIP</a> برای بارگذاری و اجرای فایل‌های دودویی استفاده کرد. کد نمونه دربارهٔ نحوهٔ بارگذاری و اجرای یک فایل دودویی کامپایل‌شده در <a href="https://github.com/ROCm/rocm-examples/tree/ca8ef5b6f1390176616cd1c18fbc98785cbc73f6/HIP-Basic/module_api">نمونه‌های ROCm</a> موجود است.</p>
+<p>در Linux، فایل‌های دودویی را می‌توان از طریق runtime مربوط به HSA که در <a href="https://github.com/ROCm/ROCR-Runtime">ROCR-Runtime</a> پیاده‌سازی شده نیز اجرا کرد.</p>
+<!--
+## Testing
+
+Does the target support running binaries, or do binaries have varying
+expectations that prevent having a standard way to run them? If users can run
+binaries, can they do so in some common emulator, or do they need native
+hardware? Does the target support running the Rust testsuite?
+
+-->
+<h2 id="additional-information"><a class="header" href="#additional-information">اطلاعات بیشتر</a></h2>
+<p>اطلاعات بیشتر را می‌توان در <a href="https://llvm.org/docs/AMDGPUUsage.html">صفحهٔ LLVM برای amdgpu</a> یافت.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-1">
+<p>برای این هدف، crateهایی که مقادیر متفاوتی برای <code>-C target-cpu</code> دارند با یکدیگر سازگار برای پیوند نیستند. به همین دلیل، کامپایلر اطمینان می‌دهد که همهٔ crateهایی که با هم پیوند می‌خورند با یک <code>target-cpu</code> یکسان کامپایل شده باشند. هنگام استفاده از دستورهای <code>rustc</code> برای ساخت باید این موضوع را در نظر گرفت. این موضوع برای Cargo اهمیت کمتری دارد، زیرا Cargo عموماً برای همهٔ crateهای یک ساخت از یک <code>target-cpu</code> یکسان استفاده می‌کند. <a href="#fr-1-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="aarch64_be-unknown-linux-musl.html">→ aarch64_be-unknown-linux-musl</a><a href="arm-none-eabi.html">arm-none-eabi ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

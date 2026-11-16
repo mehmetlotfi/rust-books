@@ -1,0 +1,70 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>نحوهٔ اشکال‌زدایی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="autodiff/debugging"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="reporting-backend-crashes"><a class="header" href="#reporting-backend-crashes">گزارش خرابی‌های backend</a></h1>
+<p>اگر پس از یک شکست در کامپایل با حجم زیادی کد llvm-ir مواجه شدید، به احتمال زیاد backend مربوط به enzyme ما نتوانسته کد شما را کامپایل کند. اشکال‌زدایی این موارد دشوارتر است، بنابراین کمک شما بسیار ارزشمند است. همچنین به یاد داشته باشید که در حال حاضر معمولاً ساخت‌های release احتمال بسیار بیشتری دارد که کار کنند.</p>
+<p>هدف نهایی در اینجا این است که باگ شما را در <a href="https://enzyme.mit.edu/explorer/">compiler explorer</a> مربوط به enzyme بازتولید کنید، تا بتوانید در مخزن <a href="https://github.com/enzymead/enzyme/issues">Enzyme</a> یک گزارش باگ ایجاد کنید.</p>
+<p>ما یک پرچم <code>autodiff</code> داریم که می‌توانید آن را به <code>rustflags</code> بدهید تا در این کار کمک کند. این پرچم کل ماژول llvm-ir را همراه با برخی فراخوانی‌های <code>__enzyme_fwddiff</code> یا <code>__enzyme_autodiff</code> چاپ می‌کند. یک گردش کار ممکن روی لینوکس می‌تواند به این شکل باشد:</p>
+<h2 id="controlling-llvm-ir-generation"><a class="header" href="#controlling-llvm-ir-generation">کنترل تولید llvm-ir</a></h2>
+<p>پیش از تولید llvm-ir، دو تکنیک را در نظر داشته باشید که می‌توانند کمک کنند کد Rust مرتبط برای اشکال‌زدایی قابل مشاهده باشد:</p>
+<ul>
+<li><strong><code>std::hint::black_box</code></strong>: متغیرها یا عبارت‌های Rust را در <code>std::hint::black_box()</code> بپیچید تا Rust و llvm آن‌ها را بهینه‌سازی و حذف نکنند. این کار زمانی مفید است که لازم است مقادیر مشخصی را در llvm-ir بازرسی یا دستی دستکاری کنید.</li>
+<li><strong><code>extern "rust"</code> یا <code>extern "c"</code></strong>: اگر می‌خواهید ببینید یک تعریف تابع مشخص چگونه به llvm-ir lower می‌شود، می‌توانید آن را به‌صورت <code>extern "rust"</code> یا <code>extern "c"</code> اعلان کنید. همچنین می‌توانید برای یافتن نمونه، به دنبال اعلان‌های موجود <code>__enzyme_autodiff</code> یا مشابه آن در ماژول تولیدشده بگردید.</li>
+</ul>
+<h2 id="1-generate-an-llvm-ir-reproducer"><a class="header" href="#1-generate-an-llvm-ir-reproducer">\۱) تولید یک بازتولیدکنندهٔ llvm-ir</a></h2>
+<pre><code class="language-sh">RUSTFLAGS="-Z autodiff=Enable,PrintModBefore" cargo +enzyme build --release &amp;&gt; out.ll
+</code></pre>
+<p>این دستور چند هشدار و پیام اطلاعاتی را نیز در بالا و پایین ماژول شما ثبت می‌کند. فایل out.ll را باز کنید و هر خطی را که بالای <code>; moduleid = &lt;somehash&gt;</code> است حذف کنید. سپس به انتهای فایل نگاه کنید و هر چیزی را که بخشی از llvm-ir نیست حذف کنید، یعنی خطاها و هشدارها را. آخرین خط llvm-ir شما اکنون باید با <code>!&lt;somenumber&gt; =</code> شروع شود، مثلاً <code>!40831 = !{i32 0, i32 1037508, i32 1037538, i32 1037559}</code> یا <code>!43760 = !dilocation(line: 297, column: 5, scope: !43746)</code>.</p>
+<p>اعداد واقعی به کد شما بستگی دارند.</p>
+<h2 id="2-check-your-llvm-ir-reproducer"><a class="header" href="#2-check-your-llvm-ir-reproducer">\۲) بررسی بازتولیدکنندهٔ llvm-ir</a></h2>
+<p>برای تأیید اینکه مرحلهٔ قبل کار کرده است، از ابزار <code>opt</code> مربوط به llvm استفاده می‌کنیم. مسیر فایل اجرایی opt را پیدا کنید؛ مسیری شبیه <code>&lt;some_dir&gt;/rust/build/&lt;x86/arm/...-target-triple&gt;/ci-llvm/bin/opt</code>. اگر LLVM را از روی کد منبع می‌سازید، احتمالاً باید <code>ci-llvm</code> را با <code>build</code> جایگزین کنید. همچنین مسیر <code>llvmenzyme-21.&lt;so/dll/dylib&gt;</code> را پیدا کنید، شبیه <code>/rust/build/target-triple/enzyme/build/enzyme/llvmenzyme-21</code>. لطفاً به یاد داشته باشید که llvm مرتب backend خود را به‌روزرسانی می‌کند، بنابراین ممکن است شمارهٔ نسخه بالاتر باشد (20، 21، …). وقتی هر دو را داشتید، دستور زیر را اجرا کنید:</p>
+<pre><code class="language-sh">&lt;path/to/opt&gt; out.ll -load-pass-plugin=/path/to/build/&lt;target-triple&gt;/stage1/lib/libEnzyme-21.so -passes="enzyme" -enzyme-strict-aliasing=0  -S
+</code></pre>
+<p>این دستور ممکن است برای نسخه‌های آینده یا روی سیستم شما شکست بخورد، که در این صورت باید libEnzyme-21.so را با LLVMEnzyme-21.so جایگزین کنید. برای دستورالعمل ساخت آن، مستندات Enzyme را ببینید. ممکن است لازم باشد نحوهٔ ساخت نسخهٔ LLVM خود را نیز تنظیم کنید.</p>
+<p>اگر مرحلهٔ قبل موفق بود، همان خطایی را خواهید دید که هنگام کامپایل کد Rust خود با cargo دیدید.</p>
+<p>اگر نتوانستید همان خطا را ببینید، لطفاً در مخزن rust یک issue باز کنید. اگر موفق شدید، تبریک! فایل هنوز بسیار بزرگ است، پس بیایید آن را به‌صورت خودکار کوچک کنیم.</p>
+<h2 id="3-minimize-your-llvm-ir-reproducer"><a class="header" href="#3-minimize-your-llvm-ir-reproducer">\۳) کوچک‌سازی بازتولیدکنندهٔ llvm-ir</a></h2>
+<p>ابتدا فایل اجرایی <code>llvm-extract</code> را پیدا کنید؛ باید در همان پوشهٔ فایل اجرایی opt باشد. سپس اجرا کنید:</p>
+<pre><code class="language-sh">&lt;path/to/llvm-extract&gt; -S --func=&lt;name&gt; --recursive --rfunc="enzyme_autodiff*" --rfunc="enzyme_fwddiff*" --rfunc=&lt;fnc_called_by_enzyme&gt; out.ll -o mwe.ll
+</code></pre>
+<p>این دستور فایل <code>mwe.ll</code> را ایجاد می‌کند، یک مثال کمینهٔ کارا.</p>
+<p>لطفاً نامی را که با آخرین پرچم <code>--func</code> داده می‌شود تنظیم کنید. می‌توانید attribute <code>#[no_mangle]</code> را روی تابعی که مشتق‌گیری می‌کنید اعمال کنید، که در این صورت می‌توانید آن را با نام Rust جایگزین کنید. در غیر این صورت باید نام mangle‌شدهٔ تابع را پیدا کنید. برای این کار، <code>out.ll</code> را باز کنید و <code>__enzyme_fwddiff</code> یا <code>__enzyme_autodiff</code> را جست‌وجو کنید. اولین رشته در آن فراخوانی تابع، نام تابع شماست. مثال:</p>
+<pre><code class="language-llvm-ir">define double @enzyme_opt_helper_0(ptr %0, i64 %1, double %2) {
+  %4 = call double (...) @__enzyme_fwddiff(ptr @_zn2ad3_f217h3b3b1800bd39fde3e, metadata !"enzyme_const", ptr %0, metadata !"enzyme_const", i64 %1, metadata !"enzyme_dup", double %2, double %2)
+  ret double %4
+}
+</code></pre>
+<p>در اینجا <code>_zn2ad3_f217h3b3b1800bd39fde3e</code> نام درست است. دقت کنید که <code>@</code> ابتدایی را کپی نکنید. مرحلهٔ ۲) را با اجرای دوبارهٔ دستور <code>opt</code> تکرار کنید، اما این بار <code>mwe.ll</code> را به‌جای <code>out.ll</code> به‌عنوان فایل ورودی بدهید. بررسی کنید که این مثال کوچک‌شده هنوز خرابی را بازتولید می‌کند یا نه.</p>
+<h2 id="4-optional-minimize-your-llvm-ir-reproducer-further"><a class="header" href="#4-optional-minimize-your-llvm-ir-reproducer-further">\۴) (اختیاری) کوچک‌سازی بیشتر بازتولیدکنندهٔ llvm-ir</a></h2>
+<p>پس از مرحلهٔ قبل باید فایل <code>mwe.ll</code> با حدود ۵ هزار خط کد داشته باشید. بیایید سعی کنیم آن را به ۵۰ خط برسانیم. فایل اجرایی <code>llvm-reduce</code> را کنار <code>opt</code> و <code>llvm-extract</code> پیدا کنید. اولین خط پیام خطای خود را کپی کنید؛ برای نمونه:</p>
+<pre><code class="language-sh">opt: /home/manuel/prog/rust/src/llvm-project/llvm/lib/ir/instructions.cpp:686: void llvm::callinst::init(llvm::functiontype*, llvm::value*, llvm::arrayref&lt;llvm::value*&gt;, llvm::arrayref&lt;llvm::operandbundledeft&lt;llvm::value*&gt; &gt;, const llvm::twine&amp;): assertion `(args.size() == fty-&gt;getnumparams() || (fty-&gt;isvararg() &amp;&amp; args.size() &gt; fty-&gt;getnumparams())) &amp;&amp; "calling a function with bad signature!"' failed.
+</code></pre>
+<p>اگر فقط یک <code>segfault</code> گرفتید، پیام خطای معناداری وجود ندارد و کار خودکار چندانی نمی‌توان کرد، پس به ۵) ادامه دهید.</p>
+<p>در غیر این صورت، فایلی به نام <code>script.sh</code> با این محتوا بسازید</p>
+<pre><code class="language-sh">#!/bin/bash
+&lt;path/to/your/opt&gt; $1 -load-pass-plugin=/path/to/llvmenzyme-19.so -passes="enzyme" \
+    |&amp; grep "/some/path.cpp:686: void llvm::callinst::init"
+</code></pre>
+<p>کمی با پیام خطایی که به grep می‌دهید آزمایش کنید. باید به‌اندازهٔ کافی بلند باشد تا مطمئن شوید خطا یکتاست. با این حال، برای خطاهای بلندتر که شامل <code>(</code> یا <code>)</code> هستند باید آن‌ها را درست escape کنید که می‌تواند آزاردهنده شود. اجرا کنید:</p>
+<pre><code class="language-sh">&lt;path/to/llvm-reduce&gt; --test=script.sh mwe.ll
+</code></pre>
+<p>اگر <code>input isn't interesting! verify interesting-ness test</code> را دیدید، پیام خطا را در script.sh اشتباه نوشته‌اید و باید مطمئن شوید grep با خطای واقعی شما مطابقت دارد. اگر همه‌چیز درست پیش برود، تکرارهای زیادی خواهید دید که با یک فایل جدید <code>reduced.ll</code> پایان می‌یابد. با <code>opt</code> تأیید کنید که هنوز همان خطا را می‌گیرید.</p>
+<h3 id="advanced-debugging-manual-llvm-ir-investigation"><a class="header" href="#advanced-debugging-manual-llvm-ir-investigation">اشکال‌زدایی پیشرفته: بررسی دستی llvm-ir</a></h3>
+<p>وقتی یک بازتولیدکنندهٔ کوچک‌شده (<code>mwe.ll</code> یا <code>reduced.ll</code>) داشتید، می‌توانید عمیق‌تر شوید:</p>
+<ul>
+<li><strong>ویرایش دستی:</strong> سعی کنید llvm-ir را دستی بازنویسی کنید. برای برخی مسائل، مانند آن‌هایی که فراخوانی‌های غیرمستقیم دارند، می‌توانید intrinsicهای مخصوص enzyme مانند <code>__enzyme_virtualreverse</code> را بررسی کنید. فهمیدن نحوهٔ استفاده از این‌ها ممکن است نیازمند مراجعه به مستندات یا کد منبع enzyme باشد.</li>
+<li><strong>موارد آزمون enzyme:</strong> در <a href="https://github.com/enzymead/enzyme/tree/main/enzyme/test">مخزن enzyme</a> به‌دنبال موارد آزمون مرتبطی بگردید که ممکن است استفادهٔ درست از قابلیت‌ها یا intrinsicهای مرتبط با مشکل شما را نشان دهند.</li>
+</ul>
+<h2 id="5-report-your-bug"><a class="header" href="#5-report-your-bug">\۵) گزارش باگ</a></h2>
+<p>پس از آن، باید بتوانید مثال <code>mwe.ll</code> (یا <code>reduced.ll</code>) خود را در <a href="https://enzyme.mit.edu/explorer/">compiler explorer</a> ما کپی و جای‌گذاری کنید.</p>
+<ul>
+<li><code>llvm ir</code> را به‌عنوان زبان و <code>opt 20</code> را به‌عنوان کامپایلر انتخاب کنید.</li>
+<li>فیلد سمت راست کامپایلر خود را با <code>-passes="enzyme"</code> جایگزین کنید، اگر از قبل تنظیم نشده است.</li>
+<li>امیدواریم دوباره همان خطای آشنای خود را ببینید.</li>
+<li>لطفاً از دکمهٔ اشتراک‌گذاری برای کپی کردن پیوندها به آن‌ها استفاده کنید.</li>
+<li>لطفاً یک issue در <a href="https://github.com/enzymead/enzyme/issues">https://github.com/enzymead/enzyme/issues</a> ایجاد کنید و <code>mwe.ll</code> و (اگر دارید) <code>reduced.ll</code> و همچنین پیوندهای compiler explorer را به اشتراک بگذارید. می‌توانید کد Rust خود یا پیوندی به آن را نیز اضافه کنید.</li>
+</ul>
+<h4 id="documenting-findings"><a class="header" href="#documenting-findings">مستندسازی یافته‌ها</a></h4>
+<p>برخی خطاهای enzyme، مانند <code>"attempting to call an indirect active function whose runtime value is inactive"</code>، در گذشته باعث سردرگمی شده‌اند. اگر چنین مسئله‌ای را بررسی می‌کنید، حتی اگر راه‌حل کاملی پیدا نکردید، لطفاً مستندسازی یافته‌های خود را در نظر بگیرید. اگر بینش‌ها کلی و مربوط به enzyme باشند و مختص استفاده از آن در Rust نباشند، افزودن آن‌ها به <a href="https://github.com/enzymead/www">مستندات اصلی enzyme</a> اغلب بهترین قدم اول است. همچنین می‌توانید یافته‌های خود را در issue مرتبط enzyme در github ذکر کنید یا در صورت مناسب بودن، به‌روزرسانی این مستندات را پیشنهاد دهید. این کار از آن جلوگیری می‌کند که دیگران از صفر شروع کنند.</p>
+<p>با یک بازتولیدکنندهٔ روشن و مستندسازی، امیدواریم یک توسعه‌دهندهٔ enzyme بتواند باگ شما را رفع کند. وقتی این اتفاق بیفتد، زیرماژول enzyme داخل کامپایلر rust به‌روزرسانی می‌شود، که باید به شما اجازه دهد کد Rust خود را مشتق‌گیری کنید. از اینکه به بهبود rust-ad کمک می‌کنید سپاسگزاریم.</p>
+<h1 id="minimize-rust-code"><a class="header" href="#minimize-rust-code">کوچک‌سازی کد Rust</a></h1>
+<p>علاوه بر داشتن یک بازتولیدکنندهٔ کمینهٔ llvm-ir، داشتن یک بازتولیدکنندهٔ کمینهٔ Rust بدون وابستگی نیز مفید است. این کار به ما اجازه می‌دهد پس از رفع مشکل، آن را به‌عنوان یک مورد آزمون به ci اضافه کنیم، که از بازگشت مشکل در آینده جلوگیری می‌کند.</p>
+<p>چند راه‌حل برای کمک به کوچک‌سازی بازتولیدکنندهٔ Rust وجود دارد. این احتمالاً ساده‌ترین رویکرد خودکار است: <a href="https://github.com/nilstrieb/cargo-minimize">cargo-minimize</a>.</p>
+<p>در غیر این صورت گزینه‌های متعدد دیگری داریم، از جمله <a href="https://github.com/langston-barrett/treereduce"><code>treereduce</code></a>، <a href="https://github.com/googleprojectzero/halfempty"><code>halfempty</code></a> یا <a href="https://github.com/renatahodovan/picireny"><code>picireny</code></a>، و احتمالاً <a href="https://github.com/csmith-project/creduce"><code>creduce</code></a> نیز.</p><nav class="page-nav"><a href="installation.html">→ نصب</a><a href="flags.html">پرچم‌های Autodiff ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

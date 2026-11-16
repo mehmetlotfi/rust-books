@@ -1,0 +1,136 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>RawVec — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="vec/vec-raw"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="rawvec"><a class="header" href="#rawvec">RawVec</a></h1>
+<p>در واقع به وضعیت جالبی رسیده‌ایم: منطق مشخص کردن یک بافر و آزاد کردن حافظهٔ آن را هم در Vec و هم در IntoIter تکرار کرده‌ایم. حالا که آن را پیاده‌سازی کرده‌ایم و تکرار <em>واقعی</em> منطق را شناسایی کرده‌ایم، زمان مناسبی است که کمی فشرده‌سازی منطق انجام دهیم.</p>
+<p>جفت <code>(ptr, cap)</code> را جدا می‌کنیم و منطق تخصیص، رشد و آزادسازی را به آن می‌دهیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">struct RawVec&lt;T&gt; {
+    ptr: NonNull&lt;T&gt;,
+    cap: usize,
+}
+
+unsafe impl&lt;T: Send&gt; Send for RawVec&lt;T&gt; {}
+unsafe impl&lt;T: Sync&gt; Sync for RawVec&lt;T&gt; {}
+
+impl&lt;T&gt; RawVec&lt;T&gt; {
+    fn new() -&gt; Self {
+        assert!(mem::size_of::&lt;T&gt;() != 0, "TODO: implement ZST support");
+        RawVec {
+            ptr: NonNull::dangling(),
+            cap: 0,
+        }
+    }
+
+    fn grow(&amp;mut self) {
+        // This can't overflow because we ensure self.cap &lt;= isize::MAX.
+        let new_cap = if self.cap == 0 { 1 } else { 2 * self.cap };
+
+        // Layout::array checks that the number of bytes is &lt;= usize::MAX,
+        // but this is redundant since old_layout.size() &lt;= isize::MAX,
+        // so the `unwrap` should never fail.
+        let new_layout = Layout::array::&lt;T&gt;(new_cap).unwrap();
+
+        // Ensure that the new allocation doesn't exceed `isize::MAX` bytes.
+        assert!(new_layout.size() &lt;= isize::MAX as usize, "Allocation too large");
+
+        let new_ptr = if self.cap == 0 {
+            unsafe { alloc::alloc(new_layout) }
+        } else {
+            let old_layout = Layout::array::&lt;T&gt;(self.cap).unwrap();
+            let old_ptr = self.ptr.as_ptr() as *mut u8;
+            unsafe { alloc::realloc(old_ptr, old_layout, new_layout.size()) }
+        };
+
+        // If allocation fails, `new_ptr` will be null, in which case we abort.
+        self.ptr = match NonNull::new(new_ptr as *mut T) {
+            Some(p) =&gt; p,
+            None =&gt; alloc::handle_alloc_error(new_layout),
+        };
+        self.cap = new_cap;
+    }
+}
+
+impl&lt;T&gt; Drop for RawVec&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        if self.cap != 0 {
+            let layout = Layout::array::&lt;T&gt;(self.cap).unwrap();
+            unsafe {
+                alloc::dealloc(self.ptr.as_ptr() as *mut u8, layout);
+            }
+        }
+    }
+}</code></pre>
+<p>و Vec را به این صورت تغییر می‌دهیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">pub struct Vec&lt;T&gt; {
+    buf: RawVec&lt;T&gt;,
+    len: usize,
+}
+
+impl&lt;T&gt; Vec&lt;T&gt; {
+    fn ptr(&amp;self) -&gt; *mut T {
+        self.buf.ptr.as_ptr()
+    }
+
+    fn cap(&amp;self) -&gt; usize {
+        self.buf.cap
+    }
+
+    pub fn new() -&gt; Self {
+        Vec {
+            buf: RawVec::new(),
+            len: 0,
+        }
+    }
+
+    // push/pop/insert/remove largely unchanged:
+    // * `self.ptr.as_ptr() -&gt; self.ptr()`
+    // * `self.cap -&gt; self.cap()`
+    // * `self.grow() -&gt; self.buf.grow()`
+}
+
+impl&lt;T&gt; Drop for Vec&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        while let Some(_) = self.pop() {}
+        // deallocation is handled by RawVec
+    }
+}</code></pre>
+<p>و سرانجام می‌توانیم IntoIter را واقعاً ساده کنیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">pub struct IntoIter&lt;T&gt; {
+    _buf: RawVec&lt;T&gt;, // we don't actually care about this. Just need it to live.
+    start: *const T,
+    end: *const T,
+}
+
+// next and next_back literally unchanged since they never referred to the buf
+
+impl&lt;T&gt; Drop for IntoIter&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        // only need to ensure all our elements are read;
+        // buffer will clean itself up afterwards.
+        for _ in &amp;mut *self {}
+    }
+}
+
+impl&lt;T&gt; IntoIterator for Vec&lt;T&gt; {
+    type Item = T;
+    type IntoIter = IntoIter&lt;T&gt;;
+    fn into_iter(self) -&gt; IntoIter&lt;T&gt; {
+        // need to use ptr::read to unsafely move the buf out since it's
+        // not Copy, and Vec implements Drop (so we can't destructure it).
+        let buf = unsafe { ptr::read(&amp;self.buf) };
+        let len = self.len;
+        mem::forget(self);
+
+        IntoIter {
+            start: buf.ptr.as_ptr(),
+            end: if buf.cap == 0 {
+                // can't offset off of a pointer unless it's part of an allocation
+                buf.ptr.as_ptr()
+            } else {
+                unsafe { buf.ptr.as_ptr().add(len) }
+            },
+            _buf: buf,
+        }
+    }
+}</code></pre>
+<p>خیلی بهتر شد.</p><nav class="page-nav"><a href="vec-into-iter.html">→ IntoIter</a><a href="vec-drain.html">Drain ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../nomicon/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

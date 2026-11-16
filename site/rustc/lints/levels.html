@@ -1,0 +1,280 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>سطوح lint — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="lints/levels"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="lint-levels"><a class="header" href="#lint-levels">سطوح lint</a></h1>
+<p>در <code>rustc</code>، lint‌ها به شش <em>سطح</em> تقسیم می‌شوند:</p>
+<ol>
+<li>allow</li>
+<li>expect</li>
+<li>warn</li>
+<li>force-warn</li>
+<li>deny</li>
+<li>forbid</li>
+</ol>
+<p>هر lint یک سطح پیش‌فرض دارد (که در فهرست lint‌ها، بعداً در همین فصل، توضیح داده شده است) و کامپایلر نیز یک سطح هشدار پیش‌فرض دارد. ابتدا توضیح می‌دهیم این سطوح چه معنایی دارند و سپس دربارهٔ پیکربندی صحبت می‌کنیم.</p>
+<h2 id="allow"><a class="header" href="#allow">allow</a></h2>
+<p>این lint‌ها وجود دارند، اما به‌طور پیش‌فرض هیچ کاری نمی‌کنند. برای مثال، این کد منبع را در نظر بگیرید:</p>
+<pre><code class="language-rust">pub fn foo() {}</code></pre>
+<p>کامپایل این فایل هیچ هشداری تولید نمی‌کند:</p>
+<pre><code class="language-bash">$ rustc lib.rs --crate-type=lib
+$
+</code></pre>
+<p>اما این کد lint با نام <code>missing_docs</code> را نقض می‌کند.</p>
+<p>این lint‌ها بیشتر برای آن وجود دارند که به‌صورت دستی و از طریق پیکربندی روشن شوند، همان‌طور که بعداً در همین بخش دربارهٔ آن صحبت خواهیم کرد.</p>
+<h2 id="expect"><a class="header" href="#expect">expect</a></h2>
+<p>گاهی مفید است که lint‌ها را سرکوب کنیم، اما در عین حال مطمئن شویم که کد مورد نظر همچنان آن‌ها را صادر می‌کند. سطح ‘expect’ دقیقاً همین کار را انجام می‌دهد. اگر lint مورد نظر صادر نشود، lint با نام <code>unfulfilled_lint_expectations</code> روی attribute با نام <code>expect</code> فعال می‌شود و به شما اطلاع می‌دهد که این انتظار دیگر برآورده نمی‌شود.</p>
+<pre><code class="language-rust">fn main() {
+    #[expect(unused_variables)]
+    let unused = "Everyone ignores me";
+
+    #[expect(unused_variables)] // `unused_variables` lint is not emitted
+    let used = "I'm useful";    // the expectation is therefore unfulfilled
+    println!("The `used` value is equal to: {:?}", used);
+}</code></pre>
+<p>این کد هشدار زیر را تولید می‌کند:</p>
+<pre><code class="language-txt">warning: this lint expectation is unfulfilled
+ --&gt; src/main.rs:7:14
+  |
+7 |     #[expect(unused_variables)]
+  |              ^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unfulfilled_lint_expectations)]` on by default
+</code></pre>
+<p>این سطح را فقط می‌توان از طریق attribute با نام <code>#[expect]</code> تعریف کرد؛ پرچم معادلی وجود ندارد. lint‌هایی که سطح ویژهٔ ‘force-warn’ دارند همچنان مثل همیشه صادر می‌شوند.</p>
+<h2 id="warn"><a class="header" href="#warn">warn</a></h2>
+<p>سطح lint با نام ‘warn’ در صورتی که lint را نقض کنید یک هشدار تولید می‌کند. برای مثال، این کد با lint با نام <code>unused_variables</code> در تعارض است:</p>
+<pre><code class="language-rust">pub fn foo() {
+    let x = 5;
+}</code></pre>
+<p>این کد این هشدار را تولید می‌کند:</p>
+<pre><code class="language-bash">$ rustc lib.rs --crate-type=lib
+warning: unused variable: `x`
+ --&gt; lib.rs:2:9
+  |
+2 |     let x = 5;
+  |         ^
+  |
+  = note: `#[warn(unused_variables)]` on by default
+  = note: to avoid this warning, consider using `_x` instead
+</code></pre>
+<h2 id="force-warn"><a class="header" href="#force-warn">force-warn</a></h2>
+<p>‘force-warn’ یک سطح lint ویژه است. از این جهت مثل ‘warn’ است که lint در این سطح یک هشدار تولید می‌کند، اما برخلاف سطح ‘warn’، سطح ‘force-warn’ را نمی‌توان بازنویسی (override) کرد. اگر یک lint روی ‘force-warn’ تنظیم شود، تضمین می‌شود که هشدار بدهد: نه بیشتر و نه کمتر. این موضوع حتی در صورتی که سطح کلی lint از طریق cap-lints محدود شده باشد نیز صادق است.</p>
+<h2 id="deny"><a class="header" href="#deny">deny</a></h2>
+<p>یک lint با سطح ‘deny’ در صورت نقض یک خطا تولید می‌کند. برای مثال، این کد با lint با نام <code>arithmetic_overflow</code> برخورد می‌کند.</p>
+<pre><code class="language-rust no_run">fn main() {
+    100u8 &lt;&lt; 10;
+}</code></pre>
+<pre><code class="language-bash">$ rustc main.rs
+error: this arithmetic operation will overflow
+ --&gt; main.rs:2:5
+  |
+2 |     100u8 &lt;&lt; 10;
+  |     ^^^^^^^^^^^ attempt to shift left by `10_i32`, which would overflow
+  |
+  = note: `#[deny(arithmetic_overflow)]` on by default
+</code></pre>
+<p>تفاوت یک خطای ناشی از lint با یک خطای معمولی قدیمی چیست؟ lint‌ها از طریق سطوح قابل پیکربندی هستند، بنابراین مشابه lint‌های ‘allow’، هشدارهایی که به‌طور پیش‌فرض ‘deny’ هستند به شما اجازه می‌دهند آن‌ها را مجاز کنید. به همین ترتیب، ممکن است بخواهید lint‌ی را که به‌طور پیش‌فرض <code>warn</code> است طوری تنظیم کنید که به‌جای آن خطا تولید کند. این سطح lint همین امکان را به شما می‌دهد.</p>
+<h2 id="forbid"><a class="header" href="#forbid">forbid</a></h2>
+<p>‘forbid’ یک سطح lint ویژه است که برای ‘deny’ همان نقشی را دارد که ‘force-warn’ برای ‘warn’ دارد. از این جهت مثل ‘deny’ است که lint در این سطح یک خطا تولید می‌کند، اما برخلاف سطح ‘deny’، سطح ‘forbid’ را نمی‌توان به سطحی پایین‌تر از خطا بازنویسی کرد. با این حال، سطوح lint همچنان می‌توانند با <code>--cap-lints</code> محدود شوند (بخش پایین را ببینید)، بنابراین <code>rustc --cap-lints warn</code> باعث می‌شود lint‌هایی که روی ‘forbid’ تنظیم شده‌اند فقط هشدار بدهند.</p>
+<h2 id="configuring-warning-levels"><a class="header" href="#configuring-warning-levels">پیکربندی سطوح هشدار</a></h2>
+<p>مثال <code>missing_docs</code> را از سطح lint با نام ‘allow’ به یاد دارید؟</p>
+<pre><code class="language-bash">$ cat lib.rs
+pub fn foo() {}
+$ rustc lib.rs --crate-type=lib
+$
+</code></pre>
+<p>می‌توانیم این lint را طوری پیکربندی کنیم که در سطح بالاتری عمل کند، هم با پرچم‌های کامپایلر و هم با attribute در کد منبع.</p>
+<p>همچنین می‌توانید برای lint‌ها «سقف» (cap) تعیین کنید تا کامپایلر بتواند برخی سطوح lint را نادیده بگیرد. این مورد را در آخر توضیح می‌دهیم.</p>
+<h3 id="via-compiler-flag"><a class="header" href="#via-compiler-flag">از طریق پرچم کامپایلر</a></h3>
+<p>پرچم‌های <code>-A</code>، <code>-W</code>، <code>--force-warn</code>، <code>-D</code> و <code>-F</code> به شما اجازه می‌دهند یک یا چند lint را به سطوح allow، warn، force-warn، deny یا forbid ببرید، به این صورت:</p>
+<pre><code class="language-bash">$ rustc lib.rs --crate-type=lib -W missing-docs
+warning: missing documentation for crate
+ --&gt; lib.rs:1:1
+  |
+1 | pub fn foo() {}
+  | ^^^^^^^^^^^^
+  |
+  = note: requested on the command line with `-W missing-docs`
+
+warning: missing documentation for a function
+ --&gt; lib.rs:1:1
+  |
+1 | pub fn foo() {}
+  | ^^^^^^^^^^^^
+</code></pre>
+<pre><code class="language-bash">$ rustc lib.rs --crate-type=lib -D missing-docs
+error: missing documentation for crate
+ --&gt; lib.rs:1:1
+  |
+1 | pub fn foo() {}
+  | ^^^^^^^^^^^^
+  |
+  = note: requested on the command line with `-D missing-docs`
+
+error: missing documentation for a function
+ --&gt; lib.rs:1:1
+  |
+1 | pub fn foo() {}
+  | ^^^^^^^^^^^^
+
+error: aborting due to 2 previous errors
+</code></pre>
+<p>همچنین می‌توانید برای تغییر چند lint، هر پرچم را بیش از یک بار بدهید:</p>
+<pre><code class="language-bash">$ rustc lib.rs --crate-type=lib -D missing-docs -D unused-variables
+</code></pre>
+<p>و البته می‌توانید این پنج پرچم را با هم ترکیب کنید:</p>
+<pre><code class="language-bash">$ rustc lib.rs --crate-type=lib -D missing-docs -A unused-variables
+</code></pre>
+<p>ترتیب این آرگومان‌های خط فرمان در نظر گرفته می‌شود. دستور زیر lint با نام <code>unused-variables</code> را مجاز می‌کند، چون آخرین آرگومان برای آن lint است:</p>
+<pre><code class="language-bash">$ rustc lib.rs --crate-type=lib -D unused-variables -A unused-variables
+</code></pre>
+<p>می‌توانید از این رفتار استفاده کنید و سطح یک lint مشخص را از میان گروهی از lint‌ها بازنویسی کنید. مثال زیر همهٔ lint‌های گروه <code>unused</code> را deny می‌کند، اما lint با نام <code>unused-variables</code> را در آن گروه صراحتاً مجاز می‌کند (forbid صرف‌نظر از ترتیب همچنان بر همه چیز غلبه دارد):</p>
+<pre><code class="language-bash">$ rustc lib.rs --crate-type=lib -D unused -A unused-variables
+</code></pre>
+<p>از آنجا که <code>force-warn</code> و <code>forbid</code> را نمی‌توان بازنویسی کرد، تنظیم یکی از آن‌ها مانع از اثرگذاری هر سطح بعدی برای همان lint می‌شود.</p>
+<h3 id="via-an-attribute"><a class="header" href="#via-an-attribute">از طریق attribute</a></h3>
+<p>همچنین می‌توانید سطح lint را با یک attribute در سطح کل crate تغییر دهید:</p>
+<pre><code class="language-bash">$ cat lib.rs
+#![warn(missing_docs)]
+
+pub fn foo() {}
+$ rustc lib.rs --crate-type=lib
+warning: missing documentation for crate
+ --&gt; lib.rs:1:1
+  |
+1 | / #![warn(missing_docs)]
+2 | |
+3 | | pub fn foo() {}
+  | |_______________^
+  |
+note: lint level defined here
+ --&gt; lib.rs:1:9
+  |
+1 | #![warn(missing_docs)]
+  |         ^^^^^^^^^^^^
+
+warning: missing documentation for a function
+ --&gt; lib.rs:3:1
+  |
+3 | pub fn foo() {}
+  | ^^^^^^^^^^^^
+</code></pre>
+<p><code>warn</code>، <code>allow</code>، <code>deny</code> و <code>forbid</code> همگی به همین شکل کار می‌کنند. راهی برای تنظیم یک lint روی <code>force-warn</code> با استفاده از attribute وجود ندارد.</p>
+<p>همچنین می‌توانید چند lint را در هر attribute بدهید:</p>
+<pre><code class="language-rust">#![warn(missing_docs, unused_variables)]
+
+pub fn foo() {}</code></pre>
+<p>و چند attribute را با هم به کار ببرید:</p>
+<pre><code class="language-rust">#![warn(missing_docs)]
+#![deny(unused_variables)]
+
+pub fn foo() {}</code></pre>
+<p>همهٔ attribute‌های lint از یک پارامتر اضافی با نام <code>reason</code> پشتیبانی می‌کنند تا زمینه‌ای دربارهٔ اینکه چرا یک attribute خاص افزوده شده است ارائه دهند. اگر lint در سطح تعریف‌شده صادر شود، این دلیل به‌عنوان بخشی از پیام lint نمایش داده می‌شود.</p>
+<pre><code class="language-rust">use std::path::PathBuf;
+pub fn get_path() -&gt; PathBuf {
+    #[allow(unused_mut, reason = "this is only modified on some platforms")]
+    let mut file_name = PathBuf::from("git");
+    #[cfg(target_os = "windows")]
+    file_name.set_extension("exe");
+    file_name
+}</code></pre>
+<h3 id="capping-lints"><a class="header" href="#capping-lints">سقف‌گذاری برای lint‌ها</a></h3>
+<p><code>rustc</code> از پرچمی با نام <code>--cap-lints LEVEL</code> پشتیبانی می‌کند که «سطح سقف lint» را تعیین می‌کند. این بیشینهٔ سطح برای همهٔ lint‌هاست. بنابراین برای مثال، اگر نمونه‌کد خود را از سطح lint با نام «deny» در بالا در نظر بگیریم:</p>
+<pre><code class="language-rust no_run">fn main() {
+    100u8 &lt;&lt; 10;
+}</code></pre>
+<p>و آن را با سقف warn برای lint‌ها کامپایل کنیم:</p>
+<pre><code class="language-bash">$ rustc lib.rs --cap-lints warn
+warning: this arithmetic operation will overflow
+ --&gt; lib.rs:2:5
+  |
+2 |     100u8 &lt;&lt; 10;
+  |     ^^^^^^^^^^^ attempt to shift left by `10_i32`, which would overflow
+  |
+  = note: `#[warn(arithmetic_overflow)]` on by default
+</code></pre>
+<p>اکنون فقط هشدار می‌دهد و خطا تولید نمی‌کند. می‌توانیم جلوتر برویم و همهٔ lint‌ها را مجاز کنیم:</p>
+<pre><code class="language-bash">$ rustc lib.rs --cap-lints allow
+$
+</code></pre>
+<p>Cargo از این قابلیت به‌شدت استفاده می‌کند؛ هنگام کامپایل وابستگی‌های شما <code>--cap-lints allow</code> را می‌دهد تا اگر آن‌ها هشداری داشتند، خروجی ساخت شما را آلوده نکنند. با این حال، توجه کنید که <code>--cap-lints allow</code> lint‌هایی را که با <code>force-warn</code> علامت‌گذاری شده‌اند بازنویسی <strong>نمی‌کند</strong>.</p>
+<h2 id="priority-of-lint-level-sources"><a class="header" href="#priority-of-lint-level-sources">اولویت منابع سطح lint</a></h2>
+<p>Rust اجازه می‌دهد سطوح lint (<code>allow</code>، <code>warn</code>، <code>deny</code>، <code>forbid</code>، <code>force-warn</code>) از طریق منابع گوناگون تنظیم شوند:</p>
+<ul>
+<li><strong>attribute‌ها</strong>: <code>#[allow(...)]</code>، <code>#![deny(...)]</code> و مانند آن.</li>
+<li><strong>گزینه‌های خط فرمان</strong>: <code>--cap-lints</code>، <code>--force-warn</code>، <code>-A</code>، <code>-W</code>، <code>-D</code>، <code>-F</code></li>
+</ul>
+<p>در ادامه توضیح می‌دهیم که این کنترل‌های مختلف lint چگونه با هم تعامل می‌کنند:</p>
+<ol>
+<li>
+<p><a href="#force-warn"><code>--force-warn</code></a> یک lint را به سطح هشدار می‌برد و بر attribute‌ها و همهٔ پرچم‌های دیگر CLI اولویت دارد.</p>
+<pre><code class="language-rust compile_fail">#[forbid(unused_variables)]
+fn main() {
+    let x = 42;
+}</code></pre>
+<p>کامپایل با:</p>
+<pre><code class="language-bash"> $ rustc --force-warn unused_variables lib.rs
+ warning: unused variable: `x`
+   --&gt; lib.rs:3:9
+   |
+ 3 |     let x = 42;
+   |         ^ help: if this is intentional, prefix it with an underscore: `_x`
+   |
+   = note: requested on the command line with `--force-warn unused-variables`
+
+ warning: 1 warning emitted
+</code></pre>
+</li>
+<li>
+<p><a href="#capping-lints"><code>--cap-lints</code></a> بیشینهٔ سطح یک lint را تعیین می‌کند و بر attribute‌ها و همچنین پرچم‌های <code>-D</code>، <code>-W</code> و <code>-F</code> در CLI اولویت دارد.</p>
+<pre><code class="language-rust compile_fail">#[deny(unused_variables)]
+fn main() {
+    let x = 42;
+}</code></pre>
+<p>کامپایل با:</p>
+<pre><code class="language-bash"> $ rustc --cap-lints=warn lib.rs
+ warning: unused variable: `x`
+ --&gt; test1.rs:3:9
+   |
+ 3 |     let x = 42;
+   |         ^ help: if this is intentional, prefix it with an underscore: `_x`
+   |
+ note: the lint level is defined here
+ --&gt; test1.rs:1:8
+   |
+ 1 | #[deny(unused_variables)]
+   |        ^^^^^^^^^^^^^^^^
+
+ warning: 1 warning emitted
+</code></pre>
+</li>
+<li>
+<p><a href="#via-compiler-flag">پرچم‌های سطح CLI</a> سطح پیش‌فرض یک lint را بازنویسی می‌کنند. این پرچم‌ها اساساً مانند attribute‌های سطح crate رفتار می‌کنند. attribute‌های داخل کد منبع بر پرچم‌های CLI اولویت دارند، به‌جز <code>-F</code>/<code>--forbid</code> که نمی‌توان آن را بازنویسی کرد.</p>
+<p>ترتیب پرچم‌ها اهمیت دارد؛ پرچم‌های سمت راست بر پرچم‌های قبلی اولویت دارند.</p>
+<pre><code class="language-rust">fn main() {
+    let x = 42;
+}</code></pre>
+<p>کامپایل با:</p>
+<pre><code class="language-bash"> $ rustc -A unused_variables -D unused_variables lib.rs
+ error: unused variable: `x`
+ --&gt; test1.rs:2:9
+   |
+ 2 |     let x = 42;
+   |         ^ help: if this is intentional, prefix it with an underscore: `_x`
+   |
+   = note: requested on the command line with `-D unused-variables`
+
+ error: aborting due to 1 previous error
+</code></pre>
+</li>
+<li>
+<p>در داخل کد منبع، <a href="#via-an-attribute">attribute‌های</a> در سطح پایین‌تر درخت نحو بر attribute‌های سطح بالاتر اولویت دارند، و همچنین بر attribute قبلی روی همان موجودیت، با ترتیب چپ‌به‌راست در کد منبع.</p>
+<pre><code class="language-rust">#![deny(unused_variables)]
+
+#[allow(unused_variables)]
+fn main() {
+    let x = 42; // Allow wins
+}</code></pre>
+<ul>
+<li>استثنا این است که وقتی یک lint روی “forbid” تنظیم شد، تلاش برای تغییر سطح آن خطا است، به‌جز <code>deny</code> که درون بافتار forbid مجاز است، اما نادیده گرفته می‌شود.</li>
+</ul>
+</li>
+</ol>
+<p>از نظر اولویت، <a href="groups.html">گروه‌های lint</a> طوری رفتار می‌شوند که گویی به فهرستی از همهٔ lint‌هایی که در بر دارند گسترش یافته‌اند. استثنا گروه <code>warnings</code> است که ترتیب attribute‌ها و CLI را نادیده می‌گیرد و بر همهٔ lint‌هایی که در غیر این صورت داخل آن موجودیت هشدار می‌دادند اعمال می‌شود.</p><nav class="page-nav"><a href="index.html">→ lintها</a><a href="groups.html">گروه‌های lint ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

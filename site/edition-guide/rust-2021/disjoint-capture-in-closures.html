@@ -1,0 +1,113 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>ضبط مجزا در closureها — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2021/disjoint-capture-in-closures"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="disjoint-capture-in-closures"><a class="header" href="#disjoint-capture-in-closures">ضبط مجزا در closureها</a></h1>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<ul>
+<li><code>|| a.x + 1</code> اکنون فقط <code>a.x</code> را ضبط می‌کند، نه کل <code>a</code> را.</li>
+<li>این موضوع می‌تواند باعث شود چیزها در زمان‌های متفاوتی drop شوند یا بر اینکه closureها صفت‌هایی مانند <code>Send</code> یا <code>Clone</code> را پیاده‌سازی کنند یا نه تأثیر بگذارد.
+<ul>
+<li>اگر تغییرات احتمالی شناسایی شوند، <code>cargo fix</code> دستورهایی مانند <code>let _ = &amp;a</code> را درج می‌کند تا closure را مجبور به ضبط کل متغیر کند.</li>
+</ul>
+</li>
+</ul>
+<h2 id="details"><a class="header" href="#details">جزئیات</a></h2>
+<p><a href="../../book/ch13-01-closures.html">Closureها</a> هر چیزی را که از درون بدنه‌شان به آن ارجاع دهید به‌طور خودکار ضبط می‌کنند. برای مثال، <code>|| a + 1</code> به‌طور خودکار یک ارجاع به <code>a</code> را از زمینهٔ پیرامون ضبط می‌کند.</p>
+<p>در Rust 2018 و پیش از آن، closureها کل متغیرها را ضبط می‌کنند، حتی اگر closure فقط از یک فیلد استفاده کند. برای مثال، <code>|| a.x + 1</code> یک ارجاع به <code>a</code> را ضبط می‌کند و نه فقط <code>a.x</code> را. ضبط کامل <code>a</code> مانع تغییر یا انتقال فیلدهای دیگر <code>a</code> می‌شود، به‌طوری که کدی مانند این کامپایل نمی‌شود:</p>
+<pre><code class="language-rust ignore">let a = SomeStruct::new();
+drop(a.x); // Move out of one field of the struct
+println!("{}", a.y); // Ok: Still use another field of the struct
+let c = || println!("{}", a.y); // Error: Tries to capture all of `a`
+c();</code></pre>
+<p>از Rust 2021 به بعد، ضبط در closureها دقیق‌تر است. معمولاً فقط فیلدهایی را که استفاده می‌کنند ضبط می‌کنند (در برخی موارد ممکن است بیشتر از آنچه استفاده می‌کنند ضبط کنند؛ برای جزئیات کامل به مرجع Rust مراجعه کنید). بنابراین مثال بالا در Rust 2021 بدون مشکل کامپایل می‌شود.</p>
+<p>ضبط مجزا به‌عنوان بخشی از <a href="https://github.com/rust-lang/rfcs/blob/master/text/2229-capture-disjoint-fields.md">RFC 2229</a> پیشنهاد شد و این RFC جزئیات انگیزهٔ آن را در بر دارد.</p>
+<h2 id="migration"><a class="header" href="#migration">مهاجرت</a></h2>
+<p>به‌عنوان بخشی از ویرایش 2021، یک lint مهاجرت با نام <code>rust_2021_incompatible_closure_captures</code> اضافه شده است تا به مهاجرت خودکار کدهای Rust 2018 به Rust 2021 کمک کند.</p>
+<p>برای مهاجرت کد خود به سازگاری با ویرایش Rust 2021، این دستور را اجرا کنید:</p>
+<pre><code class="language-sh">cargo fix --edition
+</code></pre>
+<p>در ادامه بررسی می‌کنیم که چگونه می‌توان کد را به‌صورت دستی طوری مهاجرت داد که با ضبط closureها در Rust 2021 سازگار باشد، برای زمانی که مهاجرت خودکار موفق نشود یا بخواهید نحوهٔ کار مهاجرت را بهتر بفهمید.</p>
+<p>تغییر متغیرهایی که یک closure ضبط می‌کند ممکن است در دو حالت باعث تغییر رفتار برنامه‌ها یا توقف کامپایل شدن آن‌ها شود:</p>
+<ul>
+<li>تغییر در ترتیب drop، یا زمان اجرای نابودگرها (<a href="#drop-order">جزئیات</a>);</li>
+<li>تغییر در اینکه closure کدام صفت‌ها را پیاده‌سازی می‌کند (<a href="#trait-implementations">جزئیات</a>).</li>
+</ul>
+<p>هرگاه هر یک از سناریوهای زیر شناسایی شود، <code>cargo fix</code> یک «let ساختگی» (dummy let) را درون closure شما درج می‌کند تا آن را مجبور کند کل متغیر را ضبط کند:</p>
+<pre><code class="language-rust">let x = (vec![22], vec![23]);
+let c = move || {
+    // "Dummy let" that forces `x` to be captured in its entirety
+    let _ = &amp;x;
+
+    // Otherwise, only `x.0` would be captured here
+    println!("{:?}", x.0);
+};</code></pre>
+<p>این یک تحلیل محافظه‌کارانه است: در بسیاری از موارد می‌توان این letهای ساختگی را با خیال راحت حذف کرد و برنامهٔ شما درست کار خواهد کرد.</p>
+<h3 id="wild-card-patterns"><a class="header" href="#wild-card-patterns">الگوهای عام (Wild Card)</a></h3>
+<p>closureها اکنون فقط داده‌ای را ضبط می‌کنند که باید خوانده شود، یعنی closureهای زیر <code>x</code> را ضبط نخواهند کرد:</p>
+<pre><code class="language-rust">let x = 10;
+let c = || {
+    let _ = x; // no-op
+};
+
+let c = || match x {
+    _ =&gt; println!("Hello World!")
+};</code></pre>
+<p>دستور <code>let _ = x</code> در اینجا بی‌اثر (no-op) است، زیرا الگوی <code>_</code> سمت راست را کاملاً نادیده می‌گیرد و <code>x</code> ارجاعی به یک مکان در حافظه (در اینجا یک متغیر) است.</p>
+<p>این تغییر به‌تنهایی (ضبط مقادیر کمتر) هیچ پیشنهادی را فعال نمی‌کند، اما ممکن است همراه با تغییر «ترتیب drop» در ادامه چنین کاری کند.</p>
+<p><strong>نکتهٔ ظریف:</strong> عبارت‌های مشابه دیگری نیز وجود دارند، مانند «letهای ساختگی» <code>let _ = &amp;x</code> که ما درج می‌کنیم و بی‌اثر نیستند. دلیل این است که سمت راست (<code>&amp;x</code>) ارجاعی به یک مکان در حافظه نیست، بلکه عبارتی است که ابتدا باید ارزیابی شود (و سپس نتیجه‌اش دور ریخته می‌شود).</p>
+<h3 id="drop-order"><a class="header" href="#drop-order">ترتیب drop</a></h3>
+<p>وقتی یک closure مالکیت یک مقدار را از متغیر <code>t</code> به دست می‌گیرد، آن مقدار هنگام drop شدن closure، drop می‌شود و نه هنگامی که متغیر <code>t</code> از دامنه خارج می‌شود:</p>
+<pre><code class="language-rust"><span class="boring">fn move_value&lt;T&gt;(_: T){}
+</span>{
+    let t = (vec![0], vec![0]);
+
+    {
+        let c = || move_value(t); // t is moved here
+    } // c is dropped, which drops the tuple `t` as well
+} // t goes out of scope here</code></pre>
+<p>کد بالا در Rust 2018 و Rust 2021 به یک شکل اجرا می‌شود. با این حال، در مواردی که closure فقط مالکیت <em>بخشی</em> از یک متغیر را می‌گیرد، ممکن است تفاوت‌هایی وجود داشته باشد:</p>
+<pre><code class="language-rust"><span class="boring">fn move_value&lt;T&gt;(_: T){}
+</span>{
+    let t = (vec![0], vec![0]);
+
+    {
+        let c = || {
+            // In Rust 2018, captures all of `t`.
+            // In Rust 2021, captures only `t.0`
+            move_value(t.0);
+        };
+
+        // In Rust 2018, `c` (and `t`) are both dropped when we
+        // exit this block.
+        //
+        // In Rust 2021, `c` and `t.0` are both dropped when we
+        // exit this block.
+    }
+
+// In Rust 2018, the value from `t` has been moved and is
+// not dropped.
+//
+// In Rust 2021, the value from `t.0` has been moved, but `t.1`
+// remains, so it will be dropped here.
+}</code></pre>
+<p>در بیشتر موارد، drop شدن مقادیر در زمان‌های متفاوت فقط بر زمان آزاد شدن حافظه تأثیر می‌گذارد و اهمیتی ندارد. با این حال، برخی پیاده‌سازی‌های <code>Drop</code> (یا همان نابودگرها) اثر جانبی دارند و تغییر ترتیب drop در آن موارد می‌تواند معنای برنامهٔ شما را عوض کند. در چنین مواردی، کامپایلر پیشنهاد می‌کند یک <code>let</code> ساختگی درج شود تا کل متغیر ضبط شود.</p>
+<h3 id="trait-implementations"><a class="header" href="#trait-implementations">پیاده‌سازی صفت‌ها</a></h3>
+<p>closureها بر اساس مقادیری که ضبط می‌کنند، صفت‌های زیر را به‌طور خودکار پیاده‌سازی می‌کنند:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/std/clone/trait.Clone.html"><code>Clone</code></a>: اگر همهٔ مقادیر ضبط‌شده <code>Clone</code> باشند.</li>
+<li><a href="../../reference/special-types-and-traits.html#auto-traits">traitهای خودکار (auto trait)</a> مانند <a href="https://doc.rust-lang.org/std/marker/trait.Send.html"><code>Send</code></a>، <a href="https://doc.rust-lang.org/std/marker/trait.Sync.html"><code>Sync</code></a> و <a href="https://doc.rust-lang.org/std/panic/trait.UnwindSafe.html"><code>UnwindSafe</code></a>: اگر همهٔ مقادیر ضبط‌شده trait مورد نظر را پیاده‌سازی کرده باشند.</li>
+</ul>
+<p>در Rust 2021، چون مقادیر متفاوتی ضبط می‌شوند، این موضوع می‌تواند بر اینکه یک closure کدام صفت‌ها را پیاده‌سازی کند تأثیر بگذارد. lintهای مهاجرت هر closure را آزمایش می‌کنند تا ببینند آیا پیش‌تر یک صفت مشخص را پیاده‌سازی می‌کرده و اکنون هم آن را پیاده‌سازی می‌کند یا نه؛ اگر متوجه شوند صفتی که قبلاً پیاده‌سازی می‌شد دیگر پیاده‌سازی نمی‌شود، «letهای ساختگی» درج می‌شوند.</p>
+<p>برای نمونه، یک روش رایج برای امکان جابه‌جایی اشاره‌گرهای خام بین نخ‌ها این است که آن‌ها را در یک ساختار بپیچیم و سپس صفت خودکار <code>Send</code>/<code>Sync</code> را برای آن پوشش پیاده‌سازی کنیم. آن closure که به <code>thread::spawn</code> داده می‌شود از فیلدهای مشخصی درون پوشش استفاده می‌کند، اما صرف‌نظر از آن کل پوشش ضبط می‌شود. از آنجا که پوشش <code>Send</code>/<code>Sync</code> است، کد ایمن در نظر گرفته می‌شود و در نتیجه با موفقیت کامپایل می‌شود.</p>
+<p>با ضبط مجزا، فقط فیلد مشخصی که در closure ذکر شده ضبط می‌شود، که در اصل <code>Send</code>/<code>Sync</code> نبوده و هدف پوشش را از بین می‌برد.</p>
+<pre><code class="language-rust">use std::thread;
+
+struct Ptr(*mut i32);
+unsafe impl Send for Ptr {}
+
+
+let mut x = 5;
+let px = Ptr(&amp;mut x as *mut i32);
+
+let c = thread::spawn(move || {
+    unsafe {
+        *(px.0) += 10;
+    }
+}); // Closure captured px.0 which is not Send</code></pre><nav class="page-nav"><a href="IntoIterator-for-arrays.html">→ IntoIterator برای آرایه‌ها</a><a href="panic-macro-consistency.html">یکپارچگی ماکروی panic ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

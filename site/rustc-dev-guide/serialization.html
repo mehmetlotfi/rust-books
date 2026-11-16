@@ -1,0 +1,118 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>سریال‌سازی در rustc — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="serialization"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="serialization-in-rustc"><a class="header" href="#serialization-in-rustc">سریالایز‌کردن در rustc</a></h1>
+<p>rustc باید در طول کامپایل داده‌های مختلف را <a href="https://en.wikipedia.org/wiki/Serialization">سریالایز</a> و دی‌سریالایز کند.
+به‌طور مشخص:</p>
+<ul>
+<li>«فراداده crate»، که عمدتاً از خروجی کوئری‌ها تشکیل شده،
+از قالب دودویی به فایل‌های <code>rlib</code> و <code>rmeta</code> سریالایز می‌شود که هنگام کامپایل یک crate کتابخانه خروجی داده می‌شوند.
+این فایل‌های <code>rlib</code> و <code>rmeta</code> سپس توسط crateهایی که به آن کتابخانه وابسته‌اند دی‌سریالایز می‌شوند.</li>
+<li>برخی خروجی‌های کوئری با قالب دودویی سریالایز می‌شوند تا
+<a href="queries/incremental-compilation-in-detail.html#the-real-world-how-persistence-makes-everything-complicated">نتایج کامپایل افزایشی را ماندگار کنند</a>.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_codegen_ssa/struct.CrateInfo.html"><code>CrateInfo</code></a> هنگام استفاده از پرچم <code>JSON</code> به <code>-Z no-link</code> سریالایز می‌شود و با پرچم <code>JSON</code> از <code>-Z link-only</code> دی‌سریالایز می‌شود.</li>
+</ul>
+<h2 id="the-encodable-and-decodable-traits"><a class="header" href="#the-encodable-and-decodable-traits">traitهای <code>Encodable</code> و <code>Decodable</code> </a></h2>
+<p>crate با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_serialize/index.html"><code>rustc_serialize</code></a> دو trait برای نوع‌هایی که می‌توان سریالایز کرد تعریف می‌کند:</p>
+<pre><code class="language-rust ignore">pub trait Encodable&lt;S: Encoder&gt; {
+    fn encode(&amp;self, s: &amp;mut S) -&gt; Result&lt;(), S::Error&gt;;
+}
+
+pub trait Decodable&lt;D: Decoder&gt;: Sized {
+    fn decode(d: &amp;mut D) -&gt; Result&lt;Self, D::Error&gt;;
+}</code></pre>
+<p>همچنین پیاده‌سازی این‌ها را برای نوع‌های رایج کتابخانهٔ استاندارد مثل
+<a href="https://doc.rust-lang.org/std/#primitives">نوع‌های اولیه</a> مثل نوع‌های عدد صحیح، نوع‌های ممیز شناور، <code>bool</code>, <code>char</code>, <code>str</code>و غیره تعریف می‌کند.</p>
+<p>برای نوع‌هایی که از آن نوع‌ها ساخته می‌شوند،
+<code>Encodable</code> و <code>Decodable</code> معمولاً توسط <a href="#derive-macros">derive</a>پیاده‌سازی می‌شوند.
+این‌ها پیاده‌سازی‌هایی تولید می‌کنند که دی‌سریالایز را به فیلدهای struct یا enum می‌سپارند.
+برای struct، آن implها چیزی شبیه این هستند:</p>
+<pre><code class="language-rust ignore">#![feature(rustc_private)]
+extern crate rustc_serialize;
+use rustc_serialize::{Decodable, Decoder, Encodable, Encoder};
+
+struct MyStruct {
+    int: u32,
+    float: f32,
+}
+
+impl&lt;E: Encoder&gt; Encodable&lt;E&gt; for MyStruct {
+    fn encode(&amp;self, s: &amp;mut E) -&gt; Result&lt;(), E::Error&gt; {
+        s.emit_struct("MyStruct", 2, |s| {
+            s.emit_struct_field("int", 0, |s| self.int.encode(s))?;
+            s.emit_struct_field("float", 1, |s| self.float.encode(s))
+        })
+    }
+}
+
+impl&lt;D: Decoder&gt; Decodable&lt;D&gt; for MyStruct {
+    fn decode(s: &amp;mut D) -&gt; Result&lt;MyStruct, D::Error&gt; {
+        s.read_struct("MyStruct", 2, |d| {
+            let int = d.read_struct_field("int", 0, Decodable::decode)?;
+            let float = d.read_struct_field("float", 1, Decodable::decode)?;
+
+            Ok(MyStruct { int, float })
+        })
+    }
+}</code></pre>
+<h2 id="encoding-and-decoding-arena-allocated-types"><a class="header" href="#encoding-and-decoding-arena-allocated-types">انکد و دیکد نوع‌های تخصیص‌یافته از arena</a></h2>
+<p>rustc نوع‌های <a href="memory.html">تخصیص‌یافته از arena</a>زیادی داردرا ممکن می‌کنند.
+دی‌سریالایز این نوع‌ها بدون دسترسی به arenaای که باید در آن تخصیص یابند ممکن نیست.
+traitهای <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/codec/trait.TyDecoder.html"><code>TyDecoder</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/codec/trait.TyEncoder.html"><code>TyEncoder</code></a> زیرtraitهای <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_serialize/trait.Decoder.html"><code>Decoder</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_serialize/trait.Encoder.html"><code>Encoder</code></a> هستند که دسترسی به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html"><code>TyCtxt</code></a>.</p>
+<p>نوع‌هایی که <code>arena</code> نوع‌های تخصیص‌یافته از arena دارند می‌توانند پارامتر نوع پیاده‌سازی‌های
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_serialize/trait.Encodable.html"><code>Encodable</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_serialize/trait.Decodable.html"><code>Decodable</code></a> خود را با این traitها محدود کنند.
+برای مثال</p>
+<pre><code class="language-rust ignore">impl&lt;'tcx, D: TyDecoder&lt;'tcx&gt;&gt; Decodable&lt;D&gt; for MyStruct&lt;'tcx&gt; {
+    /* ... */
+}</code></pre>
+<p>ماکروهای <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_macros/derive.TyEncodable.html"><code>TyEncodable</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_macros/derive.TyDecodable.html"><code>TyDecodable</code></a> <a href="#derive-macros">derive</a> به چنین پیاده‌سازی‌ای گسترش می‌یابند.</p>
+<p>دیکد کردن نوع واقعی <code>arena</code> تخصیص‌یافته از arena دشوارتر است،
+چون برخی پیاده‌سازی‌ها به‌دلیل <a href="../reference/items/implementations.html#orphan-rules">قواعد orphan</a>قابل‌نوشتن نیستند.
+برای دورزدن این،
+trait با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/codec/trait.RefDecodable.html"><code>RefDecodable</code></a> در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/index.html"><code>rustc_middle</code></a>تعریف شده است.
+آن را می‌توان برای هر نوعی پیاده‌سازی کرد.
+ماکرو <code>TyDecodable</code> برای دیکد کردن ارجاع‌ها <code>RefDecodable</code> را فراخوانی می‌کند،
+اما کد جنریک گوناگون لازم دارد نوع‌ها واقعاً <code>Decodable</code> با دیکودر مشخصی باشند.</p>
+<p>برای نوع‌های intern‌شده، به‌جای پیاده‌سازی دستی <code>RefDecodable</code>، استفاده از wrapper نوع جدید،
+مثل <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/predicate/struct.Predicate.html"><code>ty::Predicate</code></a> و پیاده‌سازی دستی <code>Encodable</code> و <code>Decodable</code> ممکن است ساده‌تر باشد.</p>
+<h2 id="derive-macros"><a class="header" href="#derive-macros">Derive macros</a></h2>
+<p>crate با نام <a href="https://github.com/rust-lang/rust/tree/HEAD/compiler/rustc_macros"><code>rustc_macros</code></a> derive‌های مختلفی برای کمک به پیاده‌سازی <code>Decodable</code> و <code>Encodable</code>تعریف می‌کند.</p>
+<ul>
+<li>ماکروهای <code>Encodable</code> و <code>Decodable</code> پیاده‌سازی‌هایی تولید می‌کنند که برای همهٔ <code>Encoders</code> و <code>Decoders</code>اعمال می‌شوندرا پیاده‌سازی نمی‌کند.
+این‌ها باید در crateهایی استفاده شوند که به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/index.html"><code>rustc_middle</code></a>وابسته نیستند،
+یا باید توسط نوعی سریالایز شوند که <code>TyEncoder</code>.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_macros/derive.MetadataEncodable.html"><code>MetadataEncodable</code></a> پیاده‌سازی‌هایی تولید می‌کند که فقط دیکد توسط <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/rmeta/encoder/struct.EncodeContext.html"><code>rustc_metadata::rmeta::encoder::EncodeContext</code></a>را مجاز می‌کنند.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_macros/derive.BlobDecodable.html"><code>BlobDecodable</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_macros/derive.LazyDecodable.html"><code>LazyDecodable</code></a> همتای دیکد برای
+<code>MetadataEncodable</code>هستند.
+پیاده‌سازی‌هایی تولید می‌کنند که با دیکودرهای blob فراداده در <code>rustc_metadata::rmeta</code>دیکد می‌کنند؛ وقتی نوع هیچ handle فراداده‌ٔ lazy ندارد از <code>BlobDecodable</code> استفاده کنید و وقتی دارد از <code>LazyDecodable</code> .</li>
+<li><code>TyEncodable</code> و <code>TyDecodable</code> پیاده‌سازی‌ای تولید می‌کنند که برای هر
+<code>TyEncoder</code> یا <code>TyDecoder</code>اعمال می‌شودهستند.
+این‌ها باید برای نوع‌هایی به‌کار روند که فقط
+در فرادادهٔ crate و/یا cache افزایشی سریالایز می‌شوند،
+که بیشتر نوع‌های سریالایزپذیر در <code>rustc_middle</code>.</li>
+</ul>
+<h2 id="shorthands"><a class="header" href="#shorthands">Shorthands</a></h2>
+<p><code>Ty</code> می‌تواند عمیقاً بازگشتی باشد؛
+اگر هر <code>Ty</code> را ساده‌لوحانه انکد کنیم، فرادادهٔ crate بسیار بزرگ می‌شودبه‌کار می‌رود.
+برای مدیریت این،
+هر <code>TyEncoder</code> یک cache از مکان‌هایی در خروجی‌اش دارد که نوع‌ها را در آن‌ها سریالایز کرده است.
+اگر نوعی که انکد می‌شود در cache باشد،
+به‌جای سریالایز عادی نوع،
+آفست بایت درون فایل در حال نوشتن انکد می‌شود.
+طرح مشابهی برای <code>ty::Predicate</code>.</p>
+<h2 id="lazyvaluet"><a class="header" href="#lazyvaluet"><code>LazyValue&lt;T&gt;</code></a></h2>
+<p>فرادادهٔ crate پیش از ساخته‌شدن <code>TyCtxt&lt;'tcx&gt;</code> بارگذاری می‌شود،
+پس برخی دی‌سریالایزها باید از بارگذاری اولیهٔ فراداده به تعویق بیفتند.
+نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/rmeta/struct.LazyValue.html"><code>LazyValue&lt;T&gt;</code></a> آفست (نسبی) را در فرادادهٔ crate می‌پیچد که <code>T</code> در آن سریالایز شده است.
+چند گونه هم هست، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/rmeta/struct.LazyValue.html"><code>LazyArray&lt;T&gt;</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/rmeta/struct.LazyValue.html"><code>LazyTable&lt;I, T&gt;</code></a>.</p>
+<p>نوع‌های <code>LazyArray&lt;[T]&gt;</code> و <code>LazyTable&lt;I, T&gt;</code> قابلیت‌هایی فراتر از
+<code>Lazy&lt;Vec&lt;T&gt;&gt;</code> و <code>Lazy&lt;HashMap&lt;I, T&gt;&gt;</code>فراهم می‌کنند:</p>
+<ul>
+<li>می‌توان <code>LazyArray&lt;T&gt;</code> را مستقیماً از یک <code>Iterator</code>انکد کرد،
+بدون اینکه ابتدا در <code>Vec&lt;T&gt;</code>جمع شود.</li>
+<li>اندیس‌گذاری در <code>LazyTable&lt;I, T&gt;</code> نیازمند دیکد کردن ورودی‌ها نیست،
+جز آنکه در حال خواندن است.</li>
+</ul>
+<p><strong>نکته</strong>: <code>LazyValue&lt;T&gt;</code> پس از اولین دی‌سریالایز مقدارش را cache نمی‌کند.
+در عوض، خود سامانهٔ کوئری راه اصلی cache کردن این نتایج است.</p>
+<h2 id="specialization"><a class="header" href="#specialization">Specialization</a></h2>
+<p>چند نوع، به‌ویژه <code>DefId</code>، باید پیاده‌سازی‌های متفاوتی برای <code>Encoder</code>های مختلف داشته باشنددارد.
+این فعلاً با تخصصی‌سازی‌های موردی مدیریت می‌شود،
+برای مثال: <code>DefId</code> یک پیاده‌سازی <code>default</code> از <code>Encodable&lt;E&gt;</code> و یکی تخصصی برای <code>Encodable&lt;CacheEncoder&gt;</code>.</p><nav class="page-nav"><a href="memory.html">→ مدیریت حافظه در rustc</a><a href="parallel-rustc.html">کامپایل موازی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

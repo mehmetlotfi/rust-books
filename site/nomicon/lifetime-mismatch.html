@@ -1,0 +1,50 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>محدودیت‌های طول عمر — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="lifetime-mismatch"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="limits-of-lifetimes"><a class="header" href="#limits-of-lifetimes">محدودیت‌های طول عمر</a></h1>
+<p>کد زیر را در نظر بگیرید:</p>
+<pre><code class="language-rust compile_fail">#[derive(Debug)]
+struct Foo;
+
+impl Foo {
+    fn mutate_and_share(&amp;mut self) -&gt; &amp;Self { &amp;*self }
+    fn share(&amp;self) {}
+}
+
+fn main() {
+    let mut foo = Foo;
+    let loan = foo.mutate_and_share();
+    foo.share();
+    println!("{:?}", loan);
+}</code></pre>
+<p>ممکن است انتظار داشته باشید که کامپایل شود. ما <code>mutate_and_share</code> را فراخوانی می‌کنیم که <code>foo</code> را موقتاً به‌صورت تغییرپذیر قرض می‌گیرد، اما سپس فقط یک ارجاع مشترک برمی‌گرداند. بنابراین انتظار داریم <code>foo.share()</code> موفق شود، چون <code>foo</code> دیگر نباید به‌صورت تغییرپذیر قرض‌گرفته شده باشد.</p>
+<p>اما وقتی سعی می‌کنیم آن را کامپایل کنیم:</p>
+<pre><code class="language-text">error[E0502]: cannot borrow `foo` as immutable because it is also borrowed as mutable
+  --&gt; src/main.rs:12:5
+   |
+11 |     let loan = foo.mutate_and_share();
+   |                --- mutable borrow occurs here
+12 |     foo.share();
+   |     ^^^ immutable borrow occurs here
+13 |     println!("{:?}", loan);
+</code></pre>
+<p>چه اتفاقی افتاد؟ در واقع همان استدلالی را که برای <a href="lifetimes.html#example-aliasing-a-mutable-reference">مثال ۲ در بخش قبل</a> داشتیم دوباره می‌بینیم. برنامه را desugar می‌کنیم و به این می‌رسیم:</p>
+<!-- ignore: desugared code -->
+<pre><code class="language-rust ignore">struct Foo;
+
+impl Foo {
+    fn mutate_and_share&lt;'a&gt;(&amp;'a mut self) -&gt; &amp;'a Self { &amp;'a *self }
+    fn share&lt;'a&gt;(&amp;'a self) {}
+}
+
+fn main() {
+    'b: {
+        let mut foo: Foo = Foo;
+        'c: {
+            let loan: &amp;'c Foo = Foo::mutate_and_share::&lt;'c&gt;(&amp;'c mut foo);
+            'd: {
+                Foo::share::&lt;'d&gt;(&amp;'d foo);
+            }
+            println!("{:?}", loan);
+        }
+    }
+}</code></pre>
+<p>سیستم طول عمر مجبور می‌شود <code>&amp;mut foo</code> را به‌دلیل طول عمر <code>loan</code> و امضای <code>mutate_and_share</code> تا طول عمر <code>'c</code> گسترش دهد. سپس وقتی می‌خواهیم <code>share</code> را فراخوانی کنیم، می‌بیند که می‌خواهیم آن <code>&amp;'c mut foo</code> را alias کنیم و جلوی چشممان منفجر می‌شود!</p>
+<p>این برنامه طبق معناشناسی ارجاعی که واقعاً به آن اهمیت می‌دهیم به‌روشنی درست است، اما سیستم طول عمر برای مدیریت آن بیش از حد درشت‌دانه است.</p><nav class="page-nav"><a href="lifetimes.html">→ طول عمرها</a><a href="lifetime-elision.html">حذف طول عمر ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

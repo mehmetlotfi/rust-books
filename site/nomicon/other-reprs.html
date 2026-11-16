@@ -1,0 +1,69 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>سایر reprها — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="other-reprs"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="alternative-representations"><a class="header" href="#alternative-representations">بازنمایی‌های جایگزین</a></h1>
+<p>Rust به شما اجازه می‌دهد راهبردهای چیدمان داده‌ای متفاوت از حالت پیش‌فرض را مشخص کنید.</p>
+<h2 id="reprc"><a class="header" href="#reprc">repr(C)</a></h2>
+<p>این مهم‌ترین <code>repr</code> است. هدفش کاملاً ساده است: انجام همان کاری که C انجام می‌دهد. ترتیب، اندازه و تراز فیلدها دقیقاً همان چیزی است که از C یا C++ انتظار دارید. همچنین نوع، از مرز فراخوانی تابع‌های <code>extern "C"</code> به همان شیوه‌ای عبور داده می‌شود که C نوع متناظر را عبور می‌دهد. هر نوعی که انتظار دارید از مرز FFI عبور کند باید <code>repr(C)</code> داشته باشد، زیرا C زبان مشترک دنیای برنامه‌نویسی است. این کار همچنین برای انجام درست و مطمئن ترفندهای پیچیده‌تر با چیدمان داده، مانند بازتفسیر مقادیر به‌عنوان نوعی دیگر، ضروری است.</p>
+<p>اکیداً توصیه می‌کنیم از <a href="https://rust-lang.github.io/rust-bindgen/">rust-bindgen</a> و/یا <a href="https://github.com/eqrion/cbindgen">cbindgen</a> برای مدیریت مرزهای FFI خود استفاده کنید. تیم Rust از نزدیک با آن پروژه‌ها کار می‌کند تا مطمئن شود آن‌ها به‌طور استوار کار می‌کنند و با تضمین‌های کنونی و آیندهٔ مربوط به چیدمان نوع‌ها و <code>repr</code>ها سازگارند.</p>
+<p>باید تعامل <code>repr(C)</code> با ویژگی‌های غیرمعمول‌تر چیدمان داده در Rust را در نظر داشت. به دلیل کاربرد دوگانه‌اش، یعنی «برای FFI» و «برای کنترل چیدمان»، می‌توان <code>repr(C)</code> را بر نوع‌هایی اعمال کرد که اگر از مرز FFI عبور داده شوند بی‌معنا یا مسئله‌ساز خواهند بود.</p>
+<ul>
+<li>
+<p>ZSTها همچنان اندازهٔ صفر دارند، هرچند این رفتار استاندارد در C نیست و صراحتاً برخلاف رفتار یک نوع تهی در C++ است که می‌گوید آن‌ها هنوز باید یک بایت فضا اشغال کنند.</p>
+</li>
+<li>
+<p>اشاره‌گرهای DST (اشاره‌گرهای پهن) و چندتایی‌ها مفهومی در C نیستند و به همین دلیل هرگز FFI-safe نیستند.</p>
+</li>
+<li>
+<p>enumهای دارای فیلد نیز مفهومی در C یا C++ نیستند، اما یک پل‌زدن معتبر میان این نوع‌ها <a href="https://github.com/rust-lang/rfcs/blob/master/text/2195-really-tagged-unions.md">تعریف شده است</a>.</p>
+</li>
+<li>
+<p>اگر <code>T</code> یک <a href="ffi.html#the-nullable-pointer-optimization">نوع اشاره‌گر غیرتهی FFI-safe</a> باشد، <code>Option&lt;T&gt;</code> تضمین می‌شود که چیدمان و ABI یکسانی با <code>T</code> داشته باشد و بنابراین آن نیز FFI-safe است. تا زمان نگارش این متن، این شامل <code>&amp;</code>، <code>&amp;mut</code> و اشاره‌گرهای تابع می‌شود که هیچ‌کدام هرگز نمی‌توانند تهی باشند.</p>
+</li>
+<li>
+<p>ساختارهای چندتایی‌ای از نظر <code>repr(C)</code> مانند ساختارها هستند، چون تنها تفاوتشان با ساختار این است که فیلدها نام ندارند.</p>
+</li>
+<li>
+<p><code>repr(C)</code> برای شمارش‌های بدون فیلد معادل یکی از <code>repr(u*)</code> است (بخش بعد را ببینید). اندازه و علامت انتخاب‌شده همان اندازه و علامت پیش‌فرض شمارش در رابط دودویی برنامهٔ (ABI) C پلتفرم هدف است. توجه کنید که بازنمایی شمارش در C به پیاده‌سازی بستگی دارد، پس این در واقع یک «بهترین حدس» است. به‌ویژه، وقتی کد C مورد نظر با پرچم‌های خاصی کامپایل شده باشد ممکن است نادرست باشد.</p>
+</li>
+<li>
+<p>شمارش‌های بدون فیلد با <code>repr(C)</code> یا <code>repr(u*)</code> همچنان نمی‌توانند به مقداری صحیح بدون گونهٔ متناظر تنظیم شوند، هرچند این کار در C یا C++ مجاز است. ساختن (به‌صورت unsafe) نمونه‌ای از یک شمارش که با هیچ‌یک از گونه‌هایش مطابقت نداشته باشد رفتار تعریف‌نشده است. (این اجازه می‌دهد matchهای جامع همچنان مثل همیشه نوشته و کامپایل شوند.)</p>
+</li>
+</ul>
+<h2 id="reprtransparent"><a class="header" href="#reprtransparent">repr(transparent)</a></h2>
+<p><code>#[repr(transparent)]</code> را فقط می‌توان روی یک ساختار یا شمارش تک‌گونه‌ای به کار برد که یک فیلد غیر-ZST دارد (ممکن است فیلدهای ZST اضافی هم وجود داشته باشند). اثر آن این است که چیدمان و ABI کل ساختار/شمارش تضمین می‌شود با همان یک فیلد یکسان باشد.</p>
+<blockquote>
+<p>نکته: یک قابلیت nightly به نام <code>transparent_unions</code> وجود دارد که <code>repr(transparent)</code> را به union‌ها اعمال می‌کند، اما به دلیل نگرانی‌های طراحی پایدار نشده است. برای جزئیات بیشتر <a href="https://github.com/rust-lang/rust/issues/60405">مسئلهٔ پیگیری</a> را ببینید.</p>
+</blockquote>
+<p>هدف این است که امکان transmute کردن میان آن تک‌فیلد و struct/enum فراهم شود. نمونه‌ای از آن <a href="https://doc.rust-lang.org/std/cell/struct.UnsafeCell.html"><code>UnsafeCell</code></a> است که می‌توان آن را به نوعی که در بر می‌گیرد transmute کرد (<a href="https://doc.rust-lang.org/std/cell/struct.UnsafeCell.html"><code>UnsafeCell</code></a> همچنین از قابلیت ناپایدار <a href="https://github.com/rust-lang/rust/pull/68491">no_niche</a> استفاده می‌کند، بنابراین وقتی درون نوع‌های دیگر تو در تو قرار گیرد، یکسان بودن ABI آن در واقع تضمین نمی‌شود).</p>
+<p>همچنین، عبور دادن ساختار/شمارش از FFI در جایی که طرف دیگر انتظار نوع فیلد درونی را دارد تضمین شده است که کار می‌کند. به‌ویژه، این برای آن ضروری است که <code>struct Foo(f32)</code> یا <code>enum Foo { Bar(f32) }</code> همیشه ABI یکسانی با <code>f32</code> داشته باشند.</p>
+<p>این repr فقط وقتی بخشی از ABI عمومی یک نوع به حساب می‌آید که یا تک‌فیلد <code>pub</code> باشد یا چیدمان آن به‌صورت متنی مستند شده باشد. در غیر این صورت، crateهای دیگر نباید به چیدمان آن تکیه کنند.</p>
+<p>جزئیات بیشتر در <a href="https://github.com/rust-lang/rfcs/blob/master/text/1758-repr-transparent.md">RFC 1758</a> و <a href="https://rust-lang.github.io/rfcs/2645-transparent-unions.html">RFC 2645</a> آمده است.</p>
+<h2 id="repru-repri"><a class="header" href="#repru-repri">repr(u*), repr(i*)</a></h2>
+<p>این‌ها اندازه و علامت یک شمارش بدون فیلد را مشخص می‌کنند. اگر مشخصهٔ گونه (discriminant) از عدد صحیحی که باید در آن جا شود سرریز کند، یک خطای زمان کامپایل تولید می‌شود. می‌توانید با تنظیم صریح عنصر سرریزکننده روی 0 از Rust بخواهید این را مجاز کند. با این حال Rust اجازه نمی‌دهد شمارشی بسازید که در آن دو گونه مشخصهٔ یکسان داشته باشند.</p>
+<p>عبارت «شمارش بدون فیلد» فقط به این معناست که شمارش در هیچ‌یک از گونه‌هایش داده ندارد. یک شمارش بدون فیلد و بدون <code>repr</code> همچنان یک نوع بومی Rust است و چیدمان یا بازنمایی پایدار ندارد. افزودن <code>repr(u*)</code>/<code>repr(i*)</code> باعث می‌شود از نظر چیدمان دقیقاً مانند نوع صحیح مشخص‌شده با آن رفتار شود (جز آنکه کامپایلر همچنان از دانش خود دربارهٔ مقادیر «نامعتبر» این نوع برای بهینه‌سازی چیدمان شمارش استفاده می‌کند، مثلاً وقتی این شمارش درون <code>Option</code> قرار می‌گیرد). توجه کنید که ABI فراخوانی تابع برای این نوع‌ها همچنان به‌طور کلی نامشخص است، جز اینکه در فراخوانی‌های <code>extern "C"</code> با شمارش‌های C هم‌علامت و هم‌اندازه سازگار با ABI هستند.</p>
+<p>اگر شمارش فیلد داشته باشد، اثر آن شبیه اثر <code>repr(C)</code> است، به این معنا که چیدمانی تعریف‌شده برای نوع وجود دارد. این امکان را فراهم می‌کند که شمارش را به کد C پاس بدهید یا به بازنمایی خام نوع دسترسی پیدا کنید و مستقیماً برچسب و فیلدهای آن را دستکاری کنید. برای جزئیات <a href="https://github.com/rust-lang/rfcs/blob/master/text/2195-really-tagged-unions.md">RFC</a> را ببینید.</p>
+<p>این <code>repr</code>ها روی ساختار تأثیری ندارند.</p>
+<p>افزودن <code>repr(u*)</code>، <code>repr(i*)</code> یا <code>repr(C)</code> صریح به یک شمارش دارای فیلد، بهینه‌سازی اشاره‌گر تهی را متوقف می‌کند، مانند:</p>
+<pre><code class="language-rust"><span class="boring">use std::mem::size_of;
+</span>enum MyOption&lt;T&gt; {
+    Some(T),
+    None,
+}
+
+#[repr(u8)]
+enum MyReprOption&lt;T&gt; {
+    Some(T),
+    None,
+}
+
+assert_eq!(8, size_of::&lt;MyOption&lt;&amp;u16&gt;&gt;());
+assert_eq!(16, size_of::&lt;MyReprOption&lt;&amp;u16&gt;&gt;());</code></pre>
+<p>این بهینه‌سازی همچنان برای شمارش‌های بدون فیلد با <code>repr(u*)</code>، <code>repr(i*)</code> یا <code>repr(C)</code> صریح اعمال می‌شود.</p>
+<h2 id="reprpacked-reprpackedn"><a class="header" href="#reprpacked-reprpackedn">repr(packed), repr(packed(n))</a></h2>
+<p><code>repr(packed(n))</code> (که در آن <code>n</code> توانی از دو است) نوع را وادار می‌کند ترازی <em>حداکثر</em> برابر <code>n</code> داشته باشد. رایج‌ترین حالت استفاده بدون <code>n</code> صریح است؛ <code>repr(packed)</code> معادل <code>repr(packed(1))</code> است که Rust را مجبور می‌کند هر پدینگی را حذف کند و نوع را فقط به اندازهٔ یک بایت تراز کند. این ممکن است ردپای حافظه را بهبود دهد، اما احتمالاً اثرات جانبی منفی دیگری هم خواهد داشت.</p>
+<p>به‌ویژه، بیشتر معماری‌ها <em>به‌شدت</em> ترجیح می‌دهند مقادیر به‌طور طبیعی تراز باشند. این ممکن است به این معنا باشد که بارگیری‌های ناتراز جریمه می‌شوند (x86) یا حتی خطا می‌دهند (برخی تراشه‌های ARM). برای حالت‌های ساده مثل بارگیری یا ذخیرهٔ مستقیم یک فیلد packed، کامپایلر ممکن است بتواند مشکلات تراز را با شیفت‌ها و ماسک‌ها پنهان کند. اما اگر ارجاعی به یک فیلد packed بگیرید، بعید است کامپایلر بتواند کدی تولید کند که از بارگیری ناتراز اجتناب کند.</p>
+<p><a href="https://github.com/rust-lang/rust/issues/27060">از آنجا که این می‌تواند رفتار تعریف‌نشده ایجاد کند</a>، lint پیاده‌سازی شده است و به یک خطای سخت (hard error) تبدیل خواهد شد.</p>
+<p><code>repr(packed)/repr(packed(n))</code> را نباید سرسری به کار برد. مگر اینکه نیازمندی‌های بسیار سختی داشته باشید، نباید از آن استفاده شود.</p>
+<p>این repr یک تغییردهنده برای <code>repr(C)</code> و <code>repr(Rust)</code> است. برای سازگاری با FFI به احتمال زیاد همیشه می‌خواهید صریح باشید: <code>repr(C, packed)</code>.</p>
+<h2 id="repralignn"><a class="header" href="#repralignn">repr(align(n))</a></h2>
+<p><code>repr(align(n))</code> (که در آن <code>n</code> توانی از دو است) نوع را وادار می‌کند ترازی <em>حداقل</em> برابر <code>n</code> داشته باشد.</p>
+<p>این کار ترفندهایی را ممکن می‌کند، مانند اطمینان از اینکه عناصر همسایهٔ یک آرایه هرگز یک خط کش را با یکدیگر به اشتراک نمی‌گذارند (که ممکن است برخی انواع کدهای همروند را سریع‌تر کند).</p>
+<p>این یک تغییردهنده برای <code>repr(C)</code> و <code>repr(Rust)</code> است. با <code>repr(packed)</code> ناسازگار است.</p><nav class="page-nav"><a href="exotic-sizes.html">→ نوع‌هایی با اندازهٔ غیرمعمول</a><a href="ownership.html">مالکیت ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

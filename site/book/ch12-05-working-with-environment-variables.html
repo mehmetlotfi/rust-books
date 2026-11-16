@@ -1,0 +1,371 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>کار با متغیرهای محیطی — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch12-05-working-with-environment-variables"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="working-with-environment-variables"><a class="header" href="#working-with-environment-variables">کار با متغیرهای محیطی</a></h2>
+<p>ما باینری <code>minigrep</code> را با افزودن یک ویژگی اضافی بهبود می‌دهیم: گزینه‌ای برای جستجوی حساس‌نبودن به حروف کوچک و بزرگ که کاربر می‌تواند از طریق یک متغیر محیطی آن را فعال کند. می‌توانستیم این ویژگی را به‌صورت گزینه‌ای در خط فرمان پیاده‌سازی کنیم و از کاربران بخواهیم که هر بار آن را وارد کنند، اما با استفاده از یک متغیر محیطی، به کاربران اجازه می‌دهیم که فقط یک‌بار این متغیر را تنظیم کنند و در کل آن نشست ترمینال، تمام جستجوهای آن‌ها به‌صورت حساس‌نبودن به حروف انجام شود.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="writing-a-failing-test-for-the-case-insensitive-search-function"></a></p>
+<h3 id="writing-a-failing-test-for-case-insensitive-search"><a class="header" href="#writing-a-failing-test-for-case-insensitive-search">نوشتن یک تست ناموفق برای جستجوی غیرحساس به بزرگی و کوچکی حروف</a></h3>
+<p>ابتدا تابع جدیدی به نام <code>search_case_insensitive</code> به کتابخانه <code>minigrep</code> اضافه می‌کنیم که زمانی فراخوانی می‌شود که متغیر محیطی مقدار داشته باشد. ما همچنان از فرایند توسعه آزمون‌محور (TDD) پیروی می‌کنیم، بنابراین گام اول، نوشتن یک تست شکست‌خورده است. یک تست جدید برای تابع <code>search_case_insensitive</code> اضافه می‌کنیم و نام تست قبلی‌مان را از <code>one_result</code> به <code>case_sensitive</code> تغییر می‌دهیم تا تفاوت بین این دو تست واضح‌تر شود، همان‌طور که در لیست 12-20 نشان داده شده است.</p>
+<figure class="listing" id="listing-12-20">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">pub fn search&lt;'a&gt;(query: &amp;str, contents: &amp;'a str) -&gt; Vec&lt;&amp;'a str&gt; {
+</span><span class="boring">    let mut results = Vec::new();
+</span><span class="boring">
+</span><span class="boring">    for line in contents.lines() {
+</span><span class="boring">        if line.contains(query) {
+</span><span class="boring">            results.push(line);
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    results
+</span><span class="boring">}
+</span><span class="boring">
+</span>#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn case_sensitive() {
+        let query = "duct";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.
+Duct tape.";
+
+        assert_eq!(vec!["safe, fast, productive."], search(query, contents));
+    }
+
+    #[test]
+    fn case_insensitive() {
+        let query = "rUsT";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.
+Trust me.";
+
+        assert_eq!(
+            vec!["Rust:", "Trust me."],
+            search_case_insensitive(query, contents)
+        );
+    }
+}</code></pre>
+<figcaption><a href="#listing-12-20">لیست ۱۲-۲۰</a>: افزودن یک تست شکست‌خورده جدید برای تابع غیرحساس به حروف کوچک و بزرگ که قصد داریم اضافه کنیم</figcaption>
+</figure>
+<p>توجه کنید که <code>contents</code> تست قدیمی را نیز ویرایش کرده‌ایم. یک خط جدید با متن <code>"Duct tape."</code> و با حرف بزرگ <em>D</em> اضافه کرده‌ایم که در جستجوی حساس به بزرگی و کوچکی حروف نباید با عبارت جستجوی <code>"duct"</code> مطابقت داشته باشد. این تغییر در تست قدیمی کمک می‌کند مطمئن شویم قابلیت جستجوی حساس به بزرگی و کوچکی حروف را که پیش‌تر پیاده‌سازی کرده‌ایم به‌طور تصادفی خراب نمی‌کنیم. این تست اکنون باید موفق شود و در طول کار روی جستجوی غیرحساس به بزرگی و کوچکی حروف نیز باید همچنان موفق باقی بماند.</p>
+<p>تست جدید برای جستجوی غیرحساس به حروف کوچک و بزرگ از <code>"rUsT"</code> به عنوان عبارت جستجو استفاده می‌کند. در تابع <code>search_case_insensitive</code> که قصد داریم اضافه کنیم، عبارت جستجوی <code>"rUsT"</code> باید با خط حاوی <code>"Rust:"</code> با حرف بزرگ <em>R</em> و خط <code>"Trust me."</code> مطابقت داشته باشد، حتی اگر هر دو حالت متفاوتی نسبت به عبارت جستجو داشته باشند. این تست شکست‌خورده ما است و به دلیل اینکه هنوز تابع <code>search_case_insensitive</code> تعریف نشده است، کامپایل نخواهد شد. می‌توانید یک پیاده‌سازی موقتی که همیشه یک وکتور خالی برمی‌گرداند اضافه کنید، مشابه کاری که برای تابع <code>search</code> در لیستینگ 12-16 انجام دادیم تا تست کامپایل شده و شکست بخورد.</p>
+<h3 id="implementing-the-search_case_insensitive-function"><a class="header" href="#implementing-the-search_case_insensitive-function">پیاده‌سازی تابع <code>search_case_insensitive</code></a></h3>
+<p>تابع <code>search_case_insensitive</code> که در لیستینگ ۱۲-۲۱ نشان داده شده است، تقریباً مشابه تابع <code>search</code> خواهد بود. تنها تفاوت این است که <code>query</code> و هر <code>line</code> را به حروف کوچک تبدیل می‌کنیم تا صرف‌نظر از بزرگی یا کوچکی حروف آرگومان‌های ورودی، هنگام بررسی اینکه آیا خط شامل عبارت جستجو است، هر دو در یک حالت باشند.</p>
+<figure class="listing" id="listing-12-21">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">pub fn search&lt;'a&gt;(query: &amp;str, contents: &amp;'a str) -&gt; Vec&lt;&amp;'a str&gt; {
+</span><span class="boring">    let mut results = Vec::new();
+</span><span class="boring">
+</span><span class="boring">    for line in contents.lines() {
+</span><span class="boring">        if line.contains(query) {
+</span><span class="boring">            results.push(line);
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    results
+</span><span class="boring">}
+</span><span class="boring">
+</span>pub fn search_case_insensitive&lt;'a&gt;(
+    query: &amp;str,
+    contents: &amp;'a str,
+) -&gt; Vec&lt;&amp;'a str&gt; {
+    let query = query.to_lowercase();
+    let mut results = Vec::new();
+
+    for line in contents.lines() {
+        if line.to_lowercase().contains(&amp;query) {
+            results.push(line);
+        }
+    }
+
+    results
+}
+<span class="boring">
+</span><span class="boring">#[cfg(test)]
+</span><span class="boring">mod tests {
+</span><span class="boring">    use super::*;
+</span><span class="boring">
+</span><span class="boring">    #[test]
+</span><span class="boring">    fn case_sensitive() {
+</span><span class="boring">        let query = "duct";
+</span><span class="boring">        let contents = "\
+</span><span class="boring">Rust:
+</span><span class="boring">safe, fast, productive.
+</span><span class="boring">Pick three.
+</span><span class="boring">Duct tape.";
+</span><span class="boring">
+</span><span class="boring">        assert_eq!(vec!["safe, fast, productive."], search(query, contents));
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    #[test]
+</span><span class="boring">    fn case_insensitive() {
+</span><span class="boring">        let query = "rUsT";
+</span><span class="boring">        let contents = "\
+</span><span class="boring">Rust:
+</span><span class="boring">safe, fast, productive.
+</span><span class="boring">Pick three.
+</span><span class="boring">Trust me.";
+</span><span class="boring">
+</span><span class="boring">        assert_eq!(
+</span><span class="boring">            vec!["Rust:", "Trust me."],
+</span><span class="boring">            search_case_insensitive(query, contents)
+</span><span class="boring">        );
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-12-21">لیست ۱۲-۲۱</a>: تعریف تابع &lt;code&gt;&lt;/x-listing&gt;search_case_insensitive&lt;/code&gt; برای کوچک‌حرف کردن عبارت جستجو و خط قبل از مقایسه آنها</figcaption>
+</figure>
+<p>ابتدا رشته <code>query</code> را به حروف کوچک تبدیل می‌کنیم و آن را در متغیر جدیدی با همان نام ذخیره می‌کنیم و مقدار اصلی <code>query</code> را شَدو (shadow) می‌کنیم. فراخوانی <code>to_lowercase</code> بر روی <code>query</code> ضروری است تا صرف‌نظر از این‌که کاربر عبارت مورد جستجوی خود را به صورت <code>"rust"</code>، <code>"RUST"</code>، <code>"Rust"</code> یا <code>"rUsT"</code> وارد کند، ما با آن گویی که <code>"rust"</code> وارد شده است برخورد کنیم و نسبت به حروف کوچک و بزرگ حساس نباشیم. هرچند <code>to_lowercase</code> نگاشت پایه‌ی Unicode را انجام می‌دهد، اما صد درصد دقیق نخواهد بود. اگر قصد نوشتن یک برنامه واقعی را داشتیم، نیاز به کار بیشتری در این بخش بود، اما از آن‌جا که این بخش در مورد متغیرهای محیطی است، نه Unicode، در همین حد باقی می‌مانیم.</p>
+<p>توجه کنید که اکنون <code>query</code> یک رشته (<code>String</code>) به جای برش رشته (<code>string slice</code>) است، زیرا فراخوانی <code>to_lowercase</code> داده‌های جدید ایجاد می‌کند به جای اینکه به داده‌های موجود اشاره کند. به عنوان مثال، بگویید عبارت جستجو <code>"rUsT"</code> است: آن رشته شامل یک <code>u</code> یا <code>t</code> کوچک نیست که بتوانیم استفاده کنیم، بنابراین باید یک <code>String</code> جدید شامل <code>"rust"</code> تخصیص دهیم. وقتی اکنون <code>query</code> را به عنوان یک آرگومان به متد <code>contains</code> منتقل می‌کنیم، نیاز داریم که یک علامت <code>&amp;</code> اضافه کنیم چون امضای <code>contains</code> به گونه‌ای تعریف شده است که یک برش رشته دریافت می‌کند.</p>
+<p>بعداً یک فراخوانی به <code>to_lowercase</code> بر روی هر <code>line</code> اضافه می‌کنیم تا همه کاراکترها کوچک‌حرف شوند. اکنون که <code>line</code> و <code>query</code> را به کوچک‌حرف تبدیل کرده‌ایم، مطمئن می‌شویم که مطابقت‌ها صرف‌نظر از مورد عبارت جستجو پیدا شوند.</p>
+<p>بیایید ببینیم آیا این پیاده‌سازی تست‌ها را پاس می‌کند یا خیر:</p>
+<pre><code class="language-console">$ cargo test
+   Compiling minigrep v0.1.0 (file:///projects/minigrep)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.33s
+     Running unittests src/lib.rs (target/debug/deps/minigrep-9cd200e5fac0fc94)
+
+running 2 tests
+test tests::case_insensitive ... ok
+test tests::case_sensitive ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/minigrep-9cd200e5fac0fc94)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests minigrep
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+</code></pre>
+<p>عالی! تست‌ها پاس شدند. حالا بیایید تابع جدید <code>search_case_insensitive</code> را از تابع <code>run</code> فراخوانی کنیم. ابتدا یک گزینه پیکربندی به ساختار <code>Config</code> اضافه می‌کنیم تا بین جستجوی حساس به حروف کوچک و بزرگ و غیرحساس به حروف کوچک و بزرگ سوئیچ کنیم. افزودن این فیلد باعث ایجاد خطاهای کامپایل می‌شود زیرا هنوز این فیلد را در هیچ جا مقداردهی نکرده‌ایم:</p>
+<p><span class="filename">نام فایل: src/main.rs</span></p>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">use std::env;
+</span><span class="boring">use std::error::Error;
+</span><span class="boring">use std::fs;
+</span><span class="boring">use std::process;
+</span><span class="boring">
+</span><span class="boring">use minigrep::{search, search_case_insensitive};
+</span><span class="boring">
+</span><span class="boring">// --snip--
+</span><span class="boring">
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let args: Vec&lt;String&gt; = env::args().collect();
+</span><span class="boring">
+</span><span class="boring">    let config = Config::build(&amp;args).unwrap_or_else(|err| {
+</span><span class="boring">        println!("Problem parsing arguments: {err}");
+</span><span class="boring">        process::exit(1);
+</span><span class="boring">    });
+</span><span class="boring">
+</span><span class="boring">    if let Err(e) = run(config) {
+</span><span class="boring">        println!("Application error: {e}");
+</span><span class="boring">        process::exit(1);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>pub struct Config {
+    pub query: String,
+    pub file_path: String,
+    pub ignore_case: bool,
+}
+<span class="boring">
+</span><span class="boring">impl Config {
+</span><span class="boring">    fn build(args: &amp;[String]) -&gt; Result&lt;Config, &amp;'static str&gt; {
+</span><span class="boring">        if args.len() &lt; 3 {
+</span><span class="boring">            return Err("not enough arguments");
+</span><span class="boring">        }
+</span><span class="boring">
+</span><span class="boring">        let query = args[1].clone();
+</span><span class="boring">        let file_path = args[2].clone();
+</span><span class="boring">
+</span><span class="boring">        Ok(Config { query, file_path })
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">fn run(config: Config) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+</span><span class="boring">    let contents = fs::read_to_string(config.file_path)?;
+</span><span class="boring">
+</span><span class="boring">    let results = if config.ignore_case {
+</span><span class="boring">        search_case_insensitive(&amp;config.query, &amp;contents)
+</span><span class="boring">    } else {
+</span><span class="boring">        search(&amp;config.query, &amp;contents)
+</span><span class="boring">    };
+</span><span class="boring">
+</span><span class="boring">    for line in results {
+</span><span class="boring">        println!("{line}");
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    Ok(())
+</span><span class="boring">}</span></code></pre>
+<p>فیلد <code>ignore_case</code> را اضافه کردیم که مقداری بولی نگه می‌دارد. سپس تابع <code>run</code> باید مقدار فیلد <code>ignore_case</code> را بررسی کند و بر پایهٔ آن تصمیم بگیرد تابع <code>search</code> را فراخوانی کند یا <code>search_case_insensitive</code> را؛ همان‌گونه که در فهرست ۱۲-۲۲ آمده است. این کد هنوز کامپایل نخواهد شد.</p>
+<figure class="listing" id="listing-12-22">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">use std::env;
+</span><span class="boring">use std::error::Error;
+</span><span class="boring">use std::fs;
+</span><span class="boring">use std::process;
+</span><span class="boring">
+</span>use minigrep::{search, search_case_insensitive};
+
+// --snip--
+
+<span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let args: Vec&lt;String&gt; = env::args().collect();
+</span><span class="boring">
+</span><span class="boring">    let config = Config::build(&amp;args).unwrap_or_else(|err| {
+</span><span class="boring">        println!("Problem parsing arguments: {err}");
+</span><span class="boring">        process::exit(1);
+</span><span class="boring">    });
+</span><span class="boring">
+</span><span class="boring">    if let Err(e) = run(config) {
+</span><span class="boring">        println!("Application error: {e}");
+</span><span class="boring">        process::exit(1);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct Config {
+</span><span class="boring">    pub query: String,
+</span><span class="boring">    pub file_path: String,
+</span><span class="boring">    pub ignore_case: bool,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Config {
+</span><span class="boring">    fn build(args: &amp;[String]) -&gt; Result&lt;Config, &amp;'static str&gt; {
+</span><span class="boring">        if args.len() &lt; 3 {
+</span><span class="boring">            return Err("not enough arguments");
+</span><span class="boring">        }
+</span><span class="boring">
+</span><span class="boring">        let query = args[1].clone();
+</span><span class="boring">        let file_path = args[2].clone();
+</span><span class="boring">
+</span><span class="boring">        Ok(Config { query, file_path })
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn run(config: Config) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+    let contents = fs::read_to_string(config.file_path)?;
+
+    let results = if config.ignore_case {
+        search_case_insensitive(&amp;config.query, &amp;contents)
+    } else {
+        search(&amp;config.query, &amp;contents)
+    };
+
+    for line in results {
+        println!("{line}");
+    }
+
+    Ok(())
+}</code></pre>
+<figcaption><a href="#listing-12-22">لیست ۱۲-۲۲</a>: فراخوانی &lt;code&gt;&lt;/x-listing&gt;search&lt;/code&gt; یا &lt;code&gt;search_case_insensitive&lt;/code&gt; بر پایهٔ مقدار &lt;code&gt;config.ignore_case&lt;/code&gt;</figcaption>
+</figure>
+<p>در نهایت، باید بررسی کنیم که آیا متغیر محیطی تنظیم شده است یا خیر. توابع مربوط به کار با متغیرهای محیطی در ماژول <code>env</code> از کتابخانه استاندارد قرار دارند که در بالای فایل <em>src/main.rs</em> از قبل در scope قرار دارد. برای بررسی اینکه آیا متغیر محیطی‌ای به نام <code>IGNORE_CASE</code> مقداری دارد یا نه، از تابع <code>var</code> در ماژول <code>env</code> استفاده می‌کنیم، همان‌طور که در لیست 12-23 نشان داده شده است.</p>
+<figure class="listing" id="listing-12-23">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore noplayground"><span class="boring">use std::env;
+</span><span class="boring">use std::error::Error;
+</span><span class="boring">use std::fs;
+</span><span class="boring">use std::process;
+</span><span class="boring">
+</span><span class="boring">use minigrep::{search, search_case_insensitive};
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let args: Vec&lt;String&gt; = env::args().collect();
+</span><span class="boring">
+</span><span class="boring">    let config = Config::build(&amp;args).unwrap_or_else(|err| {
+</span><span class="boring">        println!("Problem parsing arguments: {err}");
+</span><span class="boring">        process::exit(1);
+</span><span class="boring">    });
+</span><span class="boring">
+</span><span class="boring">    if let Err(e) = run(config) {
+</span><span class="boring">        println!("Application error: {e}");
+</span><span class="boring">        process::exit(1);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct Config {
+</span><span class="boring">    pub query: String,
+</span><span class="boring">    pub file_path: String,
+</span><span class="boring">    pub ignore_case: bool,
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Config {
+    fn build(args: &amp;[String]) -&gt; Result&lt;Config, &amp;'static str&gt; {
+        if args.len() &lt; 3 {
+            return Err("not enough arguments");
+        }
+
+        let query = args[1].clone();
+        let file_path = args[2].clone();
+
+        let ignore_case = env::var("IGNORE_CASE").is_ok();
+
+        Ok(Config {
+            query,
+            file_path,
+            ignore_case,
+        })
+    }
+}
+<span class="boring">
+</span><span class="boring">fn run(config: Config) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+</span><span class="boring">    let contents = fs::read_to_string(config.file_path)?;
+</span><span class="boring">
+</span><span class="boring">    let results = if config.ignore_case {
+</span><span class="boring">        search_case_insensitive(&amp;config.query, &amp;contents)
+</span><span class="boring">    } else {
+</span><span class="boring">        search(&amp;config.query, &amp;contents)
+</span><span class="boring">    };
+</span><span class="boring">
+</span><span class="boring">    for line in results {
+</span><span class="boring">        println!("{line}");
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    Ok(())
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-12-23">لیست ۱۲-۲۳</a>: بررسی وجود مقدار در متغیر محیطی با نام &lt;code&gt;&lt;/x-listing&gt;IGNORE_CASE&lt;/code&gt;</figcaption>
+</figure>
+<p>اینجا یک متغیر جدید به نام <code>ignore_case</code> ایجاد می‌کنیم. برای مقداردهی آن، تابع <code>env::var</code> را فراخوانی کرده و نام متغیر محیطی <code>IGNORE_CASE</code> را به آن می‌دهیم. تابع <code>env::var</code> یک <code>Result</code> برمی‌گرداند که در صورت تنظیم بودن متغیر محیطی به هر مقداری، مقدار <code>Ok</code> با مقدار متغیر محیطی را دارد. اگر متغیر محیطی تنظیم نشده باشد، مقدار <code>Err</code> برگردانده می‌شود.</p>
+<p>ما از متد <code>is_ok</code> روی <code>Result</code> استفاده می‌کنیم تا بررسی کنیم که آیا متغیر محیطی تنظیم شده است، که نشان می‌دهد برنامه باید جستجو را به صورت غیرحساس به حروف کوچک و بزرگ انجام دهد. اگر متغیر محیطی <code>IGNORE_CASE</code> به هیچ مقداری تنظیم نشده باشد، <code>is_ok</code> مقدار <code>false</code> برمی‌گرداند و برنامه جستجو را به صورت حساس به حروف کوچک و بزرگ انجام می‌دهد. ما به مقدار متغیر محیطی نیازی نداریم، فقط می‌خواهیم بررسی کنیم که آیا تنظیم شده است یا نه. بنابراین از <code>is_ok</code> به جای متدهایی مانند <code>unwrap</code>، <code>expect</code> یا دیگر متدهای مرتبط با <code>Result</code> استفاده می‌کنیم.</p>
+<p>ما مقدار متغیر <code>ignore_case</code> را به نمونه <code>Config</code> منتقل می‌کنیم تا تابع <code>run</code> بتواند این مقدار را بخواند و تصمیم بگیرد که آیا باید تابع <code>search_case_insensitive</code> یا <code>search</code> را فراخوانی کند.</p>
+<p>حالا بیایید برنامه را امتحان کنیم! ابتدا برنامه را بدون تنظیم متغیر محیطی و با عبارت جستجوی <code>to</code> اجرا می‌کنیم. این عبارت باید با هر خطی که شامل کلمه <em>to</em> به صورت تمام حروف کوچک باشد، مطابقت داشته باشد:</p>
+<pre><code class="language-console">$ cargo run -- to poem.txt
+   Compiling minigrep v0.1.0 (file:///projects/minigrep)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.0s
+     Running `target/debug/minigrep to poem.txt`
+Are you nobody, too?
+How dreary to be somebody!
+</code></pre>
+<p>به نظر می‌رسد همچنان کار می‌کند! حالا برنامه را با <code>IGNORE_CASE</code> تنظیم‌شده روی <code>1</code> ولی با همان عبارت جستجوی <code>to</code> اجرا می‌کنیم:</p>
+<pre><code class="language-console">$ IGNORE_CASE=1 cargo run -- to poem.txt
+</code></pre>
+<p>در صورت استفاده از PowerShell، نیاز است که متغیر محیطی را تنظیم کنید و سپس برنامه را به صورت دستورات جداگانه اجرا کنید:</p>
+<pre><code class="language-console">PS&gt; $Env:IGNORE_CASE=1; cargo run -- to poem.txt
+</code></pre>
+<p>این دستور باعث می‌شود که <code>IGNORE_CASE</code> برای مدت زمان نشست ترمینال شما تنظیم باقی بماند. می‌توانید آن را با دستور <code>Remove-Item</code> حذف کنید:</p>
+<pre><code class="language-console">PS&gt; Remove-Item Env:IGNORE_CASE
+</code></pre>
+<p>برنامه باید خطوطی که شامل <em>to</em> هستند و ممکن است حروف بزرگ داشته باشند را برگرداند:</p>
+<!-- manual-regeneration
+cd listings/ch12-an-io-project/listing-12-23
+IGNORE_CASE=1 cargo run -- to poem.txt
+can't extract because of the environment variable
+-->
+<pre><code class="language-console">Are you nobody, too?
+How dreary to be somebody!
+To tell your name the livelong day
+To an admiring bog!
+</code></pre>
+<p>عالی! حالا برنامه <code>minigrep</code> ما می‌تواند جستجوهای غیرحساس به حروف کوچک و بزرگ را انجام دهد که با یک متغیر محیطی کنترل می‌شود. حالا شما می‌دانید چگونه گزینه‌هایی را که از طریق آرگومان‌های خط فرمان یا متغیرهای محیطی تنظیم می‌شوند مدیریت کنید.</p>
+<p>برخی برنامه‌ها اجازه می‌دهند که آرگومان‌ها و متغیرهای محیطی برای یک پیکربندی واحد استفاده شوند. در این موارد، برنامه‌ها تصمیم می‌گیرند که یکی از آن‌ها اولویت داشته باشد. برای تمرین بیشتر، سعی کنید حساسیت به حروف کوچک و بزرگ را از طریق یک آرگومان خط فرمان یا یک متغیر محیطی کنترل کنید. تصمیم بگیرید که در صورت تنظیم یکی به حساس و دیگری به غیرحساس بودن، آرگومان خط فرمان یا متغیر محیطی باید اولویت داشته باشد.</p>
+<p>ماژول <code>std::env</code> ویژگی‌های مفید بسیاری برای کار با متغیرهای محیطی دارد: مستندات آن را بررسی کنید تا ببینید چه امکاناتی در دسترس است.</p><nav class="page-nav"><a href="ch12-04-testing-the-librarys-functionality.html">→ افزودن قابلیت با توسعهٔ آزمون‌محور</a><a href="ch12-06-writing-to-stderr-instead-of-stdout.html">هدایت خطاها به خروجی خطای استاندارد ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

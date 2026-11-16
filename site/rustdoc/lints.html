@@ -1,0 +1,336 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>lintهای مخصوص rustdoc — کتاب rustdoc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="lints"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="what-is-rustdoc.html" style="color:inherit;text-decoration:none">کتاب rustdoc</a><small class="en-title" dir="ltr">The rustdoc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="lints"><a class="header" href="#lints">Lintها</a></h1>
+<p><code>rustdoc</code> چند lint فراهم می‌کند تا در نوشتن و آزمودن مستندات به شما کمک کند. می‌توانید آن‌ها را مانند هر lint دیگری به این شکل به کار ببرید:</p>
+<pre><code class="language-rust">#![allow(rustdoc::broken_intra_doc_links)] // allows the lint, no diagnostics will be reported
+#![warn(rustdoc::broken_intra_doc_links)] // warn if there are broken intra-doc links
+#![deny(rustdoc::broken_intra_doc_links)] // error if there are broken intra-doc links</code></pre>
+<p>توجه کنید که به‌جز <code>missing_docs</code>، این lintها فقط هنگام اجرای <code>rustdoc</code> در دسترس‌اند، نه <code>rustc</code>.</p>
+<p>فهرست lintهایی که <code>rustdoc</code> فراهم می‌کند در ادامه آمده است:</p>
+<h2 id="broken_intra_doc_links"><a class="header" href="#broken_intra_doc_links"><code>broken_intra_doc_links</code></a></h2>
+<p>این lint <strong>به‌طور پیش‌فرض هشدار می‌دهد</strong>. این lint زمانی را تشخیص می‌دهد که یک <a href="write-documentation/linking-to-items-by-name.html">پیوند درون‌مستندی</a> نتواند حل شود. برای مثال:</p>
+<pre><code class="language-rust">/// I want to link to [`Nonexistent`] but it doesn't exist!
+pub fn foo() {}</code></pre>
+<p>هشداری با این مضمون دریافت می‌کنید:</p>
+<pre><code class="language-text">warning: unresolved link to `Nonexistent`
+ --&gt; test.rs:1:24
+  |
+1 | /// I want to link to [`Nonexistent`] but it doesn't exist!
+  |                        ^^^^^^^^^^^^^ no item named `Nonexistent` in `test`
+</code></pre>
+<p>همچنین وقتی ابهامی وجود داشته باشد هشدار می‌دهد و پیشنهاد می‌کند چگونه ابهام را برطرف کنید:</p>
+<pre><code class="language-rust">/// [`Foo`]
+pub fn function() {}
+
+pub enum Foo {}
+
+pub fn Foo(){}</code></pre>
+<pre><code class="language-text">warning: `Foo` is both an enum and a function
+ --&gt; test.rs:1:6
+  |
+1 | /// [`Foo`]
+  |      ^^^^^ ambiguous link
+  |
+  = note: `#[warn(rustdoc::broken_intra_doc_links)]` on by default
+help: to link to the enum, prefix with the item type
+  |
+1 | /// [`enum@Foo`]
+  |      ^^^^^^^^^^
+help: to link to the function, add parentheses
+  |
+1 | /// [`Foo()`]
+  |      ^^^^^^^
+
+</code></pre>
+<h2 id="private_intra_doc_links"><a class="header" href="#private_intra_doc_links"><code>private_intra_doc_links</code></a></h2>
+<p>این lint <strong>به‌طور پیش‌فرض هشدار می‌دهد</strong>. این lint زمانی را تشخیص می‌دهد که <a href="write-documentation/linking-to-items-by-name.html">پیوندهای درون‌مستندی</a> از آیتم‌های عمومی به آیتم‌های خصوصی اشاره کنند. برای مثال:</p>
+<pre><code class="language-rust">#![warn(rustdoc::private_intra_doc_links)] // note: unnecessary - warns by default.
+
+/// [private]
+pub fn public() {}
+fn private() {}</code></pre>
+<p>این کد هشداری می‌دهد که پیوند هنگام نمایش در مستندات شما شکسته خواهد بود:</p>
+<pre><code class="language-text">warning: public documentation for `public` links to private item `private`
+ --&gt; priv.rs:1:6
+  |
+1 | /// [private]
+  |      ^^^^^^^ this item is private
+  |
+  = note: `#[warn(rustdoc::private_intra_doc_links)]` on by default
+  = note: this link will resolve properly if you pass `--document-private-items`
+</code></pre>
+<p>توجه کنید که رفتار این lint بسته به این‌که <code>--document-private-items</code> را بدهید یا نه، متفاوت است! اگر آیتم‌های خصوصی را مستند کنید، با وجود هشدار، باز هم پیوند تولید می‌شود:</p>
+<pre><code class="language-text">warning: public documentation for `public` links to private item `private`
+ --&gt; priv.rs:1:6
+  |
+1 | /// [private]
+  |      ^^^^^^^ this item is private
+  |
+  = note: `#[warn(rustdoc::private_intra_doc_links)]` on by default
+  = note: this link resolves only because you passed `--document-private-items`, but will break without
+</code></pre>
+<h2 id="missing_docs"><a class="header" href="#missing_docs"><code>missing_docs</code></a></h2>
+<p>این lint <strong>به‌طور پیش‌فرض مجاز است</strong>. این lint آیتم‌هایی را که مستندات ندارند تشخیص می‌دهد. برای مثال:</p>
+<pre><code class="language-rust">#![warn(missing_docs)]
+
+pub fn undocumented() {}
+<span class="boring">fn main() {}</span></code></pre>
+<p>آنگاه تابع <code>undocumented</code> هشدار زیر را خواهد داشت:</p>
+<pre><code class="language-text">warning: missing documentation for a function
+  --&gt; your-crate/lib.rs:3:1
+   |
+ 3 | pub fn undocumented() {}
+   | ^^^^^^^^^^^^^^^^^^^^^
+</code></pre>
+<p>توجه کنید که برخلاف سایر lintهای rustdoc، این lint مستقیماً از <code>rustc</code> نیز در دسترس است.</p>
+<h2 id="missing_crate_level_docs"><a class="header" href="#missing_crate_level_docs"><code>missing_crate_level_docs</code></a></h2>
+<p>این lint <strong>به‌طور پیش‌فرض مجاز است</strong>. این lint تشخیص می‌دهد که آیا در ریشهٔ crate مستنداتی وجود ندارد یا نه. برای مثال:</p>
+<pre><code class="language-rust">#![warn(rustdoc::missing_crate_level_docs)]</code></pre>
+<p>این کد هشدار زیر را تولید می‌کند:</p>
+<pre><code class="language-text">warning: no documentation found for this crate's top-level module
+  |
+  = help: The following guide may be of use:
+          https://doc.rust-lang.org/nightly/rustdoc/how-to-write-documentation.html
+</code></pre>
+<p>این lint در حال حاضر به‌طور پیش‌فرض «allow» است، اما قصد این است که در آینده به یک هشدار تبدیل شود. هدف از آن، آشنا کردن کاربران تازه‌وارد با <em>چگونگی</em> مستند کردن crate خودشان است، به این صورت که آن‌ها را به دستورالعمل‌هایی برای شروع کار راهنمایی می‌کند، بی‌آن‌که هشدارهای طاقت‌فرسایی مانند <code>missing_docs</code> تولید کند.</p>
+<h2 id="missing_doc_code_examples"><a class="header" href="#missing_doc_code_examples"><code>missing_doc_code_examples</code></a></h2>
+<p>این lint <strong>به‌طور پیش‌فرض مجاز است</strong> و <strong>فقط در nightly</strong> در دسترس است. این lint زمانی را تشخیص می‌دهد که یک بلوک مستندات مثال کد نداشته باشد. برای مثال:</p>
+<pre><code class="language-rust">#![warn(rustdoc::missing_doc_code_examples)]
+
+/// There is no code example!
+pub fn no_code_example() {}
+<span class="boring">fn main() {}</span></code></pre>
+<p>آنگاه تابع <code>no_code_example</code> هشدار زیر را خواهد داشت:</p>
+<pre><code class="language-text">warning: Missing code example in this documentation
+  --&gt; your-crate/lib.rs:3:1
+   |
+LL | /// There is no code example!
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+</code></pre>
+<p>برای رفع این lint، باید یک مثال کد به بلوک مستندات اضافه کنید:</p>
+<pre><code class="language-rust">/// There is no code example!
+///
+/// ```
+/// println!("calling no_code_example...");
+/// no_code_example();
+/// println!("we called no_code_example!");
+/// ```
+pub fn no_code_example() {}</code></pre>
+<p>این lint برای آیتم‌های زیر صادر نمی‌شود:</p>
+<ul>
+<li>بلوک‌های impl (هم صفت و هم ذاتی)</li>
+<li>واریانت‌های شمارش</li>
+<li>فیلدهای ساختار یا union</li>
+<li>نام‌های مستعار نوع، از جمله نوع‌های وابسته</li>
+<li>staticها و ثابت‌ها</li>
+<li>ماژول‌ها (از جمله ماژول سطح بالای یک crate)</li>
+<li>آیتم‌های خارجی حاصل از بازصادرکردن (re-export) (توابع، staticها، نوع‌ها و غیره)</li>
+</ul>
+<h2 id="private_doc_tests"><a class="header" href="#private_doc_tests"><code>private_doc_tests</code></a></h2>
+<p>این lint <strong>به‌طور پیش‌فرض مجاز است</strong>. این lint آزمون‌های مستنداتی را که روی یک آیتم خصوصی قرار دارند تشخیص می‌دهد. برای مثال:</p>
+<pre><code class="language-rust">#![warn(rustdoc::private_doc_tests)]
+
+mod foo {
+    /// private doc test
+    ///
+    /// ```
+    /// assert!(false);
+    /// ```
+    fn bar() {}
+}
+<span class="boring">fn main() {}</span></code></pre>
+<p>که این خروجی را می‌دهد:</p>
+<pre><code class="language-text">warning: Documentation test in private item
+  --&gt; your-crate/lib.rs:4:1
+   |
+ 4 | /     /// private doc test
+ 5 | |     ///
+ 6 | |     /// ```
+ 7 | |     /// assert!(false);
+ 8 | |     /// ```
+   | |___________^
+</code></pre>
+<h2 id="invalid_codeblock_attributes"><a class="header" href="#invalid_codeblock_attributes"><code>invalid_codeblock_attributes</code></a></h2>
+<p>این lint <strong>به‌طور پیش‌فرض هشدار می‌دهد</strong>. این lint attributeهای بلوک کد را در مثال‌های مستندات که احتمالاً مقدارشان اشتباه تایپ شده است تشخیص می‌دهد. برای مثال:</p>
+<pre><code class="language-rust">#![warn(rustdoc::invalid_codeblock_attributes)]  // note: unnecessary - warns by default.
+
+/// Example.
+///
+/// ```should-panic
+/// assert_eq!(1, 2);
+/// ```
+pub fn foo() {}</code></pre>
+<p>که این خروجی را می‌دهد:</p>
+<pre><code class="language-text">warning: unknown attribute `should-panic`. Did you mean `should_panic`?
+ --&gt; src/lib.rs:1:1
+  |
+1 | / /// Example.
+2 | | ///
+3 | | /// ```should-panic
+4 | | /// assert_eq!(1, 2);
+5 | | /// ```
+  | |_______^
+  |
+  = note: `#[warn(rustdoc::invalid_codeblock_attributes)]` on by default
+  = help: the code block will either not be tested if not marked as a rust one or won't fail if it doesn't panic when running
+</code></pre>
+<p>در مثال بالا، شکل درست <code>should_panic</code> است. این lint به تشخیص اشتباهات تایپی در برخی attributeهای رایج کمک می‌کند.</p>
+<h2 id="invalid_html_tags"><a class="header" href="#invalid_html_tags"><code>invalid_html_tags</code></a></h2>
+<p>این lint <strong>به‌طور پیش‌فرض هشدار می‌دهد</strong>. این lint تگ‌های HTML بسته‌نشده یا نامعتبر را تشخیص می‌دهد. برای مثال:</p>
+<pre><code class="language-rust">#![warn(rustdoc::invalid_html_tags)]
+
+/// &lt;h1&gt;
+/// &lt;/script&gt;
+pub fn foo() {}</code></pre>
+<p>که این خروجی را می‌دهد:</p>
+<pre><code class="language-text">warning: unopened HTML tag `script`
+ --&gt; foo.rs:1:1
+  |
+1 | / /// &lt;h1&gt;
+2 | | /// &lt;/script&gt;
+  | |_____________^
+  |
+  note: the lint level is defined here
+ --&gt; foo.rs:1:9
+  |
+1 | #![warn(rustdoc::invalid_html_tags)]
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unclosed HTML tag `h1`
+ --&gt; foo.rs:1:1
+  |
+1 | / /// &lt;h1&gt;
+2 | | /// &lt;/script&gt;
+  | |_____________^
+
+warning: 2 warnings emitted
+</code></pre>
+<h2 id="invalid_rust_codeblocks"><a class="header" href="#invalid_rust_codeblocks"><code>invalid_rust_codeblocks</code></a></h2>
+<p>این lint <strong>به‌طور پیش‌فرض هشدار می‌دهد</strong>. این lint بلوک‌های کد Rust را در مثال‌های مستندات که نامعتبرند (مثلاً خالی‌اند یا به‌عنوان Rust قابل تجزیه نیستند) تشخیص می‌دهد. برای مثال:</p>
+<pre><code class="language-rust">/// Empty code blocks (with and without the `rust` marker):
+///
+/// ```rust
+/// ```
+///
+/// Invalid syntax in code blocks:
+///
+/// ```rust
+/// '&lt;
+/// ```
+pub fn foo() {}</code></pre>
+<p>که این خروجی را می‌دهد:</p>
+<pre><code class="language-text">warning: Rust code block is empty
+ --&gt; lint.rs:3:5
+  |
+3 |   /// ```rust
+  |  _____^
+4 | | /// ```
+  | |_______^
+  |
+  = note: `#[warn(rustdoc::invalid_rust_codeblocks)]` on by default
+
+warning: could not parse code block as Rust code
+  --&gt; lint.rs:8:5
+   |
+8  |   /// ```rust
+   |  _____^
+9  | | /// '&lt;
+10 | | /// ```
+   | |_______^
+   |
+   = note: error from rustc: unterminated character literal
+</code></pre>
+<h2 id="bare_urls"><a class="header" href="#bare_urls"><code>bare_urls</code></a></h2>
+<p>این lint <strong>به‌طور پیش‌فرض هشدار می‌دهد</strong>. این lint نشانی‌های URL ای را که پیوند نیستند تشخیص می‌دهد. برای مثال:</p>
+<pre><code class="language-rust">#![warn(rustdoc::bare_urls)] // note: unnecessary - warns by default.
+
+/// http://example.org
+/// [http://example.net]
+pub fn foo() {}</code></pre>
+<p>که این خروجی را می‌دهد:</p>
+<pre><code class="language-text">warning: this URL is not a hyperlink
+ --&gt; links.rs:1:5
+  |
+1 | /// http://example.org
+  |     ^^^^^^^^^^^^^^^^^^ help: use an automatic link instead: `&lt;http://example.org&gt;`
+  |
+  = note: `#[warn(rustdoc::bare_urls)]` on by default
+
+warning: this URL is not a hyperlink
+ --&gt; links.rs:3:6
+  |
+3 | /// [http://example.net]
+  |      ^^^^^^^^^^^^^^^^^^ help: use an automatic link instead: `&lt;http://example.net&gt;`
+
+warning: 2 warnings emitted
+</code></pre>
+<h2 id="unescaped_backticks"><a class="header" href="#unescaped_backticks"><code>unescaped_backticks</code></a></h2>
+<p>این lint <strong>به‌طور پیش‌فرض مجاز است</strong>. این lint backtickهای (`) escape‌نشده را تشخیص می‌دهد. این معمولاً به معنای کد درون‌خطی شکسته است. برای مثال:</p>
+<pre><code class="language-rust">#![warn(rustdoc::unescaped_backticks)]
+
+/// `add(a, b) is the same as `add(b, a)`.
+pub fn add(a: i32, b: i32) -&gt; i32 { a + b }</code></pre>
+<p>که این خروجی را می‌دهد:</p>
+<pre><code class="language-text">warning: unescaped backtick
+ --&gt; src/lib.rs:3:41
+  |
+3 | /// `add(a, b) is the same as `add(b, a)`.
+  |                                         ^
+  |
+note: the lint level is defined here
+ --&gt; src/lib.rs:1:9
+  |
+1 | #![warn(rustdoc::unescaped_backticks)]
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: a previous inline code might be longer than expected
+  |
+3 | /// `add(a, b)` is the same as `add(b, a)`.
+  |               +
+help: if you meant to use a literal backtick, escape it
+  |
+3 | /// `add(a, b) is the same as `add(b, a)\`.
+  |                                         +
+
+warning: 1 warning emitted
+</code></pre>
+<h2 id="redundant_explicit_links"><a class="header" href="#redundant_explicit_links"><code>redundant_explicit_links</code></a></h2>
+<p>این lint <strong>به‌طور پیش‌فرض هشدار می‌دهد</strong>. این lint پیوندهای صریحی را که با پیوندهای خودکار محاسبه‌شده یکسان‌اند تشخیص می‌دهد. این معمولاً به معنای قابل‌حذف بودن پیوندهای صریح است. برای مثال:</p>
+<pre><code class="language-rust">#![warn(rustdoc::redundant_explicit_links)] // note: unnecessary - warns by default.
+
+/// add takes 2 [`usize`](usize) and performs addition
+/// on them, then returns result.
+pub fn add(left: usize, right: usize) -&gt; usize {
+    left + right
+}</code></pre>
+<p>که این خروجی را می‌دهد:</p>
+<pre><code class="language-text">error: redundant explicit rustdoc link
+  --&gt; src/lib.rs:3:27
+   |
+3  | /// add takes 2 [`usize`](usize) and performs addition
+   |                           ^^^^^
+   |
+   = note: Explicit link does not affect the original link
+note: the lint level is defined here
+  --&gt; src/lib.rs:1:9
+   |
+1  | #![deny(rustdoc::redundant_explicit_links)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: Remove explicit link instead
+</code></pre>
+<h2 id="invalid_markdown_table"><a class="header" href="#invalid_markdown_table"><code>invalid_markdown_table</code></a></h2>
+<p>این lint <strong>به‌طور پیش‌فرض هشدار می‌دهد</strong>. این lint علامت‌های pipe (<code>|</code>) بدون escape را در ردیف‌های جدول تشخیص می‌دهد که باعث نادیده گرفته شدن برخی سلول‌های ردیف می‌شوند. برای مثال:</p>
+<pre><code class="language-rust">//! | col1 |
+//! | ---- |
+//! | `code_with(|arg| arg)` |</code></pre>
+<p>که این خروجی را می‌دهد:</p>
+<pre><code class="language-text">error: table row has too many columns
+  --&gt; $DIR/foo.rs:5:18
+   |
+5  | //! | `code_with(|arg| arg)` |
+   |                  ^ help: any content after this column divider is discarded
+   |
+   = help: to escape `|` characters in tables, add a `\` before them like `\|`
+note: the lint level is defined here
+  --&gt; $DIR/foo.rs:1:9
+   |
+1  | #![deny(rustdoc::invalid_markdown_table)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+</code></pre><nav class="page-nav"><a href="write-documentation/documentation-tests.html">→ آزمون‌های مستندات</a><a href="scraped-examples.html">مثال‌های استخراج‌شده ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustdoc/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

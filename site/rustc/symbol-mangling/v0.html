@@ -1,0 +1,818 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>قالب نماد v0 — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="symbol-mangling/v0"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="v0-symbol-format"><a class="header" href="#v0-symbol-format">قالب نماد v0</a></h1>
+<p>قالب mangling نسخه v0 در <a href="https://rust-lang.github.io/rfcs/2603-rust-symbol-name-mangling-v0.html">RFC 2603</a> معرفی شد. این قالب ویژگی‌های زیر را دارد:</p>
+<ul>
+<li>برای هر چیزی که ممکن است در جدول نمادهای یک فایل باینری قرار بگیرد، یک کدگذاری رشته‌ای بدون ابهام فراهم می‌کند.</li>
+<li>اطلاعات مربوط به پارامترهای جنریک را به شکلی برگشت‌پذیر کدگذاری می‌کند.</li>
+<li>نمادهای mangle‌شده <em>قابل رمزگشایی</em> هستند، به‌طوری که شکل demangle‌شده باید به‌آسانی به‌عنوان نمونه‌ای مشخص از مثلاً یک تابع چندریخت (polymorphic) قابل شناسایی باشد.</li>
+<li>تعریفی یکپارچه دارد که به pretty-print کردن برخی ساختارهای زبان وابسته نیست.</li>
+<li>می‌توان نمادها را به کاراکترهای <code>A-Z</code>، <code>a-z</code>، <code>0-9</code> و <code>_</code> محدود کرد. این کار به مستقل بودن از پلتفرم کمک می‌کند، زیرا کاراکترهای دیگر ممکن است در برخی زمینه‌ها معنای ویژه‌ای داشته باشند (مثلاً <code>.</code> در فایل‌های <code>DEF</code> برای MSVC). نمادهای یونیکد به‌صورت اختیاری پشتیبانی می‌شوند.</li>
+<li>تلاش می‌کند کارا بماند، از نام‌های بی‌دلیل طولانی دوری کند و برای demangle کردن از عملیات پرهزینه محاسباتی پرهیز کند.</li>
+</ul>
+<p>قالب v0 قرار نیست با دیگر طرح‌های mangling (مانند C++) سازگار باشد.</p>
+<p>قالب v0 به‌عنوان یک ABI پایدار برای Rust ارائه نشده است. این قالب فعلاً قرار است به‌اندازه‌ای دقیق تعریف شده باشد که یک demangler بتواند شکلی معقول و قابل‌خواندن برای انسان از نماد تولید کند. چندین بخش وابسته به پیاده‌سازی وجود دارد که باعث می‌شود نتوان به‌طور کامل پیش‌بینی کرد یک موجودیت مشخص در Rust چگونه کدگذاری خواهد شد.</p>
+<p>بخش‌های زیر کدگذاری یک نماد v0 را تعریف می‌کنند. شکل demangle‌شده استانداردی برای نمادها وجود ندارد، هرچند پیشنهادهایی برای نحوه demangle کردن یک نماد ارائه شده است. پیاده‌سازان ممکن است به روش‌های دیگری demangle کنند.</p>
+<h2 id="extensions"><a class="header" href="#extensions">افزونه‌ها</a></h2>
+<p>ممکن است این قالب در آینده، همزمان با گسترش Rust با آیتم‌های زبانی جدید، با افزودن تگ‌های جدید گسترش یابد. برای سازگاری رو به جلو، demangler‌ها باید نمادهایی را که کدگذاری‌شان شامل یک کاراکتر تگ توصیف‌نشده در این سند است، به‌شکلی مناسب مدیریت کنند. مثلاً می‌توانند به نمایش خود نماد mangle‌شده بازگردند. قالب را می‌توان در هر جایی که تگ وجود دارد گسترش داد، مانند قاعده <a href="#type">type</a>. معنای تگ‌ها و کدگذاری‌های موجود تغییر نخواهد کرد.</p>
+<h2 id="grammar-notation"><a class="header" href="#grammar-notation">نمادگذاری گرامر</a></h2>
+<p>قالب یک نماد کدگذاری‌شده به‌صورت یک گرامر مستقل از متن (context free grammar) و با نحوی شبیه BNF گسترش‌یافته نشان داده می‌شود. خلاصه‌ای یکپارچه را می‌توانید در <a href="#symbol-grammar-summary">خلاصه گرامر نماد</a> بیابید.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Syntax</th><th>Example</th><th>توضیح</th></tr>
+</thead>
+<tbody>
+<tr><td>Rule</td><td>→</td><td><nobr>A → <em>B</em> <em>C</em></nobr></td><td>یک قاعده تولید (production).</td></tr>
+<tr><td>الحاق (Concatenation)</td><td>whitespace</td><td><nobr>A → <em>B</em> <em>C</em> <em>D</em></nobr></td><td>عناصر منفرد به‌ترتیب از چپ به راست.</td></tr>
+<tr><td>انتخاب (Alternative)</td><td>|</td><td><nobr>A → <em>B</em> | <em>C</em></nobr></td><td>با یکی از دو طرف مطابقت می‌کند.</td></tr>
+<tr><td>Grouping</td><td>()</td><td><nobr>A → <em>B</em> (<em>C</em> | <em>D</em>) <em>E</em></nobr></td><td>چند عنصر را به‌عنوان یک عنصر گروه‌بندی می‌کند.</td></tr>
+<tr><td>تکرار (Repetition)</td><td>{}</td><td><nobr>A → {<em>B</em>}</nobr></td><td>عنصر محصور را صفر بار یا بیشتر تکرار می‌کند.</td></tr>
+<tr><td>Option</td><td><sub>opt</sub></td><td><nobr>A → <em>B</em><sub>opt</sub> <em>C</em></nobr></td><td>یک عنصر اختیاری.</td></tr>
+<tr><td>Literal</td><td><code>monospace</code></td><td><nobr>A → <code>G</code></nobr></td><td>یک پایانه (terminal) که دقیقاً با همان کاراکترها و با حساسیت به بزرگی و کوچکی حروف مطابقت می‌کند.</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="symbol-name"><a class="header" href="#symbol-name">نام نماد</a></h2>
+<blockquote>
+<p>symbol-name → <code>_R</code> <em><a href="#common-rules">decimal-number</a></em><sub>opt</sub> <em><a href="#symbol-path">path</a></em> <em><a href="#instantiating-crate">instantiating-crate</a></em><sub>opt</sub> <em><a href="#vendor-specific-suffix">vendor-specific-suffix</a></em><sub>opt</sub></p>
+</blockquote>
+<p>یک نماد mangle‌شده با دو کاراکتر <code>_R</code> آغاز می‌شود که پیشوندی برای شناسایی نماد به‌عنوان نماد Rust است. پس از این پیشوند می‌تواند اختیاراً یک <em><a href="#common-rules">decimal-number</a></em> بیاید که نسخه کدگذاری را مشخص می‌کند. این عدد فعلاً استفاده نمی‌شود و در کدگذاری کنونی هرگز وجود ندارد. سپس یک <em><a href="#symbol-path">path</a></em> می‌آید که مسیر یک موجودیت را کدگذاری می‌کند. پس از مسیر، یک <em><a href="#instantiating-crate">instantiating-crate</a></em> اختیاری می‌آید که به تمایز موجودیت‌هایی کمک می‌کند که ممکن است در crateهای مختلف چندین بار نمونه‌سازی شوند. بخش پایانی یک <em><a href="#vendor-specific-suffix">vendor-specific-suffix</a></em> اختیاری است.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>یک <em>symbol-name</em> باید به‌صورت <em><a href="#symbol-path">path</a></em> نمایش داده شود. معمولاً نیازی به نمایش <em><a href="#instantiating-crate">instantiating-crate</a></em> و <em><a href="#vendor-specific-suffix">vendor-specific-suffix</a></em> نیست.</p>
+</blockquote>
+<blockquote>
+<p>Example: <code>rust std::path::PathBuf::new();</code></p>
+<pre><code class="language-rust">std::path::PathBuf::new();</code></pre>
+<p>نماد <code>PathBuf::new</code> در crate با نام <code>mycrate</code> چنین است:</p>
+<pre><code class="language-text">_RNvMsr_NtCs3ssYzQotkvD_3std4pathNtB5_7PathBuf3newCs15kBYyAo9fc_7mycrate
+├┘└───────────────────────┬──────────────────────┘└──────────┬─────────┘
+│                         │                                  │
+│                         │                                  └── instantiating-crate path "mycrate"
+│                         └───────────────────────────────────── path to std::path::PathBuf::new
+└─────────────────────────────────────────────────────────────── `_R` symbol prefix
+</code></pre>
+<p>Demangling پیشنهادی: <code>&lt;std::path::PathBuf&gt;::new</code></p>
+</blockquote>
+<h2 id="symbol-path"><a class="header" href="#symbol-path">مسیر نماد</a></h2>
+<blockquote>
+<p>path → <br>      <em><a href="#path-crate-root">crate-root</a></em> <br>   | <em><a href="#path-inherent-impl">inherent-impl</a></em> <br>   | <em><a href="#path-trait-impl">trait-impl</a></em> <br>   | <em><a href="#path-trait-definition">trait-definition</a></em> <br>   | <em><a href="#path-nested-path">nested-path</a></em> <br>   | <em><a href="#path-generic-arguments">generic-args</a></em> <br>   | <em><a href="#backref">backref</a></em></p>
+</blockquote>
+<p>یک <em>path</em> نوعی از <a href="../../reference/paths.html">مسیر Rust</a> به یک موجودیت را نشان می‌دهد. علاوه بر بخش‌های معمول مسیر در Rust که از شناسه‌ها استفاده می‌کنند، از عناصر اضافی برای نمایش موجودیت‌های بی‌نام (مانند یک <code>impl</code>) یا آرگومان‌های جنریک برای آیتم‌های monomorphize‌شده استفاده می‌کند.</p>
+<p>از کاراکتر تگ ابتدایی می‌توان برای تشخیص نوع مسیر استفاده کرد:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Tag</th><th>Rule</th><th>توضیح</th></tr>
+</thead>
+<tbody>
+<tr><td><code>C</code></td><td><em><a href="#path-crate-root">crate-root</a></em></td><td>ریشه یک مسیر crate.</td></tr>
+<tr><td><code>M</code></td><td><em><a href="#path-inherent-impl">inherent-impl</a></em></td><td>یک پیاده‌سازی ذاتی (inherent).</td></tr>
+<tr><td><code>X</code></td><td><em><a href="#path-trait-impl">trait-impl</a></em></td><td>یک پیاده‌سازی trait.</td></tr>
+<tr><td><code>Y</code></td><td><em><a href="#path-trait-definition">trait-definition</a></em></td><td>یک تعریف trait.</td></tr>
+<tr><td><code>N</code></td><td><em><a href="#path-nested-path">nested-path</a></em></td><td>یک مسیر تو‌در‌تو.</td></tr>
+<tr><td><code>I</code></td><td><em><a href="#path-generic-arguments">generic-args</a></em></td><td>آرگومان‌های جنریک.</td></tr>
+<tr><td><code>B</code></td><td><em><a href="#backref">backref</a></em></td><td>یک ارجاع پس‌رو (back reference).</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="path-crate-root"><a class="header" href="#path-crate-root">مسیر: ریشه crate</a></h3>
+<blockquote>
+<p>crate-root → <code>C</code> <em><a href="#identifier">identifier</a></em></p>
+</blockquote>
+<p>یک <em>crate-root</em> مسیری را نشان می‌دهد که به ریشه درخت ماژول‌های یک crate اشاره می‌کند. این بخش از کاراکتر <code>C</code> و به دنبال آن نام crate به‌صورت یک <em><a href="#identifier">identifier</a></em> تشکیل می‌شود.</p>
+<p>نام crate همان نامی است که از دید crate تعریف‌کننده دیده می‌شود. از آنجا که Rust از پیوند دادن چند crate با نام یکسان پشتیبانی می‌کند، از <em><a href="#disambiguator">disambiguator</a></em> برای یکتا کردن نام در سراسر گراف crateها استفاده می‌شود.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>یک <em>crate-root</em> را می‌توان به‌صورت شناسه‌ای مانند <code>mycrate</code> نمایش داد.</p>
+<p>معمولاً نیازی به نمایش disambiguator موجود در شناسه نیست، اما به‌عنوان شکلی جایگزین می‌توان disambiguator را به‌صورت هگزادسیمال نمایش داد، مانند <code>mycrate[ca63f166dbe9294]</code>.</p>
+</blockquote>
+<blockquote>
+<p>Example: <code>rust fn example() {}</code></p>
+<pre><code class="language-rust">fn example() {}</code></pre>
+<p>نماد <code>example</code> در crate با نام <code>mycrate</code> چنین است:</p>
+<pre><code class="language-text">_RNvCs15kBYyAo9fc_7mycrate7example
+    │└────┬─────┘││└──┬──┘
+    │     │      ││   │
+    │     │      ││   └── crate-root identifier "mycrate"
+    │     │      │└────── length 7 of "mycrate"
+    │     │      └─────── end of base-62-number
+    │     └────────────── disambiguator for crate-root "mycrate" 0xca63f166dbe9293 + 1
+    └──────────────────── crate-root
+</code></pre>
+<p>Demangling پیشنهادی: <code>mycrate::example</code></p>
+<p>نکته: کامپایلر ممکن است از شکل <em>crate-root</em> دوباره برای بیان شناسه‌های دلخواهِ بدون دامنه و بدون disambiguator استفاده کند، مثلاً برای نوع‌های پایه جدیدی که هنوز به گرامر اضافه نشده‌اند. برای این کار، یک <em>crate-root</em> بدون disambiguator صریح تولید می‌کند و بر این واقعیت تکیه دارد که چنین نام crate بدون disambiguator در عمل نمی‌تواند وجود داشته باشد. برای مثال، نوع پایه <code>f128</code> به‌صورت <code>C4f128</code> کدگذاری می‌شود. برای اینکه این کار اثر مطلوب را داشته باشد، از demangler‌ها انتظار می‌رود هرگز disambiguator صفر مربوط به ریشه crate را نمایش ندهند؛ یعنی انتظار می‌رود <code>C4f128</code> به‌صورت <code>f128</code> نمایش داده شود، نه <code>f128[0]</code>.</p>
+</blockquote>
+<h3 id="path-inherent-impl"><a class="header" href="#path-inherent-impl">مسیر: پیاده‌سازی ذاتی (Inherent impl)</a></h3>
+<blockquote>
+<p>inherent-impl → <code>M</code> <em><a href="#path-impl">impl-path</a></em> <em><a href="#type">type</a></em></p>
+</blockquote>
+<p>یک <em>inherent-impl</em> مسیر یک <a href="../../reference/items/implementations.html#inherent-implementations">پیاده‌سازی ذاتی</a> را نشان می‌دهد. این بخش از کاراکتر <code>M</code> و به دنبال آن یک <em><a href="#path-impl">impl-path</a></em> تشکیل می‌شود که بلوک impl‌ای را که آیتم در آن تعریف شده به‌طور یکتا مشخص می‌کند. پس از آن یک <em><a href="#type">type</a></em> می‌آید که نوع <code>Self</code> آن impl را نشان می‌دهد.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>یک <em>inherent-impl</em> را می‌توان به‌صورت یک بخش مسیر مشخص‌شده (qualified) برای <em><a href="#type">type</a></em> درون کروشه‌های زاویه‌ای نمایش داد. معمولاً نیازی به نمایش <em><a href="#path-impl">impl-path</a></em> نیست.</p>
+</blockquote>
+<blockquote>
+<p>Example: <code>rust struct Example; impl Example { fn foo() {} }</code></p>
+<pre><code class="language-rust">struct Example;
+impl Example {
+    fn foo() {}
+}</code></pre>
+<p>نماد <code>foo</code> در impl مربوط به <code>Example</code> چنین است:</p>
+<pre><code class="language-text">_RNvMs_Cs4Cv8Wi1oAIB_7mycrateNtB4_7Example3foo
+    │├┘└─────────┬──────────┘└────┬──────┘
+    ││           │                │
+    ││           │                └── Self type "Example"
+    ││           └─────────────────── path to the impl's parent "mycrate"
+    │└─────────────────────────────── disambiguator 1
+    └──────────────────────────────── inherent-impl
+</code></pre>
+<p>Demangling پیشنهادی: <code>&lt;mycrate::Example&gt;::foo</code></p>
+</blockquote>
+<h3 id="path-trait-impl"><a class="header" href="#path-trait-impl">مسیر: پیاده‌سازی trait</a></h3>
+<blockquote>
+<p>trait-impl → <code>X</code> <em><a href="#path-impl">impl-path</a></em> <em><a href="#type">type</a></em> <em><a href="#symbol-path">path</a></em></p>
+</blockquote>
+<p>یک <em>trait-impl</em> مسیر یک <a href="../../reference/items/implementations.html#trait-implementations">پیاده‌سازی trait</a> را نشان می‌دهد. این بخش از کاراکتر <code>X</code> و به دنبال آن یک <em><a href="#path-impl">impl-path</a></em> به والد impl، سپس <em><a href="#type">type</a></em> که نوع <code>Self</code> آن impl را نشان می‌دهد و سپس یک <em><a href="#symbol-path">path</a></em> به trait تشکیل می‌شود.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>یک <em>trait-impl</em> را می‌توان به‌صورت یک بخش مسیر مشخص‌شده با نحو <code>&lt;</code> <em>type</em> <code>as</code> <em>path</em> <code>&gt;</code> نمایش داد. معمولاً نیازی به نمایش <em><a href="#path-impl">impl-path</a></em> نیست.</p>
+</blockquote>
+<blockquote>
+<p>Example: <code>rust struct Example; trait Trait { fn foo(); } impl Trait for Example { fn foo() {} }</code></p>
+<pre><code class="language-rust">struct Example;
+trait Trait {
+    fn foo();
+}
+impl Trait for Example {
+    fn foo() {}
+}</code></pre>
+<p>نماد <code>foo</code> در پیاده‌سازی trait برای <code>Example</code> چنین است:</p>
+<pre><code class="language-text">_RNvXCs15kBYyAo9fc_7mycrateNtB2_7ExampleNtB2_5Trait3foo
+    │└─────────┬──────────┘└─────┬─────┘└────┬────┘
+    │          │                 │           │
+    │          │                 │           └── path to the trait "Trait"
+    │          │                 └────────────── Self type "Example"
+    │          └──────────────────────────────── path to the impl's parent "mycrate"
+    └─────────────────────────────────────────── trait-impl
+</code></pre>
+<p>Demangling پیشنهادی: <code>&lt;mycrate::Example as mycrate::Trait&gt;::foo</code></p>
+</blockquote>
+<h3 id="path-impl"><a class="header" href="#path-impl">Path: Impl</a></h3>
+<blockquote>
+<p>impl-path → <em><a href="#disambiguator">disambiguator</a></em><sub>opt</sub> <em><a href="#symbol-path">path</a></em></p>
+</blockquote>
+<p>یک <em>impl-path</em> مسیری است که در <em><a href="#path-inherent-impl">inherent-impl</a></em> و <em><a href="#path-trait-impl">trait-impl</a></em> برای نشان دادن مسیر والدِ یک <a href="../../reference/items/implementations.html">پیاده‌سازی</a> به کار می‌رود. این بخش از یک <em><a href="#disambiguator">disambiguator</a></em> اختیاری و به دنبال آن یک <em><a href="#symbol-path">path</a></em> تشکیل می‌شود. <em><a href="#symbol-path">path</a></em> مسیر والدی است که impl را در بر می‌گیرد. <em><a href="#disambiguator">disambiguator</a></em> را می‌توان برای تمایز میان چند impl در یک والد یکسان به کار برد.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>معمولاً نیازی به نمایش <em>impl-path</em> نیست (مگر اینکه محل impl مورد نظر باشد).</p>
+</blockquote>
+<blockquote>
+<p>Example: <code>rust struct Example; impl Example { fn foo() {} } impl Example { fn bar() {} }</code></p>
+<pre><code class="language-rust">struct Example;
+impl Example {
+    fn foo() {}
+}
+impl Example {
+    fn bar() {}
+}</code></pre>
+<p>نماد <code>foo</code> در impl مربوط به <code>Example</code> چنین است:</p>
+<pre><code class="language-text">_RNvMCs7qp2U7fqm6G_7mycrateNtB2_7Example3foo
+     └─────────┬──────────┘
+               │
+               └── path to the impl's parent crate-root "mycrate"
+</code></pre>
+<p>نماد <code>bar</code> مشابه است، با این تفاوت که یک disambiguator دارد تا نشان دهد در بلوک impl دیگری قرار دارد.</p>
+<pre><code class="language-text">_RNvMs_Cs7qp2U7fqm6G_7mycrateNtB4_7Example3bar
+     ├┘└─────────┬──────────┘
+     │           │
+     │           └── path to the impl's parent crate-root "mycrate"
+     └────────────── disambiguator 1
+</code></pre>
+<p>Demangling پیشنهادی:</p>
+<ul>
+<li><code>foo</code>: <code>&lt;mycrate::Example&gt;::foo</code></li>
+<li><code>bar</code>: <code>&lt;mycrate::Example&gt;::bar</code></li>
+</ul>
+</blockquote>
+<h3 id="path-trait-definition"><a class="header" href="#path-trait-definition">مسیر: تعریف trait</a></h3>
+<blockquote>
+<p>trait-definition → <code>Y</code> <em><a href="#type">type</a></em> <em><a href="#symbol-path">path</a></em></p>
+</blockquote>
+<p>یک <em>trait-definition</em> مسیری به یک <a href="../../reference/items/traits.html">تعریف trait</a> است. این بخش از کاراکتر <code>Y</code> و به دنبال آن <em><a href="#type">type</a></em> که نوع <code>Self</code> ارجاع‌دهنده است، و سپس <em><a href="#symbol-path">path</a></em> به تعریف trait تشکیل می‌شود.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>یک <em>trait-definition</em> را می‌توان به‌صورت یک بخش مسیر مشخص‌شده با نحو <code>&lt;</code> <em>type</em> <code>as</code> <em>path</em> <code>&gt;</code> نمایش داد.</p>
+</blockquote>
+<blockquote>
+<p>Example: <code>rust trait Trait { fn example() {} } struct Example; impl Trait for Example {}</code></p>
+<pre><code class="language-rust">trait Trait {
+    fn example() {}
+}
+struct Example;
+impl Trait for Example {}</code></pre>
+<p>نماد <code>example</code> در trait با نام <code>Trait</code> که برای <code>Example</code> پیاده‌سازی شده چنین است:</p>
+<pre><code class="language-text">_RNvYNtCs15kBYyAo9fc_7mycrate7ExampleNtB4_5Trait7exampleB4_
+    │└──────────────┬───────────────┘└────┬────┘
+    │               │                     │
+    │               │                     └── path to the trait "Trait"
+    │               └──────────────────────── path to the implementing type "mycrate::Example"
+    └──────────────────────────────────────── trait-definition
+</code></pre>
+<p>Demangling پیشنهادی: <code>&lt;mycrate::Example as mycrate::Trait&gt;::example</code></p>
+</blockquote>
+<h3 id="path-nested-path"><a class="header" href="#path-nested-path">مسیر: مسیر تو‌در‌تو</a></h3>
+<blockquote>
+<p>nested-path → <code>N</code> <em><a href="#namespace">namespace</a></em> <em><a href="#symbol-path">path</a></em> <em><a href="#identifier">identifier</a></em></p>
+</blockquote>
+<p>یک <em>nested-path</em> مسیری است که یک موجودیت با نام اختیاری را نشان می‌دهد. این بخش از کاراکتر <code>N</code> و به دنبال آن یک <em><a href="#namespace">namespace</a></em> که فضای نام موجودیت را مشخص می‌کند، سپس یک <em><a href="#symbol-path">path</a></em> که مسیر والد موجودیت را نشان می‌دهد، و سپس یک <em><a href="#identifier">identifier</a></em> از خود موجودیت تشکیل می‌شود.</p>
+<p>وقتی موجودیت نام ندارد، شناسه موجودیت می‌تواند طول ۰ داشته باشد. برای مثال، موجودیت‌هایی مانند closureها، سازنده‌های struct‌های tuple-مانند و ثابت‌های ناشناس ممکن است نام نداشته باشند. مگر آنکه disambiguator برابر ۰ باشد، شناسه همچنان می‌تواند disambiguator داشته باشد.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>یک <em>nested-path</em> را می‌توان با نمایش <em><a href="#symbol-path">path</a></em>، سپس جداکننده <code>::</code> و بعد <em><a href="#identifier">identifier</a></em> نمایش داد. اگر <em><a href="#identifier">identifier</a></em> خالی باشد، جداکننده <code>::</code> نباید نمایش داده شود.</p>
+<p>اگر یک <em><a href="#namespace">namespace</a></em> مشخص شده باشد، می‌توان زمینه اضافی افزود، مثلاً: \ <em><a href="#symbol-path">path</a></em> <code>::{</code> <em><a href="#namespace">namespace</a></em> (<code>:</code> <em><a href="#identifier">identifier</a></em>)<sub>opt</sub> <code>#</code> <em>disambiguator</em><sub>به‌صورت عدد در مبنای ۱۰</sub> <code>}</code></p>
+<p>در اینجا فضای نام <code>C</code> ممکن است به‌صورت <code>closure</code> و <code>S</code> به‌صورت <code>shim</code> چاپ شود. بقیه را می‌توان با کاراکتر تگ‌شان چاپ کرد. اگر نام خالی باشد، بخش <code>:</code> <em>name</em> را می‌توان حذف کرد.</p>
+<p>اگر یک <em><a href="#namespace">namespace</a></em> مشخص شده باشد، <em><a href="#disambiguator">disambiguator</a></em> موجود در <em><a href="#identifier">identifier</a></em> را می‌توان نمایش داد. در موقعیت‌های دیگر معمولاً نیازی به نمایش <em><a href="#disambiguator">disambiguator</a></em> نیست. اگر نمایش داده شود، توصیه می‌شود آن را درون کروشه قرار دهید، برای مثال <code>[284a76a8b41a7fd3]</code>. اگر <em><a href="#disambiguator">disambiguator</a></em> وجود نداشته باشد، مقدارش ۰ است و همیشه می‌توان آن را از نمایش حذف کرد.</p>
+</blockquote>
+<blockquote>
+<p>Example: <code>rust fn main() { let x = || {}; let y = || {}; x(); y(); }</code></p>
+<pre><code class="language-rust">fn main() {
+    let x = || {};
+    let y = || {};
+    x();
+    y();
+}</code></pre>
+<p>نماد closure با نام <code>x</code> در crate با نام <code>mycrate</code> چنین است:</p>
+<pre><code class="language-text">_RNCNvCsgStHSCytQ6I_7mycrate4main0B3_
+  ││└─────────────┬─────────────┘│
+  ││              │              │
+  ││              │              └── identifier with length 0
+  ││              └───────────────── path to "mycrate::main"
+  │└──────────────────────────────── closure namespace
+  └───────────────────────────────── nested-path
+</code></pre>
+<p>نماد closure با نام <code>y</code> مشابه است، با این تفاوت که یک disambiguator دارد:</p>
+<pre><code class="language-text">_RNCNvCsgStHSCytQ6I_7mycrate4mains_0B3_
+                                 ││
+                                 │└── base-62-number 0
+                                 └─── disambiguator 1 (base-62-number+1)
+</code></pre>
+<p>Demangling پیشنهادی:</p>
+<ul>
+<li><code>x</code>: <code>mycrate::main::{closure#0}</code></li>
+<li><code>y</code>: <code>mycrate::main::{closure#1}</code></li>
+</ul>
+</blockquote>
+<h3 id="path-generic-arguments"><a class="header" href="#path-generic-arguments">مسیر: آرگومان‌های جنریک</a></h3>
+<blockquote>
+<p>generic-args → <code>I</code> <em><a href="#symbol-path">path</a></em> {<em><a href="#path-generic-arguments">generic-arg</a></em>} <code>E</code></p>
+<p>generic-arg → <br>      <em><a href="#lifetime">lifetime</a></em> <br>   | <em><a href="#type">type</a></em> <br>   | <code>K</code> <em><a href="#const">const</a></em></p>
+</blockquote>
+<p>یک <em>generic-args</em> مسیری است که فهرستی از آرگومان‌های جنریک را نشان می‌دهد. این بخش از کاراکتر <code>I</code> و به دنبال آن یک <em><a href="#symbol-path">path</a></em> به موجودیت تعریف‌کننده، سپس صفر یا چند <em><a href="#path-generic-arguments">generic-arg</a></em>‌ و در پایان کاراکتر <code>E</code> تشکیل می‌شود.</p>
+<p>هر <em><a href="#path-generic-arguments">generic-arg</a></em> یا یک <em><a href="#lifetime">lifetime</a></em> است (که با کاراکتر <code>L</code> آغاز می‌شود)، یا یک <em><a href="#type">type</a></em>، یا کاراکتر <code>K</code> به‌همراه یک <em><a href="#const">const</a></em> که یک آرگومان ثابت را نشان می‌دهد.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>یک <em>generic-args</em> را می‌توان چنین چاپ کرد: <em><a href="#symbol-path">path</a></em> <code>::</code><sub>opt</sub> <code>&lt;</code> فهرست آرگومان‌ها جداشده با ویرگول <code>&gt;</code> جداکننده <code>::</code> را می‌توان برای مسیرهای نوع حذف کرد (مشابه قواعد Rust).</p>
+</blockquote>
+<blockquote>
+<blockquote>
+<p>مثال:</p>
+</blockquote>
+<pre><code class="language-rust">fn main() {
+    example([123]);
+}
+
+fn example&lt;T, const N: usize&gt;(x: [T; N]) {}</code></pre>
+<p>نماد تابع <code>example</code> چنین است:</p>
+<pre><code class="language-text">_RINvCsgStHSCytQ6I_7mycrate7examplelKj1_EB2_
+  │└──────────────┬───────────────┘││││││
+  │               │                │││││└── end of generic-args
+  │               │                ││││└─── end of const-data
+  │               │                │││└──── const value `1`
+  │               │                ││└───── const type `usize`
+  │               │                │└────── const generic
+  │               │                └─────── generic type i32
+  │               └──────────────────────── path to "mycrate::example"
+  └──────────────────────────────────────── generic-args
+</code></pre>
+<p>Demangling پیشنهادی: <code>mycrate::example::&lt;i32, 1&gt;</code></p>
+</blockquote>
+<h3 id="namespace"><a class="header" href="#namespace">Namespace</a></h3>
+<blockquote>
+<p>namespace → <em><a href="#common-rules">lower</a></em> | <em><a href="#common-rules">upper</a></em></p>
+</blockquote>
+<p>یک <em>namespace</em> برای جدا کردن نام‌ها در گروه‌های منطقی مجزا به کار می‌رود، تا نام‌های یکسان بتوانند بدون برخورد وجود داشته باشند. این بخش از یک کاراکتر واحد، یعنی یک حرف بزرگ یا کوچک ASCII، تشکیل می‌شود. حروف کوچک برای دسته‌های تمایزدهنده داخلی پیاده‌سازی رزرو شده‌اند (و demangler‌ها هرگز نباید آن‌ها را نمایش دهند). حروف بزرگ برای فضاهای نام ویژه به کار می‌روند که demangler‌ها ممکن است آن‌ها را به شکلی خاص نمایش دهند.</p>
+<p>فضاهای نام با حرف بزرگ عبارت‌اند از:</p>
+<ul>
+<li><code>C</code> — یک closure.</li>
+<li><code>S</code> — یک shim. کامپایلر در برخی موقعیت‌ها که به یک واسطه نیاز است، shim اضافه می‌کند. برای مثال، یک اشاره‌گر <code>fn()</code> به تابعی که <a href="../../reference/attributes/codegen.html#the-track_caller-attribute">ویژگی <code>#[track_caller]</code></a> دارد، برای مدیریت محل ضمنی فراخواننده به یک shim نیاز دارد.</li>
+</ul>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>برای demangling پیشنهادی به <em><a href="#path-nested-path">nested-path</a></em> مراجعه کنید.</p>
+</blockquote>
+<h2 id="identifier"><a class="header" href="#identifier">شناسه (Identifier)</a></h2>
+<blockquote>
+<p>identifier → <em><a href="#disambiguator">disambiguator</a></em><sub>opt</sub> <em><a href="#identifier">undisambiguated-identifier</a></em></p>
+<p>undisambiguated-identifier → <code>u</code><sub>opt</sub> <em><a href="#common-rules">decimal-number</a></em> <code>_</code><sub>opt</sub> <em><a href="#identifier">bytes</a></em></p>
+<p>bytes → {<em>UTF-8 bytes</em>}</p>
+</blockquote>
+<p>یک <em>identifier</em> برچسبی نام‌دار است که در یک <em><a href="#symbol-path">path</a></em> برای ارجاع به یک موجودیت به کار می‌رود. این بخش از یک <em><a href="#disambiguator">disambiguator</a></em> اختیاری و به دنبال آن یک <em><a href="#identifier">undisambiguated-identifier</a></em> تشکیل می‌شود.</p>
+<p>disambiguator برای تمایز شناسه‌های یکسانی به کار می‌رود که نباید یکسان در نظر گرفته شوند. برای مثال، closureها نام ندارند، بنابراین disambiguator تنها عنصر تمایزدهنده میان دو closure متفاوت در یک مسیر والد یکسان است.</p>
+<p>undisambiguated-identifier با یک کاراکتر اختیاری <code>u</code> آغاز می‌شود که نشان می‌دهد شناسه با <a href="#punycode-identifiers">Punycode</a> کدگذاری شده است. بخش بعدی یک <em><a href="#common-rules">decimal-number</a></em> است که طول <em>bytes</em> را نشان می‌دهد.</p>
+<p>پس از اندازه شناسه، یک کاراکتر اختیاری <code>_</code> می‌آید که برای جدا کردن مقدار طول از خود شناسه به کار می‌رود. اگر <em>bytes</em> با یک رقم دهدهی یا <code>_</code> شروع شود، <code>_</code> اجباری است تا مشخص بماند <em>decimal-number</em> کجا تمام می‌شود و <em>bytes</em> از کجا آغاز می‌گردد.</p>
+<p><em>bytes</em> خود شناسه است که با UTF-8 کدگذاری شده است.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>نحوه نمایش یک <em>identifier</em> می‌تواند به زمینه آن بستگی داشته باشد. اگر با Punycode کدگذاری شده باشد، می‌توان آن را پیش از نمایش رمزگشایی کرد.</p>
+<p><em><a href="#disambiguator">disambiguator</a></em> ممکن است نمایش داده شود یا نشود؛ برای قواعدی که از <em>identifier</em> استفاده می‌کنند، به توصیه‌ها مراجعه کنید.</p>
+</blockquote>
+<h3 id="punycode-identifiers"><a class="header" href="#punycode-identifiers">شناسه‌های Punycode</a></h3>
+<p>از آنجا که برخی محیط‌ها به حروف و ارقام ASCII و <code>_</code> محدود هستند، <a href="../../reference/identifiers.html">شناسه‌های یونیکد</a> در Rust ممکن است با نسخه‌ای اصلاح‌شده از <a href="https://tools.ietf.org/html/rfc3492">Punycode</a> کدگذاری شوند.</p>
+<p>برای مثال، تابع:</p>
+<pre><code class="language-rust">mod gödel {
+  mod escher {
+    fn bach() {}
+  }
+}</code></pre>
+<p>به این صورت mangle می‌شود:</p>
+<pre><code class="language-text">_RNvNtNtCsgOH4LzxkuMq_7mycrateu8gdel_5qa6escher4bach
+                              ││└───┬──┘
+                              ││    │
+                              ││    └── gdel_5qa translates to gödel
+                              │└─────── 8 is the length
+                              └──────── `u` indicates it is a Unicode identifier
+</code></pre>
+<p>Punycode استاندارد رشته‌هایی به شکل <code>([[:ascii:]]+-)?[[:alnum:]]+</code> تولید می‌کند. این موضوع مشکل‌ساز است، زیرا کاراکتر <code>-</code> (که برای جدا کردن بخش ASCII از کدگذاری مبنای ۳۶ به کار می‌رود) در مجموعه کاراکترهای پشتیبانی‌شده برای نمادها نیست. به همین دلیل، کاراکترهای <code>-</code> در کدگذاری Punycode با <code>_</code> جایگزین می‌شوند.</p>
+<p>چند مثال:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Original</th><th>Punycode</th><th>Punycode + کدگذاری</th></tr>
+</thead>
+<tbody>
+<tr><td>føø</td><td>f-5gaa</td><td>f_5gaa</td></tr>
+<tr><td>α_ω</td><td>_-ylb7e</td><td>__ylb7e</td></tr>
+<tr><td>铁锈</td><td>n84amf</td><td>n84amf</td></tr>
+<tr><td>🤦</td><td>fq9h</td><td>fq9h</td></tr>
+<tr><td>ρυστ</td><td>2xaedc</td><td>2xaedc</td></tr>
+</tbody>
+</table>
+</div>
+<blockquote>
+<p>نکته: تصمیم‌گیری درباره اینکه شناسه‌ها با Punycode کدگذاری شوند یا نه، بر عهده کامپایلر است. برخی پلتفرم‌ها ممکن است پشتیبانی بومی از نمادهای UTF-8 داشته باشند و کامپایلر ممکن است تصمیم بگیرد مستقیماً از کدگذاری UTF-8 استفاده کند. demangler‌ها باید آماده پشتیبانی از هر دو شکل باشند.</p>
+</blockquote>
+<h2 id="disambiguator"><a class="header" href="#disambiguator">Disambiguator</a></h2>
+<blockquote>
+<p>disambiguator → <code>s</code> <em><a href="#base-62-number">base-62-number</a></em></p>
+</blockquote>
+<p>یک <em>disambiguator</em> در بخش‌های مختلف یک <em><a href="#symbol-path">path</a></em> نماد به کار می‌رود تا عناصر مسیری را که در غیر این صورت یکسان می‌بودند اما نباید یکسان در نظر گرفته شوند، به‌طور یکتا مشخص کند. با کاراکتر <code>s</code> آغاز می‌شود و پس از آن یک <em><a href="#base-62-number">base-62-number</a></em> می‌آید.</p>
+<p>اگر <em>disambiguator</em> مشخص نشده باشد، می‌توان مقدار آن را صفر فرض کرد. در غیر این صورت، هنگام demangle کردن باید مقدار ۱ به <em><a href="#base-62-number">base-62-number</a></em> افزوده شود (بنابراین یک <em>base-62-number</em> با مقدار صفر که به‌صورت <code>_</code> کدگذاری شده، مقدار ۱ دارد). این کار باعث می‌شود disambiguatorهایی که به‌صورت متوالی کدگذاری می‌شوند از حداقل بایت استفاده کنند.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p><em>disambiguator</em> ممکن است نمایش داده شود یا نشود؛ برای قواعدی که از <em>disambiguator</em> استفاده می‌کنند، به توصیه‌ها مراجعه کنید. به‌طور کلی توصیه می‌شود disambiguatorهای صفر هرگز نمایش داده نشوند، مگر آنکه شناسه همراهشان خالی باشد (مانند آیتم‌های بی‌نام از جمله closureها). هنگام نمایش یک disambiguator، می‌توان آن را به طولی متناسب با زمینه کوتاه کرد، شبیه اینکه هش commitهای git به‌ندرت به‌طور کامل نمایش داده می‌شوند.</p>
+</blockquote>
+<h2 id="lifetime"><a class="header" href="#lifetime">Lifetime</a></h2>
+<blockquote>
+<p>lifetime → <code>L</code> <em><a href="#base-62-number">base-62-number</a></em></p>
+</blockquote>
+<p>یک <em>lifetime</em> برای کدگذاری یک طول عمر ناشناس (شماره‌دار) به کار می‌رود، که یا پاک‌شده (erased) است یا <a href="#binder">رتبه‌بالاتر (higher-ranked)</a>. با کاراکتر <code>L</code> آغاز می‌شود و پس از آن یک <em><a href="#base-62-number">base-62-number</a></em> می‌آید. اندیس ۰ همیشه پاک‌شده است. اندیس‌های از ۱ به بعد (به‌صورت اندیس‌های de Bruijn) به یک طول عمر رتبه‌بالاتر اشاره می‌کنند که توسط یکی از <em><a href="#binder">binder</a></em>های احاطه‌کننده مقید شده است.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>یک <em>lifetime</em> را می‌توان مانند یک طول عمر Rust با یک نقل‌قول تکی نمایش داد.</p>
+<p>اندیس ۰ باید به‌صورت <code>'_</code> نمایش داده شود. اندیس ۰ نباید برای طول عمرها در یک <em><a href="#ref-type">ref-type</a></em>، <em><a href="#mut-ref-type">mut-ref-type</a></em> یا <em><a href="#dyn-trait-type">dyn-trait-type</a></em> نمایش داده شود.</p>
+<p>می‌توان یک طول عمر را با تبدیل اندیس De Bruijn به سطح De Bruijn (سطح = تعداد طول عمرهای مقید − اندیس) و انتخاب یک نام یکتا برای هر سطح نمایش داد. مثلاً با شروع از حروف کوچک منفرد مانند <code>'a</code> برای سطح ۰. برای سطح‌های بالاتر از ۲۵ می‌توان چاپ طول عمر عددی مانند <code>'_123</code> را در نظر گرفت. برای اطلاعات بیشتر درباره اندیس‌ها و ترتیب طول عمرها به <em><a href="#binder">binder</a></em> مراجعه کنید.</p>
+</blockquote>
+<blockquote>
+<p>مثال:</p>
+<pre><code class="language-rust">fn main() {
+    example::&lt;fn(&amp;u8, &amp;u16)&gt;();
+}
+
+pub fn example&lt;T&gt;() {}</code></pre>
+<p>نماد تابع <code>example</code> چنین است:</p>
+<pre><code class="language-text">_RINvCs7qp2U7fqm6G_7mycrate7exampleFG0_RL1_hRL0_tEuEB2_
+                                   │└┬┘│└┬┘││└┬┘││
+                                   │ │ │ │ ││ │ │└── end of input types
+                                   │ │ │ │ ││ │ └─── type u16
+                                   │ │ │ │ ││ └───── lifetime #1 'b
+                                   │ │ │ │ │└─────── reference type
+                                   │ │ │ │ └──────── type u8
+                                   │ │ │ └────────── lifetime #2 'a
+                                   │ │ └──────────── reference type
+                                   │ └────────────── binder with 2 lifetimes
+                                   └──────────────── function type
+</code></pre>
+<p>Demangling پیشنهادی: <code>mycrate::example::&lt;for&lt;'a, 'b&gt; fn(&amp;'a u8, &amp;'b u16)&gt;</code></p>
+</blockquote>
+<h2 id="const"><a class="header" href="#const">Const</a></h2>
+<blockquote>
+<p><code>p</code></p>
+<p>const-data → <code>n</code><sub>opt</sub> {<em><a href="#const">hex-digit</a></em>} <code>_</code></p>
+<p><a href="#const">hex-digit</a> → <em><a href="#common-rules">digit</a></em> | <code>a</code> | <code>b</code> | <code>c</code> | <code>d</code> | <code>e</code> | <code>f</code></p>
+</blockquote>
+<p>یک <em>const</em> برای کدگذاری یک مقدار ثابت به کار می‌رود که در جنریک‌ها و نوع‌ها استفاده می‌شود. شکل‌های زیر را دارد:</p>
+<ul>
+<li>یک مقدار ثابت که به‌صورت یک <em><a href="#type">type</a></em> (نوع ثابت را نشان می‌دهد) و <em><a href="#const">const-data</a></em> (مقدار ثابت) کدگذاری می‌شود و برای پایان دادن به <em>const</em> با <code>_</code> ختم می‌گردد.</li>
+<li>کاراکتر <code>p</code> که یک <a href="#placeholders">placeholder</a> را نشان می‌دهد.</li>
+<li>یک <em><a href="#backref">backref</a></em> به یک <em>const</em> از پیش کدگذاری‌شده با همان مقدار.</li>
+</ul>
+<p>کدگذاری <em>const-data</em> به نوع بستگی دارد:</p>
+<ul>
+<li><code>bool</code> — مقدار <code>false</code> به‌صورت <code>0_</code> و مقدار true به‌صورت <code>1_</code> کدگذاری می‌شود.</li>
+<li><code>char</code> — مقدار اسکالر یونیکد کاراکتر به‌صورت هگزادسیمال کدگذاری می‌شود.</li>
+<li>اعداد صحیح بدون علامت — مقدار به‌صورت هگزادسیمال کدگذاری می‌شود.</li>
+<li>اعداد صحیح علامت‌دار — کاراکتر <code>n</code> پیشوندی است که منفی بودن را نشان می‌دهد، و پس از آن قدر مطلق به‌صورت هگزادسیمال کدگذاری می‌شود.</li>
+</ul>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>یک <em>const</em> را می‌توان بسته به نوع، با مقدار ثابت نمایش داد.</p>
+<p>placeholder با نام <code>p</code> باید به‌صورت کاراکتر <code>_</code> نمایش داده شود.</p>
+<p>برای نوع‌های خاص:</p>
+<ul>
+<li><code>b</code> (bool) — به‌صورت <code>true</code> یا <code>false</code> نمایش داده شود.</li>
+<li><code>c</code> (char) — کاراکتر را به‌صورت یک کاراکتر Rust نمایش دهید (مانند <code>'A'</code> یا <code>'\n'</code>).</li>
+<li>اعداد صحیح — عدد صحیح را نمایش دهید (چه در مبنای ده و چه در مبنای شانزده).</li>
+</ul>
+</blockquote>
+<blockquote>
+<p>مثال:</p>
+<pre><code class="language-rust">fn main() {
+    example::&lt;0x12345678&gt;();
+}
+
+pub fn example&lt;const N: u64&gt;() {}</code></pre>
+<p>نماد تابع <code>example</code> چنین است:</p>
+<pre><code class="language-text">_RINvCs7qp2U7fqm6G_7mycrate7exampleKy12345678_EB2_
+                                   ││└───┬───┘
+                                   ││    │
+                                   ││    └── const-data 0x12345678
+                                   │└─────── const type u64
+                                   └──────── const generic arg
+</code></pre>
+<p>Demangling پیشنهادی: <code>mycrate::example::&lt;305419896&gt;</code></p>
+</blockquote>
+<h3 id="placeholders"><a class="header" href="#placeholders">Placeholderها</a></h3>
+<p>یک <em>placeholder</em> ممکن است در شرایطی ظاهر شود که یک نوع یا مقدار ثابت مرتبط نیست.</p>
+<blockquote>
+<p>مثال:</p>
+<pre><code class="language-rust">pub struct Example&lt;T, const N: usize&gt;([T; N]);
+
+impl&lt;T, const N: usize&gt; Example&lt;T, N&gt; {
+    pub fn foo() -&gt; &amp;'static () {
+        static EXAMPLE_STATIC: () = ();
+        &amp;EXAMPLE_STATIC
+    }
+}</code></pre>
+<p>در این مثال، static با نام <code>EXAMPLE_STATIC</code> بر اساس پارامترهای نوع یا ثابت <code>T</code> و <code>N</code> monomorphize نمی‌شود. برای آن آرگومان‌های جنریک از placeholder استفاده می‌شود. نماد آن چنین است:</p>
+<pre><code class="language-text">_RNvNvMCsd9PVOYlP1UU_7mycrateINtB4_7ExamplepKpE3foo14EXAMPLE_STATIC
+                             │             │││
+                             │             ││└── const placeholder
+                             │             │└─── const generic argument
+                             │             └──── type placeholder
+                             └────────────────── generic-args
+</code></pre>
+<p>Demangling پیشنهادی: <code>&lt;mycrate::Example&lt;_, _&gt;&gt;::foo::EXAMPLE_STATIC</code></p>
+</blockquote>
+<h2 id="type"><a class="header" href="#type">Type</a></h2>
+<blockquote>
+<p>type → <br>      <em><a href="#basic-type">basic-type</a></em> <br>   | <em><a href="#array-type">array-type</a></em> <br>   | <em><a href="#slice-type">slice-type</a></em> <br>   | <em><a href="#tuple-type">tuple-type</a></em> <br>   | <em><a href="#splatted-type">splatted-type</a></em> <br>   | <em><a href="#ref-type">ref-type</a></em> <br>   | <em><a href="#mut-ref-type">mut-ref-type</a></em> <br>   | <em><a href="#const-ptr-type">const-ptr-type</a></em> <br>   | <em><a href="#mut-ptr-type">mut-ptr-type</a></em> <br>   | <em><a href="#fn-type">fn-type</a></em> <br>   | <em><a href="#dyn-trait-type">dyn-trait-type</a></em> <br>   | <em><a href="#pattern-type">pattern-type</a></em> <br>   | <em><a href="#symbol-path">path</a></em> <br>   | <em><a href="#backref">backref</a></em></p>
+</blockquote>
+<p>یک <em>type</em> یک <a href="../../reference/types.html">نوع</a> در Rust را نشان می‌دهد. از کاراکتر ابتدایی می‌توان برای تشخیص اینکه کدام نوع کدگذاری شده استفاده کرد. کدگذاری نوع‌ها بر اساس کاراکتر تگ ابتدایی چنین است:</p>
+<ul>
+<li>یک <span id="basic-type"><em>basic-type</em></span> به‌صورت یک کاراکتر واحد کدگذاری می‌شود:
+<ul>
+<li><code>a</code> — <code>i8</code></li>
+<li><code>b</code> — <code>bool</code></li>
+<li><code>c</code> — <code>char</code></li>
+<li><code>d</code> — <code>f64</code></li>
+<li><code>e</code> — <code>str</code></li>
+<li><code>f</code> — <code>f32</code></li>
+<li><code>h</code> — <code>u8</code></li>
+<li><code>i</code> — <code>isize</code></li>
+<li><code>j</code> — <code>usize</code></li>
+<li><code>l</code> — <code>i32</code></li>
+<li><code>m</code> — <code>u32</code></li>
+<li><code>n</code> — <code>i128</code></li>
+<li><code>o</code> — <code>u128</code></li>
+<li><code>s</code> — <code>i16</code></li>
+<li><code>t</code> — <code>u16</code></li>
+<li><code>u</code> — unit <code>()</code></li>
+<li><code>v</code> — variadic <code>...</code></li>
+<li><code>x</code> — <code>i64</code></li>
+<li><code>y</code> — <code>u64</code></li>
+<li><code>z</code> — <code>!</code></li>
+<li><code>p</code> — <a href="#placeholders">placeholder</a> <code>_</code></li>
+</ul>
+</li>
+</ul>
+<p>بقیه نوع‌های اولیه (primitive) به‌صورت یک production از نوع crate کدگذاری می‌شوند، مثلاً <code>C4f128</code>.</p>
+<ul>
+<li>
+<p><code>A</code> — یک <a href="../../reference/types/array.html">آرایه</a> <code>[T; N]</code>.</p>
+<blockquote>
+<p><span id="array-type">array-type</span> → <code>A</code> <em><a href="#type">type</a></em> <em><a href="#const">const</a></em></p>
+</blockquote>
+<p>تگ <code>A</code> با <em><a href="#type">type</a></em> آرایه و سپس یک <em><a href="#const">const</a></em> برای اندازه آرایه دنبال می‌شود.</p>
+</li>
+<li>
+<p><code>S</code> — یک <a href="../../reference/types/slice.html">slice</a> به‌صورت <code>[T]</code>.</p>
+<blockquote>
+<p><span id="slice-type">slice-type</span> → <code>S</code> <em><a href="#type">type</a></em></p>
+</blockquote>
+<p>تگ <code>S</code> با <em><a href="#type">type</a></em> اسلایس دنبال می‌شود.</p>
+</li>
+<li>
+<p><code>T</code> — یک <a href="../../reference/types/tuple.html">tuple</a> به‌صورت <code>(T1, T2, T3, ...)</code>.</p>
+<blockquote>
+<p><span id="tuple-type">tuple-type</span> → <code>T</code> {<em><a href="#type">type</a></em>} <code>E</code></p>
+</blockquote>
+<p>تگ <code>T</code> با یک یا چند <em><a href="#type">type</a></em>‌ که نوع هر فیلد را نشان می‌دهند و سپس کاراکتر پایان‌دهنده <code>E</code> دنبال می‌شود.</p>
+<p>توجه کنید که tuple با طول صفر (unit) با <em><a href="#basic-type">basic-type</a></em> به‌صورت <code>u</code> کدگذاری می‌شود.</p>
+</li>
+<li>
+<p><code>w</code> — یک <a href="https://github.com/rust-lang/rust/issues/153629">نوع splatted</a> به‌صورت <code>#[rustc_splat] T</code>.</p>
+<blockquote>
+<p><span id="splatted-type">splatted-type</span> → <code>w</code> {<em><a href="#type">type</a></em>}</p>
+</blockquote>
+<p>تگ <code>w</code> با <em><a href="#type">type</a></em> که splat می‌شود دنبال می‌گردد.</p>
+<p>توجه کنید که قابلیت splat ناپایدار است و ممکن است تغییر کند یا حذف شود.</p>
+</li>
+<li>
+<p><code>R</code> — یک <a href="../../reference/types/pointer.html#shared-references-">ارجاع</a> به‌صورت <code>&amp;T</code>.</p>
+<blockquote>
+<p><span id="ref-type">ref-type</span> →  <code>R</code> <em><a href="#lifetime">lifetime</a></em><sub>opt</sub> <em><a href="#type">type</a></em></p>
+</blockquote>
+<p>تگ <code>R</code> با یک <em><a href="#lifetime">lifetime</a></em> اختیاری و سپس <em><a href="#type">type</a></em> ارجاع دنبال می‌شود. اگر طول عمر پاک (erase) شده باشد، درج نمی‌شود.</p>
+</li>
+<li>
+<p><code>Q</code> — یک <a href="../../reference/types/pointer.html#mutable-references-mut">ارجاع تغییرپذیر</a> به‌صورت <code>&amp;mut T</code>.</p>
+<blockquote>
+<p><span id="mut-ref-type">mut-ref-type</span> → <code>Q</code> <em><a href="#lifetime">lifetime</a></em><sub>opt</sub> <em><a href="#type">type</a></em></p>
+</blockquote>
+<p>تگ <code>Q</code> با یک <em><a href="#lifetime">lifetime</a></em> اختیاری و سپس <em><a href="#type">type</a></em> ارجاع تغییرپذیر دنبال می‌شود. اگر طول عمر پاک (erase) شده باشد، درج نمی‌شود.</p>
+</li>
+<li>
+<p><code>P</code> — یک <a href="../../reference/types/pointer.html#raw-pointers-const-and-mut">اشاره‌گر خام ثابت</a> به‌صورت <code>*const T</code>.</p>
+<p>تگ <code>P</code> با <em><a href="#type">type</a></em> اشاره‌گر دنبال می‌شود.</p>
+<blockquote>
+<p><span id="const-ptr-type">const-ptr-type</span> → <code>P</code> <em><a href="#type">type</a></em></p>
+</blockquote>
+</li>
+<li>
+<p><code>O</code> — یک <a href="../../reference/types/pointer.html#raw-pointers-const-and-mut">اشاره‌گر خام تغییرپذیر</a> به‌صورت <code>*mut T</code>.</p>
+<blockquote>
+<p><span id="mut-ptr-type">mut-ptr-type</span> → <code>O</code> <em><a href="#type">type</a></em></p>
+</blockquote>
+<p>تگ <code>O</code> با <em><a href="#type">type</a></em> اشاره‌گر دنبال می‌شود.</p>
+</li>
+<li>
+<p><code>F</code> — یک <a href="../../reference/types/function-pointer.html">اشاره‌گر تابع</a> به‌صورت <code>fn(…) -&gt; …</code>.</p>
+<blockquote>
+<p><span id="fn-type">fn-type</span> → <code>F</code> <em><a href="#fn-sig">fn-sig</a></em></p>
+<p><span id="fn-sig">fn-sig</span> → <em><a href="#binder">binder</a></em><sub>opt</sub> <code>U</code><sub>opt</sub> (<code>K</code> <em><a href="#abi">abi</a></em>)<sub>opt</sub> {<em><a href="#type">type</a></em>} <code>E</code> <em><a href="#type">type</a></em></p>
+<p><span id="abi">abi</span> → <br>      <code>C</code> <br>   | <em><a href="#identifier">undisambiguated-identifier</a></em></p>
+</blockquote>
+<p>تگ <code>F</code> با یک <em><a href="#fn-sig">fn-sig</a></em> که امضای تابع است دنبال می‌شود. یک <em>fn-sig</em> امضای یک اشاره‌گر تابع است.</p>
+<p>با یک <em><a href="#binder">binder</a></em> اختیاری آغاز می‌شود که قیدهای trait رتبه‌بالاتر (<code>for&lt;…&gt;</code>) را نشان می‌دهد.</p>
+<p>پس از آن یک کاراکتر اختیاری <code>U</code> می‌آید که برای تابع <code>unsafe</code> وجود دارد.</p>
+<p>پس از آن یک کاراکتر اختیاری <code>K</code> می‌آید که نشان می‌دهد یک <em><a href="#abi">abi</a></em> مشخص شده است. اگر ABI مشخص نشده باشد، ABI از نوع <code>"Rust"</code> فرض می‌شود.</p>
+<p><em><a href="#abi">abi</a></em> می‌تواند حرف <code>C</code> باشد که نشان می‌دهد ABI از نوع <code>"C"</code> است. در غیر این صورت، یک <em><a href="#identifier">undisambiguated-identifier</a></em> از رشته ABI است که خط‌تیره‌ها در آن به زیرخط تبدیل شده‌اند.</p>
+<p>پس از آن صفر یا چند <em><a href="#type">type</a></em>‌ می‌آید که پارامترهای ورودی تابع را نشان می‌دهند.</p>
+<p>پس از آن کاراکتر <code>E</code> و سپس <em><a href="#type">type</a></em> مقدار بازگشتی می‌آید.</p>
+</li>
+</ul>
+<ul>
+<li>
+<p><code>W</code> — یک <a href="#pattern-type">pattern-type</a> به‌صورت <code>u32 is 0..100</code>.</p>
+<blockquote>
+<p><span id="pattern-type">pattern-type</span> → <code>W</code> <em>[pattern-kind]</em></p>
+<p><span id="pattern-kind">pattern-kind</span> → <br>      <em>[range-pattern-kind]</em> <br>   <em>[or-pattern-kind]</em></p>
+<p><span id="range-pattern-kind">range-pattern-kind</span> → <code>R</code> <em><a href="#const">const</a></em> <em><a href="#const">const</a></em></p>
+<p><span id="or-pattern-kind">or-pattern-kind</span> → <code>O</code> <em>[pattern-kind]</em> <code>E</code></p>
+</blockquote>
+<p>اگرچه الگوهای or در نظر می‌توانند تو‌در‌تو باشند، در عمل چنین نمی‌شود و به‌جای آن مسطح (flatten) می‌شوند.</p>
+<p>الگوهای بازه‌ای یک ثابت آغاز و یک ثابت پایان دارند که هر دو در بازه گنجانده می‌شوند. مقدار پایان باید بزرگ‌تر از آغاز باشد (wraparound ممکن نیست). برای شبیه‌سازی wraparound، باید از یک الگوی or از دو بازه استفاده کنید: یکی تا حد بالا و دیگری از حد پایین.</p>
+</li>
+<li>
+<p><code>D</code> — یک <a href="../../reference/types/trait-object.html">trait object</a> به‌صورت <code>dyn Trait&lt;Assoc=X&gt; + Send + 'a</code>.</p>
+<blockquote>
+<p><span id="dyn-trait-type">dyn-trait-type</span> → <code>D</code> <em><a href="#dyn-bounds">dyn-bounds</a></em> <em><a href="#lifetime">lifetime</a></em></p>
+<p><span id="dyn-bounds">dyn-bounds</span> → <em><a href="#binder">binder</a></em><sub>opt</sub> {<em><a href="#dyn-trait">dyn-trait</a></em>} <code>E</code></p>
+<p><span id="dyn-trait">dyn-trait</span> → <em><a href="#symbol-path">path</a></em> {<em><a href="#dyn-trait-assoc-binding">dyn-trait-assoc-binding</a></em>}</p>
+<p><span id="dyn-trait-assoc-binding">dyn-trait-assoc-binding</span> → <code>p</code> <em><a href="#identifier">undisambiguated-identifier</a></em> <em><a href="#type-or-const">type-or-const</a></em></p>
+<p><span id="type-or-const">type-or-const</span> → <br>      <em><a href="#type">type</a></em> <br>   | <code>K</code> <em><a href="#const">const</a></em></p>
+</blockquote>
+<p>تگ <code>D</code> با یک <em><a href="#dyn-bounds">dyn-bounds</a></em> که قیدهای trait را کدگذاری می‌کند، و سپس یک <em><a href="#lifetime">lifetime</a></em> برای قید طول عمر trait object دنبال می‌شود.</p>
+<p>یک <em>dyn-bounds</em> با یک <em><a href="#binder">binder</a></em> اختیاری آغاز می‌شود که قیدهای trait رتبه‌بالاتر (<code>for&lt;…&gt;</code>) را نشان می‌دهد. پس از آن دنباله‌ای از <em><a href="#dyn-trait">dyn-trait</a></em> می‌آید که با کاراکتر <code>E</code> پایان می‌یابد.</p>
+<p>هر <em><a href="#dyn-trait">dyn-trait</a></em> یک قید trait را نشان می‌دهد که از یک <em><a href="#symbol-path">path</a></em> به trait و به دنبال آن صفر یا چند <em><a href="#dyn-trait-assoc-binding">dyn-trait-assoc-binding</a></em> تشکیل می‌شود که نوع‌های وابسته را فهرست می‌کنند.</p>
+<p>هر <em><a href="#dyn-trait-assoc-binding">dyn-trait-assoc-binding</a></em> از کاراکتر <code>p</code> و به دنبال آن یک <em><a href="#identifier">undisambiguated-identifier</a></em> که نام binding وابسته را نشان می‌دهد، و در پایان یک <em><a href="#type-or-const">type-or-const</a></em> تشکیل می‌شود.</p>
+</li>
+</ul>
+<ul>
+<li>
+<p>یک <em><a href="#symbol-path">path</a></em> به یک نوع نام‌دار.</p>
+</li>
+<li>
+<p>یک <em><a href="#backref">backref</a></em> برای ارجاع به نوعی که پیش‌تر کدگذاری شده است.</p>
+</li>
+</ul>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>یک <em><a href="#type">type</a></em> را می‌توان به‌صورت نوعی که نشان می‌دهد و با نحو معمول Rust برای نمایش آن نوع، نمایش داد.</p>
+</blockquote>
+<blockquote>
+<p>مثال:</p>
+<pre><code class="language-rust">fn main() {
+    example::&lt;[u16; 8]&gt;();
+}
+
+pub fn example&lt;T&gt;() {}</code></pre>
+<p>نماد تابع <code>example</code> چنین است:</p>
+<pre><code class="language-text">_RINvCs7qp2U7fqm6G_7mycrate7exampleAtj8_EB2_
+                                   │││├┘│
+                                   ││││ └─── end of generic args
+                                   │││└───── const data 8
+                                   ││└────── const type usize
+                                   │└─────── array element type u16
+                                   └──────── array type
+</code></pre>
+<p>Demangling پیشنهادی: <code>mycrate::example::&lt;[u16; 8]&gt;</code></p>
+</blockquote>
+<h2 id="binder"><a class="header" href="#binder">Binder</a></h2>
+<blockquote>
+<p>binder → <code>G</code> <em><a href="#base-62-number">base-62-number</a></em></p>
+</blockquote>
+<p>یک <em>binder</em> تعداد طول عمرهای <a href="../../reference/trait-bounds.html#higher-ranked-trait-bounds">قید trait رتبه‌بالاتر</a> را که باید مقید شوند نشان می‌دهد. این بخش از کاراکتر <code>G</code> و به دنبال آن یک <em><a href="#base-62-number">base-62-number</a></em> تشکیل می‌شود. هنگام رمزگشایی باید مقدار ۱ به <em><a href="#base-62-number">base-62-number</a></em> افزوده شود (به‌طوری که کدگذاری <em>base-62-number</em> برابر <code>_</code> به‌عنوان یک binder تعبیر شود).</p>
+<p>سپس یک قاعده <em>lifetime</em> می‌تواند به این طول عمرهای شماره‌دار ارجاع دهد. کمترین اندیس‌ها نشان‌دهنده درونی‌ترین طول عمرها هستند. تعداد طول عمرهای مقید برابر مقدار <em><a href="#base-62-number">base-62-number</a></em> به‌علاوه یک است.</p>
+<p>برای مثال، در <code>for&lt;'a, 'b&gt; fn(for&lt;'c&gt; fn (...))</code>، هر <em><a href="#lifetime">lifetime</a></em>‌ در <code>...</code> (اما نه درون binderهای بیشتر) اندیس‌های ۱، ۲ و ۳ را خواهد دید که به ترتیب به <code>'c</code>، <code>'b</code> و <code>'a</code> اشاره می‌کنند.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>یک <em>binder</em> را می‌توان با نحو <code>for&lt;…&gt;</code> و با فهرست کردن طول عمرها طبق توصیه <em><a href="#lifetime">lifetime</a></em> چاپ کرد. برای مثال به <em><a href="#lifetime">lifetime</a></em> مراجعه کنید.</p>
+</blockquote>
+<h2 id="backref"><a class="header" href="#backref">Backref</a></h2>
+<blockquote>
+<p>backref → <code>B</code> <em><a href="#base-62-number">base-62-number</a></em></p>
+</blockquote>
+<p>یک <em>backref</em> برای ارجاع به بخشی قبلی از نماد mangle‌شده به کار می‌رود. این کار شکلی ساده از فشرده‌سازی برای کاهش طول نماد mangle‌شده فراهم می‌کند. این می‌تواند به کاهش حجم کار و منابع مورد نیاز کامپایلر، linker و loader کمک کند.</p>
+<p>از کاراکتر <code>B</code> و به دنبال آن یک <em><a href="#base-62-number">base-62-number</a></em> تشکیل می‌شود. این عدد افست مبتنی بر ۰ را بر حسب بایت نشان می‌دهد که از بلافاصله پس از پیشوند <code>_R</code> نماد شروع می‌شود. <em>backref</em> عنصر متناظر را که از آن موقعیت آغاز می‌شود نمایش می‌دهد.</p>
+<p><em>backref</em>‌ها همیشه به موقعیتی پیش از خود <em>backref</em> اشاره می‌کنند.</p>
+<p>فشرده‌سازی <em>backref</em> بر این واقعیت تکیه دارد که همه عناصر نماد که قابل جایگزینی هستند، شکل mangle‌شده‌ای دارند که خودپایان‌بخش (self-terminating) است. با داشتن موقعیت آغاز گره کدگذاری‌شده، گرامر تضمین می‌کند که همیشه بدون ابهام مشخص است گره کجا پایان می‌یابد. این امر با ممنوع کردن عناصر اختیاری یا تکراری در انتهای productionهای قابل جایگزینی تضمین می‌شود.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>یک <em>backref</em> باید با نمایش عنصری که به آن اشاره می‌کند demangle شود. هنگام کار با backrefهای عمیقاً تو‌در‌تو باید دقت کرد تا از مصرف بیش از حد stack جلوگیری شود.</p>
+</blockquote>
+<blockquote>
+<p>مثال:</p>
+<pre><code class="language-rust">fn main() {
+    example::&lt;Example, Example&gt;();
+}
+
+struct Example;
+
+pub fn example&lt;T, U&gt;() {}</code></pre>
+<p>نماد تابع <code>example</code> چنین است:</p>
+<pre><code class="language-text">_RINvCs7qp2U7fqm6G_7mycrate7exampleNtB2_7ExampleBw_EB2_
+                                     │├┘        │├┘ │├┘
+                                     ││         ││  ││
+                                     ││         ││  │└── backref to offset 3 (crate-root)
+                                     ││         ││  └─── backref for instantiating-crate path
+                                     ││         │└────── backref to offset 33 (path to Example)
+                                     ││         └─────── backref for second generic-arg
+                                     │└───────────────── backref to offset 3 (crate-root)
+                                     └────────────────── backref for first generic-arg (first segment of Example path)
+</code></pre>
+<p>Demangling پیشنهادی: <code>mycrate::example::&lt;mycrate::Example, mycrate::Example&gt;</code></p>
+</blockquote>
+<h2 id="instantiating-crate"><a class="header" href="#instantiating-crate">Crate نمونه‌ساز (Instantiating crate)</a></h2>
+<blockquote>
+<p>instantiating-crate → <em><a href="#symbol-path">path</a></em></p>
+</blockquote>
+<p><em>instantiating-crate</em> یک عنصر اختیاری از <em><a href="#symbol-name">symbol-name</a></em> است که می‌توان از آن برای مشخص کردن اینکه کدام crate نماد را نمونه‌سازی می‌کند استفاده کرد. این بخش از یک <em><a href="#symbol-path">path</a></em> واحد تشکیل می‌شود.</p>
+<p>این کار به تمایز نمادهایی کمک می‌کند که در غیر این صورت یکسان می‌بودند، برای مثال monomorphization یک تابع از یک crate خارجی ممکن است به یک نماد تکراری منجر شود، اگر crate دیگری نیز همان تابع جنریک را با همان نوع‌ها نمونه‌سازی کند.</p>
+<p>در عمل، crate نمونه‌ساز اغلب همان crate‌ای است که نماد در آن تعریف شده، بنابراین معمولاً به‌صورت یک <em><a href="#backref">backref</a></em> به <em><a href="#path-crate-root">crate-root</a></em> که در جای دیگری از نماد کدگذاری شده، کدگذاری می‌شود.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>معمولاً نیازی به نمایش <em>instantiating-crate</em> نیست.</p>
+</blockquote>
+<blockquote>
+<p>Example: <code>rust std::path::Path::new("example");</code></p>
+<pre><code class="language-rust">std::path::Path::new("example");</code></pre>
+<p>نماد <code>Path::new::&lt;str&gt;</code> که از crate با نام <code>mycrate</code> نمونه‌سازی شده چنین است:</p>
+<pre><code class="language-text">_RINvMsY_NtCseXNvpPnDBDp_3std4pathNtB6_4Path3neweECs7qp2U7fqm6G_7mycrate
+                                                                └──┬───┘
+                                                                   │
+                                                                   └── instantiating crate identifier `mycrate`
+</code></pre>
+<p>Demangling پیشنهادی: <code>&lt;std::path::Path&gt;::new::&lt;str&gt;</code></p>
+</blockquote>
+<h2 id="vendor-specific-suffix"><a class="header" href="#vendor-specific-suffix">پسوند مخصوص فروشنده (Vendor-specific suffix)</a></h2>
+<blockquote>
+<p>vendor-specific-suffix → (<code>.</code> | <code>$</code>) <em><a href="#vendor-specific-suffix">suffix</a></em></p>
+<p>suffix → {<em>byte</em>}</p>
+</blockquote>
+<p><em>vendor-specific-suffix</em> یک عنصر اختیاری در انتهای <em><a href="#symbol-name">symbol-name</a></em> است. از یک کاراکتر <code>.</code> یا <code>$</code> و به دنبال آن صفر یا چند بایت تشکیل می‌شود. هیچ محدودیتی برای کاراکترهای پس از نقطه یا علامت دلار وجود ندارد.</p>
+<p>این پسوند در صورت نیاز توسط پیاده‌سازی اضافه می‌شود. یکی از مواردی که ممکن است رخ دهد زمانی است که نام‌های محلاً یکتا باید به نام‌های سراسری یکتا تبدیل شوند. LLVM می‌تواند هنگام LTO پسوند <code>.llvm.&lt;numbers&gt;</code> را اضافه کند تا نام یکتا تضمین شود، و <code>$</code> را می‌توان برای داده‌های thread-local در Mach-O به کار برد. در این موقعیت‌ها معمولاً نادیده گرفتن پسوند اشکالی ندارد؛ نام دارای پسوند همان معنای نام اصلی را دارد.</p>
+<blockquote>
+<p><strong>Demangling پیشنهادی</strong></p>
+<p>معمولاً نیازی به نمایش <em>vendor-specific-suffix</em> نیست.</p>
+</blockquote>
+<blockquote>
+<p>مثال:</p>
+<pre><code class="language-rust"><span class="boring">use std::cell::RefCell;
+</span>thread_local! {
+    pub static EXAMPLE: RefCell&lt;u32&gt; = RefCell::new(1);
+}</code></pre>
+<p>نماد <code>EXAMPLE</code> در macOS ممکن است برای داده‌های thread-local چنین باشد:</p>
+<pre><code class="language-text">_RNvNvNvCs7qp2U7fqm6G_7mycrate7EXAMPLE7___getit5___KEY$tlv$init
+                                                      └───┬───┘
+                                                          │
+                                                          └── vendor-specific-suffix
+</code></pre>
+<p>Demangling پیشنهادی: <code>mycrate::EXAMPLE::__getit::__KEY</code></p>
+</blockquote>
+<h2 id="common-rules"><a class="header" href="#common-rules">قواعد مشترک</a></h2>
+<blockquote>
+<p><a href="#common-rules">decimal-number</a> → <br>      <code>0</code> <br>   | <em><a href="#common-rules">non-zero-digit</a></em> {<em><a href="#common-rules">digit</a></em>}</p>
+<p><a href="#common-rules">non-zero-digit</a> → <code>1</code> | <code>2</code> | <code>3</code> | <code>4</code> | <code>5</code> | <code>6</code> | <code>7</code> | <code>8</code> | <code>9</code> <br><a href="#common-rules">digit</a> → <code>0</code> | <em><a href="#common-rules">non-zero-digit</a></em></p>
+<p><a href="#common-rules">lower</a> → <code>a</code> |<code>b</code> |<code>c</code> |<code>d</code> |<code>e</code> |<code>f</code> |<code>g</code> |<code>h</code> |<code>i</code> |<code>j</code> |<code>k</code> |<code>l</code> |<code>m</code> |<code>n</code> |<code>o</code> |<code>p</code> |<code>q</code> |<code>r</code> |<code>s</code> |<code>t</code> |<code>u</code> |<code>v</code> |<code>w</code> |<code>x</code> |<code>y</code> |<code>z</code></p>
+<p><a href="#common-rules">upper</a> → <code>A</code> | <code>B</code> | <code>C</code> | <code>D</code> | <code>E</code> | <code>F</code> | <code>G</code> | <code>H</code> | <code>I</code> | <code>J</code> | <code>K</code> | <code>L</code> | <code>M</code> | <code>N</code> | <code>O</code> | <code>P</code> | <code>Q</code> | <code>R</code> | <code>S</code> | <code>T</code> | <code>U</code> | <code>V</code> | <code>W</code> | <code>X</code> | <code>Y</code> | <code>Z</code></p>
+</blockquote>
+<p>یک <em>decimal-number</em> به‌صورت یک یا چند <em><a href="#common-rules">digit</a></em>‌ کدگذاری می‌شود که یک مقدار عددی در مبنای ده را نشان می‌دهند.</p>
+<p>مقدار صفر به‌صورت یک بایت واحد <code>0</code> کدگذاری می‌شود. توجه کنید که موقعیت‌هایی وجود دارد که پس از <code>0</code> ممکن است رقم دیگری بیاید که نباید به‌عنوان بخشی از decimal-number رمزگشایی شود. برای مثال، یک <em><a href="#identifier">identifier</a></em> با طول صفر درون یک <em><a href="#path-nested-path">nested-path</a></em> که خود درون یک <em><a href="#path-nested-path">nested-path</a></em> دیگر است، به دو شناسه پشت‌سرهم منجر می‌شود که اولی فقط کدگذاری <code>0</code> را دارد.</p>
+<p>یک <em>digit</em> یک رقم ASCII است.</p>
+<p>یک <em>lower</em> و یک <em>upper</em> به ترتیب یک حرف کوچک و یک حرف بزرگ ASCII هستند.</p>
+<h2 id="base-62-number"><a class="header" href="#base-62-number">base-62-number</a></h2>
+<blockquote>
+<p><a href="#base-62-number">base-62-number</a> → { <em><a href="#common-rules">digit</a></em> | <em><a href="#common-rules">lower</a></em> | <em><a href="#common-rules">upper</a></em> } <code>_</code></p>
+</blockquote>
+<p>یک <em>base-62-number</em> کدگذاری یک مقدار عددی است. از ارقام ASCII و حروف کوچک و بزرگ استفاده می‌کند. مقدار با کاراکتر <code>_</code> پایان می‌یابد. اگر مقدار ۰ باشد، کدگذاری همان کاراکتر <code>_</code> بدون هیچ رقمی است. در غیر این صورت، یک واحد از مقدار کم می‌شود و با نگاشت زیر کدگذاری می‌گردد:</p>
+<ul>
+<li><code>0</code>-<code>9</code> maps to 0-9</li>
+<li><code>a</code>-<code>z</code> maps to 10 to 35</li>
+<li><code>A</code>-<code>Z</code> maps to 36 to 61</li>
+</ul>
+<p>عدد مکرراً بر ۶۲ تقسیم می‌شود (با تقسیم صحیح که به سمت صفر گرد می‌کند) تا کاراکتر بعدی در دنباله انتخاب شود. باقی‌مانده هر تقسیم در نگاشت برای انتخاب کاراکتر بعدی به کار می‌رود. این کار تا زمانی که عدد به ۰ برسد تکرار می‌شود. سپس دنباله نهایی کاراکترها معکوس می‌شود.</p>
+<p>رمزگشایی فرایندی مشابه در جهت عکس است.</p>
+<p>Examples:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Value</th><th>Encoding</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td><code>_</code></td></tr>
+<tr><td>1</td><td><code>0_</code></td></tr>
+<tr><td>11</td><td><code>a_</code></td></tr>
+<tr><td>62</td><td><code>Z_</code></td></tr>
+<tr><td>63</td><td><code>10_</code></td></tr>
+<tr><td>1000</td><td><code>g7_</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="symbol-grammar-summary"><a class="header" href="#symbol-grammar-summary">خلاصه گرامر نماد</a></h2>
+<p>در ادامه خلاصه‌ای از همه productionهای گرامر نماد آمده است.</p>
+<blockquote>
+<p><a href="#symbol-name">symbol-name</a> → <code>_R</code> <em><a href="#common-rules">decimal-number</a></em><sub>opt</sub> <em><a href="#symbol-path">path</a></em> <em><a href="#instantiating-crate">instantiating-crate</a></em><sub>opt</sub> <em><a href="#vendor-specific-suffix">vendor-specific-suffix</a></em><sub>opt</sub></p>
+<p><a href="#symbol-path">path</a> → <br>      <em><a href="#path-crate-root">crate-root</a></em> <br>   | <em><a href="#path-inherent-impl">inherent-impl</a></em> <br>   | <em><a href="#path-trait-impl">trait-impl</a></em> <br>   | <em><a href="#path-trait-definition">trait-definition</a></em> <br>   | <em><a href="#path-nested-path">nested-path</a></em> <br>   | <em><a href="#path-generic-arguments">generic-args</a></em> <br>   | <em><a href="#backref">backref</a></em></p>
+<p><a href="#path-crate-root">crate-root</a> → <code>C</code> <em><a href="#identifier">identifier</a></em> <br><a href="#path-inherent-impl">inherent-impl</a> → <code>M</code> <em><a href="#path-impl">impl-path</a></em> <em><a href="#type">type</a></em> <br><a href="#path-trait-impl">trait-impl</a> → <code>X</code> <em><a href="#path-impl">impl-path</a></em> <em><a href="#type">type</a></em> <em><a href="#symbol-path">path</a></em> <br><a href="#path-trait-definition">trait-definition</a> → <code>Y</code> <em><a href="#type">type</a></em> <em><a href="#symbol-path">path</a></em> <br><a href="#path-nested-path">nested-path</a> → <code>N</code> <em><a href="#namespace">namespace</a></em> <em><a href="#symbol-path">path</a></em> <em><a href="#identifier">identifier</a></em> <br><a href="#path-generic-arguments">generic-args</a> → <code>I</code> <em><a href="#symbol-path">path</a></em> {<em><a href="#path-generic-arguments">generic-arg</a></em>} <code>E</code></p>
+<p><a href="#identifier">identifier</a> → <em><a href="#disambiguator">disambiguator</a></em><sub>opt</sub> <em><a href="#identifier">undisambiguated-identifier</a></em> <br><a href="#identifier">undisambiguated-identifier</a> → <code>u</code><sub>opt</sub> <em><a href="#common-rules">decimal-number</a></em> <code>_</code><sub>opt</sub> <em><a href="#identifier">bytes</a></em> <br><a href="#identifier">bytes</a> → {<em>UTF-8 bytes</em>}</p>
+<p><a href="#disambiguator">disambiguator</a> → <code>s</code> <em><a href="#base-62-number">base-62-number</a></em></p>
+<p><a href="#path-impl">impl-path</a> → <em><a href="#disambiguator">disambiguator</a></em><sub>opt</sub> <em><a href="#symbol-path">path</a></em></p>
+<p><a href="#type">type</a> → <br>      <em><a href="#basic-type">basic-type</a></em> <br>   | <em><a href="#array-type">array-type</a></em> <br>   | <em><a href="#slice-type">slice-type</a></em> <br>   | <em><a href="#tuple-type">tuple-type</a></em> <br>   | <em><a href="#ref-type">ref-type</a></em> <br>   | <em><a href="#mut-ref-type">mut-ref-type</a></em> <br>   | <em><a href="#const-ptr-type">const-ptr-type</a></em> <br>   | <em><a href="#mut-ptr-type">mut-ptr-type</a></em> <br>   | <em><a href="#fn-type">fn-type</a></em> <br>   | <em><a href="#dyn-trait-type">dyn-trait-type</a></em> <br>   | <em><a href="#pattern-type">pattern-type</a></em> <br>   | <em><a href="#symbol-path">path</a></em> <br>   | <em><a href="#backref">backref</a></em></p>
+<p><a href="#basic-type">basic-type</a> → <em><a href="#common-rules">lower</a></em> <br><a href="#array-type">array-type</a> → <code>A</code> <em><a href="#type">type</a></em> <em><a href="#const">const</a></em> <br><a href="#slice-type">slice-type</a> → <code>S</code> <em><a href="#type">type</a></em> <br><a href="#tuple-type">tuple-type</a> → <code>T</code> {<em><a href="#type">type</a></em>} <code>E</code> <br><a href="#ref-type">ref-type</a> →  <code>R</code> <em><a href="#lifetime">lifetime</a></em><sub>opt</sub> <em><a href="#type">type</a></em> <br><a href="#mut-ref-type">mut-ref-type</a> → <code>Q</code> <em><a href="#lifetime">lifetime</a></em><sub>opt</sub> <em><a href="#type">type</a></em> <br><a href="#const-ptr-type">const-ptr-type</a> → <code>P</code> <em><a href="#type">type</a></em> <br><a href="#mut-ptr-type">mut-ptr-type</a> → <code>O</code> <em><a href="#type">type</a></em> <br><a href="#fn-type">fn-type</a> → <code>F</code> <em><a href="#fn-sig">fn-sig</a></em> <br><a href="#dyn-trait-type">dyn-trait-type</a> → <code>D</code> <em><a href="#dyn-bounds">dyn-bounds</a></em> <em><a href="#lifetime">lifetime</a></em>
+<a href="#pattern-type">pattern-type</a> → <code>W</code> <em>[pattern-kind]</em></p>
+<p>[pattern-kind] → <br>      <em>[range-pattern-kind]</em> <br>   <em>[or-pattern-kind]</em></p>
+<p>[range-pattern-kind] -&gt; <code>R</code> <em><a href="#const">const</a></em> <em><a href="#const">const</a></em> <br>[or-pattern-kind] -&gt; <code>O</code> <em>[pattern-kind]</em> <code>E</code> \</p>
+<p><a href="#namespace">namespace</a> → <em><a href="#common-rules">lower</a></em> | <em><a href="#common-rules">upper</a></em></p>
+<p><a href="#path-generic-arguments">generic-arg</a> → <br>      <em><a href="#lifetime">lifetime</a></em> <br>   | <em><a href="#type">type</a></em> <br>   | <code>K</code> <em><a href="#const">const</a></em></p>
+<p><a href="#lifetime">lifetime</a> → <code>L</code> <em><a href="#base-62-number">base-62-number</a></em></p>
+<p><code>p</code></p>
+<p><a href="#const">const-data</a> → <code>n</code><sub>opt</sub> {<em><a href="#const">hex-digit</a></em>} <code>_</code></p>
+<p><a href="#const">hex-digit</a> → <em><a href="#common-rules">digit</a></em> | <code>a</code> | <code>b</code> | <code>c</code> | <code>d</code> | <code>e</code> | <code>f</code></p>
+<p><a href="#fn-sig">fn-sig</a> → <em><a href="#binder">binder</a></em><sub>opt</sub> <code>U</code><sub>opt</sub> (<code>K</code> <em><a href="#abi">abi</a></em>)<sub>opt</sub> {<em><a href="#type">type</a></em>} <code>E</code> <em><a href="#type">type</a></em></p>
+<p><a href="#abi">abi</a> → <br>      <code>C</code> <br>   | <em><a href="#identifier">undisambiguated-identifier</a></em></p>
+<p><a href="#dyn-bounds">dyn-bounds</a> → <em><a href="#binder">binder</a></em><sub>opt</sub> {<em><a href="#dyn-trait">dyn-trait</a></em>} <code>E</code> <br><a href="#dyn-trait">dyn-trait</a> → <em><a href="#symbol-path">path</a></em> {<em><a href="#dyn-trait-assoc-binding">dyn-trait-assoc-binding</a></em>} <br><a href="#dyn-trait-assoc-binding">dyn-trait-assoc-binding</a> → <code>p</code> <em><a href="#identifier">undisambiguated-identifier</a></em> <em><a href="#type">type</a></em></p>
+<p><a href="#binder">binder</a> → <code>G</code> <em><a href="#base-62-number">base-62-number</a></em></p>
+<p><a href="#backref">backref</a> → <code>B</code> <em><a href="#base-62-number">base-62-number</a></em></p>
+<p><a href="#instantiating-crate">instantiating-crate</a> → <em><a href="#symbol-path">path</a></em></p>
+<p><a href="#vendor-specific-suffix">vendor-specific-suffix</a> → (<code>.</code> | <code>$</code>) <em><a href="#vendor-specific-suffix">suffix</a></em> <br><a href="#vendor-specific-suffix">suffix</a> → {<em>byte</em>}</p>
+<p><a href="#common-rules">decimal-number</a> → <br>      <code>0</code> <br>   | <em><a href="#common-rules">non-zero-digit</a></em> {<em><a href="#common-rules">digit</a></em>}</p>
+<p><a href="#base-62-number">base-62-number</a> → { <em><a href="#common-rules">digit</a></em> | <em><a href="#common-rules">lower</a></em> | <em><a href="#common-rules">upper</a></em> } <code>_</code></p>
+<p><a href="#common-rules">non-zero-digit</a> → <code>1</code> | <code>2</code> | <code>3</code> | <code>4</code> | <code>5</code> | <code>6</code> | <code>7</code> | <code>8</code> | <code>9</code> <br><a href="#common-rules">digit</a> → <code>0</code> | <em><a href="#common-rules">non-zero-digit</a></em> <br><a href="#common-rules">lower</a> → <code>a</code> |<code>b</code> |<code>c</code> |<code>d</code> |<code>e</code> |<code>f</code> |<code>g</code> |<code>h</code> |<code>i</code> |<code>j</code> |<code>k</code> |<code>l</code> |<code>m</code> |<code>n</code> |<code>o</code> |<code>p</code> |<code>q</code> |<code>r</code> |<code>s</code> |<code>t</code> |<code>u</code> |<code>v</code> |<code>w</code> |<code>x</code> |<code>y</code> |<code>z</code> <br><a href="#common-rules">upper</a> → <code>A</code> | <code>B</code> | <code>C</code> | <code>D</code> | <code>E</code> | <code>F</code> | <code>G</code> | <code>H</code> | <code>I</code> | <code>J</code> | <code>K</code> | <code>L</code> | <code>M</code> | <code>N</code> | <code>O</code> | <code>P</code> | <code>Q</code> | <code>R</code> | <code>S</code> | <code>T</code> | <code>U</code> | <code>V</code> | <code>W</code> | <code>X</code> | <code>Y</code> | <code>Z</code></p>
+</blockquote>
+<h2 id="encoding-of-rust-entities"><a class="header" href="#encoding-of-rust-entities">کدگذاری موجودیت‌های Rust</a></h2>
+<p>موارد زیر راهنمایی‌هایی برای نحوه کدگذاری موجودیت‌های Rust در یک نماد هستند. کامپایلر تا زمانی که نماد بدون ابهام باشد، در نحوه کدگذاری یک موجودیت اختیار دارد.</p>
+<ul>
+<li>
+<p>توابع نام‌دار، متدها و staticها باید با یک production از نوع <em><a href="#symbol-path">path</a></em> نمایش داده شوند.</p>
+</li>
+<li>
+<p>مسیرها باید از درونی‌ترین موجودیتی که می‌تواند ریشه مسیر باشد آغاز شوند. ریشه‌ها می‌توانند شناسه‌های crate، پیاده‌سازی‌های ذاتی، پیاده‌سازی‌های trait و (برای آیتم‌های درون متدهای پیش‌فرض) تعریف‌های trait باشند.</p>
+</li>
+<li>
+<p>کامپایلر آزاد است اندیس‌های disambiguation و تگ‌های فضای نام را از بازه‌های رزروشده انتخاب کند، به شرطی که بدون‌ابهام بودن شناسه‌ها را تضمین کند.</p>
+</li>
+<li>
+<p>برای صرفه‌جویی در فضا، آرگومان‌های جنریکی که با مقدار پیش‌فرض برابرند نباید کدگذاری شوند.</p>
+</li>
+</ul><nav class="page-nav"><a href="index.html">→ Symbol Mangling</a><a href="../contributing.html">مشارکت در rustc ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

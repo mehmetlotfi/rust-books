@@ -1,0 +1,243 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>جزئیات استنتاج — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="opaque-types-impl-trait-inference"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="inference-of-opaque-types-impl-trait"><a class="header" href="#inference-of-opaque-types-impl-trait">استنتاج نوع‌های مبهم (opaque) (<code>impl Trait</code>)</a></h1>
+<p>این صفحه توضیح می‌دهد کامپایلر چگونه <a href="./borrow-check/region-inference/member-constraints.html">نوع پنهان</a> یک <a href="./opaque-types-type-alias-impl-trait.html">نوع مبهم (opaque)</a> را استنتاج می‌کند.
+این نوع استنتاج نوع به‌طور ویژه پیچیده است، زیرا
+برخلاف انواع دیگر استنتاج نوع،
+می‌تواند در میان توابع و بدنهٔ توابع کار کند.</p>
+<h2 id="running-example"><a class="header" href="#running-example">مثال راهنما</a></h2>
+<p>برای کمک به توضیح نحوهٔ کار، یک مثال را در نظر بگیریم.</p>
+<pre><code class="language-rust">#![feature(type_alias_impl_trait)]
+mod m {
+    pub type Seq&lt;T&gt; = impl IntoIterator&lt;Item = T&gt;;
+
+    #[define_opaque(Seq)]
+    pub fn produce_singleton&lt;T&gt;(t: T) -&gt; Seq&lt;T&gt; {
+        vec![t]
+    }
+
+    #[define_opaque(Seq)]
+    pub fn produce_doubleton&lt;T&gt;(t: T, u: T) -&gt; Seq&lt;T&gt; {
+        vec![t, u]
+    }
+}
+
+fn is_send&lt;T: Send&gt;(_: &amp;T) {}
+
+pub fn main() {
+    let elems = m::produce_singleton(22);
+
+    is_send(&amp;elems);
+
+    for elem in elems {
+        println!("elem = {:?}", elem);
+    }
+}</code></pre>
+<p>در این کد، <em>نوع مبهم</em> (opaque type) <code>Seq&lt;T&gt;</code> است.
+دامنهٔ تعریف‌کنندهٔ آن ماژول <code>m</code> است.
+<em>نوع پنهان</em> آن <code>Vec&lt;T&gt;</code> است
+که از <code>m::produce_singleton</code> و <code>m::produce_doubleton</code> استنتاج می‌شود.</p>
+<p>در تابع <code>main</code>، نوع مبهم خارج از دامنهٔ تعریف‌کنندهٔ خود است.
+وقتی <code>main</code> تابع <code>m::produce_singleton</code> را فراخوانی می‌کند، یک ارجاع به نوع مبهم <code>Seq&lt;i32&gt;</code> دریافت می‌کند.
+فراخوانی <code>is_send</code> بررسی می‌کند که <code>Seq&lt;i32&gt;: Send</code>.
+<code>Send</code> در میان قیدهای impl trait فهرست نشده است،
+اما به‌دلیل نشت auto-trait می‌توانیم استنتاج کنیم که برقرار است.
+تبدیل (desugaring) حلقهٔ <code>for</code> ایجاب می‌کند که <code>Seq&lt;T&gt;: IntoIterator</code>،
+که از قیدهای اعلام‌شده روی <code>Seq&lt;T&gt;</code> قابل اثبات است.</p>
+<h3 id="type-checking-main"><a class="header" href="#type-checking-main">بررسی نوع <code>main</code></a></h3>
+<p>با نگاه به آنچه هنگام بررسی نوع <code>main</code> رخ می‌دهد شروع می‌کنیم.
+ابتدا <code>produce_singleton</code> را فراخوانی می‌کنیم و نوع بازگشتی یک نوع مبهم
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/enum.ItemKind.html#variant.OpaqueTy"><code>OpaqueTy</code></a> است.</p>
+<h4 id="type-checking-the-for-loop"><a class="header" href="#type-checking-the-for-loop">بررسی نوع حلقهٔ for</a></h4>
+<p>حلقهٔ for بخش <code>in elems</code> را به <code>IntoIterator::into_iter(elems)</code> تبدیل (desugar) می‌کند.
+نوع <code>elems</code> برابر <code>Seq&lt;T&gt;</code> است، بنابراین بررسی‌کنندهٔ نوع تعهد (obligation) <code>Seq&lt;T&gt;: IntoIterator</code> را ثبت می‌کند.
+این تعهد به‌سادگی برآورده می‌شود،
+چون <code>Seq&lt;T&gt;</code> یک نوع مبهم (<code>impl IntoIterator&lt;Item = T&gt;</code>) است که برای این صفت قید دارد.
+همان‌طور که قید where به شکل <code>U: Foo</code> به <code>U</code> اجازه می‌دهد به‌سادگی <code>Foo</code> را برآورده کند،
+قیدهای نوع‌های مبهم برای بررسی‌کنندهٔ نوع در دسترس‌اند و برای برآورده کردن تعهدها به کار می‌روند.</p>
+<p>نوع <code>elem</code> در حلقهٔ for برابر <code>&lt;Seq&lt;T&gt; as IntoIterator&gt;::Item</code> استنتاج می‌شود که همان <code>T</code> است.
+بررسی‌کنندهٔ نوع در هیچ نقطه‌ای به نوع پنهان علاقه‌ای ندارد.</p>
+<h4 id="type-checking-the-is_send-call"><a class="header" href="#type-checking-the-is_send-call">بررسی نوع فراخوانی <code>is_send</code></a></h4>
+<p>هنگام تلاش برای اثبات قیدهای auto trait،
+ابتدا فرایند بالا را تکرار می‌کنیم
+تا ببینیم آیا auto trait در فهرست قیدهای نوع مبهم هست یا نه.
+اگر نبود، نوع پنهان نوع مبهم را آشکار می‌کنیم،
+اما فقط برای اثبات همین قید صفت خاص، نه به‌طور کلی.
+آشکارسازی با فراخوانی query ‏<code>type_of</code> روی <code>DefId</code> نوع مبهم انجام می‌شود.
+این query در داخل، نوع‌های پنهان را از تابع(های) تعریف‌کننده درخواست می‌کند
+و آن را برمی‌گرداند (برای جزئیات بیشتر <a href="#within-the-type_of-query">بخش مربوط به <code>type_of</code></a> را ببینید).</p>
+<h4 id="flowchart-of-type-checking-steps"><a class="header" href="#flowchart-of-type-checking-steps">نمودار گردشی گام‌های بررسی نوع</a></h4>
+<pre><code class="language-mermaid">flowchart TD
+    TypeChecking["type checking `main`"]
+    subgraph TypeOfSeq["type_of(Seq&lt;T&gt;) query"]
+        WalkModuleHir["Walk the HIR for the module `m`\nto find the hidden types from each\nfunction/const/static within"]
+        VisitProduceSingleton["visit `produce_singleton`"]
+        InterimType["`produce_singleton` hidden type is `Vec&lt;T&gt;`\nkeep searching"]
+        VisitProduceDoubleton["visit `produce_doubleton`"]
+        CompareType["`produce_doubleton` hidden type is also Vec&lt;T&gt;\nthis matches what we saw before ✅"]
+        Done["No more items to look at in scope\nReturn `Vec&lt;T&gt;`"]
+    end
+
+    BorrowCheckProduceSingleton["`borrow_check(produce_singleton)`"]
+    TypeCheckProduceSingleton["`type_check(produce_singleton)`"]
+
+    BorrowCheckProduceDoubleton["`borrow_check(produce_doubleton)`"]
+    TypeCheckProduceDoubleton["`type_check(produce_doubleton)`"]
+
+    Substitute["Substitute `T =&gt; u32`,\nyielding `Vec&lt;i32&gt;` as the hidden type"]
+    CheckSend["Check that `Vec&lt;i32&gt;: Send` ✅"]
+
+    TypeChecking -- trait code for auto traits --&gt; TypeOfSeq
+    TypeOfSeq --&gt; WalkModuleHir
+    WalkModuleHir --&gt; VisitProduceSingleton
+    VisitProduceSingleton --&gt; BorrowCheckProduceSingleton
+    BorrowCheckProduceSingleton --&gt; TypeCheckProduceSingleton
+    TypeCheckProduceSingleton --&gt; InterimType
+    InterimType --&gt; VisitProduceDoubleton
+    VisitProduceDoubleton --&gt; BorrowCheckProduceDoubleton
+    BorrowCheckProduceDoubleton --&gt; TypeCheckProduceDoubleton
+    TypeCheckProduceDoubleton --&gt; CompareType --&gt; Done
+    Done --&gt; Substitute --&gt; CheckSend
+</code></pre>
+<h3 id="within-the-type_of-query"><a class="header" href="#within-the-type_of-query">درون query ‏<code>type_of</code></a></h3>
+<p>query ‏<code>type_of</code>، وقتی روی یک نوع مبهم O اعمال شود، نوع پنهان را برمی‌گرداند.
+آن نوع پنهان با ترکیب نتایج
+هر تابع قیددهنده در دامنهٔ تعریف‌کنندهٔ O محاسبه می‌شود.</p>
+<pre><code class="language-mermaid">flowchart TD
+    TypeOf["type_of query"]
+    TypeOf -- find_opaque_ty_constraints --&gt; FindOpaqueTyConstraints
+    FindOpaqueTyConstraints --&gt; Iterate
+    Iterate["Iterate over each item in defining scope"]
+    Iterate -- For each item --&gt; TypeCheck
+    TypeCheck["Check typeck(I) to see if it constraints O"]
+    TypeCheck -- I does not\nconstrain O --&gt; Iterate
+    TypeCheck -- I constrains O --&gt; BorrowCheck
+    BorrowCheck["Invoke mir_borrowck(I) to get hidden type\nfor O computed by I"]
+    BorrowCheck --&gt; PreviousType
+    PreviousType["Hidden type from I\nsame as any previous hidden type\nfound so far?"]
+    PreviousType -- Yes --&gt; Complete
+    PreviousType -- No --&gt; ReportError
+    ReportError["Report an error"]
+    ReportError --&gt; Complete["Item I complete"]
+    Complete --&gt; Iterate
+
+    FindOpaqueTyConstraints -- All constraints found --&gt; Done
+    Done["Done"]
+</code></pre>
+<h3 id="relating-an-opaque-type-to-another-type"><a class="header" href="#relating-an-opaque-type-to-another-type">ربط دادن یک نوع مبهم به نوعی دیگر</a></h3>
+<p>یک جای مرکزی وجود دارد که در آن نوع پنهانِ یک نوع مبهم مقید می‌شود
+و آن تابع <code>handle_opaque_type</code> است.
+جالب اینکه دو نوع می‌گیرد، پس می‌توانید هر دو نوعی را بدهید،
+اما یکی از آن‌ها باید نوع مبهم باشد.
+ترتیب فقط برای تشخیص‌ها (diagnostics) اهمیت دارد.</p>
+<pre><code class="language-mermaid">flowchart TD
+    subgraph typecheck["type check comparison routines"]
+        equate.rs
+        sub.rs
+        lub.rs
+    end
+
+    typecheck --&gt; TwoSimul
+
+    subgraph handleopaquetype["infcx.handle_opaque_type"]
+
+        TwoSimul["Defining two opaque types simultaneously?"]
+
+        TwoSimul -- Yes --&gt; ReportError["Report error"]
+
+        TwoSimul -- No --&gt; MayDefine -- Yes --&gt; RegisterOpaqueType --&gt; AlreadyHasValue
+
+        MayDefine -- No --&gt; ReportError
+
+        MayDefine["In defining scope OR in query?"]
+
+        AlreadyHasValue["Opaque type X already has\na registered value?"]
+
+        AlreadyHasValue -- No --&gt; Obligations["Register opaque type bounds\nas obligations for hidden type"]
+
+        RegisterOpaqueType["Register opaque type with\nother type as value"]
+
+        AlreadyHasValue -- Yes --&gt; EquateOpaqueTypes["Equate new hidden type\nwith old hidden type"]
+    end
+</code></pre>
+<h3 id="interactions-with-queries"><a class="header" href="#interactions-with-queries">تعامل با queryها</a></h3>
+<p>وقتی queryها نوع‌های مبهم را مدیریت می‌کنند،
+نمی‌توانند تشخیص دهند که در دامنهٔ تعریف‌کننده هستند یا نه،
+بنابراین فقط فرض می‌کنند که هستند.</p>
+<p>نوع‌های پنهان ثبت‌شده در struct ‏<code>QueryResponse</code> و در فیلد
+<code>opaque_types</code> ذخیره می‌شوند (تابع
+<code>take_opaque_types_for_query_response</code> آن‌ها را بیرون می‌خواند).</p>
+<p>وقتی <code>QueryResponse</code> در infcx پیرامون در
+<code>query_response_substitution_guess</code> نمونه‌سازی می‌شود،
+هر قید نوع پنهان را با فراخوانی <code>handle_opaque_type</code> (مانند بالا) تبدیل می‌کنیم.</p>
+<p>یک نکتهٔ «عجیب» وجود دارد.
+نوع‌های مبهم نمونه‌سازی‌شده ترتیبی دارند
+(اگر یک نوع مبهم با نوع مبهم دیگری مقایسه شود،
+و ناچار باشیم یکی از نوع‌های مبهم را انتخاب کنیم تا نوع پنهانش تعیین شود).
+از آنی استفاده می‌کنیم که «مورد انتظار» در نظر گرفته می‌شود.
+اما در واقع هر دو نوع مبهم ممکن است کاربردهای تعریف‌کننده داشته باشند.
+وقتی نتیجهٔ query نمونه‌سازی شود،
+از بافتی که از query استفاده می‌کند دوباره ارزیابی خواهد شد.
+بافت نهایی (typeck یک تابع، mir borrowck یا بررسی‌های wf)
+خواهد دانست کدام نوع مبهم را واقعاً می‌توان نمونه‌سازی کرد
+و سپس آن را درست مدیریت می‌کند.</p>
+<h3 id="within-the-mir-borrow-checker"><a class="header" href="#within-the-mir-borrow-checker">درون بررسی‌کنندهٔ قرض MIR</a></h3>
+<p>بررسی‌کنندهٔ قرض MIR چیزها را از طریق <code>nll_relate</code> به هم ربط می‌دهد و فقط به ناحیه‌ها (regions) اهمیت می‌دهد.
+هر رابطهٔ نوعی، مقیدسازی نوع‌های پنهان را راه می‌اندازد،
+بنابراین بررسی‌کنندهٔ قرض همان کاری را می‌کند که بررسی‌کنندهٔ نوع می‌کند،
+اما کد آشکارا مرده را (مثلاً پس از یک panic) نادیده می‌گیرد.
+بررسی‌کنندهٔ قرض همچنین مرجع حقیقت در مورد نوع‌های پنهان است،
+چون تنها کسی است که می‌تواند درست بفهمد کدام طول عمرها روی نوع پنهان متناظر
+با کدام طول عمرها روی اعلان نوع مبهم‌اند.</p>
+<h2 id="backwards-compatibility-hacks"><a class="header" href="#backwards-compatibility-hacks">هک‌های سازگاری با نسخه‌های قبلی</a></h2>
+<p><code>impl Trait</code> در جایگاه بازگشتی ویژگی‌های عجیب گوناگونی دارد که بخشی
+از هیچ RFC نبوده‌اند و احتمالاً پایدارسازی تصادفی بوده‌اند.
+برای پشتیبانی از این‌ها،
+<code>replace_opaque_types_with_inference_vars</code> برای بازگرداندن رفتار پیشین به کار می‌رود.</p>
+<p>سه هک سازگاری با نسخه‌های قبلی وجود دارد:</p>
+<ol>
+<li>
+<p>همهٔ نقاط بازگشت یک متغیر استنتاج مشترک دارند،
+بنابراین برخی نقاط بازگشت فقط در صورتی کامپایل می‌شوند که نقطهٔ بازگشت دیگری از یک نوع مشخص استفاده کند.</p>
+<pre><code class="language-rust">fn foo() -&gt; impl Debug {
+    if false {
+        return std::iter::empty().collect();
+    }
+    vec![42]
+}</code></pre>
+</li>
+<li>
+<p>قیدهای برابری نوع وابسته برای <code>impl Trait</code> را می‌توان به کار برد،
+مادامی که نوع پنهان قیدهای صفت روی نوع وابسته را برآورده کند.
+امضای مبهم <code>impl Trait</code> لازم نیست آن‌ها را برآورده کند.</p>
+<pre><code class="language-rust">trait Duh {}
+
+impl Duh for i32 {}
+
+trait Trait {
+    type Assoc: Duh;
+}
+
+// the fact that `R` is the `::Output` projection on `F` causes
+// an intermediate inference var to be generated which is then later
+// compared against the actually found `Assoc` type.
+impl&lt;R: Duh, F: FnMut() -&gt; R&gt; Trait for F {
+    type Assoc = R;
+}
+
+// The `impl Send` here is then later compared against the inference var
+// created, causing the inference var to be set to `impl Send` instead of
+// the hidden type. We already have obligations registered on the inference
+// var to make it uphold the `: Duh` bound on `Trait::Assoc`. The opaque
+// type does not implement `Duh`, even if its hidden type does.
+// Lazy TAIT would error out, but we inserted a hack to make it work again,
+// keeping backwards compatibility.
+fn foo() -&gt; impl Trait&lt;Assoc = impl Send&gt; {
+    || 42
+}</code></pre>
+</li>
+<li>
+<p>closureها نمی‌توانند نوع پنهان برای <code>impl Trait</code> تابع والد خود بسازند.
+این نکته عمدتاً منتفی است،
+چون مورد ۱ متغیرهای استنتاج را معرفی می‌کند
+و در نتیجه closure همیشه فقط متغیر استنتاج را می‌بیند، اما اگر مورد ۱ را برطرف کنیم، این به یک مشکل تبدیل خواهد شد.</p>
+</li>
+</ol><nav class="page-nav"><a href="opaque-types-type-alias-impl-trait.html">→ نوع‌های Opaque</a><a href="return-position-impl-trait-in-trait.html">Impl Trait در جایگاه بازگشتی در صفت ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

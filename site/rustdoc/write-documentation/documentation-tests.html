@@ -1,0 +1,339 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>آزمون‌های مستندات — کتاب rustdoc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="write-documentation/documentation-tests"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustdoc.html" style="color:inherit;text-decoration:none">کتاب rustdoc</a><small class="en-title" dir="ltr">The rustdoc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="documentation-tests"><a class="header" href="#documentation-tests">آزمون‌های مستندات (Documentation tests)</a></h1>
+<p><code>rustdoc</code> از اجرای مثال‌های مستندات شما به‌عنوان آزمون پشتیبانی می‌کند. این کار تضمین می‌کند که مثال‌های درون مستندات شما به‌روز و کارا هستند.</p>
+<p>ایدهٔ اصلی این است:</p>
+<pre><code class="language-rust no_run">/// # Examples
+///
+/// ```
+/// let x = 5;
+/// ```
+<span class="boring">fn f() {}</span></code></pre>
+<p>در اینجا، سه backtick آغاز و پایان بلوک کد را مشخص می‌کنند. اگر این کد در فایلی به نام <code>foo.rs</code> باشد، اجرای <code>rustdoc --test foo.rs</code> این مثال را استخراج می‌کند و سپس آن را به‌عنوان یک آزمون اجرا می‌کند.</p>
+<p>لطفاً توجه کنید که به‌طور پیش‌فرض، اگر برای بلوک کد هیچ زبانی تعیین نشده باشد، rustdoc فرض می‌کند که کد Rust است. بنابراین این:</p>
+<pre><code class="language-markdown">```rust
+let x = 5;
+```
+</code></pre>
+<p>دقیقاً معادل این است:</p>
+<pre><code class="language-markdown">```
+let x = 5;
+```
+</code></pre>
+<p>با این حال نکات ظریفی وجود دارد! برای جزئیات بیشتر ادامه دهید.</p>
+<h2 id="passing-or-failing-a-doctest"><a class="header" href="#passing-or-failing-a-doctest">قبول یا رد شدن یک doctest</a></h2>
+<p>مانند آزمون‌های واحد معمولی، doctestهای معمولی در صورتی «قبول» می‌شوند که کامپایل شوند و بدون panic اجرا شوند. بنابراین اگر می‌خواهید نشان دهید که یک محاسبه نتیجهٔ مشخصی می‌دهد، خانوادهٔ ماکروهای <code>assert!</code> درست مانند سایر کدهای Rust کار می‌کنند:</p>
+<pre><code class="language-rust">let foo = "foo";
+assert_eq!(foo, "foo");</code></pre>
+<p>به این ترتیب، اگر محاسبه هر زمان چیز متفاوتی برگرداند، کد panic می‌کند و doctest شکست می‌خورد.</p>
+<h2 id="pre-processing-examples"><a class="header" href="#pre-processing-examples">پیش‌پردازش مثال‌ها</a></h2>
+<p>در مثال بالا، چیز عجیبی می‌بینید: هیچ تابع <code>main</code> وجود ندارد! مجبور کردن شما به نوشتن <code>main</code> برای هر مثال، هر قدر هم کوچک باشد، اصطکاک ایجاد می‌کند و خروجی را شلوغ می‌کند. به همین دلیل <code>rustdoc</code> مثال‌های شما را پیش از اجرا اندکی پردازش می‌کند. این الگوریتم کاملی است که <code>rustdoc</code> برای پیش‌پردازش مثال‌ها به کار می‌برد:</p>
+<ol>
+<li>چند attribute ـِ <code>allow</code> رایج درج می‌شوند، از جمله <code>unused_variables</code>، <code>unused_assignments</code>، <code>unused_mut</code>، <code>unused_attributes</code> و <code>dead_code</code>. مثال‌های کوچک اغلب این lintها را فعال می‌کنند.</li>
+<li>هر attributeی که با <code>#![doc(test(attr(...)))]</code> مشخص شده باشد افزوده می‌شود.</li>
+<li>هر attribute ـِ <code>#![foo]</code> که در ابتدا آمده باشد به‌عنوان attribute سطح crate دست‌نخورده می‌ماند.</li>
+<li>اگر مثال شامل <code>extern crate</code> نباشد و <code>#![doc(test(no_crate_inject))]</code> مشخص نشده باشد، آنگاه <code>extern crate &lt;mycrate&gt;;</code> درج می‌شود (توجه کنید که <code>#[macro_use]</code> وجود ندارد).</li>
+<li>سرانجام، اگر مثال شامل <code>fn main</code> نباشد، بقیهٔ متن درون <code>fn main() { your_code }</code> پیچیده می‌شود.</li>
+</ol>
+<p>برای اطلاعات بیشتر دربارهٔ آن نکته در قاعدهٔ ۴، به «مستندسازی ماکروها» در ادامه مراجعه کنید.</p>
+<h2 id="hiding-portions-of-the-example"><a class="header" href="#hiding-portions-of-the-example">پنهان کردن بخش‌هایی از مثال</a></h2>
+<p>گاهی به کد آماده‌سازی یا چیزهای دیگری نیاز دارید که حواس را از مثال شما پرت می‌کند، اما برای کار کردن آزمون‌ها مهم‌اند. بلوک مثالی را در نظر بگیرید که این شکل را دارد:</p>
+<pre><code class="language-rust no_run">/// ```
+/// /// Some documentation.
+/// # fn foo() {} // this function will be hidden
+/// println!("Hello, World!");
+/// ```
+<span class="boring">fn f() {}</span></code></pre>
+<p>این‌گونه رندر می‌شود:</p>
+<pre><code class="language-rust">/// Some documentation.
+<span class="boring">fn foo() {}
+</span>println!("Hello, World!");</code></pre>
+<p>بله، درست است: می‌توانید خط‌هایی اضافه کنید که با <code>#</code> شروع می‌شوند و آن‌ها از خروجی پنهان می‌شوند، اما هنگام کامپایل کد شما به کار می‌روند. می‌توانید از این به نفع خود استفاده کنید. در این مورد، doc commentها باید روی نوعی تابع اعمال شوند، پس اگر بخواهم فقط یک doc comment را به شما نشان دهم، باید یک تعریف تابع کوچک زیر آن اضافه کنم. در عین حال، آن تابع فقط برای راضی کردن کامپایلر آنجاست، پس پنهان کردنش مثال را روشن‌تر می‌کند. می‌توانید از این تکنیک برای توضیح مثال‌های طولانی‌تر با جزئیات استفاده کنید، بی‌آن‌که آزمون‌پذیری مستنداتتان از بین برود.</p>
+<p>برای مثال، تصور کنید می‌خواهیم این کد را مستندسازی کنیم:</p>
+<pre><code class="language-rust">let x = 5;
+let y = 6;
+println!("{}", x + y);</code></pre>
+<p>ممکن است بخواهیم مستندات در نهایت این شکل را داشته باشند:</p>
+<blockquote>
+<p>ابتدا <code>x</code> را برابر پنج قرار می‌دهیم:</p>
+<pre><code class="language-rust">let x = 5;
+<span class="boring">let y = 6;
+</span><span class="boring">println!("{}", x + y);</span></code></pre>
+<p>سپس <code>y</code> را برابر شش قرار می‌دهیم:</p>
+<pre><code class="language-rust"><span class="boring">let x = 5;
+</span>let y = 6;
+<span class="boring">println!("{}", x + y);</span></code></pre>
+<p>و در پایان، مجموع <code>x</code> و <code>y</code> را چاپ می‌کنیم:</p>
+<pre><code class="language-rust"><span class="boring">let x = 5;
+</span><span class="boring">let y = 6;
+</span>println!("{}", x + y);</code></pre>
+</blockquote>
+<p>برای این‌که هر بلوک کد آزمون‌پذیر بماند، می‌خواهیم کل برنامه در هر بلوک باشد، اما نمی‌خواهیم خواننده هر بار همهٔ خطوط را ببیند. این چیزی است که در کد منبع خود می‌گذاریم:</p>
+<pre><code class="language-markdown">First, we set `x` to five:
+
+```
+let x = 5;
+# let y = 6;
+# println!("{}", x + y);
+```
+
+Next, we set `y` to six:
+
+```
+# let x = 5;
+let y = 6;
+# println!("{}", x + y);
+```
+
+Finally, we print the sum of `x` and `y`:
+
+```
+# let x = 5;
+# let y = 6;
+println!("{}", x + y);
+```
+</code></pre>
+<p>با تکرار همهٔ بخش‌های مثال، می‌توانید مطمئن شوید که مثال شما همچنان کامپایل می‌شود، در حالی که فقط بخش‌هایی را نشان می‌دهید که به آن قسمت از توضیحتان مربوط‌اند.</p>
+<p>می‌توان از پنهان شدن خط‌ها با <code>#</code> جلوگیری کرد، با استفاده از دو هش پشت‌سرهم <code>##</code>. این کار فقط برای نخستین <code>#</code> لازم است که در غیر این صورت باعث پنهان شدن می‌شد. اگر یک رشتهٔ لیترال مانند زیر داشته باشیم که خطی دارد که با <code>#</code> شروع می‌شود:</p>
+<pre><code class="language-rust">let s = "foo
+# bar # baz";</code></pre>
+<p>می‌توانیم با escape کردن <code>#</code> ابتدایی آن را مستندسازی کنیم:</p>
+<pre><code class="language-text">/// let s = "foo
+/// ## bar # baz";
+</code></pre>
+<p>این هم مثالی با یک قاعدهٔ ماکرو که با توکن‌هایی که با <code>#</code> شروع می‌شوند تطبیق می‌یابد:</p>
+<pre><code class="language-rust no_run">/// ```
+/// macro_rules! ignore { (##tag) =&gt; {}; }
+/// ignore! {
+///     ###tag
+/// }
+/// ```
+<span class="boring">fn f() {}</span></code></pre>
+<p>همان‌طور که می‌بینید، قاعده دو <code>#</code> انتظار دارد، پس هنگام فراخوانی آن باید یک <code>#</code> اضافه بنویسیم زیرا نخستین <code>#</code> به‌عنوان escape به کار می‌رود.</p>
+<h2 id="using--in-doc-tests"><a class="header" href="#using--in-doc-tests">استفاده از <code>?</code> در آزمون‌های مستندات</a></h2>
+<p>هنگام نوشتن یک مثال، گنجاندن مدیریت کامل خطا به‌ندرت مفید است، زیرا مقدار قابل‌توجهی کد تکراری (boilerplate) اضافه می‌کند. در عوض، ممکن است چنین چیزی بخواهید:</p>
+<pre><code class="language-rust no_run">/// ```
+/// use std::io;
+/// let mut input = String::new();
+/// io::stdin().read_line(&amp;mut input)?;
+/// ```
+<span class="boring">fn f() {}</span></code></pre>
+<p>مشکل این است که <code>?</code> یک <code>Result&lt;T, E&gt;</code> برمی‌گرداند و تابع‌های آزمون چیزی برنمی‌گردانند، بنابراین این کد خطای ناسازگاری نوع‌ها می‌دهد.</p>
+<p>می‌توانید با افزودن دستی یک <code>main</code> که <code>Result&lt;T, E&gt;</code> برمی‌گرداند این محدودیت را دور بزنید، زیرا <code>Result&lt;T, E&gt;</code> صفت <code>Termination</code> را پیاده‌سازی می‌کند:</p>
+<pre><code class="language-rust no_run">/// A doc test using ?
+///
+/// ```
+/// use std::io;
+///
+/// fn main() -&gt; io::Result&lt;()&gt; {
+///     let mut input = String::new();
+///     io::stdin().read_line(&amp;mut input)?;
+///     Ok(())
+/// }
+/// ```
+<span class="boring">fn f() {}</span></code></pre>
+<p>با کمک <code>#</code> از بخش بالا، به راه‌حلی می‌رسید که برای خواننده همان ایدهٔ اولیه به نظر می‌رسد اما با آزمون‌های مستندات کار می‌کند:</p>
+<pre><code class="language-rust no_run">/// ```
+/// use std::io;
+/// # fn main() -&gt; io::Result&lt;()&gt; {
+/// let mut input = String::new();
+/// io::stdin().read_line(&amp;mut input)?;
+/// # Ok(())
+/// # }
+/// ```
+<span class="boring">fn f() {}</span></code></pre>
+<p>از نسخهٔ 1.34.0 به بعد، می‌توان <code>fn main()</code> را هم حذف کرد، اما باید نوع خطا را مشخص کنید:</p>
+<pre><code class="language-rust no_run">/// ```
+/// use std::io;
+/// let mut input = String::new();
+/// io::stdin().read_line(&amp;mut input)?;
+/// # Ok::&lt;(), io::Error&gt;(())
+/// ```
+<span class="boring">fn f() {}</span></code></pre>
+<p>این پیامد ناخوشایند آن است که عملگر <code>?</code> یک تبدیل ضمنی اضافه می‌کند، پس استنتاج نوع شکست می‌خورد چون نوع یکتا نیست. لطفاً توجه کنید که باید <code>(())</code> را پشت‌سرهم و بدون فاصلهٔ میانی بنویسید تا <code>rustdoc</code> بفهمد شما یک تابع ضمنی برگرداننده <code>Result</code> می‌خواهید.</p>
+<h2 id="showing-warnings-in-doctests"><a class="header" href="#showing-warnings-in-doctests">نمایش هشدارها در doctestها</a></h2>
+<p>می‌توانید با اجرای <code>rustdoc --test --test-args=--show-output</code> (یا اگر از cargo استفاده می‌کنید، <code>cargo test --doc -- --show-output</code>) هشدارها را در doctestها نشان دهید. به‌طور پیش‌فرض، این کار همچنان هشدارهای <code>unused</code> را پنهان می‌کند، زیرا بسیاری از مثال‌ها از تابع‌های خصوصی استفاده می‌کنند؛ اگر می‌خواهید هشدارهای متغیرهای استفاده‌نشده یا کد مرده را ببینید، می‌توانید <code>#![warn(unused)]</code> را در بالای مثال خود اضافه کنید. همچنین می‌توانید برای فعال کردن هشدارها به‌صورت سراسری از <a href="the-doc-attribute.html#testattr"><code>#![doc(test(attr(warn(unused))))]</code></a> در ریشهٔ crate استفاده کنید.</p>
+<h2 id="documenting-macros"><a class="header" href="#documenting-macros">مستندسازی ماکروها</a></h2>
+<p>این مثالی از مستندسازی یک ماکرو است:</p>
+<pre><code class="language-rust">/// Panic with a given message unless an expression evaluates to true.
+///
+/// # Examples
+///
+/// ```
+/// # #[macro_use] extern crate foo;
+/// # fn main() {
+/// panic_unless!(1 + 1 == 2, “Math is broken.”);
+/// # }
+/// ```
+///
+/// ```should_panic
+/// # #[macro_use] extern crate foo;
+/// # fn main() {
+/// panic_unless!(true == false, “I’m broken.”);
+/// # }
+/// ```
+#[macro_export]
+macro_rules! panic_unless {
+    ($condition:expr, $($rest:expr),+) =&gt; ({ if ! $condition { panic!($($rest),+); } });
+}
+<span class="boring">fn main() {}</span></code></pre>
+<p>سه نکته را باید توجه کنید: باید خط <code>extern crate</code> خودمان را اضافه کنیم تا بتوانیم attribute ـِ <code>#[macro_use]</code> را بیفزاییم. دوم، باید <code>main()</code> خودمان را هم اضافه کنیم (به دلایلی که در بالا بحث شد). و سرانجام، استفادهٔ سنجیدهٔ <code>#</code> برای کامنت کردن آن دو مورد، تا در خروجی ظاهر نشوند.</p>
+<h2 id="attributes"><a class="header" href="#attributes">attributeها</a></h2>
+<p>بلوک‌های کد را می‌توان با attributeهایی علامت‌گذاری کرد که به <code>rustdoc</code> می‌گویند آزمون را چگونه بسازد و تفسیر کند. این attributeها در خط آغازین، پس از <a href="https://spec.commonmark.org/0.29/#code-fence">حصار کد (code fence)</a> می‌آیند. به همین دلیل، جایگاهشان را با رشته‌های زبان مانند <code>rust</code> یا <code>text</code> مشترک دارند. می‌توان چند attribute را با جدا کردن آن‌ها با ویرگول، فاصله یا tab ارائه کرد. همچنین می‌توانید توضیحاتی بنویسید که میان پرانتز <code>(…)</code> قرار می‌گیرند.</p>
+<p>همان‌طور که در مقدمهٔ ابتدای صفحه اشاره شد، مگر این‌که <code>rust</code> یا چیزی را مشخص کنید که attribute نیست (به‌جز <code>custom</code>)، بلوک کد کد منبع Rust فرض می‌شود (و به همین صورت syntax highlight می‌شود).</p>
+<p>البته اگر Markdown توسط ابزارهای دیگر هم مصرف می‌شود (مثلاً اگر درون یک <code>README.md</code> باشد که از طریق <code>include_str</code> گنجانده می‌شود)، می‌توانید <code>rust</code> را صریحاً اضافه کنید (مانند <code>rust,ignore</code>).</p>
+<h3 id="ignore"><a class="header" href="#ignore"><code>ignore</code></a></h3>
+<p>attribute ـِ <code>ignore</code> به <code>rustdoc</code> می‌گوید کد شما را نادیده بگیرد. این زمانی مفید است که می‌خواهید syntax highlighting مخصوص Rust را داشته باشید اما قطعه‌کد ناقص یا شبه‌کد است. رسم است دلیل نادیده گرفته شدن را در یک کامنت <code>(…)</code> بنویسید.</p>
+<pre><code class="language-rust">/// ```ignore
+/// fn foo() {
+/// ```
+///
+/// ```ignore (needs extra dependency)
+/// use dependency::functionality;
+/// functionality();
+/// ```
+<span class="boring">fn foo() {}</span></code></pre>
+<p>توجه کنید که تقریباً هرگز این چیزی نیست که می‌خواهید، زیرا کلی‌ترین حالت است. در عوض، اگر کد نیست آن را با <code>text</code> علامت‌گذاری کنید، یا با استفاده از <code>#</code> مثالی کارا بسازید که فقط بخش مورد نظر شما را نشان دهد.</p>
+<h3 id="should_panic"><a class="header" href="#should_panic"><code>should_panic</code></a></h3>
+<p><code>should_panic</code> به <code>rustdoc</code> می‌گوید که کد باید درست کامپایل شود اما هنگام اجرا panic کند. اگر کد panic نکند، آزمون شکست می‌خورد.</p>
+<pre><code class="language-rust">/// ```should_panic
+/// assert!(false);
+/// ```
+<span class="boring">fn foo() {}</span></code></pre>
+<h3 id="no_run"><a class="header" href="#no_run"><code>no_run</code></a></h3>
+<p>attribute ـِ <code>no_run</code> کد شما را کامپایل می‌کند اما اجرا نمی‌کند. این برای مثال‌هایی مانند «این‌گونه یک صفحهٔ وب را دریافت کنید» مهم است، که می‌خواهید مطمئن شوید کامپایل می‌شوند، اما ممکن است در یک محیط آزمون بدون دسترسی به شبکه اجرا شوند. این attribute همچنین برای نمایش قطعه‌کدهایی که می‌توانند باعث رفتار تعریف‌نشده (Undefined Behavior) شوند به کار می‌رود.</p>
+<pre><code class="language-rust">/// ```no_run
+/// loop {
+///     println!("Hello, world");
+/// }
+/// ```
+<span class="boring">fn foo() {}</span></code></pre>
+<h3 id="compile_fail"><a class="header" href="#compile_fail"><code>compile_fail</code></a></h3>
+<p><code>compile_fail</code> به <code>rustdoc</code> می‌گوید که کامپایل باید شکست بخورد. اگر کامپایل شود، آزمون شکست می‌خورد.</p>
+<pre><code class="language-rust">/// ```compile_fail
+/// let x = 5;
+/// x += 2; // shouldn't compile!
+/// ```
+<span class="boring">fn foo() {}</span></code></pre>
+<div class="warning">
+با این حال، لطفاً توجه کنید که کدی که با نسخهٔ فعلی Rust شکست می‌خورد، ممکن است در نسخه‌ای آینده کار کند،
+چون قابلیت‌های جدید افزوده می‌شوند!
+</div>
+
+<h3 id="edition"><a class="header" href="#edition"><code>edition…</code></a></h3>
+<p><code>edition2015</code>، <code>edition2018</code>، <code>edition2021</code> و <code>edition2024</code> به <code>rustdoc</code> می‌گویند که نمونه‌کد باید با edition متناظر Rust کامپایل شود.</p>
+<pre><code class="language-rust">/// Only runs on the 2018 edition.
+///
+/// ```edition2018
+/// let result: Result&lt;i32, ParseIntError&gt; = try {
+///     "1".parse::&lt;i32&gt;()?
+///         + "2".parse::&lt;i32&gt;()?
+///         + "3".parse::&lt;i32&gt;()?
+/// };
+/// ```
+<span class="boring">fn foo() {}</span></code></pre>
+<h3 id="standalone_crate"><a class="header" href="#standalone_crate"><code>standalone_crate</code></a></h3>
+<p>از edition ـِ 2024 به بعد<sup class="footnote-reference" id="fr-edition-note-1"><a href="#footnote-edition-note">1</a></sup>، doctestهای سازگار پیش از اجرا در یکی ادغام می‌شوند. ما به دلایل کارایی doctestها را ترکیب می‌کنیم: کندترین بخش doctestها کامپایل آن‌هاست. ادغام همهٔ آن‌ها در یک فایل و کامپایل این فایل جدید و سپس اجرای doctestها بسیار سریع‌تر است. چه doctestها ادغام شوند چه نشوند، هر کدام در پردازهٔ جداگانهٔ خود اجرا می‌شوند.</p>
+<p>نمونه‌ای از زمان صرف‌شده هنگام اجرای doctestها:</p>
+<p><a href="https://crates.io/crates/sysinfo">crate با نام sysinfo</a>:</p>
+<pre><code class="language-text">wall-time duration: 4.59s
+total compile time: 27.067s
+total runtime: 3.969s
+</code></pre>
+<p>کتابخانهٔ core در Rust:</p>
+<pre><code class="language-text">wall-time duration: 102s
+total compile time: 775.204s
+total runtime: 15.487s
+</code></pre>
+<p>در برخی موارد، doctestها را نمی‌توان ادغام کرد. برای مثال، اگر این را داشته باشید:</p>
+<pre><code class="language-rust">//! ```
+//! let location = std::panic::Location::caller();
+//! assert_eq!(location.line(), 4);
+//! ```</code></pre>
+<p>مشکل این کد آن است که اگر هر doctest دیگری را تغییر دهید، احتمالاً هنگام اجرای <code>rustdoc --test</code> می‌شکند و نگهداری آن را دشوار می‌کند.</p>
+<p>اینجاست که attribute ـِ <code>standalone_crate</code> وارد می‌شود: به <code>rustdoc</code> می‌گوید که یک doctest نباید با بقیه ادغام شود. پس کد قبلی باید از آن استفاده کند:</p>
+<pre><code class="language-rust">//! ```standalone_crate
+//! let location = std::panic::Location::caller();
+//! assert_eq!(location.line(), 4);
+//! ```</code></pre>
+<p>در این حالت، این یعنی با افزودن/حذف doctestهای دیگر، اطلاعات شمارهٔ خط تغییر نخواهد کرد.</p>
+<h3 id="ignore--ignoring-targets"><a class="header" href="#ignore--ignoring-targets"><code>ignore-…</code>: نادیده گرفتن هدف‌ها</a></h3>
+<p>attributeهایی که با <code>ignore-</code> شروع می‌شوند می‌توانند برای نادیده گرفتن doctestها در هدف‌های مشخص به کار روند. برای مثال، <code>ignore-x86_64</code> از ساخت doctestها جلوگیری می‌کند هرگاه نام هدف شامل <code>x86_64</code> باشد.</p>
+<pre><code class="language-rust">/// ```ignore-x86_64
+/// assert!(2 == 2);
+/// ```
+struct Foo;</code></pre>
+<p>این doctest برای هدف‌هایی مانند <code>x86_64-unknown-linux-gnu</code> ساخته نخواهد شد.</p>
+<p>می‌توان چند attribute ـِ ignore را برای نادیده گرفتن چند هدف مشخص کرد:</p>
+<pre><code class="language-rust">/// ```ignore-x86_64,ignore-windows
+/// assert!(2 == 2);
+/// ```
+struct Foo;</code></pre>
+<p>اگر می‌خواهید سازگاری با نسخه‌های قدیمی‌تر rustdoc را حفظ کنید، می‌توانید هم <code>ignore</code> و هم <code>ignore-</code> را مشخص کنید، مانند:</p>
+<pre><code class="language-rust">/// ```ignore,ignore-x86_64
+/// assert!(2 == 2);
+/// ```
+struct Foo;</code></pre>
+<p>در نسخه‌های قدیمی‌تر، این روی همهٔ هدف‌ها نادیده گرفته می‌شود، اما از نسخهٔ 1.88.0 به بعد، <code>ignore-x86_64</code> بر <code>ignore</code> غلبه می‌کند.</p>
+<h3 id="--custom-custom-css-classes-for-code-blocks"><a class="header" href="#--custom-custom-css-classes-for-code-blocks"><code>{…}</code> و <code>custom</code>: کلاس‌های CSS سفارشی برای بلوک‌های کد</a></h3>
+<pre><code class="language-rust">/// ```custom,{class=language-c}
+/// int main(void) { return 0; }
+/// ```
+pub struct Bar;</code></pre>
+<p>متن <code>int main(void) { return 0; }</code> بدون highlight در یک بلوک کد با کلاس <code>language-c</code> رندر می‌شود. برای مثال می‌توان از این برای highlight کردن زبان‌های دیگر از طریق کتابخانه‌های جاوااسکریپت استفاده کرد.</p>
+<p>بدون attribute ـِ <code>custom</code>، این به‌صورت یک مثال کد Rust با یک کلاس CSS اضافی <code>language-C</code> تولید می‌شد. بنابراین اگر به‌طور خاص نمی‌خواهید که مثال کد Rust باشد، فراموش نکنید attribute ـِ <code>custom</code> را اضافه کنید.</p>
+<p>شایان ذکر است که می‌توانید <code>class=</code> را با <code>.</code> جایگزین کنید تا همان نتیجه را بگیرید:</p>
+<pre><code class="language-rust">/// ```custom,{.language-c}
+/// int main(void) { return 0; }
+/// ```
+pub struct Bar;</code></pre>
+<p>شایان ذکر است که <code>rust</code> و <code>{.rust}</code> / <code>{class=rust}</code> اثرهای متفاوتی دارند: <code>rust</code> نشان می‌دهد که این یک بلوک کد Rust است، در حالی که دو مورد دیگر یک کلاس CSS با نام «rust» به بلوک کد در HTML تولیدشده اضافه می‌کنند.</p>
+<p>همچنین می‌توانید از نقل‌قول دوتایی استفاده کنید:</p>
+<pre><code class="language-rust">/// ```"not rust" {."hello everyone"}
+/// int main(void) { return 0; }
+/// ```
+pub struct Bar;</code></pre>
+<h3 id="test_harness"><a class="header" href="#test_harness"><code>test_harness</code></a></h3>
+<p>با اعمال <code>test_harness</code>، <code>rustdoc</code> هر <em>تابع آزمونِ</em> موجود را به‌جای تابع <code>main</code> (که ممکن است ضمنی باشد) اجرا می‌کند.</p>
+<pre><code class="language-rust">//! ```test_harness
+//! #[test]
+//! #[should_panic]
+//! fn abc() { assert!(false); }
+//!
+//! #[test]
+//! fn xyz() { assert!(true); }
+//! ```</code></pre>
+<p>دربارهٔ <em>تابع‌های آزمون</em> می‌توانید در <a href="../../book/ch11-01-writing-tests.html">کتاب</a> یا <a href="../../reference/attributes/testing.html">مرجع Rust</a> بیشتر بخوانید.</p>
+<h2 id="syntax-reference"><a class="header" href="#syntax-reference">مرجع نحو</a></h2>
+<p>نحو <em>دقیق</em> بلوک‌های کد، شامل حالت‌های مرزی، را می‌توانید در بخش <a href="https://spec.commonmark.org/0.29/#fenced-code-blocks">Fenced Code Blocks</a> از مشخصات CommonMark بیابید.</p>
+<p>Rustdoc بلوک‌های کد <em>تورفته</em> را هم به‌عنوان جایگزینی برای بلوک‌های کد محصور می‌پذیرد: به‌جای احاطه کردن کد خود با یک <a href="https://spec.commonmark.org/0.29/#code-fence">حصار کد</a> (مثلاً سه backtick)، می‌توانید هر خط را با چهار فاصله یا بیشتر تورفته کنید.</p>
+<pre><code class="language-markdown">    let foo = "foo";
+    assert_eq!(foo, "foo");
+</code></pre>
+<p>این‌ها نیز در مشخصات CommonMark، در بخش <a href="https://spec.commonmark.org/0.29/#indented-code-blocks">Indented Code Blocks</a>، مستند شده‌اند.</p>
+<p>با این حال، ترجیح داده می‌شود به‌جای بلوک‌های کد تورفته از بلوک‌های کد محصور استفاده شود. نه‌تنها بلوک‌های کد محصور برای کد Rust اصطلاحی‌تر (idiomatic) شمرده می‌شوند، بلکه راهی برای استفاده از attributeهایی مانند <code>ignore</code> یا <code>should_panic</code> با بلوک‌های کد تورفته وجود ندارد.</p>
+<h3 id="include-items-only-when-collecting-doctests"><a class="header" href="#include-items-only-when-collecting-doctests">گنجاندن آیتم‌ها فقط هنگام جمع‌آوری doctestها</a></h3>
+<p>آزمون‌های مستندات Rustdoc می‌توانند کارهایی بکنند که آزمون‌های واحد معمولی نمی‌توانند، بنابراین گاهی می‌تواند مفید باشد که doctestهای خود را با نمونه‌هایی گسترش دهید که در غیر این صورت نیازی نبود در مستندات باشند. برای این منظور، Rustdoc به شما اجازه می‌دهد برخی آیتم‌ها فقط هنگامی ظاهر شوند که doctestها را جمع‌آوری می‌کند، تا بتوانید از قابلیت doctest استفاده کنید بی‌آن‌که آزمون را مجبور به ظاهر شدن در مستندات کنید، یا مجبور شوید یک آیتم خصوصی دلخواه پیدا کنید تا آن را روی آن قرار دهید.</p>
+<p>هنگام کامپایل یک crate برای استفاده در doctestها (با گزینهٔ <code>--test</code>)، <code>rustdoc</code> مقدار <code>#[cfg(doctest)]</code> را تنظیم می‌کند. توجه کنید که آن‌ها همچنان فقط به آیتم‌های عمومی crate شما لینک می‌شوند؛ اگر لازم است آیتم‌های خصوصی را آزمون کنید، باید یک آزمون واحد بنویسید.</p>
+<p>در این مثال، doctestهایی اضافه می‌کنیم که می‌دانیم کامپایل نخواهند شد، تا بررسی کنیم که ساختار ما فقط می‌تواند داده‌های معتبر را بپذیرد:</p>
+<pre><code class="language-rust">/// We have a struct here. Remember it doesn't accept negative numbers!
+pub struct MyStruct(pub usize);
+
+/// ```compile_fail
+/// let x = my_crate::MyStruct(-5);
+/// ```
+#[cfg(doctest)]
+pub struct MyStructOnlyTakesUsize;</code></pre>
+<p>توجه کنید که ساختار <code>MyStructOnlyTakesUsize</code> در اینجا در واقع بخشی از API عمومی crate شما نیست. استفاده از <code>#[cfg(doctest)]</code> تضمین می‌کند که این ساختار فقط وقتی وجود دارد که <code>rustdoc</code> در حال جمع‌آوری doctestهاست. یعنی doctest آن هنگامی اجرا می‌شود که <code>--test</code> به rustdoc داده شود، اما از مستندات عمومی پنهان است.</p>
+<p>کاربرد ممکن دیگر <code>#[cfg(doctest)]</code> آزمودن doctestهایی است که در فایل README شما گنجانده شده‌اند، بی‌آن‌که آن را در مستندات اصلی خود بگنجانید. برای مثال، می‌توانید این را در <code>lib.rs</code> بنویسید تا README خود را به‌عنوان بخشی از doctestهایتان آزمون کنید:</p>
+<pre><code class="language-rust no_run">#[doc = include_str!("../README.md")]
+#[cfg(doctest)]
+pub struct ReadmeDoctests;</code></pre>
+<p>این کار README شما را به‌عنوان مستندات روی ساختار پنهان <code>ReadmeDoctests</code> می‌گنجاند و سپس همراه با بقیهٔ doctestهای شما آزمون می‌شود.</p>
+<h2 id="controlling-the-compilation-and-run-directories"><a class="header" href="#controlling-the-compilation-and-run-directories">کنترل پوشه‌های کامپایل و اجرا</a></h2>
+<p>به‌طور پیش‌فرض، <code>rustdoc --test</code> مثال‌های آزمون مستندات را از همان پوشهٔ کاری کامپایل و اجرا می‌کند. پوشهٔ کامپایل برای تشخیص‌های کامپایلر، ماکروی <code>file!()</code> و خروجی خودِ اجراکنندهٔ آزمون <code>rustdoc</code> به کار می‌رود، در حالی که پوشهٔ اجرا بر عملیات سیستم فایل درون مثال‌های آزمون مستندات اثر می‌گذارد، مانند <code>std::fs::read_to_string</code>.</p>
+<p>پرچم <code>--test-run-directory</code> اجازه می‌دهد پوشهٔ اجرا را جدا از پوشهٔ کامپایل کنترل کنید. این به‌ویژه در workspaceها مفید است، جایی که فراخوانی‌های کامپایلر و در نتیجه تشخیص‌ها باید نسبت به پوشهٔ workspace باشند، اما مثال‌های آزمون مستندات باید نسبت به پوشهٔ crate اجرا شوند.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-edition-note">
+<p>این بر اساس edition کل crate است، نه edition هر آزمون منفردی که ممکن است در attribute کد آن مشخص شده باشد. <a href="#fr-edition-note-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="linking-to-items-by-name.html">→ پیوند دادن به آیتم‌ها با نام</a><a href="../lints.html">lintهای مخصوص rustdoc ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustdoc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

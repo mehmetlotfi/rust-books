@@ -1,0 +1,56 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0772 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0772"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h4 id="note-this-error-code-is-no-longer-emitted-by-the-compiler"><a class="header" href="#note-this-error-code-is-no-longer-emitted-by-the-compiler">توجه: این کد خطا دیگر توسط کامپایلر صادر نمی‌شود.</a></h4>
+<p>یک شیء صفت (trait object) طول عمر مشخصی مانند <code>'1</code> دارد، اما به شکلی استفاده شده که لازم است طول عمر <code>'static</code> داشته باشد.</p>
+<p>مثال کدی که خطا می‌دهد:</p>
+<pre><code class="language-compile_fail">trait BooleanLike {}
+trait Person {}
+
+impl BooleanLike for bool {}
+
+impl dyn Person {
+    fn is_cool(&amp;self) -&gt; bool {
+        // hey you, you're pretty cool
+        true
+    }
+}
+
+fn get_is_cool&lt;'p&gt;(person: &amp;'p dyn Person) -&gt; impl BooleanLike {
+    // error: `person` has an anonymous lifetime `'p` but calling
+    //        `print_cool_fn` introduces an implicit `'static` lifetime
+    //        requirement
+    person.is_cool()
+}
+</code></pre>
+<p>شیء صفت <code>person</code> در تابع <code>get_is_cool</code>، با اینکه پشت یک ارجاع با طول عمر <code>'p</code> قرار دارد، طول عمر ضمنی مخصوص به خود را نیز دارد، یعنی <code>'2</code>.</p>
+<p>طول عمر <code>'2</code> نمایانگر داده‌ای است که شیء صفت ممکن است در درون خود نگه دارد، برای مثال:</p>
+<pre><code>trait MyTrait {}
+
+struct MyStruct&lt;'a&gt;(&amp;'a i32);
+
+impl&lt;'a&gt; MyTrait for MyStruct&lt;'a&gt; {}
+</code></pre>
+<p>در این سناریو، اگر شیء صفتی از نوع <code>dyn MyTrait + '2</code> از روی <code>MyStruct&lt;'a&gt;</code> ساخته شود، <code>'a</code> باید دست‌کم به اندازه <code>'2</code> زنده بماند. این امر تضمین می‌کند که داده درونی شیء صفت از هر متد صفتی به‌صورت ایمن قابل دسترسی باشد. این قاعده برای هر طول عمری که هر ساختاری که به شیء صفت تبدیل می‌شود داشته باشد نیز برقرار است.</p>
+<p>در پیاده‌سازی برای <code>dyn Person</code>، طول عمر <code>'2</code> که نمایانگر داده درونی است حذف شده بود، یعنی کامپایلر طول عمر <code>'static</code> را استنباط کرده است. در نتیجه، کامپایلر متد <code>is_cool</code> در این پیاده‌سازی را به شکل زیر استنباط می‌کند:</p>
+<pre><code># trait Person {}
+#
+# impl dyn Person {
+fn is_cool&lt;'a&gt;(self: &amp;'a (dyn Person + 'static)) -&gt; bool {unimplemented!()}
+# }
+</code></pre>
+<p>در حالی که تابع <code>get_is_cool</code> به این شکل استنباط می‌شود:</p>
+<pre><code># trait Person {}
+# trait BooleanLike {}
+#
+fn get_is_cool&lt;'p, R: BooleanLike&gt;(person: &amp;'p (dyn Person + 'p)) -&gt; R {
+    unimplemented!()
+}
+</code></pre>
+<p>و این ما را به هسته مشکل می‌رساند؛ انتساب نوع <code>&amp;'_ (dyn Person + '_)</code> به نوع <code>&amp;'_ (dyn Person + 'static)</code> ناممکن است.</p>
+<p>رفع آن به سادگی جنریک کردن روی طول عمر <code>'2</code> است تا کامپایلر آن را <code>'static</code> استنباط نکند:</p>
+<pre><code># trait Person {}
+#
+impl&lt;'d&gt; dyn Person + 'd {/* ... */}
+
+// This works too, and is more elegant:
+//impl dyn Person + '_ {/* ... */}
+</code></pre>
+<p>برای اطلاعات بیشتر درباره طول عمر شیءهای صفت، مرجع Rust درباره کران‌های طول عمر شیء صفت را ببینید.</p><nav class="page-nav"><a href="../errors/E0771.html">→ E0771</a><a href="../errors/E0773.html">E0773 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

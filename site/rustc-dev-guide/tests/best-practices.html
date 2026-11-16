@@ -1,0 +1,169 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>بهترین روش‌ها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tests/best-practices"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="best-practices-for-writing-tests"><a class="header" href="#best-practices-for-writing-tests">بهترین روش‌ها برای نوشتن تست</a></h1>
+<p>این فصل بهترین روش‌های مربوط به نوشتن و تغییر تست‌ها را شرح می‌دهد.
+می‌خواهیم مطمئن شویم تست‌هایی که می‌نویسیم حتی چند سال بعد هم
+بدون نیاز به مراجعه به نویسندهٔ اصلی و انجام کلی باستان‌شناسی git، آسان فهمیده و تغییر داده می‌شوند.</p>
+<p>روش خوبی است تست خودتان را بازبینی کنید و وانمود کنید مشارکت‌کنندهٔ دیگری هستید که چند سال بعد
+بدون زمینهٔ زیاد به تستی که شکست خورده نگاه می‌کند (این حتی چند روز یا چند ماه بعد هم به خودتان کمک می‌کند!).
+سپس از خود بپرسید: چگونه می‌توانم کار خودم و آن‌ها را آسان‌تر کنم؟</p>
+<p>برای اینکه این موضوع در چشم‌انداز قرار بگیرد، با یک حاشیه دربارهٔ اینکه چگونه تستی بنویسیم که
+زندگی مشارکت‌کنندهٔ دیگر را تا حد ممکن دشوار کند شروع می‌کنیم.</p>
+<blockquote>
+<p><strong>حاشیه: راهنمای میدانی خرابکاری ساده در تست</strong></p>
+<p>برای دشوارکردن زندگی مشارکت‌کنندهٔ دیگر تا حد ممکن، می‌توان:</p>
+<ul>
+<li>تست را فقط با شمارهٔ issue و بدون هیچ زمینهٔ دیگری نام‌گذاری کرد، مثلاً
+<code>issue-123456.rs</code>.</li>
+<li>هیچ کامنتی دربارهٔ آنچه تست می‌خواهد بیازماید نداشت و هیچ پیوندی به
+زمینهٔ مرتبط نگذاشت.</li>
+<li>تستی عظیم (که می‌شد کمینه‌اش کرد) گنجاند
+که شامل بخش‌های غیرضروری است و حواس را از چیز اصلی‌ای که تست واقعاً می‌خواهد بیازماید پرت می‌کند.</li>
+<li>مجموعه‌ای از خطاهای نحوی نامرتبط و خطاهای دیگر را گنجاند که برای
+آنچه تست می‌خواهد بررسی کند حیاتی نیستند.</li>
+<li>قالب‌بندی تکه‌کدها را عجیب کرد.</li>
+<li>مجموعه‌ای از featureهای استفاده‌نشده و نامرتبط را گنجاند.</li>
+<li>مثلاً <a href="./directives.html">directiveهای compiletest</a> مثل <code>ignore-windows</code> را داشت اما
+هیچ توضیحی دربارهٔ اینکه <em>چرا</em> لازم‌اند نداد.</li>
+</ul>
+</blockquote>
+<h2 id="test-naming"><a class="header" href="#test-naming">Test naming</a></h2>
+<p>کاری کنید خواننده فوراً بفهمد تست چه چیزی را می‌آزماید، به‌جای اینکه مجبور باشد شمارهٔ issue را وارد کند و در جست‌وجوی github
+بگردد تا بفهمد تست چه چیزی را می‌آزماید.
+این مزیت اضافه‌ای هم دارد:
+امکان فیلترکردن تست‌ها با <code>--test-args</code> به‌عنوان مجموعه‌ای از تست‌های مرتبط.</p>
+<ul>
+<li>تست را بر اساس چیزی که می‌آزماید یا از رگرسیون آن جلوگیری می‌کند نام‌گذاری کنید.</li>
+<li>مختصر نگه دارید.</li>
+<li>از استفاده از شمارهٔ issue به‌تنهایی به‌عنوان نام تست پرهیز کنید.</li>
+<li>از شروع‌کردن نام تست با پیشوند <code>issue-xxxxx</code> پرهیز کنید چون تکمیل خودکار را بدتر می‌کند.</li>
+</ul>
+<blockquote>
+<p><strong>از به‌کاربردن فقط شمارهٔ issue به‌عنوان نام تست پرهیز کنید</strong></p>
+<p>ترجیح دهید آن‌ها را به‌صورت پیوند یا <code>#123456</code> در کامنت‌های تست بیاورید. یا اگر
+منطقی است شمارهٔ issue را بگنجانید، کلیدواژه‌های مختصر مثل
+<code>macro-external-span-ice-123956.rs</code> را هم اضافه کنید.</p>
+<pre><code class="language-text">tests/ui/typeck/issue-123456.rs                              // bad
+tests/ui/typeck/issue-123456-asm-macro-external-span-ice.rs  // bad (for tab completion)
+tests/ui/typeck/asm-macro-external-span-ice-123456.rs        // good
+tests/ui/typeck/asm-macro-external-span-ice.rs               // good
+</code></pre>
+<p><code>issue-123456.rs</code> فوراً چیزی دربارهٔ اینکه تست واقعاً چه چیزی را می‌آزماید نمی‌گوید، یعنی باید
+جست‌وجوی اضافی کنید. گنجاندن شمارهٔ issue به‌عنوان پیشوند نام تست تکمیل با tab را کم‌فایده می‌کند
+(اگر <code>ls</code> را روی پوشهٔ تست بزنید و مجموعه‌ای از پیشوندهای <code>issue-xxxxx</code> ببینید). می‌توانیم
+در کامنت تست به issue پیوند بدهیم.</p>
+<pre><code class="language-rs">//! Check that `asm!` macro including nested macros that come from external
+//! crates do not lead to a codepoint boundary assertion ICE.
+//!
+//! Regression test for &lt;https://github.com/rust-lang/rust/issues/123456&gt;.
+</code></pre>
+<p>یک استثنا برای این قاعده <a href="./compiletest.html#crash-tests">تست‌های crash</a> است: در آنجا مرسوم است
+تست‌ها فقط با شمارهٔ issue نام‌گذاری شوند چون هدف آن‌ها پیگیری
+تکه‌کدهایی است که issueهایشان دیگر ICE/crash نمی‌دهند، و آن‌ها در PRهای رفع یا حذف می‌شوند یا
+به تست‌های ui/دیگر درست تبدیل می‌شوند.</p>
+</blockquote>
+<h2 id="test-organization"><a class="header" href="#test-organization">Test organization</a></h2>
+<ul>
+<li>For most test suites, try to find a semantically meaningful subdirectory to home the test.
+<ul>
+<li>مثلاً برای پیاده‌سازی RFC 2093 به‌طور مشخص، می‌توانیم
+مجموعه‌ای از تست‌ها را زیر <code>tests/ui/rfc-2093-infer-outlives/</code> گروه‌بندی کنیم.
+در نام پوشه، موضوع RFC را بگنجانید.</li>
+</ul>
+</li>
+<li>برای مجموعه‌های تست <a href="./compiletest.html#run-make-tests"><code>run-make</code></a>/<code>run-make-support</code>، هر <code>rmake.rs</code> باید
+در یک زیرپوشهٔ مستقیم زیر <code>tests/run-make/</code> یا
+<code>tests/run-make-cargo/</code> قرار بگیرد.
+تو در تویی بیشتر فعلاً پشتیبانی نمی‌شود.
+در اینجا هم از به‌کاربردن <em>فقط</em> شمارهٔ issue برای نام تست پرهیز کنید.</li>
+</ul>
+<h2 id="test-descriptions"><a class="header" href="#test-descriptions">Test descriptions</a></h2>
+<p>برای اینکه به مشارکت‌کنندگان دیگر کمک کنیم بفهمند اگر تغییراتشان باعث شکست تست شد تست دربارهٔ چیست،
+باید مطمئن شویم تست مستندات کافی دربارهٔ هدف/منظور خود،
+پیوند به زمینهٔ مرتبط (از جمله شمارهٔ issue یا بحث‌های دیگر)
+و احتمالاً منابع مرتبط دارد (مثلاً پیوند دادن به
+APIهای Win32 برای رفتار مشخص می‌تواند مفید باشد).</p>
+<p><strong>خلاصهٔ یک تست با کامنت‌های خوب</strong></p>
+<pre><code class="language-rust ignore">//! Brief summary of what the test is exercising.
+//! Example: Regression test for #123456: make sure coverage attribute don't ICE
+//!     when applied to non-items.
+//!
+//! Optional: Remarks on related tests/issues, external APIs/tools, crash
+//!     mechanism, how it's fixed, FIXMEs, limitations, etc.
+//! Example: This test is like `tests/attrs/linkage.rs`, but this test is
+//!     specifically checking `#[coverage]` which exercises a different code
+//!     path. The ICE was triggered during attribute validation when we tried
+//!     to construct a `def_path_str` but only emitted the diagnostic when the
+//!     platform is windows, causing an ICE on unix.
+//!
+//! Links to relevant issues and discussions. Examples below:
+//! Regression test for &lt;https://github.com/rust-lang/rust/issues/123456&gt;.
+//! See also &lt;https://github.com/rust-lang/rust/issues/101345&gt;.
+//! See discussion at &lt;https://rust-lang.zulipchat.com/#narrow/stream/131828-t-compiler/topic/123456-example-topic&gt;.
+//! See [`clone(2)`].
+//!
+//! [`clone(2)`]: https://man7.org/linux/man-pages/man2/clone.2.html
+
+//@ ignore-windows
+// Reason: (why is this test ignored for windows? why not specifically
+// windows-gnu or windows-msvc?)
+
+// Optional: Summary of test cases: What positive cases are checked?
+// What negative cases are checked? Any specific quirks?
+
+fn main() {
+    #[coverage]
+    //~^ ERROR coverage attribute can only be applied to function items.
+    let _ = {
+        // Comment highlighting something that deserves reader attention.
+        fn foo() {}
+    };
+}</code></pre>
+<p>اینکه چه مقدار زمینه/توضیح لازم است به صلاحدید نویسنده و بازبین است.
+یک قاعدهٔ سرانگشتی خوب این است که چیزهای غیربدیهی که در
+تست آزموده می‌شوند سزاوار توضیحی هستند تا به مشارکت‌کنندگان دیگر در فهمیدن کمک کنند.
+این ممکن است شامل نکاتی دربارهٔ این‌ها باشد:</p>
+<ul>
+<li>چگونه یک ICE یا باگ فعال می‌شود اگر نسبتاً پیچیده باشد.</li>
+<li>issueها و تست‌های مرتبط (مثلاً این تست شبیه تست دیگری است اما جدا نگه داشته شده چون…).</li>
+<li>Platform-specific behaviors.</li>
+<li>رفتار وابستگی‌ها و APIهای خارجی: syscallها، لینکرها، ابزارها، محیط‌ها و مانند آن.</li>
+</ul>
+<h2 id="test-content"><a class="header" href="#test-content">Test content</a></h2>
+<ul>
+<li>سعی کنید تست تا حد ممکن کمینه باشد.</li>
+<li>کد غیرحیاتی را کمینه کنید و به‌ویژه خطاهای نحوی و نوع غیرضروری را که می‌توانند snapshotهای stderr را شلوغ کنند کمینه کنید.</li>
+<li>برای خاموش‌کردن هشدارهای نامرتبط از <code>#![allow(...)]</code> یا <code>#![expect(...)]</code> استفاده کنید.</li>
+<li>در صورت امکان از نام‌های دارای معنای مفهومی استفاده کنید (مثلاً <code>fn bare_coverage_attributes() {}</code>).</li>
+</ul>
+<h2 id="flaky-tests"><a class="header" href="#flaky-tests">Flaky tests</a></h2>
+<p>همهٔ تست‌ها باید بکوشند بازتولیدپذیر و قابل‌اعتماد باشند.
+تست‌های flaky بدترین نوع تست‌اند، و می‌توان گفت حتی بدتر از نداشتن تست در وهلهٔ اول.</p>
+<ul>
+<li>تست‌های flaky می‌توانند در PRهای کاملاً نامرتبط شکست بخورند که ممکن است مشارکت‌کنندگان دیگر را گیج کند و وقتشان را صرف فهمیدن اینکه آیا شکست تست مرتبط است هدر دهد.</li>
+<li>تست‌های flaky از نتایج تستشان هیچ اطلاعات مفیدی جز این نمی‌دهند که
+flaky و نامطمئن‌اند: اگر تستی گذشت اما flaky است، آیا فقط شانس آوردم؟
+اگر تستی flaky است اما شکست خورد، آیا فقط گذرا بود؟</li>
+<li>تست‌های flaky اعتماد به کل مجموعهٔ تست را تضعیف می‌کنند.
+اگر مجموعهٔ تستی بتواند
+به‌دلیل تست‌های flaky به‌طور تصادفی و گذرا شکست بخورد، آیا کل مجموعهٔ تست گذشت یا
+فقط خوش‌شانس/بدشانس بودم؟</li>
+<li>تست‌های flaky می‌توانند در CI کامل به‌طور تصادفی شکست بخورند و منابع گران‌بها را هدر دهند.</li>
+</ul>
+<h2 id="compiletest-directives"><a class="header" href="#compiletest-directives">Compiletest directives</a></h2>
+<p>برای فهرست directiveها <a href="./directives.html">directiveهای compiletest</a> را ببینید.</p>
+<ul>
+<li>برای directiveهای <code>ignore-*</code>/<code>needs-*</code>/<code>only-*</code>، مگر اینکه بسیار بدیهی باشد،
+توضیح کوتاهی بدهید که چرا directive لازم است. مثلاً <code>"//@ ignore-wasi (wasi codegens the main symbol differently)"</code>.</li>
+<li>هنگام استفاده از <code>//@ ignore-auxiliary</code>، فایل‌های تست اصلی متناظر را مشخص کنید،
+مثلاً <code>//@ ignore-auxiliary (used by `./foo.rs`)</code>.</li>
+</ul>
+<h2 id="filecheck-best-practices"><a class="header" href="#filecheck-best-practices">FileCheck best practices</a></h2>
+<p>برای جزئیات <a href="https://llvm.org/docs/CommandGuide/FileCheck.html">راهنمای FileCheck در LLVM</a> را ببینید.</p>
+<ul>
+<li>از تطبیق روی شمارهٔ رجیسترهای مشخص یا شمارهٔ basic blockها پرهیز کنید مگر اینکه
+خاص باشند یا برای تست حیاتی باشند.
+در صورت مناسب‌بودن، استفاده از الگو (pattern) برای تطبیق آن‌ها را در نظر بگیرید.</li>
+</ul>
+<blockquote>
+<p><strong>TODO</strong></p>
+<p>Pending concrete advice.</p>
+</blockquote><nav class="page-nav"><a href="adding.html">→ افزودن آزمون‌های جدید</a><a href="compiletest.html">Compiletest ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

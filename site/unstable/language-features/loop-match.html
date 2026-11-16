@@ -1,0 +1,33 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>loop-match — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/loop-match"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="loop_match"><a class="header" href="#loop_match"><code>loop_match</code></a></h1>
+<p>issue ردیابی این قابلیت: <a href="https://github.com/rust-lang/rust/issues/132306">#132306</a></p>
+<hr>
+<p>attributeهای <code>#[loop_match]</code> و <code>#[const_continue]</code> را می‌توان برای بهبود تولید کد منطقی که با این شکل جور است به کار برد:</p>
+<pre><code class="language-ignore (pseudo-rust)">loop {
+    state = 'blk: {
+        match state {
+            State::A =&gt; {
+                break 'blk State::B
+            }
+            State::B =&gt; { /* ... */ }
+            /* ... */
+        }
+    }
+}
+</code></pre>
+<p>در اینجا خود حلقه را می‌توان با <code>#[loop_match]</code> علامت‌گذاری کرد، و هر <code>break 'blk</code> را با <code>#[const_continue]</code>، اگر مقدار در زمان کامپایل مشخص باشد:</p>
+<pre><code class="language-ignore (pseudo-rust)">#[loop_match]
+loop {
+    state = 'blk: {
+        match state {
+            State::A =&gt; {
+                #[const_continue]
+                break 'blk State::B
+            }
+            State::B =&gt; { /* ... */ }
+            /* ... */
+        }
+    }
+}
+</code></pre>
+<p>رفتار قابل‌مشاهده‌ی این حلقه دقیقاً همان رفتار بدون attributeهای اضافی است. تفاوت در خروجی تولیدشده است: به‌طور معمول، وقتی حالت <code>A</code> است، جریان کنترل از شاخه‌ی <code>A</code> به بالای حلقه برمی‌گردد و سپس به شاخه‌ی <code>B</code> می‌رود. با این attributeها، شاخه‌ی <code>A</code> بلافاصله به شاخه‌ی <code>B</code> می‌پرد.</p>
+<p>حذف این واسطه می‌تواند برای مصرف پشته و پیش‌بینی شاخه (branch prediction) مفید باشد، و با جداکردن آشکار مسیرهای جریان کنترلی که برنامه‌ی شما واقعاً از آن‌ها استفاده می‌کند، بهینه‌سازی‌های دیگر را ممکن می‌سازد.</p><nav class="page-nav"><a href="../../unstable/language-features/loop-hints.html">→ loop-hints</a><a href="../../unstable/language-features/macro-metavar-expr-concat.html">macro-metavar-expr-concat ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

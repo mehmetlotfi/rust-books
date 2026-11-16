@@ -1,0 +1,187 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>استفاده از ابزار ردیابی/لاگ‌گیری — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="tracing"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="using-tracing-to-debug-the-compiler"><a class="header" href="#using-tracing-to-debug-the-compiler">استفاده از tracing برای اشکال‌زدایی کامپایلر</a></h1>
+<p>کامپایلر تعداد زیادی فراخوانی <a href="https://docs.rs/tracing/0.1/tracing/macro.debug.html"><code>debug!</code></a> (یا <code>trace!</code>) دارد
+که در نقاط بسیاری اطلاعات لاگ چاپ می‌کنند.
+این‌ها دست‌کم برای محدودکردن محل یک باگ، اگر نه یافتن کامل آن، بسیار مفیدند،
+یا فقط برای اینکه بفهمید چرا کامپایلر کار مشخصی را انجام می‌دهد.</p>
+<p>برای دیدن لاگ‌ها باید متغیر محیطی <code>RUSTC_LOG</code> را روی فیلتر لاگ خود تنظیم کنید.
+نحو کامل فیلترهای لاگ را در <a href="https://docs.rs/tracing-subscriber/0.2.24/tracing_subscriber/filter/struct.EnvFilter.html#directives">مستندات rustdoc
+برای <code>tracing-subscriber</code></a> می‌یابید.</p>
+<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment variables</a></h2>
+<p>این نمای کلی متغیرهای محیطی‌ای است که rustc برای سفارشی‌سازی خروجی tracing می‌پذیرد.
+تعریف این‌ها را عمدتاً در <code>compiler/rustc_log/src/lib.rs</code> می‌یابید.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Usage</th></tr>
+</thead>
+<tbody>
+<tr><td><code>RUSTC_LOG</code></td><td>فیلترهای tracing (بقیهٔ این صفحه را ببینید)</td></tr>
+<tr><td><code>RUSTC_LOG_COLOR</code></td><td><code>always</code>, <code>never</code> or <code>auto</code>.</td></tr>
+<tr><td><code>RUSTC_LOG_ENTRY_EXIT</code></td><td>اگر تنظیم شده و برابر «0» نباشد، ورود/خروج span را لاگ می‌کند.</td></tr>
+<tr><td><code>RUSTC_LOG_THREAD_IDS</code></td><td>اگر تنظیم شده و برابر «1» باشد، شناسهٔ threadها را هم لاگ می‌کند.</td></tr>
+<tr><td><code>RUSTC_LOG_BACKTRACE</code></td><td>اگر یک trace با target منطبق با رشتهٔ داده‌شده صادر شود، backtrace را می‌گیرد و چاپ می‌کند.</td></tr>
+<tr><td><code>RUSTC_LOG_LINES</code></td><td>اگر <code>1</code> باشد، خطوط لاگ را بر اساس عمق تو‌رفته می‌کند.</td></tr>
+<tr><td><code>RUSTC_LOG_FORMAT_JSON</code></td><td>اگر <code>1</code> باشد، لاگ‌ها را به‌صورت JSON خروجی می‌دهد. پارامترهای دقیق در <code>rustc_log/src/lib.rs</code> هست اما قالب آن <em>ناپایدار</em> است.</td></tr>
+<tr><td><code>RUSTC_LOG_OUTPUT_TARGET</code></td><td>اگر مشخص شود، لاگ‌ها به‌جای stderr به فایلی با نام داده‌شده می‌روند.</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="function-level-filters"><a class="header" href="#function-level-filters">Function level filters</a></h2>
+<p>بسیاری از توابع در rustc با این annotate شده‌اند</p>
+<pre><code>#[instrument(level = "debug", skip(self))]
+fn foo(&amp;self, bar: Type) {}
+</code></pre>
+<p>که به شما اجازه می‌دهد از</p>
+<pre><code>RUSTC_LOG=[foo]
+</code></pre>
+<p>استفاده کنید تا همهٔ این‌ها را یک‌جا انجام دهید</p>
+<ul>
+<li>همهٔ فراخوانی‌های <code>foo</code> را لاگ می‌کند</li>
+<li>آرگومان‌ها را لاگ می‌کند (به‌جز آن‌هایی که در فهرست <code>skip</code> هستند)</li>
+<li>همه‌چیز (از هر جای دیگر کامپایلر) را تا برگشتن تابع لاگ می‌کند</li>
+</ul>
+<h3 id="i-dont-want-everything"><a class="header" href="#i-dont-want-everything">همه‌چیز را نمی‌خواهم</a></h3>
+<p>بسته به دامنهٔ تابع، ممکن است نخواهید همه‌چیز در بدنهٔ آن لاگ شود.
+به‌عنوان مثال: تابع <code>do_mir_borrowck</code> حتی برای کد بی‌اهمیتی که borrowcheck می‌شود صدها خط dump می‌کند.</p>
+<p>چون می‌توانید همهٔ فیلترها را ترکیب کنید، می‌توانید مسیر crate/ماژول اضافه کنید، مثلاً</p>
+<pre><code>RUSTC_LOG=rustc_borrowck[do_mir_borrowck]
+</code></pre>
+<h3 id="i-dont-want-all-calls"><a class="header" href="#i-dont-want-all-calls">همهٔ فراخوانی‌ها را نمی‌خواهم</a></h3>
+<p>اگر libcore را کامپایل می‌کنید، احتمالاً <em>همهٔ</em> dumpهای borrowck را نمی‌خواهید،
+بلکه فقط یکی برای تابعی مشخص.
+می‌توانید فراخوانی‌های تابع را بر اساس آرگومان‌هایشان با regex فیلتر کنید.</p>
+<pre><code>RUSTC_LOG=[do_mir_borrowck{id=\.\*from_utf8_unchecked\.\*}]
+</code></pre>
+<p>فقط لاگ‌های borrowcheck برای <code>from_utf8_unchecked</code> را می‌دهد.
+توجه کنید که همچنان برای هر <code>do_mir_borrowck</code> نادیده‌گرفته‌شده یک پیام کوتاه می‌گیرید،
+اما هیچ‌چیز از درون آن فراخوانی‌ها.
+این به شما کمک می‌کند فراخوانی‌هایی را که رخ می‌دهند مرور کنید و اگر regex را اشتباه نوشته‌اید آن را اصلاح کنید.</p>
+<h2 id="query-level-filters"><a class="header" href="#query-level-filters">Query level filters</a></h2>
+<p>هر <a href="query.html">کوئری</a> به‌طور خودکار با یک span لاگ‌گذاری برچسب می‌خورد تا
+بتوانید همهٔ پیام‌های لاگ را هنگام اجرای کوئری نمایش دهید.
+برای مثال، اگر می‌خواهید همه‌چیز را هنگام type checking لاگ کنید:</p>
+<pre><code>RUSTC_LOG=[typeck]
+</code></pre>
+<p>آرگومان‌های کوئری به‌صورت فیلد tracing گنجانده می‌شوند که یعنی می‌توانید
+بر اساس نمایش debug آرگومان‌ها فیلتر کنید.
+برای مثال، کوئری <code>typeck</code> آرگومان <code>key: LocalDefId</code> برای چیزی که بررسی می‌شود دارد.
+می‌توانید از regex برای تطبیق آن <code>LocalDefId</code> استفاده کنید تا type checking یک تابع مشخص را لاگ کنید:</p>
+<pre><code>RUSTC_LOG=[typeck{key=.*name_of_item.*}]
+</code></pre>
+<p>کوئری‌های مختلف آرگومان‌های مختلف دارند.
+فهرست کوئری‌ها و آرگومان‌هایشان را در
+<a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_middle/src/queries.rs"><code>rustc_middle/src/queries.rs</code></a> می‌یابید.</p>
+<h2 id="broad-module-level-filters"><a class="header" href="#broad-module-level-filters">فیلترهای گسترده در سطح ماژول</a></h2>
+<p>همچنین می‌توانید از فیلترهایی شبیه فیلترهای crate با نام <code>log</code> استفاده کنید،
+که همه‌چیز درون یک ماژول مشخص را فعال می‌کنند.
+این اغلب بیش‌ازحد پرحرف و بی‌ساختار است،
+پس توصیه می‌شود از فیلترهای سطح تابع استفاده کنید.</p>
+<p>فیلتر لاگ شما می‌تواند فقط <code>debug</code> باشد تا همهٔ خروجی <code>debug!</code> و بالاتر را بگیرد (مثلاً <code>info!</code> را هم شامل می‌شود)، یا <code>path::to::module</code> تا <em>همهٔ</em>
+خروجی (از جمله <code>trace!</code>) را از یک ماژول مشخص بگیرد،
+یا <code>path::to::module=debug</code> تا خروجی <code>debug!</code> و بالاتر را از یک ماژول مشخص بگیرد.</p>
+<p>برای مثال، برای گرفتن خروجی <code>debug!</code> و بالاتر برای یک ماژول مشخص،
+می‌توانید کامپایلر را با <code>RUSTC_LOG=path::to::module=debug rustc my-file.rs</code> اجرا کنید.
+آن‌گاه همهٔ خروجی <code>debug!</code> در standard error ظاهر می‌شود.</p>
+<p>توجه کنید که می‌توانید از مسیر جزئی استفاده کنید و فیلتر همچنان کار می‌کند.
+برای مثال، اگر می‌خواهید خروجی <code>info!</code> را فقط از <code>rustdoc::passes::collect_intra_doc_links</code> ببینید،
+می‌توانید از <code>RUSTDOC_LOG=rustdoc::passes::collect_intra_doc_links=info</code> <em>یا</em>
+<code>RUSTDOC_LOG=rustdoc::passes::collect_intra=info</code> استفاده کنید.</p>
+<p>اگر روی rustdoc کار می‌کنید به‌جای آن از <code>RUSTDOC_LOG</code> استفاده کنید.
+اگر روی Miri کار می‌کنید به‌جای آن از <code>MIRI_LOG</code> استفاده کنید.
+منظور را گرفتید :)</p>
+<p>برای دیدن نحو کامل قابل‌استفاده، مستندات crate با نام <a href="https://docs.rs/tracing"><code>tracing</code></a>
+و به‌طور مشخص مستندات <a href="https://docs.rs/tracing/0.1/tracing/macro.debug.html"><code>debug!</code></a> را ببینید.
+(نکته: برخلاف کامپایلر،
+crate با نام <a href="https://docs.rs/tracing"><code>tracing</code></a> و مثال‌هایش از متغیر محیطی <code>RUSTC_LOG</code> استفاده می‌کنند.
+rustc، rustdoc
+و ابزارهای دیگر متغیرهای محیطی سفارشی تنظیم می‌کنند.)</p>
+<p><strong>توجه کنید که مگر اینکه از فیلتر بسیار سخت‌گیرانه‌ای استفاده کنید، logger خروجی زیادی صادر می‌کند،
+پس از دقیق‌ترین ماژول(ها) که می‌توانید استفاده کنید (با ویرگول جدا شوند اگر چند تا هستند)</strong>.
+معمولاً ایدهٔ خوبی است standard error را به فایل pipe کنید و
+خروجی لاگ را با یک ویرایشگر متن ببینید.</p>
+<p>پس برای جمع‌بندی:</p>
+<pre><code class="language-bash"># This puts the output of all debug calls in `rustc_middle/src/traits` into
+# standard error, which might fill your console backscroll.
+$ RUSTC_LOG=rustc_middle::traits=debug rustc +stage1 my-file.rs
+
+# This puts the output of all debug calls in `rustc_middle/src/traits` in
+# `traits-log`, so you can then see it with a text editor.
+$ RUSTC_LOG=rustc_middle::traits=debug rustc +stage1 my-file.rs 2&gt;traits-log
+
+# Not recommended! This will show the output of all `debug!` calls
+# in the Rust compiler, and there are a *lot* of them, so it will be
+# hard to find anything.
+$ RUSTC_LOG=debug rustc +stage1 my-file.rs 2&gt;all-log
+
+# This will show the output of all `info!` calls in `rustc_codegen_ssa`.
+#
+# There's an `info!` statement in `codegen_instance` that outputs
+# every function that is codegen'd. This is useful to find out
+# which function triggers an LLVM assertion, and this is an `info!`
+# log rather than a `debug!` log so it will work on the official
+# compilers.
+$ RUSTC_LOG=rustc_codegen_ssa=info rustc +stage1 my-file.rs
+
+# This will show all logs in `rustc_codegen_ssa` and `rustc_resolve`.
+$ RUSTC_LOG=rustc_codegen_ssa,rustc_resolve rustc +stage1 my-file.rs
+
+# This will show the output of all `info!` calls made by rustdoc
+# or any rustc library it calls.
+$ RUSTDOC_LOG=info rustdoc +stage1 my-file.rs
+
+# This will only show `debug!` calls made by rustdoc directly,
+# not any `rustc*` crate.
+$ RUSTDOC_LOG=rustdoc=debug rustdoc +stage1 my-file.rs
+</code></pre>
+<h2 id="log-colors"><a class="header" href="#log-colors">Log colors</a></h2>
+<p>به‌طور پیش‌فرض، rustc (و ابزارهای دیگر،
+مثل rustdoc و Miri) هنگام استفاده از رنگ‌های ANSI در خروجی لاگ هوشمندانه عمل می‌کنند.
+اگر خروجی به ترمینال برود،
+از رنگ استفاده می‌کنند، و اگر خروجی به فایل برود یا جای دیگری pipe شود،
+استفاده نمی‌کنند.
+اما خواندن خروجی لاگ در ترمینال دشوار است مگر فیلتر بسیار سخت‌گیرانه‌ای داشته باشید،
+پس ممکن است بخواهید خروجی را به pager مثل <code>less</code> pipe کنید.
+اما آن‌گاه رنگی نخواهد بود که یافتن چیزی را که دنبالش هستید سخت می‌کند!</p>
+<p>می‌توانید با متغیر محیطی <code>RUSTC_LOG_COLOR</code> تعیین کنید خروجی لاگ رنگی باشد یا نه
+(یا <code>RUSTDOC_LOG_COLOR</code> برای rustdoc، یا <code>MIRI_LOG_COLOR</code>
+برای Miri و غیره). سه گزینه هست: <code>auto</code> (پیش‌فرض)، <code>always</code> و
+<code>never</code>.
+بنابراین اگر می‌خواهید هنگام pipe به <code>less</code> رنگ‌ها فعال باشند، از دستوری شبیه این استفاده کنید:</p>
+<pre><code class="language-bash"># The `-R` switch tells less to print ANSI colors without escaping them.
+$ RUSTC_LOG=debug RUSTC_LOG_COLOR=always rustc +stage1 ... | less -R
+</code></pre>
+<p>توجه کنید که <code>MIRI_LOG_COLOR</code> فقط لاگ‌هایی را که از Miri می‌آیند رنگی می‌کند،
+نه لاگ‌های توابع rustc که Miri فراخوانی می‌کند.
+برای رنگی‌کردن لاگ‌های rustc از <code>RUSTC_LOG_COLOR</code> استفاده کنید.</p>
+<h2 id="how-to-keep-or-remove-debug-and-trace-calls-from-the-resulting-binary"><a class="header" href="#how-to-keep-or-remove-debug-and-trace-calls-from-the-resulting-binary">چگونه فراخوانی‌های <code>debug!</code> و <code>trace!</code> را در فایل دودویی حاصل نگه داریم یا حذف کنیم</a></h2>
+<p>در حالی که فراخوانی‌های <code>error!</code>، <code>warn!</code> و <code>info!</code> در هر ساخت کامپایلر گنجانده می‌شوند،
+فراخوانی‌های <code>debug!</code> و <code>trace!</code> فقط وقتی در برنامه گنجانده می‌شوند که
+<code>rust.debug-logging = true</code> را در bootstrap.toml داشته باشید (به‌طور پیش‌فرض خاموش است)،
+پس اگر لاگ‌های <code>DEBUG</code> را نمی‌بینید،
+به‌ویژه اگر کامپایلر را با <code>RUSTC_LOG=rustc rustc some.rs</code> اجرا می‌کنید و فقط لاگ‌های <code>INFO</code> می‌بینید،
+مطمئن شوید <code>rust.debug-logging</code> در bootstrap.toml شما روشن است.</p>
+<h2 id="logging-etiquette-and-conventions"><a class="header" href="#logging-etiquette-and-conventions">آداب و قراردادهای لاگ‌گذاری</a></h2>
+<p>چون فراخوانی‌های <code>debug!</code> به‌طور پیش‌فرض حذف می‌شوند، در بیشتر موارد نگران عملکرد
+افزودن فراخوانی‌های «غیرضروری» <code>debug!</code> و گذاشتن آن‌ها در کدی که
+commit می‌کنید نباشید — این‌ها عملکرد چیزی را که عرضه می‌کنیم کند نمی‌کنند.</p>
+<p>با این حال، فراخوانی‌های tracing بیش‌ازحد هم می‌توانند وجود داشته باشند،
+به‌ویژه وقتی با فراخوانی‌های دیگر در نزدیکی یا در توابعی که از اینجا صدا زده می‌شوند تکراری‌اند.
+تعادل کاملی برای رسیدن به آن نیست، و تصمیم‌گیری دربارهٔ اینکه اجازه دهد
+دستورهای <code>debug!</code> بمانند یا از شما بخواهد پیش از merge حذفشان کنید با صلاحدید بازبین است.</p>
+<p>برای لاگ‌های بسیار پرسروصدا ممکن است استفاده از <code>trace!</code> به‌جای <code>debug!</code> ترجیح داده شود.</p>
+<p>یک قرارداد که تا حدی رعایت می‌شود استفاده از <code>#[instrument(level = "debug")]</code> است
+(<a href="https://docs.rs/tracing-attributes/0.1.17/tracing_attributes/attr.instrument.html">مستندات attribute را هم ببینید</a>)
+به‌جای <code>debug!("foo(...)")</code> در ابتدای تابع <code>foo</code>.
+درون توابع، <code>debug!(?variable.field)</code> را به <code>debug!("xyz = {:?}", variable.field)</code> ترجیح دهید
+و <code>debug!(bar = ?var.method(arg))</code> را به <code>debug!("bar = {:?}", var.method(arg))</code>.
+مستندات این نحو را <a href="https://docs.rs/tracing/0.1.28/tracing/#recording-fields">اینجا</a> می‌یابید.</p>
+<p>یک نکته که باید <strong>مراقبش</strong> باشید عملیات <strong>پرهزینه</strong> در لاگ‌هاست.</p>
+<p>اگر در ماژول <code>rustc::foo</code> دستوری داشته باشید</p>
+<pre><code class="language-Rust">debug!(x = ?random_operation(tcx));
+</code></pre>
+<p>آن‌گاه اگر کسی <code>rustc</code> debug را با <code>RUSTC_LOG=rustc::foo</code> اجرا کند،
+<code>random_operation()</code> اجرا می‌شود.
+فیلترهای <code>RUSTC_LOG</code> که این دستور debug را فعال نکنند <code>random_operation</code> را اجرا نمی‌کنند.</p>
+<p>یعنی نباید چیزی بسیار پرهزینه یا محتمل به crash را آنجا بگذارید
+— این کسی را که می‌خواهد از لاگ‌گذاری برای آن ماژول استفاده کند آزار می‌دهد.
+کسی تا وقتی کسی بخواهد از لاگ‌گذاری برای یافتن باگ <em>دیگری</em> استفاده کند متوجه نمی‌شود.</p><nav class="page-nav"><a href="compiler-debugging.html">→ اشکال‌زدایی کامپایلر</a><a href="profiling.html">پروفایل‌گیری از کامپایلر ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

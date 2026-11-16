@@ -1,0 +1,46 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>transparent-unions — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/transparent-unions"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="transparent_unions"><a class="header" href="#transparent_unions"><code>transparent_unions</code></a></h1>
+<p>issue ردیابی این ویژگی <a href="https://github.com/rust-lang/rust/issues/60405">#60405</a> است</p>
+<hr>
+<p>ویژگی <code>transparent_unions</code> به شما اجازه می‌دهد <code>union</code>ها را با <code>#[repr(transparent)]</code> علامت‌گذاری کنید. یک <code>union</code> دقیقاً در همان شرایطی می‌تواند <code>#[repr(transparent)]</code> باشد که یک <code>struct</code> می‌تواند <code>#[repr(transparent)]</code> باشد (به طور کلی، یعنی <code>union</code> باید دقیقاً یک فیلد با اندازهٔ غیرصفر داشته باشد). در ادامه چند نمونهٔ عینی آمده است.</p>
+<pre><code class="language-rust">#![feature(transparent_unions)]
+
+// This union has the same representation as `f32`.
+#[repr(transparent)]
+union SingleFieldUnion {
+    field: f32,
+}
+
+// This union has the same representation as `usize`.
+#[repr(transparent)]
+union MultiFieldUnion {
+    field: usize,
+    nothing: (),
+}</code></pre>
+<p>برای سازگاری با <code>struct</code>های شفاف، <code>union</code>ها باید دقیقاً یک فیلد با اندازهٔ غیرصفر داشته باشند. اگر همهٔ فیلدها اندازهٔ صفر داشته باشند، <code>union</code> نباید <code>#[repr(transparent)]</code> باشد:</p>
+<pre><code class="language-rust">#![feature(transparent_unions)]
+
+// This (non-transparent) union is already valid in stable Rust:
+pub union GoodUnion {
+    pub nothing: (),
+}
+
+// Error: transparent union needs exactly one non-zero-sized field, but has 0
+// #[repr(transparent)]
+// pub union BadUnion {
+//     pub nothing: (),
+// }</code></pre>
+<p>تنها استثنا این است که اگر <code>union</code> روی <code>T</code> جنریک باشد و فیلدی از نوع <code>T</code> داشته باشد، حتی اگر <code>T</code> یک نوع با اندازهٔ صفر باشد هم می‌تواند <code>#[repr(transparent)]</code> باشد:</p>
+<pre><code class="language-rust">#![feature(transparent_unions)]
+
+// This union has the same representation as `T`.
+#[repr(transparent)]
+pub union GenericUnion&lt;T: Copy&gt; { // Unions with non-`Copy` fields are unstable.
+    pub field: T,
+    pub nothing: (),
+}
+
+// This is okay even though `()` is a zero-sized type.
+pub const THIS_IS_OKAY: GenericUnion&lt;()&gt; = GenericUnion { field: () };</code></pre>
+<p>مانند <code>struct</code>های شفاف، یک <code>union</code> شفاف از نوع <code>U</code> همان چیدمان، اندازه و ABI فیلد تنها و غیر ZST خود را دارد. اگر روی نوع <code>T</code> جنریک باشد و همهٔ فیلدهایش ZST باشند، به جز دقیقاً یک فیلد از نوع <code>T</code>، آنگاه چیدمان و ABI آن با <code>T</code> یکسان است (حتی اگر <code>T</code> پس از monomorphization یک ZST باشد).</p>
+<p>مانند <code>struct</code>های شفاف، <code>union</code>های شفاف تنها در صورتی FFI-safe هستند که نوع بازنمایی زیربنایی‌شان نیز FFI-safe باشد.</p>
+<p>ممکن است یک <code>union</code> واجد شرایط همان بهینه‌سازی‌های از نوع nonnull نباشد که یک <code>struct</code> یا <code>enum</code> (با همان فیلدها) واجد شرایط آن‌ها است. افزودن <code>#[repr(transparent)]</code> به <code>union</code> این وضعیت را تغییر نمی‌دهد. برای ارائهٔ مثالی عینی‌تر، مشخص نشده است که آیا <code>size_of::&lt;T&gt;()</code> با <code>size_of::&lt;Option&lt;T&gt;&gt;()</code> برابر است یا نه، وقتی <code>T</code> یک <code>union</code> باشد (چه شفاف باشد چه نباشد). کامپایلر Rust در صورت امکان آزاد است این بهینه‌سازی را انجام دهد، اما ملزم به این کار نیست، و نسخه‌های مختلف کامپایلر ممکن است در اعمال این بهینه‌سازی‌ها با هم تفاوت داشته باشند.</p><nav class="page-nav"><a href="../../unstable/language-features/trait-alias.html">→ trait-alias</a><a href="../../unstable/language-features/try-blocks.html">try-blocks ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

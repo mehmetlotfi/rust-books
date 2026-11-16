@@ -1,0 +1,138 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>emit-stack-sizes — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="compiler-flags/emit-stack-sizes"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="emit-stack-sizes"><a class="header" href="#emit-stack-sizes"><code>emit-stack-sizes</code></a></h1>
+<p>مسئله‌ی پیگیری (tracking issue) این قابلیت: <a href="https://github.com/rust-lang/rust/issues/54192">#54192</a></p>
+<hr>
+<p>پرچم rustc با نام <code>-Z emit-stack-sizes</code> باعث می‌شود LLVM فراداده‌ی اندازه‌ی پشته (stack) را تولید کند.</p>
+<blockquote>
+<p><strong>توجه</strong>: این قابلیت LLVM از LLVM 8.0 به بعد فقط از قالب شیء ELF پشتیبانی می‌کند. استفاده از این پرچم با هدف‌هایی که از قالب‌های شیء دیگر استفاده می‌کنند (مثلاً macOS و Windows) باعث نادیده گرفته شدن آن می‌شود.</p>
+</blockquote>
+<p>این crate را در نظر بگیرید:</p>
+<pre><code>#![crate_type = "lib"]
+
+use std::ptr;
+
+pub fn foo() {
+    // this function doesn't use the stack
+}
+
+pub fn bar() {
+    let xs = [0u32; 2];
+
+    // force LLVM to allocate `xs` on the stack
+    unsafe { ptr::read_volatile(&amp;xs.as_ptr()); }
+}
+</code></pre>
+<p>استفاده از پرچم <code>-Z emit-stack-sizes</code> بخش‌های (section) اضافی لینکر را در <em>فایل شیء</em> خروجی تولید می‌کند.</p>
+<pre><code class="language-console">$ rustc -C opt-level=3 --emit=obj foo.rs
+
+$ size -A foo.o
+foo.o  :
+section                                 size   addr
+.text                                      0      0
+.text._ZN3foo3foo17he211d7b4a3a0c16eE      1      0
+.text._ZN3foo3bar17h1acb594305f70c2eE     22      0
+.note.GNU-stack                            0      0
+.eh_frame                                 72      0
+Total                                     95
+
+$ rustc -C opt-level=3 --emit=obj -Z emit-stack-sizes foo.rs
+
+$ size -A foo.o
+foo.o  :
+section                                 size   addr
+.text                                      0      0
+.text._ZN3foo3foo17he211d7b4a3a0c16eE      1      0
+.stack_sizes                               9      0
+.text._ZN3foo3bar17h1acb594305f70c2eE     22      0
+.stack_sizes                               9      0
+.note.GNU-stack                            0      0
+.eh_frame                                 72      0
+Total                                    113
+</code></pre>
+<p>از LLVM 7.0 به بعد، داده‌ها در بخشی به نام <code>.stack_sizes</code> نوشته می‌شوند و قالب آن «آرایه‌ای از جفت‌های مقدار نماد تابع (به اندازه‌ی اشاره‌گر) و اندازه‌ی پشته (LEB128 بدون علامت)» است.</p>
+<pre><code class="language-console">$ objdump -d foo.o
+
+foo.o:     file format elf64-x86-64
+
+Disassembly of section .text._ZN3foo3foo17he211d7b4a3a0c16eE:
+
+0000000000000000 &lt;_ZN3foo3foo17he211d7b4a3a0c16eE&gt;:
+   0:   c3                      retq
+
+Disassembly of section .text._ZN3foo3bar17h1acb594305f70c2eE:
+
+0000000000000000 &lt;_ZN3foo3bar17h1acb594305f70c2eE&gt;:
+   0:   48 83 ec 10             sub    $0x10,%rsp
+   4:   48 8d 44 24 08          lea    0x8(%rsp),%rax
+   9:   48 89 04 24             mov    %rax,(%rsp)
+   d:   48 8b 04 24             mov    (%rsp),%rax
+  11:   48 83 c4 10             add    $0x10,%rsp
+  15:   c3                      retq
+
+$ objdump -s -j .stack_sizes foo.o
+
+foo.o:     file format elf64-x86-64
+
+Contents of section .stack_sizes:
+ 0000 00000000 00000000 00                 .........
+Contents of section .stack_sizes:
+ 0000 00000000 00000000 10                 .........
+</code></pre>
+<p>مهم است بدانید که لینکرها به‌طور پیش‌فرض این بخش لینکر را دور می‌اندازند. برای حفظ این بخش می‌توانید از یک اسکریپت لینکر مانند نمونه‌ی زیر استفاده کنید.</p>
+<pre><code class="language-text">/* file: keep-stack-sizes.x */
+SECTIONS
+{
+  /* `INFO` makes the section not allocatable so it won't be loaded into memory */
+  .stack_sizes (INFO) :
+  {
+    KEEP(*(.stack_sizes));
+  }
+}
+</code></pre>
+<p>اسکریپت لینکر باید با یک پرچم rustc مانند <code>-C link-arg</code> به لینکر داده شود.</p>
+<pre><code>// file: src/main.rs
+use std::ptr;
+
+#[inline(never)]
+fn main() {
+    let xs = [0u32; 2];
+
+    // force LLVM to allocate `xs` on the stack
+    unsafe { ptr::read_volatile(&amp;xs.as_ptr()); }
+}
+</code></pre>
+<pre><code class="language-console">$ RUSTFLAGS="-Z emit-stack-sizes" cargo build --release
+
+$ size -A target/release/hello | grep stack_sizes || echo section was not found
+section was not found
+
+$ RUSTFLAGS="-Z emit-stack-sizes" cargo rustc --release -- \
+    -C link-arg=-Wl,-Tkeep-stack-sizes.x \
+    -C link-arg=-N
+
+$ size -A target/release/hello | grep stack_sizes
+.stack_sizes                               90   176272
+
+$ # non-allocatable section (flags don't contain the "A" (alloc) flag)
+$ readelf -S target/release/hello
+Section Headers:
+  [Nr]   Name              Type             Address           Offset
+       Size              EntSize            Flags  Link  Info  Align
+(..)
+  [1031] .stack_sizes      PROGBITS         000000000002b090  0002b0f0
+       000000000000005a  0000000000000000   L       5     0     1
+
+$ objdump -s -j .stack_sizes target/release/hello
+
+target/release/hello:     file format elf64-x86-64
+
+Contents of section .stack_sizes:
+ 2b090 c0040000 00000000 08f00400 00000000  ................
+ 2b0a0 00080005 00000000 00000810 05000000  ................
+ 2b0b0 00000000 20050000 00000000 10400500  .... ........@..
+ 2b0c0 00000000 00087005 00000000 00000080  ......p.........
+ 2b0d0 05000000 00000000 90050000 00000000  ................
+ 2b0e0 00a00500 00000000 0000               ..........
+</code></pre>
+<blockquote>
+<p>یادداشت نویسنده: کاملاً مطمئن نیستم چرا در <em>این</em> حالت علاوه بر <code>-Tkeep-stack-sizes.x</code>، وجود <code>-N</code> هم لازم است. برای مثال، هنگام تولید فایل‌های لینک‌شده‌ی ایستا برای معماری ARM Cortex-M به آن نیازی نیست.</p>
+</blockquote><nav class="page-nav"><a href="../../unstable/compiler-flags/embed-source.html">→ embed-source</a><a href="../../unstable/compiler-flags/export-executable-symbols.html">export-executable-symbols ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

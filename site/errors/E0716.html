@@ -1,0 +1,42 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0716 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0716"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>یک مقدار موقت (temporary) در حالی drop می‌شود که یک قرض هنوز در حال استفاده‌ی فعال است.</p>
+<p>نمونه کد خطادار:</p>
+<pre><code class="language-compile_fail E0716">fn foo() -&gt; i32 { 22 }
+fn bar(x: &amp;i32) -&gt; &amp;i32 { x }
+let p = bar(&amp;foo());
+         // ------ creates a temporary
+let q = *p;
+</code></pre>
+<p>در اینجا عبارت <code>&amp;foo()</code> عبارت <code>foo()</code> را قرض می‌گیرد. از آنجا که <code>foo()</code> فراخوانی یک تابع است و نام یک متغیر نیست، این کار یک <strong>مقدار موقت</strong> ایجاد می‌کند – آن مقدار موقت مقدار بازگشتی <code>foo()</code> را ذخیره می‌کند تا بتوان آن را قرض گرفت. می‌توانید تصور کنید که <code>let p = bar(&amp;foo());</code> معادل کد زیر است که از یک متغیر موقت صریح استفاده می‌کند.</p>
+<p>نمونه کد خطادار:</p>
+<pre><code class="language-compile_fail E0597"># fn foo() -&gt; i32 { 22 }
+# fn bar(x: &amp;i32) -&gt; &amp;i32 { x }
+let p = {
+  let tmp = foo(); // the temporary
+  bar(&amp;tmp) // error: `tmp` does not live long enough
+}; // &lt;-- tmp is freed as we exit this block
+let q = p;
+</code></pre>
+<p>هر زمان که یک مقدار موقت ایجاد می‌شود، طبق قواعد ثابتی به‌طور خودکار drop (آزاد) می‌شود. معمولاً مقدار موقت در پایان دستور دربرگیرنده drop می‌شود – در این مورد، پس از <code>let p</code>. این موضوع در مثال بالا با نشان دادن اینکه <code>tmp</code> هنگام خروج از بلوک آزاد می‌شود، توضیح داده شده است.</p>
+<p>برای رفع این مشکل باید یک متغیر محلی برای ذخیره‌ی مقدار بسازید، نه اینکه به یک مقدار موقت تکیه کنید. برای مثال، می‌توانید برنامه‌ی اصلی را به صورت زیر تغییر دهید:</p>
+<pre><code>fn foo() -&gt; i32 { 22 }
+fn bar(x: &amp;i32) -&gt; &amp;i32 { x }
+let value = foo(); // dropped at the end of the enclosing block
+let p = bar(&amp;value);
+let q = *p;
+</code></pre>
+<p>با معرفی <code>let value</code> صریح، فضایی تخصیص می‌دهیم که تا پایان بلوک دربرگیرنده (زمانی که <code>value</code> از محدوده خارج می‌شود) باقی می‌ماند. وقتی <code>&amp;value</code> را قرض می‌گیریم، یک متغیر محلی را قرض می‌گیریم که از قبل وجود دارد و بنابراین هیچ مقدار موقتی ایجاد نمی‌شود.</p>
+<p>مقادیر موقت همیشه در پایان دستور دربرگیرنده drop نمی‌شوند. در موارد ساده‌ای که عبارت <code>&amp;</code> بلافاصله در یک متغیر ذخیره می‌شود، کامپایلر به‌طور خودکار طول عمر مقدار موقت را تا پایان بلوک دربرگیرنده تمدید می‌کند. بنابراین راه دیگر برای رفع برنامه‌ی اصلی این است که <code>let tmp = &amp;foo()</code> بنویسید و نه <code>let tmp = foo()</code>:</p>
+<pre><code>fn foo() -&gt; i32 { 22 }
+fn bar(x: &amp;i32) -&gt; &amp;i32 { x }
+let value = &amp;foo();
+let p = bar(value);
+let q = *p;
+</code></pre>
+<p>در اینجا همچنان <code>foo()</code> را قرض می‌گیریم، اما چون قرض مستقیماً به یک متغیر تخصیص داده می‌شود، مقدار موقت تا پایان بلوک دربرگیرنده drop نخواهد شد. قواعد مشابهی زمانی اعمال می‌شود که مقادیر موقت در ساختارهای تجمیعی مانند tuple یا ساختار ذخیره می‌شوند:</p>
+<pre><code>// Here, two temporaries are created, but
+// as they are stored directly into `value`,
+// they are not dropped until the end of the
+// enclosing block.
+fn foo() -&gt; i32 { 22 }
+let value = (&amp;foo(), &amp;foo());
+</code></pre><nav class="page-nav"><a href="../errors/E0715.html">→ E0715</a><a href="../errors/E0717.html">E0717 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

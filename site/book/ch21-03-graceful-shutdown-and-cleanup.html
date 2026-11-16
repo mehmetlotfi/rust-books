@@ -1,0 +1,612 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>خاموش‌شدن آرام و پاک‌سازی — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch21-03-graceful-shutdown-and-cleanup"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="graceful-shutdown-and-cleanup"><a class="header" href="#graceful-shutdown-and-cleanup">خاموشی و پاک‌سازی منظم</a></h2>
+<p>کدی که در فهرست 21-20 آمده است، همان‌طور که انتظار داشتیم، با استفاده از یک thread pool به‌صورت asynchronous به درخواست‌ها پاسخ می‌دهد. در این میان، هشدارهایی در مورد فیلدهای <code>workers</code>، <code>id</code> و <code>thread</code> دریافت می‌کنیم که به‌طور مستقیم از آن‌ها استفاده نمی‌شود و این موضوع به ما یادآوری می‌کند که عملیات پاک‌سازی یا مدیریت پایانی انجام نشده است. زمانی که از روش نه‌چندان ظریف <kbd>Ctrl</kbd>+<kbd>C</kbd> برای متوقف کردن thread اصلی استفاده می‌کنیم، تمام threadهای دیگر نیز بلافاصله متوقف می‌شوند، حتی اگر در حال پردازش یک درخواست باشند.</p>
+<p>سپس، ما <code>Drop</code> trait را پیاده‌سازی خواهیم کرد تا <code>join</code> را روی هر یک از نخ‌های موجود در مجموعه نخ فراخوانی کنیم تا بتوانند درخواست‌هایی که در حال کار روی آن‌ها هستند را قبل از بسته‌شدن تکمیل کنند. سپس روشی برای اطلاع به نخ‌ها که نباید درخواست‌های جدید بپذیرند و باید خاموش شوند، پیاده‌سازی خواهیم کرد. برای مشاهده عملکرد این کد، سرور خود را تغییر می‌دهیم تا فقط دو درخواست را قبل از خاموشی منظم مجموعه نخ‌ها بپذیرد.</p>
+<p>چیزی که باید توجه داشته باشید این است که هیچ‌کدام از این موارد بخش‌هایی از کد را که مدیریت اجرای closureها را بر عهده دارند، تحت تأثیر قرار نمی‌دهند، بنابراین همه چیز در اینجا همان‌طور باقی می‌ماند اگر از یک مجموعه نخ برای یک runtime غیرهمزمان استفاده می‌کردیم.</p>
+<h3 id="implementing-the-drop-trait-on-threadpool"><a class="header" href="#implementing-the-drop-trait-on-threadpool">پیاده‌سازی <code>Drop</code> Trait روی <code>ThreadPool</code></a></h3>
+<p>بیایید با پیاده‌سازی <code>Drop</code> روی مجموعه نخ شروع کنیم. وقتی مجموعه نخ حذف می‌شود، تمام نخ‌های ما باید به یکدیگر ملحق شوند تا مطمئن شویم کار خود را تکمیل می‌کنند. لیستینگ 21-22 اولین تلاش برای پیاده‌سازی <code>Drop</code> را نشان می‌دهد؛ این کد هنوز به درستی کار نخواهد کرد.</p>
+<figure class="listing" id="listing-21-22">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">use std::{
+</span><span class="boring">    sync::{Arc, Mutex, mpsc},
+</span><span class="boring">    thread,
+</span><span class="boring">};
+</span><span class="boring">
+</span><span class="boring">pub struct ThreadPool {
+</span><span class="boring">    workers: Vec&lt;Worker&gt;,
+</span><span class="boring">    sender: mpsc::Sender&lt;Job&gt;,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">type Job = Box&lt;dyn FnOnce() + Send + 'static&gt;;
+</span><span class="boring">
+</span><span class="boring">impl ThreadPool {
+</span><span class="boring">    /// Create a new ThreadPool.
+</span><span class="boring">    ///
+</span><span class="boring">    /// The size is the number of threads in the pool.
+</span><span class="boring">    ///
+</span><span class="boring">    /// # Panics
+</span><span class="boring">    ///
+</span><span class="boring">    /// The `new` function will panic if the size is zero.
+</span><span class="boring">    pub fn new(size: usize) -&gt; ThreadPool {
+</span><span class="boring">        assert!(size &gt; 0);
+</span><span class="boring">
+</span><span class="boring">        let (sender, receiver) = mpsc::channel();
+</span><span class="boring">
+</span><span class="boring">        let receiver = Arc::new(Mutex::new(receiver));
+</span><span class="boring">
+</span><span class="boring">        let mut workers = Vec::with_capacity(size);
+</span><span class="boring">
+</span><span class="boring">        for id in 0..size {
+</span><span class="boring">            workers.push(Worker::new(id, Arc::clone(&amp;receiver)));
+</span><span class="boring">        }
+</span><span class="boring">
+</span><span class="boring">        ThreadPool { workers, sender }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn execute&lt;F&gt;(&amp;self, f: F)
+</span><span class="boring">    where
+</span><span class="boring">        F: FnOnce() + Send + 'static,
+</span><span class="boring">    {
+</span><span class="boring">        let job = Box::new(f);
+</span><span class="boring">
+</span><span class="boring">        self.sender.send(job).unwrap();
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Drop for ThreadPool {
+    fn drop(&amp;mut self) {
+        for worker in &amp;mut self.workers {
+            println!("Shutting down worker {}", worker.id);
+
+            worker.thread.join().unwrap();
+        }
+    }
+}
+<span class="boring">
+</span><span class="boring">struct Worker {
+</span><span class="boring">    id: usize,
+</span><span class="boring">    thread: thread::JoinHandle&lt;()&gt;,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Worker {
+</span><span class="boring">    fn new(id: usize, receiver: Arc&lt;Mutex&lt;mpsc::Receiver&lt;Job&gt;&gt;&gt;) -&gt; Worker {
+</span><span class="boring">        let thread = thread::spawn(move || {
+</span><span class="boring">            loop {
+</span><span class="boring">                let job = receiver.lock().unwrap().recv().unwrap();
+</span><span class="boring">
+</span><span class="boring">                println!("Worker {id} got a job; executing.");
+</span><span class="boring">
+</span><span class="boring">                job();
+</span><span class="boring">            }
+</span><span class="boring">        });
+</span><span class="boring">
+</span><span class="boring">        Worker { id, thread }
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-21-22">لیست ۲۱-۲۲</a>: ملحق کردن هر نخ وقتی مجموعه نخ از محدوده خارج می‌شود</figcaption>
+</figure>
+<p>ابتدا روی هر یک از <code>workers</code> در thread pool حلقه می‌زنیم. برای این کار از <code>&amp;mut</code> استفاده می‌کنیم، چون <code>self</code> یک ارجاع تغییرپذیر است و باید بتوانیم <code>worker</code> را هم تغییر دهیم. برای هر <code>worker</code> پیامی چاپ می‌کنیم که می‌گوید این نمونهٔ خاص از <code>Worker</code> در حال خاموش شدن است، و سپس <code>join</code> را روی نخ آن نمونهٔ <code>Worker</code> فراخوانی می‌کنیم. اگر فراخوانی <code>join</code> شکست بخورد، از <code>unwrap</code> استفاده می‌کنیم تا Rust دچار panic شود و به یک خاموشی نامنظم برود.</p>
+<p>اینجا خطایی که هنگام کامپایل این کد دریافت می‌کنیم آمده است:</p>
+<pre><code class="language-console">$ cargo check
+    Checking hello v0.1.0 (file:///projects/hello)
+error[E0507]: cannot move out of `worker.thread` which is behind a mutable reference
+  --&gt; src/lib.rs:52:13
+   |
+52 |             worker.thread.join().unwrap();
+   |             ^^^^^^^^^^^^^ ------ `worker.thread` moved due to this method call
+   |             |
+   |             move occurs because `worker.thread` has type `JoinHandle&lt;()&gt;`, which does not implement the `Copy` trait
+   |
+note: `JoinHandle::&lt;T&gt;::join` takes ownership of the receiver `self`, which moves `worker.thread`
+  --&gt; /rustc/88d9e12ae178fab0fb5cc050a94da85685d449ea/library/std/src/thread/join_handle.rs:149:16
+
+For more information about this error, try `rustc --explain E0507`.
+error: could not compile `hello` (lib) due to 1 previous error
+</code></pre>
+<p>این خطا به ما می‌گوید نمی‌توانیم <code>join</code> را فراخوانی کنیم، چون فقط یک قرض‌گیری تغییرپذیر از هر <code>worker</code> داریم و <code>join</code> مالکیت آرگومانش را می‌گیرد. برای حل این مشکل، باید نخ را از نمونهٔ <code>Worker</code> که مالک <code>thread</code> است بیرون بیاوریم تا <code>join</code> بتواند نخ را مصرف کند. یک راه برای انجام این کار این است که همان رویکردی را در پیش بگیریم که در فهرست ۱۸-۱۵ به کار بردیم. اگر <code>Worker</code> یک <code>Option&lt;thread::JoinHandle&lt;()&gt;&gt;</code> نگه می‌داشت، می‌توانستیم متد <code>take</code> را روی <code>Option</code> فراخوانی کنیم تا مقدار را از واریانت <code>Some</code> بیرون بکشیم و به‌جای آن یک واریانت <code>None</code> بگذاریم. به عبارت دیگر، یک <code>Worker</code> در حال اجرا در <code>thread</code> واریانت <code>Some</code> را خواهد داشت، و وقتی بخواهیم یک <code>Worker</code> را پاک‌سازی کنیم، <code>Some</code> را با <code>None</code> جایگزین می‌کنیم تا <code>Worker</code> نخی برای اجرا نداشته باشد.</p>
+<p>با این حال، <em>تنها</em> زمانی که این موضوع پیش می‌آید هنگام drop کردن <code>Worker</code> است. در عوض، باید در هر جایی که به <code>worker.thread</code> دسترسی پیدا می‌کنیم با یک <code>Option&lt;thread::JoinHandle&lt;()&gt;&gt;</code> سروکار داشته باشیم. Rust اصطلاحی (idiomatic) تا حد زیادی از <code>Option</code> استفاده می‌کند، اما وقتی متوجه می‌شوید چیزی را که می‌دانید همیشه حاضر خواهد بود به‌عنوان یک راه‌حل موقت مانند این درون یک <code>Option</code> قرار می‌دهید، فکر خوبی است که به دنبال رویکردهای جایگزین بگردید تا کدتان تمیزتر و کم‌خطاتر شود.</p>
+<p>در این حالت، یک جایگزین بهتر استفاده از متد <code>Vec::drain</code> است. این متد یک پارامتر محدوده می‌گیرد تا مشخص کند کدام آیتم‌ها باید از <code>Vec</code> حذف شوند و یک تکرارگر از آن آیتم‌ها بازمی‌گرداند. استفاده از <code>..</code> برای محدوده تمام مقادیر را از <code>Vec</code> حذف خواهد کرد.</p>
+<p>بنابراین باید پیاده‌سازی <code>drop</code> در <code>ThreadPool</code> را به این صورت به‌روزرسانی کنیم:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust"><span class="boring">use std::{
+</span><span class="boring">    sync::{Arc, Mutex, mpsc},
+</span><span class="boring">    thread,
+</span><span class="boring">};
+</span><span class="boring">
+</span><span class="boring">pub struct ThreadPool {
+</span><span class="boring">    workers: Vec&lt;Worker&gt;,
+</span><span class="boring">    sender: mpsc::Sender&lt;Job&gt;,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">type Job = Box&lt;dyn FnOnce() + Send + 'static&gt;;
+</span><span class="boring">
+</span><span class="boring">impl ThreadPool {
+</span><span class="boring">    /// Create a new ThreadPool.
+</span><span class="boring">    ///
+</span><span class="boring">    /// The size is the number of threads in the pool.
+</span><span class="boring">    ///
+</span><span class="boring">    /// # Panics
+</span><span class="boring">    ///
+</span><span class="boring">    /// The `new` function will panic if the size is zero.
+</span><span class="boring">    pub fn new(size: usize) -&gt; ThreadPool {
+</span><span class="boring">        assert!(size &gt; 0);
+</span><span class="boring">
+</span><span class="boring">        let (sender, receiver) = mpsc::channel();
+</span><span class="boring">
+</span><span class="boring">        let receiver = Arc::new(Mutex::new(receiver));
+</span><span class="boring">
+</span><span class="boring">        let mut workers = Vec::with_capacity(size);
+</span><span class="boring">
+</span><span class="boring">        for id in 0..size {
+</span><span class="boring">            workers.push(Worker::new(id, Arc::clone(&amp;receiver)));
+</span><span class="boring">        }
+</span><span class="boring">
+</span><span class="boring">        ThreadPool { workers, sender }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn execute&lt;F&gt;(&amp;self, f: F)
+</span><span class="boring">    where
+</span><span class="boring">        F: FnOnce() + Send + 'static,
+</span><span class="boring">    {
+</span><span class="boring">        let job = Box::new(f);
+</span><span class="boring">
+</span><span class="boring">        self.sender.send(job).unwrap();
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Drop for ThreadPool {
+    fn drop(&amp;mut self) {
+        for worker in self.workers.drain(..) {
+            println!("Shutting down worker {}", worker.id);
+
+            worker.thread.join().unwrap();
+        }
+    }
+}
+<span class="boring">
+</span><span class="boring">struct Worker {
+</span><span class="boring">    id: usize,
+</span><span class="boring">    thread: thread::JoinHandle&lt;()&gt;,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Worker {
+</span><span class="boring">    fn new(id: usize, receiver: Arc&lt;Mutex&lt;mpsc::Receiver&lt;Job&gt;&gt;&gt;) -&gt; Worker {
+</span><span class="boring">        let thread = thread::spawn(move || {
+</span><span class="boring">            loop {
+</span><span class="boring">                let job = receiver.lock().unwrap().recv().unwrap();
+</span><span class="boring">
+</span><span class="boring">                println!("Worker {id} got a job; executing.");
+</span><span class="boring">
+</span><span class="boring">                job();
+</span><span class="boring">            }
+</span><span class="boring">        });
+</span><span class="boring">
+</span><span class="boring">        Worker { id, thread }
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+</figure>
+<p>این کار خطای کامپایلر را برطرف می‌کند و نیازی به هیچ تغییر دیگری در کد ما ندارد. توجه داشته باشید که از آن‌جا که drop می‌تواند هنگام panic فراخوانی شود، تابع unwrap نیز ممکن است panic ایجاد کند و باعث double panic شود که در نتیجه، برنامه بلافاصله crash می‌کند و هرگونه عملیات پاک‌سازی در حال انجام را متوقف می‌سازد. این موضوع برای یک برنامه‌ی نمونه قابل قبول است، اما برای کدهای محصولی توصیه نمی‌شود.</p>
+<h3 id="signaling-to-the-threads-to-stop-listening-for-jobs"><a class="header" href="#signaling-to-the-threads-to-stop-listening-for-jobs">علامت‌دهی به نخ‌ها برای توقف گوش دادن به وظایف</a></h3>
+<p>با تمام تغییراتی که اعمال کرده‌ایم، کد ما بدون هیچ هشداری کامپایل می‌شود. اما خبر بد این است که این کد هنوز آن‌طور که می‌خواهیم عمل نمی‌کند. نکته‌ی کلیدی در منطق closureهایی است که توسط threadهای نمونه‌های <code>Worker</code> اجرا می‌شوند: در حال حاضر ما تابع <code>join</code> را فراخوانی می‌کنیم، اما این باعث خاموش شدن threadها نمی‌شود، چون آن‌ها به‌صورت بی‌پایان در حال <code>loop</code> برای یافتن job هستند. اگر سعی کنیم <code>ThreadPool</code> را با پیاده‌سازی فعلی تابع <code>drop</code> حذف کنیم، thread اصلی برای همیشه در حالت انتظار باقی می‌ماند تا اولین thread به پایان برسد.</p>
+<p>برای حل این مشکل، باید تغییری در پیاده‌سازی <code>drop</code> در <code>ThreadPool</code> و سپس تغییری در حلقه <code>Worker</code> ایجاد کنیم.</p>
+<p>ابتدا پیاده‌سازی تابع <code>drop</code> برای <code>ThreadPool</code> را تغییر می‌دهیم تا پیش از منتظر ماندن برای پایان یافتن threadها، به‌صورت صریح <code>sender</code> را حذف کند. فهرست 21-23 تغییرات اعمال‌شده روی <code>ThreadPool</code> را نشان می‌دهد که در آن <code>sender</code> به‌طور صریح حذف می‌شود. برخلاف thread، در این‌جا نیاز داریم که از یک <code>Option</code> استفاده کنیم تا بتوانیم <code>sender</code> را با استفاده از <code>Option::take</code> از ساختار <code>ThreadPool</code> بیرون بکشیم.</p>
+<figure class="listing" id="listing-21-23">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground not_desired_behavior"><span class="boring">use std::{
+</span><span class="boring">    sync::{Arc, Mutex, mpsc},
+</span><span class="boring">    thread,
+</span><span class="boring">};
+</span><span class="boring">
+</span>pub struct ThreadPool {
+    workers: Vec&lt;Worker&gt;,
+    sender: Option&lt;mpsc::Sender&lt;Job&gt;&gt;,
+}
+// --snip--
+<span class="boring">
+</span><span class="boring">type Job = Box&lt;dyn FnOnce() + Send + 'static&gt;;
+</span><span class="boring">
+</span>impl ThreadPool {
+<span class="boring">    /// Create a new ThreadPool.
+</span><span class="boring">    ///
+</span><span class="boring">    /// The size is the number of threads in the pool.
+</span><span class="boring">    ///
+</span><span class="boring">    /// # Panics
+</span><span class="boring">    ///
+</span><span class="boring">    /// The `new` function will panic if the size is zero.
+</span>    pub fn new(size: usize) -&gt; ThreadPool {
+        // --snip--
+
+<span class="boring">        assert!(size &gt; 0);
+</span><span class="boring">
+</span><span class="boring">        let (sender, receiver) = mpsc::channel();
+</span><span class="boring">
+</span><span class="boring">        let receiver = Arc::new(Mutex::new(receiver));
+</span><span class="boring">
+</span><span class="boring">        let mut workers = Vec::with_capacity(size);
+</span><span class="boring">
+</span><span class="boring">        for id in 0..size {
+</span><span class="boring">            workers.push(Worker::new(id, Arc::clone(&amp;receiver)));
+</span><span class="boring">        }
+</span><span class="boring">
+</span>        ThreadPool {
+            workers,
+            sender: Some(sender),
+        }
+    }
+
+    pub fn execute&lt;F&gt;(&amp;self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let job = Box::new(f);
+
+        self.sender.as_ref().unwrap().send(job).unwrap();
+    }
+}
+
+impl Drop for ThreadPool {
+    fn drop(&amp;mut self) {
+        drop(self.sender.take());
+
+        for worker in self.workers.drain(..) {
+            println!("Shutting down worker {}", worker.id);
+
+            worker.thread.join().unwrap();
+        }
+    }
+}
+<span class="boring">
+</span><span class="boring">struct Worker {
+</span><span class="boring">    id: usize,
+</span><span class="boring">    thread: thread::JoinHandle&lt;()&gt;,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Worker {
+</span><span class="boring">    fn new(id: usize, receiver: Arc&lt;Mutex&lt;mpsc::Receiver&lt;Job&gt;&gt;&gt;) -&gt; Worker {
+</span><span class="boring">        let thread = thread::spawn(move || {
+</span><span class="boring">            loop {
+</span><span class="boring">                let job = receiver.lock().unwrap().recv().unwrap();
+</span><span class="boring">
+</span><span class="boring">                println!("Worker {id} got a job; executing.");
+</span><span class="boring">
+</span><span class="boring">                job();
+</span><span class="boring">            }
+</span><span class="boring">        });
+</span><span class="boring">
+</span><span class="boring">        Worker { id, thread }
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-21-23">لیست ۲۱-۲۳</a>: Explicitly dropping &lt;code&gt;&lt;/x-listing&gt;sender&lt;/code&gt; before joining the &lt;code&gt;Worker&lt;/code&gt; threads</figcaption>
+</figure>
+<p>حذف کردن <code>sender</code> باعث بسته شدن channel می‌شود،<br> که این موضوع نشان می‌دهد دیگر هیچ پیامی ارسال<br> نخواهد شد. در این حالت، تمام فراخوانی‌های <code>recv</code><br> که نمونه‌های <code>Worker</code> درون حلقه‌ی بی‌نهایت انجام<br> می‌دهند با خطا بازمی‌گردند. در فهرست 21-24،<br> حلقه‌ی <code>Worker</code> را طوری تغییر می‌دهیم که<br> در چنین حالتی به‌صورت مناسب از حلقه خارج شود،<br> که به این معناست threadها زمانی پایان می‌یابند که<br> تابع <code>drop</code> مربوط به <code>ThreadPool</code> تابع <code>join</code> را<br> روی آن‌ها فراخوانی کند.</p>
+<figure class="listing" id="listing-21-24">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">use std::{
+</span><span class="boring">    sync::{Arc, Mutex, mpsc},
+</span><span class="boring">    thread,
+</span><span class="boring">};
+</span><span class="boring">
+</span><span class="boring">pub struct ThreadPool {
+</span><span class="boring">    workers: Vec&lt;Worker&gt;,
+</span><span class="boring">    sender: Option&lt;mpsc::Sender&lt;Job&gt;&gt;,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">type Job = Box&lt;dyn FnOnce() + Send + 'static&gt;;
+</span><span class="boring">
+</span><span class="boring">impl ThreadPool {
+</span><span class="boring">    /// Create a new ThreadPool.
+</span><span class="boring">    ///
+</span><span class="boring">    /// The size is the number of threads in the pool.
+</span><span class="boring">    ///
+</span><span class="boring">    /// # Panics
+</span><span class="boring">    ///
+</span><span class="boring">    /// The `new` function will panic if the size is zero.
+</span><span class="boring">    pub fn new(size: usize) -&gt; ThreadPool {
+</span><span class="boring">        assert!(size &gt; 0);
+</span><span class="boring">
+</span><span class="boring">        let (sender, receiver) = mpsc::channel();
+</span><span class="boring">
+</span><span class="boring">        let receiver = Arc::new(Mutex::new(receiver));
+</span><span class="boring">
+</span><span class="boring">        let mut workers = Vec::with_capacity(size);
+</span><span class="boring">
+</span><span class="boring">        for id in 0..size {
+</span><span class="boring">            workers.push(Worker::new(id, Arc::clone(&amp;receiver)));
+</span><span class="boring">        }
+</span><span class="boring">
+</span><span class="boring">        ThreadPool {
+</span><span class="boring">            workers,
+</span><span class="boring">            sender: Some(sender),
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn execute&lt;F&gt;(&amp;self, f: F)
+</span><span class="boring">    where
+</span><span class="boring">        F: FnOnce() + Send + 'static,
+</span><span class="boring">    {
+</span><span class="boring">        let job = Box::new(f);
+</span><span class="boring">
+</span><span class="boring">        self.sender.as_ref().unwrap().send(job).unwrap();
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Drop for ThreadPool {
+</span><span class="boring">    fn drop(&amp;mut self) {
+</span><span class="boring">        drop(self.sender.take());
+</span><span class="boring">
+</span><span class="boring">        for worker in self.workers.drain(..) {
+</span><span class="boring">            println!("Shutting down worker {}", worker.id);
+</span><span class="boring">
+</span><span class="boring">            worker.thread.join().unwrap();
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct Worker {
+</span><span class="boring">    id: usize,
+</span><span class="boring">    thread: thread::JoinHandle&lt;()&gt;,
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Worker {
+    fn new(id: usize, receiver: Arc&lt;Mutex&lt;mpsc::Receiver&lt;Job&gt;&gt;&gt;) -&gt; Worker {
+        let thread = thread::spawn(move || {
+            loop {
+                let message = receiver.lock().unwrap().recv();
+
+                match message {
+                    Ok(job) =&gt; {
+                        println!("Worker {id} got a job; executing.");
+
+                        job();
+                    }
+                    Err(_) =&gt; {
+                        println!("Worker {id} disconnected; shutting down.");
+                        break;
+                    }
+                }
+            }
+        });
+
+        Worker { id, thread }
+    }
+}</code></pre>
+<figcaption><a href="#listing-21-24">لیست ۲۱-۲۴</a>: خروج صریح از حلقه زمانی که &lt;code&gt;&lt;/x-listing&gt;recv&lt;/code&gt; با خطا بازمی‌گردد</figcaption>
+</figure>
+<p>برای دیدن این کد در عمل، بیایید <code>main</code> را تغییر دهیم تا فقط دو درخواست را قبل از خاموش‌شدن منظم سرور بپذیرد، همان‌طور که در لیستینگ 21-25 نشان داده شده است.</p>
+<figure class="listing" id="listing-21-25">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">use hello::ThreadPool;
+</span><span class="boring">use std::{
+</span><span class="boring">    fs,
+</span><span class="boring">    io::{BufReader, prelude::*},
+</span><span class="boring">    net::{TcpListener, TcpStream},
+</span><span class="boring">    thread,
+</span><span class="boring">    time::Duration,
+</span><span class="boring">};
+</span><span class="boring">
+</span>fn main() {
+    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    let pool = ThreadPool::new(4);
+
+    for stream in listener.incoming().take(2) {
+        let stream = stream.unwrap();
+
+        pool.execute(|| {
+            handle_connection(stream);
+        });
+    }
+
+    println!("Shutting down.");
+}
+<span class="boring">
+</span><span class="boring">fn handle_connection(mut stream: TcpStream) {
+</span><span class="boring">    let buf_reader = BufReader::new(&amp;stream);
+</span><span class="boring">    let request_line = buf_reader.lines().next().unwrap().unwrap();
+</span><span class="boring">
+</span><span class="boring">    let (status_line, filename) = match &amp;request_line[..] {
+</span><span class="boring">        "GET / HTTP/1.1" =&gt; ("HTTP/1.1 200 OK", "hello.html"),
+</span><span class="boring">        "GET /sleep HTTP/1.1" =&gt; {
+</span><span class="boring">            thread::sleep(Duration::from_secs(5));
+</span><span class="boring">            ("HTTP/1.1 200 OK", "hello.html")
+</span><span class="boring">        }
+</span><span class="boring">        _ =&gt; ("HTTP/1.1 404 NOT FOUND", "404.html"),
+</span><span class="boring">    };
+</span><span class="boring">
+</span><span class="boring">    let contents = fs::read_to_string(filename).unwrap();
+</span><span class="boring">    let length = contents.len();
+</span><span class="boring">
+</span><span class="boring">    let response =
+</span><span class="boring">        format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}");
+</span><span class="boring">
+</span><span class="boring">    stream.write_all(response.as_bytes()).unwrap();
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-21-25">لیست ۲۱-۲۵</a>: خاموش کردن سرور پس از پاسخ‌گویی به دو درخواست از طریق خروج از حلقه</figcaption>
+</figure>
+<p>شما نمی‌خواهید یک سرور وب واقعی پس از فقط دو درخواست خاموش شود. این کد فقط نشان می‌دهد که خاموشی منظم و پاک‌سازی به درستی کار می‌کند.</p>
+<p>متد <code>take</code> که در trait <code>Iterator</code> تعریف شده است، تکرار را به حداکثر دو آیتم محدود می‌کند. <code>ThreadPool</code> در انتهای <code>main</code> از محدوده خارج می‌شود و پیاده‌سازی <code>drop</code> اجرا خواهد شد.</p>
+<p>سرور را با دستور <code>cargo run</code> راه‌اندازی کنید و سه درخواست ارسال کنید. درخواست سوم باید با خطا مواجه شود و در ترمینال خود باید خروجی مشابه زیر را ببینید:</p>
+<!-- manual-regeneration
+cd listings/ch21-web-server/listing-21-25
+cargo run
+curl http://127.0.0.1:7878
+curl http://127.0.0.1:7878
+curl http://127.0.0.1:7878
+third request will error because server will have shut down
+copy output below
+Can't automate because the output depends on making requests
+-->
+<pre><code class="language-console">$ cargo run
+   Compiling hello v0.1.0 (file:///projects/hello)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.41s
+     Running `target/debug/hello`
+Worker 0 got a job; executing.
+Shutting down.
+Shutting down worker 0
+Worker 3 got a job; executing.
+Worker 1 disconnected; shutting down.
+Worker 2 disconnected; shutting down.
+Worker 3 disconnected; shutting down.
+Worker 0 disconnected; shutting down.
+Shutting down worker 1
+Shutting down worker 2
+Shutting down worker 3
+</code></pre>
+<p>ممکن است ترتیب متفاوتی از شناسه‌های <code>Worker</code> و پیام‌های چاپ‌شده ببینید. از پیام‌ها می‌توانیم ببینیم این کد چگونه کار می‌کند: نمونه‌های <code>Worker</code> با شناسهٔ ۰ و ۳ دو درخواست اول را گرفتند. سرور پس از اتصال دوم پذیرفتن اتصال‌ها را متوقف کرد، و پیاده‌سازی <code>Drop</code> روی <code>ThreadPool</code> پیش از آنکه <code>Worker 3</code> حتی کارش را شروع کند، اجرا می‌شود. drop شدن <code>sender</code> ارتباط همهٔ نمونه‌های <code>Worker</code> را قطع می‌کند و به آن‌ها می‌گوید خاموش شوند. هر یک از نمونه‌های <code>Worker</code> هنگام قطع اتصال پیامی چاپ می‌کنند، و سپس thread pool <code>join</code> را فراخوانی می‌کند تا منتظر بماند هر نخ <code>Worker</code> کارش را تمام کند.</p>
+<p>به یک جنبهٔ جالب این اجرای خاص توجه کنید: <code>ThreadPool</code> مقدار <code>sender</code> را drop کرد، و پیش از آنکه هیچ <code>Worker</code> ای خطایی دریافت کند، ما تلاش کردیم <code>Worker 0</code> را join کنیم. <code>Worker 0</code> هنوز خطایی از <code>recv</code> نگرفته بود، پس نخ اصلی مسدود شد و منتظر ماند تا <code>Worker 0</code> تمام شود. در این میان، <code>Worker 3</code> یک کار دریافت کرد و سپس همهٔ نخ‌ها خطا دریافت کردند. وقتی <code>Worker 0</code> تمام شد، نخ اصلی منتظر ماند تا بقیهٔ نمونه‌های <code>Worker</code> تمام شوند. در آن لحظه، همه از حلقه‌هایشان خارج شده و متوقف شده بودند.</p>
+<p>تبریک می‌گویم! پروژه خود را کامل کردید؛ ما یک سرور وب ساده داریم که از یک مجموعه نخ برای پاسخ‌دهی غیرهمزمان استفاده می‌کند. ما توانستیم سرور را به صورت منظم خاموش کنیم و تمام نخ‌ها در مجموعه را پاک‌سازی کنیم.</p>
+<p>در اینجا کد کامل برای مرجع آورده شده است:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore">use hello::ThreadPool;
+use std::{
+    fs,
+    io::{BufReader, prelude::*},
+    net::{TcpListener, TcpStream},
+    thread,
+    time::Duration,
+};
+
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    let pool = ThreadPool::new(4);
+
+    for stream in listener.incoming().take(2) {
+        let stream = stream.unwrap();
+
+        pool.execute(|| {
+            handle_connection(stream);
+        });
+    }
+
+    println!("Shutting down.");
+}
+
+fn handle_connection(mut stream: TcpStream) {
+    let buf_reader = BufReader::new(&amp;stream);
+    let request_line = buf_reader.lines().next().unwrap().unwrap();
+
+    let (status_line, filename) = match &amp;request_line[..] {
+        "GET / HTTP/1.1" =&gt; ("HTTP/1.1 200 OK", "hello.html"),
+        "GET /sleep HTTP/1.1" =&gt; {
+            thread::sleep(Duration::from_secs(5));
+            ("HTTP/1.1 200 OK", "hello.html")
+        }
+        _ =&gt; ("HTTP/1.1 404 NOT FOUND", "404.html"),
+    };
+
+    let contents = fs::read_to_string(filename).unwrap();
+    let length = contents.len();
+
+    let response =
+        format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}");
+
+    stream.write_all(response.as_bytes()).unwrap();
+}</code></pre>
+</figure>
+<figure class="listing">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">use std::{
+    sync::{Arc, Mutex, mpsc},
+    thread,
+};
+
+pub struct ThreadPool {
+    workers: Vec&lt;Worker&gt;,
+    sender: Option&lt;mpsc::Sender&lt;Job&gt;&gt;,
+}
+
+type Job = Box&lt;dyn FnOnce() + Send + 'static&gt;;
+
+impl ThreadPool {
+    /// Create a new ThreadPool.
+    ///
+    /// The size is the number of threads in the pool.
+    ///
+    /// # Panics
+    ///
+    /// The `new` function will panic if the size is zero.
+    pub fn new(size: usize) -&gt; ThreadPool {
+        assert!(size &gt; 0);
+
+        let (sender, receiver) = mpsc::channel();
+
+        let receiver = Arc::new(Mutex::new(receiver));
+
+        let mut workers = Vec::with_capacity(size);
+
+        for id in 0..size {
+            workers.push(Worker::new(id, Arc::clone(&amp;receiver)));
+        }
+
+        ThreadPool {
+            workers,
+            sender: Some(sender),
+        }
+    }
+
+    pub fn execute&lt;F&gt;(&amp;self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let job = Box::new(f);
+
+        self.sender.as_ref().unwrap().send(job).unwrap();
+    }
+}
+
+impl Drop for ThreadPool {
+    fn drop(&amp;mut self) {
+        drop(self.sender.take());
+
+        for worker in &amp;mut self.workers {
+            println!("Shutting down worker {}", worker.id);
+
+            if let Some(thread) = worker.thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+}
+
+struct Worker {
+    id: usize,
+    thread: Option&lt;thread::JoinHandle&lt;()&gt;&gt;,
+}
+
+impl Worker {
+    fn new(id: usize, receiver: Arc&lt;Mutex&lt;mpsc::Receiver&lt;Job&gt;&gt;&gt;) -&gt; Worker {
+        let thread = thread::spawn(move || {
+            loop {
+                let message = receiver.lock().unwrap().recv();
+
+                match message {
+                    Ok(job) =&gt; {
+                        println!("Worker {id} got a job; executing.");
+
+                        job();
+                    }
+                    Err(_) =&gt; {
+                        println!("Worker {id} disconnected; shutting down.");
+                        break;
+                    }
+                }
+            }
+        });
+
+        Worker {
+            id,
+            thread: Some(thread),
+        }
+    }
+}</code></pre>
+</figure>
+<p>می‌توانستیم بیشتر اینجا انجام دهیم! اگر می‌خواهید این پروژه را بیشتر گسترش دهید، اینجا چند ایده آمده است:</p>
+<ul>
+<li>مستندات بیشتری به <code>ThreadPool</code> و متدهای عمومی آن اضافه کنید.</li>
+<li>تست‌هایی برای عملکرد کتابخانه اضافه کنید.</li>
+<li>فراخوانی‌های <code>unwrap</code> را به مدیریت خطای قوی‌تر تغییر دهید.</li>
+<li>از <code>ThreadPool</code> برای انجام برخی کارها به غیر از ارائه درخواست‌های وب استفاده کنید.</li>
+<li>یک crate مجموعه نخ از <a href="https://crates.io/">crates.io</a> پیدا کنید و یک سرور وب مشابه با استفاده از آن crate پیاده‌سازی کنید. سپس API و مقاومت آن را با مجموعه نخی که ما پیاده‌سازی کردیم مقایسه کنید.</li>
+</ul>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<p>آفرین! شما تا پایان این کتاب پیش آمده‌اید! از اینکه در این سفر با ما همراه بودید صمیمانه سپاسگزاریم. اکنون آماده‌اید تا پروژه‌های Rust خودتان را پیاده‌سازی کنید و در پروژه‌های دیگران نیز مشارکت داشته باشید. فراموش نکنید که جامعه‌ای گرم و صمیمی از دیگر Rustaceanها وجود دارد که با آغوش باز آماده‌اند در مسیر یادگیری Rust به شما کمک کنند.</p><nav class="page-nav"><a href="ch21-02-multithreaded.html">→ از سرور تک‌نخی به سرور چندنخی</a><a href="appendix-00.html">ضمیمه ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

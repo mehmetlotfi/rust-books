@@ -1,0 +1,73 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>افزودن یک هدف جدید — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="building/new-target"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="adding-a-new-target"><a class="header" href="#adding-a-new-target">افزودن یک هدف جدید</a></h1>
+<p>این‌ها مجموعه‌ای از مراحل برای افزودن پشتیبانی از یک هدف جدید هستند. حالت‌های نهایی و مسیرهای رسیدن به آنها بسیار متنوع‌اند، بنابراین ممکن است همهٔ بخش‌ها به مقصود شما مربوط نباشند.</p>
+<p>همچنین مستندات مربوطه را در <a href="../../rustc/target-tier-policy.html#adding-a-new-target">سیاست ردهٔ هدف‌ها</a> ببینید.</p>
+<h2 id="specifying-a-new-llvm"><a class="header" href="#specifying-a-new-llvm">تعیین یک LLVM جدید</a></h2>
+<p>برای هدف‌های بسیار جدید، ممکن است لازم باشد از فورک متفاوتی از LLVM نسبت به آنچه در حال حاضر همراه Rust ارائه می‌شود استفاده کنید. در این صورت، به زیرماژول git به نام <code>src/llvm-project</code> بروید (ممکن است لازم باشد دست‌کم یک بار <code>./x check</code> را اجرا کنید تا زیرماژول به‌روز شود)، کامیت مناسب فورک خود را checkout کنید، سپس آن ارجاع جدید زیرماژول را در مخزن اصلی Rust کامیت کنید.</p>
+<p>یک مثال این است:</p>
+<pre><code>cd src/llvm-project
+git remote add my-target-llvm some-llvm-repository
+git checkout my-target-llvm/my-branch
+cd ..
+git add llvm-project
+git commit -m 'Use my custom LLVM'
+</code></pre>
+<h3 id="using-pre-built-llvm"><a class="header" href="#using-pre-built-llvm">استفاده از LLVM از پیش ساخته‌شده</a></h3>
+<p>اگر یک checkout محلی از LLVM دارید که از قبل ساخته شده است، ممکن است بتوانید Rust را طوری پیکربندی کنید که ساخت شما را به‌عنوان LLVM سیستم در نظر بگیرد تا از ساخت‌های تکراری جلوگیری شود.</p>
+<p>می‌توانید با استفاده از بخش <code>target</code> در <code>bootstrap.toml</code> به Rust بگویید از نسخهٔ از پیش ساخته‌شدهٔ LLVM استفاده کند:</p>
+<pre><code class="language-toml">[target.x86_64-unknown-linux-gnu]
+llvm-config = "/path/to/llvm/llvm-7.0.1/bin/llvm-config"
+</code></pre>
+<p>اگر قصد دارید از LLVM سیستم استفاده کنید، پیش‌تر مسیرهای زیر را مشاهده کرده‌ایم، اگرچه ممکن است در سیستم شما متفاوت باشند:</p>
+<ul>
+<li><code>/usr/bin/llvm-config-8</code></li>
+<li><code>/usr/lib/llvm-8/bin/llvm-config</code></li>
+</ul>
+<p>توجه کنید که باید ابزار <code>FileCheck</code> از LLVM نصب شده باشد، که برای آزمون‌های codegen استفاده می‌شود. این ابزار معمولاً همراه LLVM ساخته می‌شود، اما اگر از LLVM از پیش نصب‌شدهٔ خودتان استفاده می‌کنید، باید <code>FileCheck</code> را به روش دیگری فراهم کنید. در سیستم‌های مبتنی بر Debian می‌توانید بستهٔ <code>llvm-N-tools</code> را نصب کنید (که <code>N</code> شمارهٔ نسخهٔ LLVM است، مثلاً <code>llvm-8-tools</code>). به‌طور جایگزین، می‌توانید مسیر <code>FileCheck</code> را با گزینهٔ پیکربندی <code>llvm-filecheck</code> در <code>bootstrap.toml</code> مشخص کنید یا می‌توانید آزمون codegen را با گزینهٔ <code>rust.codegen-tests</code> در <code>bootstrap.toml</code> غیرفعال کنید.</p>
+<h2 id="creating-a-target-specification"><a class="header" href="#creating-a-target-specification">ساخت یک مشخصات هدف</a></h2>
+<p>باید با یک فایل JSON هدف شروع کنید. می‌توانید مشخصات یک هدف موجود را با <code>--print target-spec-json</code> ببینید:</p>
+<pre><code>rustc -Z unstable-options --target=wasm32-unknown-unknown --print target-spec-json
+</code></pre>
+<p>آن JSON را در یک فایل ذخیره کنید و آن را متناسب با هدف خود تغییر دهید.</p>
+<h3 id="adding-a-target-specification"><a class="header" href="#adding-a-target-specification">افزودن مشخصات هدف</a></h3>
+<p>پس از اینکه یک مشخصات JSON را تکمیل کردید و توانستید تا حدی با موفقیت کامپایل کنید، می‌توانید مشخصات را در خود کامپایلر کپی کنید.</p>
+<p>باید یک خط به جدول بزرگ درون ماکروی <code>supported_targets</code> در ماژول <code>rustc_target::spec</code> اضافه کنید. سپس یک فایل متناظر برای هدف جدید خود اضافه می‌کنید که شامل یک تابع <code>target</code> است.</p>
+<p>به هدف‌های موجود به‌عنوان نمونه نگاه کنید.</p>
+<p>برای استفاده از این هدف در bootstrap، باید سه‌گانهٔ هدف (target triple) را به‌طور صریح به فهرست <code>STAGE0_MISSING_TARGETS</code> در <code>src/bootstrap/src/core/sanity.rs</code> اضافه کنیم. این کار لازم است زیرا کامپایلر پیش‌فرض bootstrap (که معمولاً یک کامپایلر beta است) هدف جدیدی را که اضافه کرده‌ایم نمی‌شناسد. بنابراین باید به <code>STAGE0_MISSING_TARGETS</code> اضافه شود تا bootstrap بداند که این هدف هنوز توسط کامپایلر stage0 پشتیبانی نمی‌شود.</p>
+<pre><code class="language-diff">const STAGE0_MISSING_TARGETS: &amp;[&amp;str] = &amp;[
++   "NEW_TARGET_TRIPLE"
+];
+</code></pre>
+<h2 id="patching-crates"><a class="header" href="#patching-crates">وصله کردن crateها</a></h2>
+<p>ممکن است لازم باشد در crateهایی که کامپایلر به آنها وابسته است تغییراتی ایجاد کنید، مانند <code>libc</code> یا <code>cc</code>. در این صورت می‌توانید از قابلیت <a href="../../cargo/reference/overriding-dependencies.html#the-patch-section"><code>[patch]</code></a> در Cargo استفاده کنید. برای مثال، اگر می‌خواهید از نسخهٔ منتشرنشدهٔ <code>libc</code> استفاده کنید، می‌توانید آن را به فایل <code>Cargo.toml</code> سطح بالا اضافه کنید:</p>
+<pre><code class="language-diff">diff --git a/Cargo.toml b/Cargo.toml
+index 1e83f05e0ca..4d0172071c1 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -113,6 +113,8 @@ cargo-util = { path = "src/tools/cargo/crates/cargo-util" }
+ [patch.crates-io]
++libc = { git = "https://github.com/rust-lang/libc", rev = "0bf7ce340699dcbacabdf5f16a242d2219a49ee0" }
+
+ # See comments in `src/tools/rustc-workspace-hack/README.md` for what's going on
+ # here
+ rustc-workspace-hack = { path = 'src/tools/rustc-workspace-hack' }
+</code></pre>
+<p>پس از این، <code>cargo update -p libc</code> را اجرا کنید تا lockfileها به‌روز شوند.</p>
+<p>مراقب باشید که اگر به یک وابستگی محلی از نوع <code>path</code> وصله کنید، این کار هشدارهای آن وابستگی را فعال می‌کند. برخی وابستگی‌ها عاری از هشدار نیستند، و به دلیل تنظیم <code>rust.deny-warnings</code> در <code>bootstrap.toml</code>، ممکن است ساخت ناگهان شروع به شکست کند. برای دور زدن هشدارها، ممکن است بخواهید:</p>
+<ul>
+<li>وابستگی را برای رفع هشدارها تغییر دهید</li>
+<li>یا برای اهداف توسعهٔ محلی، هشدارها را با تنظیم <code>rust.deny-warnings = false</code> در bootstrap.toml سرکوب کنید.</li>
+</ul>
+<h2 id="cross-compiling"><a class="header" href="#cross-compiling">کامپایل متقابل</a></h2>
+<p>وقتی مشخصات هدف را هم به‌صورت JSON و هم در کد داشته باشید، می‌توانید <code>rustc</code> را کامپایل متقابل کنید:</p>
+<pre><code>DESTDIR=/path/to/install/in \
+./x install -i --stage 1 --host aarch64-apple-darwin.json --target aarch64-apple-darwin \
+compiler/rustc library/std
+</code></pre>
+<p>اگر مشخصات هدف شما از قبل در کامپایلر bootstrap موجود باشد، می‌توانید به‌جای فایل JSON برای هر دو آرگومان از آن استفاده کنید.</p>
+<h2 id="promoting-a-target-from-tier-2-target-to-tier-2-host"><a class="header" href="#promoting-a-target-from-tier-2-target-to-tier-2-host">ارتقای یک هدف از ردهٔ 2 (هدف) به ردهٔ 2 (میزبان)</a></h2>
+<p>دو سطح از هدف‌های ردهٔ 2 وجود دارد:</p>
+<ul>
+<li>هدف‌هایی که فقط کامپایل متقابل می‌شوند (<code>rustup target add</code>)</li>
+<li>هدف‌هایی که <a href="../../rustc/target-tier-policy.html#tier-2-with-host-tools">toolchain بومی دارند</a> (<code>rustup toolchain install</code>)</li>
+</ul>
+<p>برای نمونه‌ای از ارتقای یک هدف از کامپایل متقابل به بومی، <a href="https://github.com/rust-lang/rust/pull/75914">#75914</a> را ببینید.</p><nav class="page-nav"><a href="../rustdoc.html">→ مروری بر Rustdoc</a><a href="optimized-build.html">ساخت بهینه ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

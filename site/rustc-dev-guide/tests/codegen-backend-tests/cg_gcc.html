@@ -1,0 +1,71 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>بک‌اند تولید کد GCC — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="tests/codegen-backend-tests/cg_gcc"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="gcc-codegen-backend"><a class="header" href="#gcc-codegen-backend">GCC codegen backend</a></h1>
+<p>ما زیرمجموعه‌ای از مجموعهٔ تست کامپایلر را با backend تولید کد GCC در CI اجرا می‌کنیم تا تغییراتی را که می‌توانند یکپارچگی این backend با کامپایلر را بشکنند پیدا کنیم.</p>
+<p>اگر با هر باگ یا مشکلی در backend تولید کد GCC روبه‌رو شدید، تردید نکنید و issue را در
+<a href="https://github.com/rust-lang/rustc_codegen_gcc">مخزن <code>rustc_codegen_gcc</code></a> باز کنید.</p>
+<p>توجه کنید که این backend فعلاً فقط از هدف <code>x86_64-unknown-linux-gnu</code> پشتیبانی می‌کند.</p>
+<h2 id="running-into-gcc-backend-ci-errors"><a class="header" href="#running-into-gcc-backend-ci-errors">مواجهه با خطاهای CI مربوط به backend در GCC</a></h2>
+<p>اگر با خطایی مرتبط با تست‌های اجراشده با backend تولید کد GCC در CI در job با نام <code>test-x86_64-gnu-gcc</code> روبه‌رو شدید،
+می‌توانید از دستور زیر برای اجرای محلی تست‌های UI با backend مربوط به GCC استفاده کنید که آنچه را در CI رخ می‌دهد بازتولید می‌کند:</p>
+<pre><code class="language-bash">./x test tests/ui \
+  --set 'rust.codegen-backends = ["llvm", "gcc"]' \
+  --set 'rust.debug-assertions = false' \
+  --test-codegen-backend gcc
+</code></pre>
+<p>اگر مجموعهٔ تست دیگری در CI شکست خورده، باید بخش <code>tests/ui</code> را تغییر دهید.</p>
+<p>برای بازتولید کل job در CI به‌صورت محلی می‌توانید <code>cargo run --manifest-path src/ci/citool/Cargo.toml run-local test-x86_64-gnu-gcc</code> را اجرا کنید.
+برای اطلاعات بیشتر <a href="../docker.html">تست با Docker</a> را ببینید.</p>
+<h3 id="what-to-do-in-case-of-a-gcc-job-failure"><a class="header" href="#what-to-do-in-case-of-a-gcc-job-failure">اگر job مربوط به GCC شکست خورد چه کنیم؟</a></h3>
+<p>اگر تست job مربوط به GCC شکست خورد و به نظر می‌رسد شکست می‌تواند ناشی از backend مربوط به GCC باشد، می‌توانید با <code>@rust-lang/wg-gcc-backend</code> <a href="https://github.com/orgs/rust-lang/teams/wg-gcc-backend">گروه کاری cg-gcc</a> را ping کنید</p>
+<p>اگر رفع یک تست کامپایلر که با backend مربوط به GCC شکست می‌خورد ساده نیست، می‌توانید با <a href="../directives.html">directive در compiletest</a> به شکل <code>//@ ignore-backends: gcc</code> آن تست را هنگام اجرا با <code>cg_gcc</code> نادیده بگیرید.</p>
+<h2 id="choosing-which-codegen-backends-are-built"><a class="header" href="#choosing-which-codegen-backends-are-built">انتخاب اینکه کدام backendهای تولید کد ساخته شوند</a></h2>
+<p>گزینهٔ bootstrap با نام <code>rust.codegen-backends = [...]</code> بر اینکه کدام backendهای تولید کد ساخته و
+در sysroot مربوط به <code>rustc</code> تولیدشده گنجانده شوند اثر می‌گذارد.
+برای استفاده از backend تولید کد GCC، باید <code>"gcc"</code> در این آرایه در <code>bootstrap.toml</code> باشد:</p>
+<pre><code class="language-toml">rust.codegen-backends = ["llvm", "gcc"]
+</code></pre>
+<p>اگر نمی‌خواهید فایل <code>bootstrap.toml</code> خود را تغییر دهید، می‌توانید دستورهای <code>x</code> را با
+<code>--set 'rust.codegen-backends=["llvm", "gcc"]'</code> اجرا کنید.
+برای مثال:</p>
+<pre><code class="language-bash">./x build --set 'rust.codegen-backends=["llvm", "gcc"]'
+</code></pre>
+<p>اولین backend در آرایهٔ <code>codegen-backends</code> تعیین می‌کند کدام backend به‌عنوان
+<em>backend پیش‌فرض</em> <code>rustc</code> ساخته‌شده به‌کار رود.
+این همچنین تعیین می‌کند کدام backend برای کامپایل
+کتابخانهٔ استاندارد stage 1 (یا هر چیزی که در stage 2 به بعد ساخته می‌شود) استفاده شود.
+برای تولید <code>rustc</code>ای که به‌طور پیش‌فرض از backend مربوط به GCC استفاده می‌کند،
+می‌توانید <code>"gcc"</code> را اولین عنصر این آرایه بگذارید:</p>
+<pre><code class="language-bash">./x build --set 'rust.codegen-backends=["gcc"]' library
+</code></pre>
+<h2 id="choosing-the-codegen-backend-used-in-tests"><a class="header" href="#choosing-the-codegen-backend-used-in-tests">انتخاب backend تولید کدی که در تست‌ها استفاده می‌شود</a></h2>
+<p>برای اجرای تست‌های کامپایلر با backend تولید کد GCC برای ساخت برنامه‌های Rust تست، می‌توانید از پرچم
+<code>--test-codegen-backend</code> استفاده کنید:</p>
+<pre><code class="language-bash">./x test tests/ui --test-codegen-backend gcc
+</code></pre>
+<p>توجه کنید که برای کارکردن این، کامپایلر تست‌شده باید backend تولید کد GCC را در پوشهٔ sysroot خود <a href="#choosing-which-codegen-backends-are-built">در دسترس</a> داشته باشد.</p>
+<h2 id="downloading-gcc-from-ci"><a class="header" href="#downloading-gcc-from-ci">دانلود GCC از CI</a></h2>
+<p>گزینهٔ bootstrap با نام <code>gcc.download-ci-gcc</code> کنترل می‌کند GCC (که وابستگی backend تولید کد GCC است)
+از CI دانلود شود یا به‌صورت محلی ساخته شود.
+مقدار پیش‌فرض <code>true</code> است که GCC را از CI دانلود می‌کند
+اگر هیچ تغییر محلی در منابع GCC نباشد و هدف میزبان داده‌شده در CI در دسترس باشد.</p>
+<h2 id="providing-your-own-gcc"><a class="header" href="#providing-your-own-gcc">ارائهٔ GCC شخصی خودتان</a></h2>
+<p>مواردی هست که می‌خواهید فایل <code>libgccjit.so</code> خودتان را ارائه دهید.
+یک مورد وقتی است که می‌خواهید <code>rustc</code> را برای هدف دیگری cross-compile کنید چون GCC کامپایلر چندهدفه نیست.
+برای پشتیبانی از این مورد، گزینهٔ bootstrap با نام <code>gcc.libgccjit-libs-dir</code> هست.
+این گزینه <code>gcc.download-ci-gcc</code> را بازنویسی می‌کند، یعنی <code>libgccjit.so</code> توسط bootstrap دانلود یا به‌صورت محلی ساخته نخواهد شد.
+ساختار پوشهٔ آن <code>&lt;host&gt;/&lt;target&gt;/libgccjit.so</code> است، برای مثال:</p>
+<pre><code>.
+├── m68k-unknown-linux-gnu
+│   └── m68k-unknown-linux-gnu
+│       └── libgccjit.so
+└── x86_64-unknown-linux-gnu
+    ├── m68k-unknown-linux-gnu
+    │   └── libgccjit.so
+    └── x86_64-unknown-linux-gnu
+        └── libgccjit.so
+</code></pre>
+<h2 id="running-tests-of-the-backend-itself"><a class="header" href="#running-tests-of-the-backend-itself">اجرای تست‌های خود backend</a></h2>
+<p>علاوه بر اجرای مجموعه‌های تست کامپایلر با backend تولید کد GCC، می‌توانید مجموعهٔ تست خود backend را هم اجرا کنید.</p>
+<p>اکنون این کار را با دستور زیر انجام می‌دهید:</p>
+<pre><code class="language-text">./x test rustc_codegen_gcc
+</code></pre>
+<p>برای کارکردن این، backend باید <a href="#choosing-which-codegen-backends-are-built">فعال شده</a> باشد.</p><nav class="page-nav"><a href="cg_clif.html">→ بک‌اند تولید کد Cranelift (ناقص)</a><a href="../perf.html">آزمون کارایی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../rustc-dev-guide/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

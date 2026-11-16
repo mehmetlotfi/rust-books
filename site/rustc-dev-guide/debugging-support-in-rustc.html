@@ -1,0 +1,154 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>(یادداشت‌های درس) پشتیبانی از اشکال‌زدایی در کامپایلر Rust — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="debugging-support-in-rustc"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="debugging-support-in-the-rust-compiler"><a class="header" href="#debugging-support-in-the-rust-compiler">پشتیبانی از اشکال‌زدایی در کامپایلر Rust</a></h1>
+<p>این سند وضعیت پشتیبانی از ابزارهای اشکال‌زدایی (debugging) در کامپایلر Rust (rustc) را شرح می‌دهد. نمایی کلی از GDB، LLDB، WinDbg/CDB و همچنین زیرساخت پیرامون کامپایلر Rust برای اشکال‌زدایی کد Rust ارائه می‌کند. اگر می‌خواهید یاد بگیرید چگونه خود کامپایلر Rust را اشکال‌زدایی کنید، به <a href="compiler-debugging.html">اشکال‌زدایی کامپایلر</a> مراجعه کنید.</p>
+<p>مطالب از ویدیوی <a href="https://www.youtube.com/watch?v=elBxMRSNYr4">Tom Tromey discusses debugging support in rustc</a> گردآوری شده است.</p>
+<h2 id="preliminaries"><a class="header" href="#preliminaries">مقدمات</a></h2>
+<h3 id="debuggers"><a class="header" href="#debuggers">اشکال‌زداها</a></h3>
+<p>به گفتهٔ ویکی‌پدیا</p>
+<blockquote>
+<p>یک <a href="https://en.wikipedia.org/wiki/Debugger">اشکال‌زدا یا ابزار اشکال‌زدایی</a> برنامه‌ای رایانه‌ای است که برای آزمودن و اشکال‌زدایی برنامه‌های دیگر («برنامهٔ هدف») به کار می‌رود.</p>
+</blockquote>
+<p>نوشتن یک اشکال‌زدا از ابتدا برای یک زبان کار زیادی می‌طلبد، به‌ویژه اگر اشکال‌زداها باید روی پلتفرم‌های گوناگون پشتیبانی شوند. با این حال، GDB و LLDB را می‌توان برای پشتیبانی از اشکال‌زدایی یک زبان گسترش داد. این همان مسیری است که Rust برگزیده است. هدف اصلی این سند مستندسازی پشتیبانی کامپایلر Rust از اشکال‌زداهای یادشده است.</p>
+<h3 id="dwarf"><a class="header" href="#dwarf">DWARF</a></h3>
+<p>به گفتهٔ وب‌سایت استاندارد <a href="http://dwarfstd.org">DWARF</a></p>
+<blockquote>
+<p>DWARF یک قالب فایل اشکال‌زدایی است که بسیاری از کامپایلرها و اشکال‌زداها برای پشتیبانی از اشکال‌زدایی در سطح کد منبع از آن استفاده می‌کنند. این قالب نیازهای تعدادی از زبان‌های رویه‌ای، مانند C، C++ و Fortran را برآورده می‌کند و طوری طراحی شده است که برای زبان‌های دیگر نیز قابل گسترش باشد. DWARF مستقل از معماری است و برای هر پردازنده یا سیستم‌عاملی کاربرد دارد. این قالب به‌طور گسترده در Unix، Linux و دیگر سیستم‌عامل‌ها و نیز در محیط‌های مستقل (stand-alone) استفاده می‌شود.</p>
+</blockquote>
+<p>خوانندهٔ DWARF (DWARF reader) برنامه‌ای است که قالب DWARF را مصرف می‌کند و خروجی سازگار با اشکال‌زدا تولید می‌کند. این برنامه ممکن است در خود کامپایلر قرار داشته باشد. DWARF از ساختار داده‌ای به نام Debugging Information Entry (DIE) استفاده می‌کند که اطلاعات را به‌صورت «تگ» برای نشان‌دادن توابع، متغیرها و غیره ذخیره می‌کند؛ مثلاً <code>DW_TAG_variable</code>، <code>DW_TAG_pointer_type</code>، <code>DW_TAG_subprogram</code> و غیره. می‌توانید تگ‌ها و attributeهای مخصوص به خودتان را نیز ابداع کنید.</p>
+<h3 id="codeviewpdb"><a class="header" href="#codeviewpdb">CodeView/PDB</a></h3>
+<p><a href="https://llvm.org/docs/PDB/index.html">PDB</a> (Program Database) قالب فایلی است که مایکروسافت ساخته و اطلاعات اشکال‌زدایی را در بر دارد. PDBها را اشکال‌زداهایی مانند WinDbg/CDB و ابزارهای دیگر برای نمایش اطلاعات اشکال‌زدایی مصرف می‌کنند. یک PDB شامل چندین جریان (stream) است که اطلاعات اشکال‌زدایی دربارهٔ یک باینری مشخص را توصیف می‌کنند؛ مانند نوع‌ها، نمادها و فایل‌های منبعی که برای کامپایل آن باینری به کار رفته‌اند. CodeView قالب دیگری است که ساختار <a href="https://llvm.org/docs/PDB/CodeViewSymbols.html">symbol records</a> و <a href="https://llvm.org/docs/PDB/CodeViewTypes.html">type records</a> را که درون جریان‌های PDB ظاهر می‌شوند تعریف می‌کند.</p>
+<h2 id="supported-debuggers"><a class="header" href="#supported-debuggers">اشکال‌زداهای پشتیبانی‌شده</a></h2>
+<h3 id="gdb"><a class="header" href="#gdb">GDB</a></h3>
+<h4 id="rust-expression-parser"><a class="header" href="#rust-expression-parser">تجزیه‌گر عبارت Rust</a></h4>
+<p>برای اینکه بتوانیم خروجی اشکال‌زدایی را نمایش دهیم، به یک تجزیه‌گر عبارت نیاز داریم. این تجزیه‌گر عبارت (GDB) با <a href="https://www.gnu.org/software/bison/">Bison</a> نوشته شده است و فقط زیرمجموعه‌ای از عبارت‌های Rust را تجزیه می‌کند. تجزیه‌گر GDB از ابتدا نوشته شده و هیچ ارتباطی با تجزیه‌گرهای دیگر، از جمله تجزیه‌گر rustc، ندارد.</p>
+<p>GDB خروجی مقدار و نوع شبیه Rust دارد. می‌تواند مقادیر و نوع‌ها را طوری چاپ کند که در خروجی شبیه نحو Rust به نظر برسند. یا وقتی نوعی را با <a href="https://ftp.gnu.org/old-gnu/Manuals/gdb/html_node/gdb_109.html">ptype</a> در GDB چاپ می‌کنید، آن هم شبیه کد منبع Rust دیده می‌شود. مستندات را در <a href="https://sourceware.org/gdb/onlinedocs/gdb/Rust.html">راهنمای GDB/Rust</a> ببینید.</p>
+<h4 id="parser-extensions"><a class="header" href="#parser-extensions">افزونه‌های تجزیه‌گر</a></h4>
+<p>تجزیه‌گر عبارت چند افزونه دارد تا قابلیت‌هایی را که با Rust نمی‌توان انجام داد تسهیل کند. برخی محدودیت‌ها در <a href="https://sourceware.org/gdb/onlinedocs/gdb/Rust.html">راهنمای GDB/Rust</a> فهرست شده‌اند. در خوانندهٔ DWARF در GDB کدی ویژه برای پشتیبانی از این افزونه‌ها وجود دارد.</p>
+<p>چند نمونه از پشتیبانی لازم در خوانندهٔ DWARF به شرح زیر است:</p>
+<ol>
+<li>
+<p>Enum: برای پشتیبانی از نوع‌های enum لازم است. کامپایلر Rust اطلاعات مربوط به enum را در DWARF می‌نویسد و GDB هم DWARF را می‌خواند تا بفهمد فیلد تگ کجاست، یا اصلاً فیلد تگی وجود دارد یا نه، یا اینکه جایگاه تگ با بهینه‌سازی غیرصفر (non-zero optimization) مشترک است یا نه و مانند آن.</p>
+</li>
+<li>
+<p>تشریح شیءهای صفت (trait objects): افزونه‌ای در DWARF که در آن توصیف trait object در DWARF به توصیف نمونهٔ مختصری از vtable متناظر نیز اشاره می‌کند، و آن نیز به نوع مشخصی اشاره دارد که این trait object برای آن وجود دارد. یعنی می‌توانید برای آن trait object دستور <code>print *object</code> را اجرا کنید و GDB می‌فهمد چگونه نوع درست بار (payload) را در trait object پیدا کند.</p>
+</li>
+</ol>
+<p><strong>TODO</strong>: مشخص شود آیا موارد زیر باید در سند GDB-Rust ذکر شوند، نه در این صفحهٔ راهنما، تا تکراری نباشند. این مربوط به نظرهای زیر است:</p>
+<p><a href="https://github.com/rust-lang/rustc-dev-guide/pull/316#discussion_r284027340">این نظر از Tom</a></p>
+<blockquote>
+<p>افزونه‌ها و محدودیت‌های Rust در gdb در راهنمای gdb مستند شده‌اند: https://sourceware.org/gdb/onlinedocs/gdb/Rust.html – با این حال، در آن ذکر نشده که متغیرها و رجیسترهای convenience در gdb از قرارداد $ در gdb پیروی می‌کنند و تجزیه‌گر Rust افزونهٔ @ در gdb را پیاده‌سازی می‌کند.</p>
+</blockquote>
+<p><a href="https://github.com/rust-lang/rustc-dev-guide/pull/316#discussion_r285401353">این پرسش از Aman</a></p>
+<blockquote>
+<p>@tromey آیا فکر می‌کنید باید این بخش را در سند GDB-Rust ذکر کنیم، نه در این سند، تا تکرار و موارد مشابه پیش نیاید؟</p>
+</blockquote>
+<h3 id="lldb"><a class="header" href="#lldb">LLDB</a></h3>
+<h4 id="rust-expression-parser-1"><a class="header" href="#rust-expression-parser-1">تجزیه‌گر عبارت Rust</a></h4>
+<p>این تجزیه‌گر عبارت با C++ نوشته شده است. از نوع <a href="https://en.wikipedia.org/wiki/Recursive_descent_parser">تجزیه‌گر پایین‌رونده بازگشتی (Recursive Descent)</a> است. بخش کمی کمتری از زبان Rust را نسبت به GDB پیاده‌سازی می‌کند. LLDB خروجی مقدار و نوع شبیه Rust دارد.</p>
+<h4 id="developer-notes"><a class="header" href="#developer-notes">یادداشت‌های توسعه‌دهنده</a></h4>
+<ul>
+<li>LLDB معماری افزونه‌ای (plugin) دارد، اما این برای پشتیبانی از زبان کار نمی‌کند.</li>
+<li>GDB عموماً روی Linux بهتر کار می‌کند.</li>
+</ul>
+<h3 id="windbgcdb"><a class="header" href="#windbgcdb">WinDbg/CDB</a></h3>
+<p>مایکروسافت <a href="https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/">Windows Debugging Tools</a> را فراهم می‌کند، مانند اشکال‌زدای ویندوز (WinDbg) و اشکال‌زدای کنسول (CDB)، که هر دو از اشکال‌زدایی برنامه‌های نوشته‌شده با Rust پشتیبانی می‌کنند. این اشکال‌زداها اطلاعات اشکال‌زدایی یک باینری را در صورت وجود از <code>PDB</code> تجزیه می‌کنند تا یک نمایش بصری بسازند و در اشکال‌زدا ارائه دهند.</p>
+<h4 id="natvis"><a class="header" href="#natvis">Natvis</a></h4>
+<p>هم WinDbg و هم CDB با استفاده از چارچوب Natvis از تعریف و مشاهدهٔ نمایش‌های بصری سفارشی برای هر نوع دلخواه در اشکال‌زدا پشتیبانی می‌کنند. کامپایلر Rust مجموعه‌ای از فایل‌های Natvis تعریف می‌کند که نمایش‌های بصری سفارشی را برای زیرمجموعه‌ای از نوع‌های کتابخانه‌های استاندارد مانند <code>std</code>، <code>core</code> و <code>alloc</code> مشخص می‌کنند. این فایل‌های Natvis درون <code>PDB</code>هایی که target tripleهای <code>*-pc-windows-msvc</code> تولید می‌کنند جاسازی می‌شوند تا این نمایش‌های بصری سفارشی هنگام اشکال‌زدایی به‌طور خودکار فعال شوند. می‌توان این پیش‌فرض را با تنظیم پرچم <code>strip</code> در rustc به <code>debuginfo</code> یا <code>symbols</code> بازنویسی کرد.</p>
+<p>Rust با استفاده از attribute به نام <code>#[debugger_visualizer]</code> از جاسازی فایل‌های Natvis برای crateهای خارج از کتابخانه‌های استاندارد پشتیبانی می‌کند. برای جزئیات بیشتر دربارهٔ چگونگی جاسازی نمایش‌دهنده‌های اشکال‌زدا، لطفاً به بخش attribute به نام <code>debugger_visualizer</code> مراجعه کنید.</p>
+<h2 id="dwarf-and-rustc"><a class="header" href="#dwarf-and-rustc">DWARF و <code>rustc</code></a></h2>
+<p><a href="http://dwarfstd.org">DWARF</a> روش استاندارد تولید اطلاعات اشکال‌زدایی توسط کامپایلرهاست که اشکال‌زداها آن را می‌خوانند. این قالب اشکال‌زدایی <em>اصلی</em> در macOS و Linux است. قالبی چندزبانه و قابل گسترش است و برای مقاصد Rust عمدتاً به‌اندازهٔ کافی خوب است. از این رو پیاده‌سازی فعلی از مفاهیم DWARF دوباره استفاده می‌کند. این حتی وقتی صادق است که برخی مفاهیم DWARF از نظر معنایی با Rust هم‌راستا نباشند، زیرا عموماً می‌توان نوعی نگاشت میان این دو برقرار کرد.</p>
+<p>چند افزونهٔ DWARF داریم که کامپایلر Rust تولید می‌کند و اشکال‌زداها آن‌ها را می‌فهمند اما در استاندارد DWARF <em>نیستند</em>.</p>
+<ul>
+<li>
+<p>کامپایلر Rust برای یک جدول مجازی (virtual table) خروجی DWARF تولید می‌کند و این شیء <code>vtable</code> یک <code>DW_AT_containing_type</code> خواهد داشت که به نوع واقعی اشاره می‌کند. این کار به اشکال‌زداها اجازه می‌دهد اشاره‌گر trait object را تشریح کنند تا بار (payload) را به‌درستی پیدا کنند. نمونه‌ای از چنین DIE‌ای، از یک مورد آزمون در مخزن gdb، این است:</p>
+<pre><code class="language-asm">&lt;1&gt;&lt;1a9&gt;: Abbrev Number: 3 (DW_TAG_structure_type)
+   &lt;1aa&gt;   DW_AT_containing_type: &lt;0x1b4&gt;
+   &lt;1ae&gt;   DW_AT_name        : (indirect string, offset: 0x23d): vtable
+   &lt;1b2&gt;   DW_AT_byte_size   : 0
+   &lt;1b3&gt;   DW_AT_alignment   : 8
+</code></pre>
+</li>
+<li>
+<p>افزونهٔ دیگر این است که کامپایلر Rust می‌تواند یک union متمایزشدهٔ بدون تگ (tagless discriminated union) تولید کند. برای این مورد <a href="http://dwarfstd.org/ShowIssue.php?issue=180517.2">درخواست قابلیت DWARF</a> را ببینید.</p>
+</li>
+</ul>
+<h3 id="current-limitations-of-dwarf"><a class="header" href="#current-limitations-of-dwarf">محدودیت‌های کنونی DWARF</a></h3>
+<ul>
+<li>Traitها - برای نمایش Traitها در DWARF به تغییری بزرگ‌تر از معمول در DWARF نیاز است.</li>
+<li>DWARF هیچ راهی برای تمایز میان Structها و Tupleها ارائه نمی‌دهد. کامپایلر Rust فیلدهایی با نام <code>__0</code> تولید می‌کند و اشکال‌زداها دنبال دنباله‌ای از چنین نام‌هایی می‌گردند تا بر این محدودیت غلبه کنند. برای مثال، در این مورد اشکال‌زدا به‌جای <code>x.0</code> فیلد را از طریق <code>x.__0</code> نگاه می‌کند. این مشکل از طریق تجزیه‌گر Rust در اشکال‌زدا حل شده، پس اکنون می‌توانید <code>x.0</code> را بزنید.</li>
+</ul>
+<p>DWARF بر این تکیه دارد که اشکال‌زداها برخی اطلاعات دربارهٔ ABI پلتفرم را بدانند. Rust همیشه این کار را نمی‌کند.</p>
+<h2 id="developer-notes-1"><a class="header" href="#developer-notes-1">یادداشت‌های توسعه‌دهنده</a></h2>
+<p>این بخش از سخنرانی‌ای دربارهٔ جنبه‌های خاصی از توسعه گرفته شده است.</p>
+<h2 id="what-is-missing"><a class="header" href="#what-is-missing">آنچه کم است</a></h2>
+<h3 id="code-signing-for-lldb-debug-server-on-macos"><a class="header" href="#code-signing-for-lldb-debug-server-on-macos">امضای کد برای سرور اشکال‌زدای LLDB در macOS</a></h3>
+<p>به گفتهٔ ویکی‌پدیا، <a href="https://en.wikipedia.org/wiki/System_Integrity_Protection">System Integrity Protection</a> چنین است</p>
+<blockquote>
+<p>System Integrity Protection (SIP، که گاهی rootless نامیده می‌شود) یک قابلیت امنیتی سیستم‌عامل macOS شرکت اپل است که در OS X El Capitan معرفی شد. شامل تعدادی سازوکار است که هسته (kernel) اعمال می‌کند. محور آن محافظت از فایل‌ها و پوشه‌های متعلق به سیستم در برابر تغییر توسط فرایندهایی است که «entitlement» مشخصی ندارند، حتی اگر توسط کاربر root یا کاربری با امتیازهای root (sudo) اجرا شوند.</p>
+</blockquote>
+<p>این قابلیت از استفادهٔ فرایندها از فراخوان سیستمی <code>ptrace</code> جلوگیری می‌کند. اگر فرایندی بخواهد از <code>ptrace</code> استفاده کند باید امضای کد داشته باشد. گواهی‌ای که آن را امضا می‌کند باید روی دستگاه شما مورد اعتماد باشد.</p>
+<p><a href="https://developer.apple.com/library/archive/releasenotes/MacOSX/WhatsNewInOSX/Articles/MacOSX10_11.html#//apple_ref/doc/uid/TP40016227-SW11">مستندات توسعه‌دهندهٔ اپل دربارهٔ System Integrity Protection</a> را ببینید.</p>
+<p>ممکن است لازم باشد در اپل ثبت‌نام کنیم و کلیدها را برای انجام این امضا بگیریم. Tom بررسی کرده است که آیا Mozilla نمی‌تواند این کار را بکند، چون به حداکثر تعداد کلیدهایی که مجاز به امضا با آن‌هاست رسیده است. Tom نمی‌داند Mozilla می‌تواند کلیدهای بیشتری بگیرد یا نه.</p>
+<p>به‌طور جایگزین، Tom پیشنهاد می‌کند شاید یک نهاد حقوقی Rust برای گرفتن کلیدها از اپل لازم باشد. این مشکل ماهیت فنی ندارد. اگر چنین کلیدی داشتیم، می‌توانستیم GDB را نیز امضا کنیم و آن را عرضه کنیم.</p>
+<h3 id="dwarf-and-traits"><a class="header" href="#dwarf-and-traits">DWARF و Traitها</a></h3>
+<p>Traitهای Rust اصلاً در DWARF تولید نمی‌شوند. تأثیر این موضوع این است که فراخوانی متد <code>x.method()</code> به همین شکل کار نمی‌کند. دلیلش آن است که متد توسط یک trait پیاده‌سازی شده، نه توسط یک نوع. این اطلاعات وجود ندارد، بنابراین یافتن متدهای trait ممکن نیست.</p>
+<p>DWARF مفهومی به نام نوع‌های interface دارد (احتمالاً برای Java افزوده شده است). ایدهٔ Tom این بود که از این نوع interface به‌عنوان trait استفاده شود.</p>
+<p>DWARF فقط با نام‌های مشخص سروکار دارد، نه نوع‌های ارجاع. بنابراین، یک پیاده‌سازی مشخص از یک trait برای یک نوع یکی از این interfaceها (نوع <code>DW_tag_interface</code>) خواهد بود. همچنین، نوعی که trait برای آن پیاده‌سازی شده همهٔ interfaceهایی را که این نوع پیاده‌سازی می‌کند توصیف می‌کند. این به یک افزونهٔ DWARF نیاز دارد.</p>
+<p>مسئله در GitHub: <a href="https://github.com/rust-lang/rust/issues/33014">https://github.com/rust-lang/rust/issues/33014</a></p>
+<h2 id="typical-process-for-a-debug-info-change-llvm"><a class="header" href="#typical-process-for-a-debug-info-change-llvm">فرایند معمول برای تغییر در اطلاعات اشکال‌زدایی (LLVM)</a></h2>
+<p>LLVM سازنده‌هایی (builder) برای اطلاعات اشکال‌زدایی (Debug Info یا DI) دارد. این چیز اصلی است که Rust آن را فراخوانی می‌کند. به همین دلیل باید ابتدا LLVM را تغییر دهیم، چون ابتدا آن تولید می‌شود و نه مستقیماً DWARF. این نوعی فراداده است که می‌سازید و به LLVM می‌سپارید. در این تحویل میان Rustc و LLVM، برخی متدهای سازندهٔ DI در LLVM برای ساختن نمایش یک نوع فراخوانی می‌شوند.</p>
+<p>مراحل این فرایند به شرح زیر است:</p>
+<ol>
+<li>
+<p>LLVM باید تغییر کند.</p>
+<p>LLVM اصلاً نوع‌های Interface را تولید نمی‌کند، بنابراین ابتدا باید این در LLVM پیاده‌سازی شود.</p>
+<p>از نگهدارندگان LLVM تأیید بگیرید که این ایدهٔ خوبی است.</p>
+</li>
+<li>
+<p>افزونهٔ DWARF را تغییر دهید.</p>
+</li>
+<li>
+<p>اشکال‌زداها را به‌روز کنید.</p>
+<p>خوانندگان DWARF و ارزیاب‌های عبارت را به‌روز کنید.</p>
+</li>
+<li>
+<p>کامپایلر Rust را به‌روز کنید.</p>
+<p>آن را طوری تغییر دهید که این اطلاعات جدید را تولید کند.</p>
+</li>
+</ol>
+<h3 id="procedural-macro-stepping"><a class="header" href="#procedural-macro-stepping">گام‌برداری در ماکروهای رویه‌ای</a></h3>
+<p>پرسشی عمیق این است که چگونه واقعاً یک ماکروی رویه‌ای (procedural macro) را اشکال‌زدایی می‌کنید؟ چه مکانی را برای بسط ماکرو تولید می‌کنید؟ برخی از حالت‌های زیر را در نظر بگیرید -</p>
+<ul>
+<li>می‌توانید مکان فراخوانی ماکرو را تولید کنید.</li>
+<li>می‌توانید مکان تعریف ماکرو را تولید کنید.</li>
+<li>می‌توانید مکان‌های محتوای ماکرو را تولید کنید.</li>
+</ul>
+<p>RFC: <a href="https://github.com/rust-lang/rfcs/pull/2117">https://github.com/rust-lang/rfcs/pull/2117</a></p>
+<p>تمرکز بر این است که ماکروها خودشان تصمیم بگیرند چه کنند. این را می‌توان با داشتن نوعی attribute به دست آورد که به ماکرو اجازه می‌دهد به کامپایلر بگوید نشانگر خط (line marker) باید کجا باشد. این بر جایی که breakpointها را می‌گذارید و بر آنچه هنگام گام‌برداری رخ می‌دهد اثر می‌گذارد.</p>
+<h2 id="source-file-checksums-in-debug-info"><a class="header" href="#source-file-checksums-in-debug-info">چک‌سام فایل‌های منبع در اطلاعات اشکال‌زدایی</a></h2>
+<p>هم DWARF و هم CodeView (PDB) از جاسازی یک هش رمزنگاری‌شدهٔ هر فایل منبعی که در باینری مربوطه نقش داشته است پشتیبانی می‌کنند.</p>
+<p>اشکال‌زدا می‌تواند از هش رمزنگاری‌شده برای تأیید اینکه فایل منبع با فایل اجرایی مطابقت دارد استفاده کند. اگر فایل منبع مطابقت نداشته باشد، اشکال‌زدا می‌تواند به کاربر هشدار دهد.</p>
+<p>از هش همچنین می‌توان برای اثبات اینکه یک فایل منبع مشخص از زمانی که برای کامپایل یک فایل اجرایی به کار رفته تغییر نکرده است استفاده کرد. چون MD5 و SHA1 هر دو آسیب‌پذیری‌های اثبات‌شده دارند، استفاده از SHA256 برای این منظور توصیه می‌شود.</p>
+<p>کامپایلر Rust هش هر فایل منبع را در <code>SourceFile</code> متناظر در <code>SourceMap</code> ذخیره می‌کند. هش فایل‌های ورودی crateهای خارجی در فراداده <code>rlib</code> ذخیره می‌شود.</p>
+<p>یک الگوریتم هش پیش‌فرض در مشخصات target تنظیم شده است. این به target اجازه می‌دهد بهترین هش موجود را مشخص کند، زیرا همهٔ targetها همهٔ الگوریتم‌های هش را پشتیبانی نمی‌کنند.</p>
+<p>الگوریتم هش برای یک target را می‌توان با گزینهٔ خط فرمان <code>-Z source-file-checksum=</code> نیز بازنویسی کرد.</p>
+<h4 id="dwarf-5"><a class="header" href="#dwarf-5">DWARF 5</a></h4>
+<p>DWARF نسخهٔ ۵ از جاسازی یک هش MD5 برای اعتبارسنجی نسخهٔ فایل منبع در حال استفاده پشتیبانی می‌کند. DWARF 5 - Section 6.2.4.1 opcode DW_LNCT_MD5</p>
+<h4 id="llvm"><a class="header" href="#llvm">LLVM</a></h4>
+<p>LLVM IR از چک‌سام‌های MD5 و SHA1 (و SHA256 در LLVM 11 به بعد) فایل منبع در گره DIFile پشتیبانی می‌کند.</p>
+<p><a href="https://llvm.org/docs/LangRef.html#difile">مستندات LLVM DIFile</a></p>
+<h4 id="microsoft-visual-c-compiler-zh-option"><a class="header" href="#microsoft-visual-c-compiler-zh-option">گزینهٔ /ZH در کامپایلر Microsoft Visual C++</a></h4>
+<p>کامپایلر MSVC با گزینهٔ کامپایلر <code>/ZH</code> از جاسازی هش‌های MD5، SHA1 یا SHA256 در PDB پشتیبانی می‌کند.</p>
+<p><a href="https://docs.microsoft.com/en-us/cpp/build/reference/zh">مستندات MSVC /ZH</a></p>
+<h4 id="clang"><a class="header" href="#clang">Clang</a></h4>
+<p>Clang همیشه یک چک‌سام MD5 جاسازی می‌کند، هرچند این در مستندات دیده نمی‌شود.</p>
+<h2 id="future-work"><a class="header" href="#future-work">کارهای آینده</a></h2>
+<h4 id="name-mangling-changes"><a class="header" href="#name-mangling-changes">تغییرات در name mangling</a></h4>
+<ul>
+<li>demangler جدید در <code>libiberty</code> (درخت کد منبع gcc).</li>
+<li>demangler جدید در LLVM یا LLDB.</li>
+</ul>
+<p><strong>TODO</strong>: مکان کد منبع demangler بررسی شود. <a href="https://github.com/rust-lang/rustc-dev-guide/issues/1157">#1157</a></p>
+<h4 id="reuse-rust-compiler-for-expressions"><a class="header" href="#reuse-rust-compiler-for-expressions">استفادهٔ مجدد از کامپایلر Rust برای عبارت‌ها</a></h4>
+<p>این ایدهٔ مهمی است، زیرا اشکال‌زداها در مجموع تلاشی برای پیاده‌سازی استنتاج نوع نمی‌کنند. وقتی در اشکال‌زدا تایپ می‌کنید باید بسیار صریح‌تر از کد منبع واقعی‌تان باشید. بنابراین نمی‌توانید فقط یک عبارت را از کد منبع کپی و در اشکال‌زدا جای‌گذاری کنید و همان پاسخ را انتظار داشته باشید، اما این خوب می‌بود. با استفاده از کامپایلر می‌توان به این کمک کرد.</p>
+<p>این قطعاً شدنی است، اما پروژه‌ای بزرگ است. قطعاً به یک پل به اشکال‌زدا نیاز دارید، زیرا فقط اشکال‌زدا به حافظه دسترسی دارد. هم GDB (gcc) و هم LLDB (clang) این قابلیت را دارند. LLDB از Clang برای کامپایل کد به JIT استفاده می‌کند و GDB می‌تواند همین کار را با GCC بکند.</p>
+<p>ارزیابی عبارت در هر دو اشکال‌زدا هم ابرمجموعه‌ای و هم زیرمجموعه‌ای از Rust را پیاده‌سازی می‌کند. آن‌ها فقط زبان عبارت را پیاده‌سازی می‌کنند، اما افزونه‌هایی هم اضافه می‌کنند، مثلاً GDB متغیرهای convenience دارد. بنابراین اگر این مسیر را می‌روید، نه‌تنها باید این پل را بسازید، بلکه شاید لازم باشد حالتی هم اضافه کنید تا کامپایلر برخی افزونه‌ها را بفهمد.</p><nav class="page-nav"><a href="debuginfo/testing.html">→ آزمودن (ناقص)</a><a href="backend/libs-and-metadata.html">کتابخانه‌ها و فراداده ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

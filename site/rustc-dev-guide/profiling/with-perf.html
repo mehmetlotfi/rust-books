@@ -1,0 +1,235 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>با ابزار perf لینوکس — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="profiling/with-perf"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="profiling-with-perf"><a class="header" href="#profiling-with-perf">پروفایل‌کردن با perf</a></h1>
+<p>این راهنمایی برای پروفایل‌کردن rustc با <a href="https://perf.wiki.kernel.org/index.php/Main_Page">perf</a> است.</p>
+<h2 id="initial-steps"><a class="header" href="#initial-steps">Initial steps</a></h2>
+<ul>
+<li>یک checkout تمیز از rust-lang/rust بگیرید</li>
+<li>Set the following settings in your <code>bootstrap.toml</code>:
+<ul>
+<li><code>rust.debuginfo-level = 1</code> - enables line debuginfo</li>
+<li><code>build.allocator</code> را تنظیم‌نشده بگذارید — این به شما اجازه می‌دهد پروفایل مصرف حافظه را با valgrind انجام دهید</li>
+<li>بقیه‌چیز را روی پیش‌فرض بگذارید</li>
+</ul>
+</li>
+<li><code>./x build</code> را برای ساخت کامل اجرا کنید</li>
+<li>Make a rustup toolchain pointing to that result
+<ul>
+<li><a href="../building/how-to-build-and-run.html">دستورالعمل‌ها را در بخش «ساخت و اجرا»</a> ببینید</li>
+</ul>
+</li>
+</ul>
+<h2 id="gathering-a-perf-profile"><a class="header" href="#gathering-a-perf-profile">جمع‌آوری پروفایل perf</a></h2>
+<p>perf ابزار عالی‌ای در لینوکس است که می‌توان برای جمع‌آوری و تحلیل انواع اطلاعات از آن استفاده کرد.
+بیشتر برای یافتن اینکه برنامه زمانش را کجا صرف می‌کند به‌کار می‌رود.
+اما می‌توان آن را برای انواع دیگر رویدادها هم به‌کار برد، مثل cache miss و مانند آن.</p>
+<h3 id="the-basics"><a class="header" href="#the-basics">مبانی</a></h3>
+<p>دستور پایهٔ <code>perf</code> این است:</p>
+<pre><code class="language-bash">perf record -F99 --call-graph dwarf XXX
+</code></pre>
+<p><code>-F99</code> به perf می‌گوید با ۹۹ هرتز نمونه‌برداری کند، که از تولید داده‌های بیش‌ازحد در اجراهای طولانی‌تر جلوگیری می‌کند.</p>
+<blockquote>
+<p>۹۹ هرتز را اغلب انتخاب می‌کنند چون بعید است با فعالیت دوره‌ای دیگر هم‌گام شود.</p>
+</blockquote>
+<p><code>--call-graph dwarf</code> به perf می‌گوید اطلاعات call-graph را از debuginfo بگیرد که دقیق است.
+<code>XXX</code> دستوری است که می‌خواهید پروفایل کنید.
+برای مثال ممکن است این‌طور بکنید:</p>
+<pre><code class="language-bash">perf record -F99 --call-graph dwarf cargo +&lt;toolchain&gt; rustc
+</code></pre>
+<p>تا <code>cargo</code> را اجرا کنید — اینجا <code>&lt;toolchain&gt;</code> باید نام toolchainی باشد که در ابتدا ساختید.
+اما چند نکته هست که باید از آن‌ها آگاه باشید:</p>
+<ul>
+<li>You probably don’t want to profile the time spent building dependencies.
+So something like <code>cargo build; cargo clean --package $crate</code> may be helpful
+<ul>
+<li>هرچند معمولاً من فقط <code>touch src/lib.rs</code> را می‌زنم و دوباره می‌سازم =)</li>
+</ul>
+</li>
+<li>احتمالاً نمی‌خواهید کامپایل افزایشی پروفایل شما را مختل کند.
+پس چیزی مثل <code>CARGO_INCREMENTAL=0</code> می‌تواند مفید باشد.</li>
+</ul>
+<p>برای پرهیز از مشکل <code>addr2line xxx/elf: could not read first record</code> هنگام خواندن
+داده‌های جمع‌آوری‌شده از <code>cargo</code>، ممکن است لازم باشد از آخرین نسخهٔ <code>addr2line</code> استفاده کنید:</p>
+<pre><code class="language-bash">cargo install --locked addr2line --features="bin"
+</code></pre>
+<h3 id="gathering-a-perf-profile-from-a-perfrust-langorg-test"><a class="header" href="#gathering-a-perf-profile-from-a-perfrust-langorg-test">جمع‌آوری پروفایل perf از تست <code>perf.rust-lang.org</code></a></h3>
+<p>اغلب می‌خواهیم یک تست مشخص از <code>perf.rust-lang.org</code> را تحلیل کنیم.
+ساده‌ترین راه استفاده از مجموعهٔ benchmark با نام <a href="https://github.com/rust-lang/rustc-perf">rustc-perf</a> است،
+که این رویکرد <a href="with-rustc-perf.html">اینجا</a> شرح داده شده است.</p>
+<p>به‌جای استفاده از CLI مجموعهٔ benchmark، می‌توانید benchmarkها را دستی هم پروفایل کنید.
+ابتدا باید مخزن <a href="https://github.com/rust-lang/rustc-perf">rustc-perf</a> را clone کنید:</p>
+<pre><code class="language-bash">$ git clone https://github.com/rust-lang/rustc-perf
+</code></pre>
+<p>و سپس کد منبع تستی را که می‌خواهید پروفایل کنید بیابید.
+منابع تست‌ها در <a href="https://github.com/rust-lang/rustc-perf/tree/master/collector/compile-benchmarks">پوشهٔ <code>collector/compile-benchmarks</code></a>
+و <a href="https://github.com/rust-lang/rustc-perf/tree/master/collector/runtime-benchmarks">پوشهٔ <code>collector/runtime-benchmarks</code></a> هستند.
+پس وارد پوشهٔ یک تست مشخص می‌شویم؛ <code>clap-rs</code> را مثال می‌زنیم:</p>
+<pre><code class="language-bash">cd collector/compile-benchmarks/clap-3.1.6
+</code></pre>
+<p>در این مورد فرض کنید می‌خواهیم عملکرد <code>cargo check</code> را پروفایل کنیم.
+در آن صورت ابتدا چند دستور پایه برای ساخت وابستگی‌ها اجرا می‌کنم:</p>
+<pre><code class="language-bash"># Setup: first clean out any old results and build the dependencies:
+cargo +&lt;toolchain&gt; clean
+CARGO_INCREMENTAL=0 cargo +&lt;toolchain&gt; check
+</code></pre>
+<p>(باز هم <code>&lt;toolchain&gt;</code> باید با نام toolchainی که در گام اول ساختیم جایگزین شود.)</p>
+<p>در ادامه: می‌خواهیم زمان اجرا را <em>فقط</em> برای crate با نام clap-rs ثبت کنیم،
+در حالی که cargo check اجرا می‌شود.
+من برای این معمولاً از <code>cargo rustc</code> استفاده می‌کنم، چون به من اجازه می‌دهد پرچم‌های صریح هم اضافه کنم،
+که بعداً این کار را می‌کنیم.</p>
+<pre><code class="language-bash">touch src/lib.rs
+CARGO_INCREMENTAL=0 perf record -F99 --call-graph dwarf cargo rustc --profile check --lib
+</code></pre>
+<p>به آن دستور آخر دقت کنید: عجیب است!
+از دستور <code>cargo rustc</code> استفاده می‌کند که rustc را با گزینه‌های (بالقوه) اضافی اجرا می‌کند؛
+گزینه‌های <code>--profile check</code> و <code>--lib</code> مشخص می‌کنند که اجرای <code>cargo check</code> انجام می‌دهیم،
+و اینکه این یک کتابخانه است (نه فایل دودویی).</p>
+<p>در این نقطه می‌توانیم از ابزار <code>perf</code> برای تحلیل نتایج استفاده کنیم.
+برای مثال:</p>
+<pre><code class="language-bash">perf report
+</code></pre>
+<p>این یک برنامهٔ TUI تعاملی باز می‌کند.
+در موارد ساده می‌تواند مفید باشد.
+برای بررسی دقیق‌تر، <a href="https://github.com/nikomatsakis/perf-focus">ابزار <code>perf-focus</code></a> می‌تواند مفید باشد؛ در ادامه شرح داده می‌شود.</p>
+<p><strong>یک نکتهٔ احتیاط.</strong> هر یک از تست‌های rustc-perf یک «دانه‌برف» خاص خودش است.
+به‌ویژه، برخی از آن‌ها کتابخانه نیستند،
+که در آن صورت باید <code>touch src/main.rs</code> را بزنید و <code>--lib</code> را ندهید.
+صادقانه مطمئن نیستم بهترین راه تشخیص اینکه کدام تست چیست چیست.</p>
+<h3 id="gathering-nll-data"><a class="header" href="#gathering-nll-data">Gathering NLL data</a></h3>
+<p>اگر می‌خواهید اجرای NLL را پروفایل کنید، می‌توانید گزینه‌های اضافی را به دستور <code>cargo rustc</code> بدهید،
+به این شکل:</p>
+<pre><code class="language-bash">touch src/lib.rs
+CARGO_INCREMENTAL=0 perf record -F99 --call-graph dwarf cargo rustc --profile check --lib -- -Z borrowck=mir
+</code></pre>
+<h2 id="analyzing-a-perf-profile-with-perf-focus"><a class="header" href="#analyzing-a-perf-profile-with-perf-focus">تحلیل پروفایل perf با <code>perf focus</code></a></h2>
+<p>وقتی پروفایل perf را جمع‌آوری کردید، می‌خواهیم اطلاعاتی از آن بگیریم.
+برای این من شخصاً از <a href="https://github.com/nikomatsakis/perf-focus">perf focus</a> استفاده می‌کنم.
+ابزاری ساده اما مفید است که به شما اجازه می‌دهد به پرسش‌هایی از این دست پاسخ دهید:</p>
+<ul>
+<li>«چقدر زمان در تابع F صرف شد» (مهم نیست از کجا فراخوانی شده)</li>
+<li>«چقدر زمان در تابع F هنگامی که از G فراخوانی شد صرف شد»</li>
+<li>«چقدر زمان در تابع F <em>به‌استثنای</em> زمان صرف‌شده در G صرف شد»</li>
+<li>«F چه توابعی را فراخوانی می‌کند و چقدر زمان در آن‌ها صرف می‌کند»</li>
+</ul>
+<p>برای فهم نحوهٔ کار آن باید کمی دربارهٔ perf بدانید.
+اساساً perf با <em>نمونه‌برداری</em> از فرایند شما به‌صورت منظم (یا هر وقت رویدادی رخ دهد) کار می‌کند.
+برای هر نمونه، perf یک backtrace جمع می‌کند.
+<code>perf focus</code> به شما اجازه می‌دهد یک regular expression بنویسید که آزمایش می‌کند
+کدام توابع در آن backtrace ظاهر می‌شوند،
+و سپس می‌گوید چه درصدی از نمونه‌ها backtraceی داشتند که regular expression را برآورده می‌کرد.
+احتمالاً ساده‌ترین راه توضیح، مرور نحوهٔ تحلیل عملکرد NLL توسط من است.</p>
+<h3 id="installing-perf-focus"><a class="header" href="#installing-perf-focus">Installing <code>perf-focus</code></a></h3>
+<p>می‌توانید perf-focus را با <code>cargo install</code> نصب کنید:</p>
+<pre><code class="language-bash">cargo install --locked perf-focus
+</code></pre>
+<h3 id="example-how-much-time-is-spent-in-mir-borrowck"><a class="header" href="#example-how-much-time-is-spent-in-mir-borrowck">مثال: چقدر زمان در MIR borrowck صرف می‌شود؟</a></h3>
+<p>فرض کنید داده‌های NLL را برای یک تست جمع کرده‌ایم.
+می‌خواهیم بدانیم چقدر زمان در borrow-checker مربوط به MIR صرف می‌شود.
+تابع «اصلی» MIR borrowck <code>do_mir_borrowck</code> نام دارد، پس می‌توانیم این دستور را بزنیم:</p>
+<pre><code class="language-bash">$ perf focus '{do_mir_borrowck}'
+Matcher    : {do_mir_borrowck}
+Matches    : 228
+Not Matches: 542
+Percentage : 29%
+</code></pre>
+<p>آرگومان <code>'{do_mir_borrowck}'</code> <strong>matcher</strong> نامیده می‌شود.
+تستی را که باید روی backtrace اعمال شود مشخص می‌کند.
+در این مورد، <code>{X}</code> نشان می‌دهد باید <em>تابعی</em> روی backtrace باشد
+که regular expression با نام <code>X</code> را برآورده کند.
+در این مورد، آن regex فقط نام تابعی است که می‌خواهیم (در واقع
+زیرمجموعه‌ای از نام است؛
+نام کامل چیزهای دیگری مثل مسیر ماژول را هم دارد).
+در این حالت، perf-focus فقط درصد نمونه‌هایی را که
+<code>do_mir_borrowck</code> روی پشته بود چاپ می‌کند: در این مورد ۲۹٪.</p>
+<p><strong>نکته‌ای دربارهٔ c++filt.</strong> برای گرفتن داده از <code>perf</code>،
+<code>perf focus</code> فعلاً <code>perf script</code> را اجرا می‌کند (شاید راه بهتری باشد…).
+گاهی دیده‌ام <code>perf script</code> نام‌های mangled شدهٔ C++ خروجی می‌دهد.
+این آزاردهنده است. می‌توانید با اجرای خودتان <code>perf script |   head</code> بفهمید — اگر نام‌هایی مثل <code>5rustc6middle</code> به‌جای <code>rustc::middle</code> دیدید،
+همین مشکل را دارید.
+می‌توانید با این کار آن را حل کنید:</p>
+<pre><code class="language-bash">perf script | c++filt | perf focus --from-stdin ...
+</code></pre>
+<p>این خروجی <code>perf script</code> را از <code>c++filt</code> عبور می‌دهد و
+بیشتر آن نام‌ها را به قالب دوستانه‌تری تبدیل می‌کند.
+پرچم <code>--from-stdin</code> در <code>perf focus</code> به آن می‌گوید داده‌اش را از stdin بگیرد،
+نه اینکه <code>perf focus</code> را اجرا کند.
+باید این را راحت‌تر کنیم (در بدترین حالت، شاید گزینه‌ای برای <code>c++filt</code> به <code>perf focus</code> اضافه کنیم،
+یا همیشه از آن استفاده کنیم — بی‌ضرر است).</p>
+<h3 id="example-how-much-time-does-mir-borrowck-spend-solving-traits"><a class="header" href="#example-how-much-time-does-mir-borrowck-spend-solving-traits">مثال: MIR borrowck چقدر زمان را صرف حل traitها می‌کند؟</a></h3>
+<p>شاید بخواهیم بدانیم MIR borrowck چقدر زمان را در trait checker صرف می‌کند.
+می‌توانیم با regex پیچیده‌تری بپرسیم:</p>
+<pre><code class="language-bash">$ perf focus '{do_mir_borrowck}..{^rustc::traits}'
+Matcher    : {do_mir_borrowck},..{^rustc::traits}
+Matches    : 12
+Not Matches: 1311
+Percentage : 0%
+</code></pre>
+<p>اینجا از عملگر <code>..</code> استفاده کردیم تا بپرسیم «چند وقت یک‌بار
+<code>do_mir_borrowck</code> روی پشته است و سپس، بعداً، تابعی
+که نامش با <code>rustc::traits</code> شروع می‌شود؟» (اساساً کد آن ماژول).
+معلوم می‌شود پاسخ «تقریباً هرگز» است — فقط ۱۲ نمونه با آن
+توصیف جور بود (اگر هرگز <em>هیچ</em> نمونه‌ای ندیدید، اغلب نشان می‌دهد پرس‌وجوی شما درست نیست).</p>
+<p>اگر کنجکاو هستید، می‌توانید با گزینهٔ <code>--print-match</code> دقیقاً بفهمید کدام نمونه‌ها.
+این backtrace کامل هر نمونه را چاپ می‌کند.
+<code>|</code> در ابتدای خط نشان می‌دهد کدام بخش را regular expression تطبیق داده است.</p>
+<h3 id="example-where-does-mir-borrowck-spend-its-time"><a class="header" href="#example-where-does-mir-borrowck-spend-its-time">مثال: MIR borrowck زمانش را کجا صرف می‌کند؟</a></h3>
+<p>اغلب می‌خواهیم پرس‌وجوهای «کاوشی‌تر» بزنیم.
+مثلاً می‌دانیم MIR borrowck ۲۹٪ زمان را می‌گیرد، اما آن زمان کجا صرف می‌شود؟
+برای این، گزینهٔ <code>--tree-callees</code> اغلب بهترین ابزار است.
+معمولاً باید <code>--tree-min-percent</code> یا <code>--tree-max-depth</code> را هم بدهید.
+نتیجه این‌طور به نظر می‌رسد:</p>
+<pre><code class="language-bash">$ perf focus '{do_mir_borrowck}' --tree-callees --tree-min-percent 3
+Matcher    : {do_mir_borrowck}
+Matches    : 577
+Not Matches: 746
+Percentage : 43%
+
+Tree
+| matched `{do_mir_borrowck}` (43% total, 0% self)
+: | rustc_borrowck::nll::compute_regions (20% total, 0% self)
+: : | rustc_borrowck::nll::type_check::type_check_internal (13% total, 0% self)
+: : : | core::ops::function::FnOnce::call_once (5% total, 0% self)
+: : : : | rustc_borrowck::nll::type_check::liveness::generate (5% total, 3% self)
+: : : | &lt;rustc_borrowck::nll::type_check::TypeVerifier&lt;'a, 'b, 'tcx&gt; as rustc::mir::visit::Visitor&lt;'tcx&gt;&gt;::visit_mir (3% total, 0% self)
+: | rustc::mir::visit::Visitor::visit_mir (8% total, 6% self)
+: | &lt;rustc_borrowck::MirBorrowckCtxt&lt;'cx, 'tcx&gt; as rustc_mir_dataflow::DataflowResultsConsumer&lt;'cx, 'tcx&gt;&gt;::visit_statement_entry (5% total, 0% self)
+: | rustc_mir_dataflow::do_dataflow (3% total, 0% self)
+</code></pre>
+<p>آنچه با <code>--tree-callees</code> رخ می‌دهد این است که</p>
+<ul>
+<li>هر نمونه‌ای را که با regular expression جور است می‌یابیم</li>
+<li>به کدی که <em>پس از</em> تطبیق regex رخ می‌دهد نگاه می‌کنیم و سعی می‌کنیم درخت فراخوانی بسازیم</li>
+</ul>
+<p>گزینهٔ <code>--tree-min-percent 3</code> می‌گوید «فقط چیزهایی را نشان بده که بیش از ۳٪ زمان را می‌گیرند».
+بدون این،
+درخت اغلب بسیار شلوغ می‌شود و چیزهای تصادفی مثل درون malloc را شامل می‌شود.
+<code>--tree-max-depth</code> هم می‌تواند مفید باشد، فقط محدود می‌کند چند سطح چاپ شود.</p>
+<p>برای هر خط، درصد زمان در آن تابع را در مجموع («total») و درصد زمانی را نشان می‌دهیم که <strong>فقط در همان
+تابع و نه در تابعی که از آن فراخوانی شده</strong> صرف شده است (self).
+معمولاً «total» عدد جالب‌تری است، اما نه همیشه.</p>
+<h3 id="relative-percentages"><a class="header" href="#relative-percentages">Relative percentages</a></h3>
+<p>به‌طور پیش‌فرض، همهٔ درصدها در perf-focus نسبت به <strong>کل اجرای برنامه</strong> هستند.
+این به حفظ دید کلی کمک می‌کند — اغلب وقتی برای یافتن نقاط داغ جزئی‌تر می‌شویم،
+ممکن است فراموش کنیم که
+از نظر کل اجرای برنامه، این «نقطهٔ داغ» در واقع مهم نیست.
+همچنین تضمین می‌کند درصدهای بین پرس‌وجوهای مختلف به‌آسانی قابل‌مقایسه باشند.</p>
+<p>با این حال، گاهی گرفتن درصدهای نسبی مفید است،
+بنابراین <code>perf focus</code> گزینهٔ <code>--relative</code> را دارد.
+در این حالت، درصدها فقط برای نمونه‌های منطبق فهرست می‌شوند (نه همهٔ نمونه‌ها).
+برای مثال می‌توانیم درصدها را نسبت به خود borrowck این‌طور بگیریم:</p>
+<pre><code class="language-bash">$ perf focus '{do_mir_borrowck}' --tree-callees --relative --tree-max-depth 1 --tree-min-percent 5
+Matcher    : {do_mir_borrowck}
+Matches    : 577
+Not Matches: 746
+Percentage : 100%
+
+Tree
+| matched `{do_mir_borrowck}` (100% total, 0% self)
+: | rustc_borrowck::nll::compute_regions (47% total, 0% self) [...]
+: | rustc::mir::visit::Visitor::visit_mir (19% total, 15% self) [...]
+: | &lt;rustc_borrowck::MirBorrowckCtxt&lt;'cx, 'tcx&gt; as rustc_mir_dataflow::DataflowResultsConsumer&lt;'cx, 'tcx&gt;&gt;::visit_statement_entry (13% total, 0% self) [...]
+: | rustc_mir_dataflow::do_dataflow (8% total, 1% self) [...]
+</code></pre>
+<p>اینجا می‌بینید <code>compute_regions</code> با «۴۷٪ total» ظاهر شد — یعنی
+۴۷٪ <code>do_mir_borrowck</code> در آن تابع صرف می‌شود.
+پیش‌تر
+۲۰٪ دیدیم — دلیلش این است که خود <code>do_mir_borrowck</code> فقط ۴۳٪
+کل زمان است (و <code>.47 * .43 = .20</code>).</p><nav class="page-nav"><a href="../profiling.html">→ پروفایل‌گیری از کامپایلر</a><a href="wpa-profiling.html">با Windows Performance Analyzer ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

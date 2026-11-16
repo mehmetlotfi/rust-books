@@ -1,0 +1,107 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>با Windows Performance Analyzer — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="profiling/wpa-profiling"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="profiling-on-windows"><a class="header" href="#profiling-on-windows">پروفایل‌کردن در ویندوز</a></h1>
+<h2 id="introducing-wpr-and-wpa"><a class="header" href="#introducing-wpr-and-wpa">معرفی WPR و WPA</a></h2>
+<p>تحلیل عملکرد سطح بالا (از جمله مصرف حافظه) را می‌توان با Windows
+Performance Recorder (WPR) و Windows Performance Analyzer (WPA) انجام داد.
+همان‌طور که از نام‌ها پیداست، WPR برای ثبت آمار سیستم (به شکل فایل‌های event trace log یا همان
+فایل‌های ETL) است، در حالی که WPA برای تحلیل این فایل‌های ETL است.</p>
+<p>WPR آمار کل سیستم را جمع می‌کند، پس فقط چیزهای مرتبط با rustc را ثبت نمی‌کند بلکه
+هر چیز دیگری را هم که روی ماشین اجرا می‌شود.
+هنگام تحلیل، می‌توانیم فقط چیزهایی را که جالب می‌دانیم فیلتر کنیم.</p>
+<p>این ابزارها بسیار قدرتمندند اما پیش از اینکه بتوانیم کامپایلر Rust را با موفقیت پروفایل کنیم
+کمی یادگیری هم لازم دارند.</p>
+<p>اینجا نحوهٔ استفاده از WPR و WPA برای تحلیل کامپایلر Rust را بررسی می‌کنیم و پیوندهایی به «profile»های مفید می‌دهیم
+(یعنی فایل‌های تنظیماتی که پیش‌فرض‌های WPR و WPA را تغییر می‌دهند) که
+به‌طور خاص برای آسان‌تر‌کردن تحلیل rustc طراحی شده‌اند.</p>
+<h3 id="installing-wpr-and-wpa"><a class="header" href="#installing-wpr-and-wpa">نصب WPR و WPA</a></h3>
+<p>می‌توانید WPR و WPA را به‌عنوان بخشی از Windows Performance Toolkit نصب کنید که خودش گزینه‌ای
+در دانلود Windows Assessment and Deployment Kit (ADK) است.
+نصب‌کنندهٔ ADK را می‌توانید
+<a href="https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install">اینجا</a> دانلود کنید.
+مطمئن شوید Windows Performance Toolkit را انتخاب می‌کنید (لازم نیست چیز دیگری انتخاب کنید).</p>
+<h2 id="recording"><a class="header" href="#recording">Recording</a></h2>
+<p>برای انجام تحلیل سیستم، ابتدا باید سیستم خود را با WPR ثبت کنید.
+WPR را باز کنید و در پایین پنجره «profile»های چیزهایی را که می‌خواهید ثبت کنید انتخاب کنید.
+برای بررسی
+مصرف حافظهٔ فرایند bootstrap در rustc، موارد زیر را انتخاب می‌کنیم:</p>
+<ul>
+<li>CPU usage</li>
+<li>VirtualAlloc usage</li>
+</ul>
+<p>ممکن است وسوسه شوید «Heap usage» را هم ثبت کنید، اما این هر تخصیص heap را ثبت می‌کند
+و می‌تواند بسیار بسیار پرهزینه باشد.
+برای تحلیل سطح بالا شاید بهتر باشد آن را خاموش بگذارید.</p>
+<p>حالا باید تنظیمات خود را برای ثبت آماده کنیم.
+برای تحلیل مصرف حافظه، بهتر است ساخت
+کامپایلر stage 2 را با ساخت کامپایلر stage 1 دارای نمادهای اشکال‌زدایی ثبت کنید.
+داشتن نمادها در
+کامپایلری که برای ساخت rustc استفاده می‌کنیم تحلیل ما را بسیار آسان می‌کند چون WPA می‌تواند نمادهای Rust را
+درست تفسیر کند.
+متأسفانه کامپایلر stage 0 نمادها را فعال ندارد،
+و به همین دلیل باید کامپایلر stage 1 و سپس کامپایلر stage 2 را خودمان بسازیم.</p>
+<p>برای این کار، مطمئن شوید در فایل <code>bootstrap.toml</code> مقدار <code>rust.debuginfo-level = 1</code> را تنظیم کرده‌اید.
+این به rustc می‌گوید هنگام bootstrap اطلاعات اشکال‌زدایی شامل stack frameها تولید کند.</p>
+<p>حالا می‌توانید کامپایلر stage 1 را بسازید: <code>x build --stage 1 -i library</code> یا هر روش دیگری
+که می‌خواهید کامپایلر stage 1 را بسازید.</p>
+<p>حالا که کامپایلر stage 1 ساخته شد، می‌توانیم ساخت stage 2 را ثبت کنیم.
+به WPR برگردید، دکمهٔ «start» را بزنید و کامپایلر stage 2 را بسازید (مثلاً <code>x build --stage=2 -i library</code>).
+وقتی این فرایند تمام شد، ثبت را متوقف کنید.</p>
+<p>دکمهٔ Save را بزنید و وقتی آن فرایند کامل شد، روی دکمهٔ «Open in WPA» که ظاهر می‌شود کلیک کنید.</p>
+<blockquote>
+<p>نکته: فایل trace نسبتاً بزرگ است پس ممکن است WPA مدتی برای باز‌کردن کامل فایل نیاز داشته باشد.</p>
+</blockquote>
+<h2 id="analysis"><a class="header" href="#analysis">Analysis</a></h2>
+<p>حالا که فایل ETL ما در WPA باز است، می‌توانیم نتایج را تحلیل کنیم.
+ابتدا می‌خواهیم «profile» از پیش ساخته‌شده را اعمال کنیم که WPA را در وضعیتی مناسب تحلیل bootstrap در rustc قرار می‌دهد.
+profile را
+<a href="https://github.com/wesleywiser/rustc-bootstrap-wpa-analysis/releases/download/1/rustc.generic.wpaProfile">اینجا</a> دانلود کنید.
+منوی «Profiles» را در بالا انتخاب کنید، سپس «apply» و بعد profile دانلودشده را انتخاب کنید.</p>
+<p>باید چیزی شبیه این ببینید:</p>
+<img alt="WPA with profile applied" src="../img/wpa-initial-memory.png">
+<p>سپس باید به WPA بگوییم نمادهای اشکال‌زدایی را بارگذاری و پردازش کند تا بتواند
+ردیابی‌های پشتهٔ Rust را درست demangle کند.
+برای این، روی «Trace» کلیک کنید و «Load Symbols» را انتخاب کنید.
+این گام می‌تواند مدتی طول بکشد.</p>
+<p>وقتی WPA نمادهای rustc را بارگذاری کرد، می‌توانیم گره rustc.exe را باز کنیم و شروع کنیم به کاوش
+در پشتهٔ دارای بزرگ‌ترین تخصیص‌ها.</p>
+<p>برای این کار، گره <code>[Root]</code> را در ستون «Commit Stack» باز می‌کنیم و تا یافتن stack frameهای جالب
+ادامه می‌دهیم.</p>
+<blockquote>
+<p>نکته: پس از انتخاب گره‌ای که می‌خواهید باز کنید، کلید جهت راست را بزنید. این
+گره را باز می‌کند و انتخاب را روی گرهٔ بزرگ بعدی در مجموعهٔ باز‌شده می‌گذارد.
+می‌توانید زدن کلید جهت راست را تا رسیدن به frame جالب ادامه دهید.</p>
+</blockquote>
+<img alt="WPA with expanded stack" src="../img/wpa-stack.png">
+<p>در این نمونه می‌بینید فراخوانی‌ها از طریق codegen در مجموع حدود ۳۰ گیگابایت حافظه را
+در طول این پروفایل تخصیص می‌دهند.</p>
+<h2 id="other-analysis-tabs"><a class="header" href="#other-analysis-tabs">تب‌های تحلیل دیگر</a></h2>
+<p>profile چند تب دیگر هم دارد که می‌توانند مفید باشند:</p>
+<ul>
+<li>System Configuration
+<ul>
+<li>اطلاعات عمومی دربارهٔ سیستمی که ثبت روی آن انجام شده.</li>
+</ul>
+</li>
+<li>rustc Build Processes
+<ul>
+<li>فهرست تخت فرایندهای مرتبط مثل rustc.exe، cargo.exe، link.exe و غیره.</li>
+<li>هر فرایند آرگومان‌های خط فرمان خود را فهرست می‌کند.</li>
+<li>برای فهمیدن اینکه یک فرایند مشخص rustc روی چه چیزی کار می‌کرد مفید است.</li>
+</ul>
+</li>
+<li>rustc Build Process Tree
+<ul>
+<li>خط زمانی که نشان می‌دهد فرایندها چه وقت شروع و خارج شدند.</li>
+</ul>
+</li>
+<li>rustc CPU Analysis
+<ul>
+<li>نمودارهایی از پیش پیکربندی‌شده برای نمایش نقاط داغ در rustc دارد.</li>
+<li>این نمودارها برای پشتیبانی از تحلیل اینکه rustc زمانش را کجا صرف می‌کند طراحی شده‌اند.</li>
+</ul>
+</li>
+<li>rustc Memory Analysis
+<ul>
+<li>نمودارهایی از پیش پیکربندی‌شده برای نمایش اینکه rustc حافظه را کجا تخصیص می‌دهد دارد.</li>
+</ul>
+</li>
+</ul><nav class="page-nav"><a href="with-perf.html">→ با ابزار perf لینوکس</a><a href="with-rustc-perf.html">با مجموعهٔ بنچمارک Rust ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

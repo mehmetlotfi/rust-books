@@ -1,0 +1,202 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>*-unknown-uefi — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="platform-support/unknown-uefi"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="-unknown-uefi"><a class="header" href="#-unknown-uefi"><code>*-unknown-uefi</code></a></h1>
+<p><strong>سطح: 2</strong></p>
+<p>اهداف Unified Extensible Firmware Interface (UEFI) برای فایل‌های دودویی برنامه‌ای، درایور و هستهٔ UEFI.</p>
+<p>اهداف موجود:</p>
+<ul>
+<li><code>aarch64-unknown-uefi</code></li>
+<li><code>i686-unknown-uefi</code></li>
+<li><code>x86_64-unknown-uefi</code></li>
+</ul>
+<h2 id="target-maintainers"><a class="header" href="#target-maintainers">نگهدارندگان هدف</a></h2>
+<ul>
+<li><a href="https://github.com/dvdhrm">@dvdhrm</a></li>
+<li><a href="https://github.com/nicholasbishop">@nicholasbishop</a></li>
+<li>(for <code>aarch64-unknown-uefi</code> only) <a href="https://github.com/rust-lang/team/blob/master/teams/arm-maintainers.toml">arm-maintainers</a> (<a href="mailto:rust@arm.com">rust@arm.com</a>)
+<ul>
+<li>برای اطلاع‌رسانی به ما از <code>@rustbot ping arm-maintainers</code> استفاده کنید</li>
+</ul>
+</li>
+</ul>
+<h2 id="requirements"><a class="header" href="#requirements">الزامات</a></h2>
+<p>همهٔ اهداف UEFI را می‌توان از طریق کامپایل متقاطع به‌عنوان محیط‌های <code>no-std</code> به کار برد. پشتیبانی از <code>std</code> وجود دارد، اما ناقص و بسیار جدید است. <code>alloc</code> در صورتی پشتیبانی می‌شود که کاربر یک تخصیص‌دهنده فراهم کند یا از std استفاده شود. هیچ ابزار میزبانی پشتیبانی نمی‌شود.</p>
+<p>محیط UEFI شبیه محیط Microsoft Windows است، با چند تفاوت جزئی. بنابراین کامپایل متقاطع برای UEFI با همان ابزارهایی انجام می‌شود که کامپایل متقاطع برای Windows. فایل‌های دودویی هدف با قالب PE32+ کدگذاری می‌شوند؛ قرارداد فراخوانی در هر معماری متفاوت است، اما با آنچه Windows استفاده می‌کند مطابقت دارد (اگر معماری را Windows پشتیبانی کند). قرارداد فراخوانی ویژهٔ <code>efiapi</code> در Rust ABI درست را برای پلتفرم هدف انتخاب می‌کند (<code>extern "C"</code> دست‌کم روی اهداف Intel نادرست است). اگر جزئیات بیشتری لازم باشد، مشخصات (specification) بخش مفصلی دربارهٔ قراردادهای فراخوانی پشتیبانی‌شدهٔ مختلف دارد.</p>
+<p>MMX، SSE و دیگر واحدهای FP به‌طور پیش‌فرض غیرفعال هستند تا امکان کامپایل کد هستهٔ UEFI که پیش از راه‌اندازی آن‌ها اجرا می‌شود فراهم باشد. این رفتار را می‌توان برای کامپایل‌های جداگانه از طریق پرچم‌های خط فرمان rustc تغییر داد. با این حال همهٔ firmwareها این واحدها را به‌درستی پیکربندی نمی‌کنند، بنابراین بازرسی دقیق لازم است.</p>
+<p>همان‌طور که در PE32+ بومی است، فایل‌های دودویی وابسته به موقعیت هستند، اما اگر مکان مطلوبشان در دسترس نباشد، می‌توان آن‌ها را در زمان اجرا جابه‌جا (relocate) کرد. کد باید به‌صورت ایستا پیوند شود. پیوند پویا پشتیبانی نمی‌شود. کد از طریق رابط‌های UEFI به اشتراک گذاشته می‌شود، نه با پیوند پویا. علاوه بر این، UEFI اجرای کد روی هر چیزی جز CPU/نخ بوت را ممنوع می‌کند و استفاده از وقفه (interrupt) نیز مجاز نیست (به‌جز وقفهٔ تایمر). درایورهای دستگاه موظف‌اند از روش‌های polling استفاده کنند.</p>
+<p>UEFI از یک فضای آدرس واحد برای اجرای همهٔ کدها استفاده می‌کند. چندین برنامه را می‌توان هم‌زمان بارگذاری کرد و آن‌ها با چندوظیفگی همکارانه (cooperative multitasking) روی یک پشتهٔ واحد اجرا می‌شوند.</p>
+<p>به‌طور پیش‌فرض، اهداف UEFI از نوع <code>link</code> پیوندگر LLVM یعنی <code>lld</code> استفاده می‌کنند تا فایل‌های دودویی را به فایل PE32+ نهایی با پسوند <code>*.efi</code> پیوند دهند. زیرسیستم PE روی <code>EFI_APPLICATION</code> تنظیم شده است، اما می‌توان با ارسال <code>/subsystem:&lt;...&gt;</code> به پیوندگر آن را تغییر داد. به‌طور مشابه، نقطهٔ ورود روی <code>efi_main</code> تنظیم شده است اما می‌توان آن را از طریق <code>/entry:&lt;...&gt;</code> تغییر داد. راهبرد panic روی <code>abort</code> تنظیم شده است.</p>
+<p>مشخصات UEFI به‌صورت رایگان به‌صورت آنلاین در دسترس است: <a href="https://uefi.org/specifications">UEFI Specification Directory</a></p>
+<h2 id="building-rust-for-uefi-targets"><a class="header" href="#building-rust-for-uefi-targets">ساخت Rust برای اهداف UEFI</a></h2>
+<p>می‌توان Rust را برای اهداف UEFI با فعال کردن آن‌ها در پیکربندی ساخت <code>rustc</code> ساخت. توجه کنید که فقط می‌توانید کتابخانه‌های استاندارد را بسازید. کامپایلر و ابزارهای میزبان فعلاً برای اهداف UEFI قابل کامپایل نیستند. یک پیکربندی نمونه چنین است:</p>
+<pre><code class="language-toml">[build]
+build-stage = 1
+target = ["x86_64-unknown-uefi"]
+</code></pre>
+<h2 id="building-rust-programs"><a class="header" href="#building-rust-programs">ساخت برنامه‌های Rust</a></h2>
+<p>از Rust 1.67 به بعد، artifactهای از پیش کامپایل‌شده از طریق <code>rustup</code> ارائه می‌شوند. برای مثال، برای استفاده از <code>x86_64-unknown-uefi</code>:</p>
+<pre><code class="language-sh"># install cross-compile toolchain
+rustup target add x86_64-unknown-uefi
+# target flag may be used with any cargo or rustc command
+cargo build --target x86_64-unknown-uefi
+</code></pre>
+<h3 id="building-a-driver"><a class="header" href="#building-a-driver">ساخت یک درایور</a></h3>
+<p>سه نوع فایل اجرایی UEFI وجود دارد: برنامه (application)، درایور سرویس بوت (boot service driver) و درایور زمان اجرا (runtime driver). همهٔ اهداف UEFI در Rust به‌طور پیش‌فرض برنامه تولید می‌کنند. برای ساخت درایور به‌جای آن، پرچم پیوندگر <a href="https://learn.microsoft.com/en-us/cpp/build/reference/subsystem"><code>subsystem</code></a> را با مقدار <code>efi_boot_service_driver</code> یا <code>efi_runtime_driver</code> بدهید.</p>
+<p>مثال:</p>
+<pre><code class="language-toml"># In .cargo/config.toml:
+[build]
+rustflags = ["-C", "link-args=/subsystem:efi_runtime_driver"]
+</code></pre>
+<h2 id="testing"><a class="header" href="#testing">آزمون</a></h2>
+<p>برنامه‌های UEFI را می‌توان روی هر سیستم UEFI در ESP کپی کرد و از طریق منوی بوت firmware اجرا کرد. مجموعهٔ qemu نیز امکان شبیه‌سازی سیستم‌های UEFI و اجرای برنامه‌های UEFI را فراهم می‌کند. برای جزئیات، مستندات آن را ببینید.</p>
+<p>ابزار Rust با نام <a href="https://github.com/Richard-W/uefi-run">uefi-run</a> یک پوشش ساده پیرامون <code>qemu</code> است که می‌تواند برنامه‌های UEFI را در qemu اجرا کند. می‌توانید آن را با <code>cargo install --locked uefi-run</code> نصب کنید و برنامه‌های qemu را به‌صورت <code>uefi-run ./application.efi</code> اجرا کنید.</p>
+<h2 id="cross-compilation-toolchains-and-c-code"><a class="header" href="#cross-compilation-toolchains-and-c-code">toolchainهای کامپایل متقاطع و کد C</a></h2>
+<p>سه روش رایج برای کامپایل کد C بومی برای اهداف UEFI وجود دارد:</p>
+<ul>
+<li>استفاده از SDK رسمی Intel: <a href="https://github.com/tianocore/edk2">Tianocore/EDK2</a>. این SDK از پلتفرم‌های بسیاری پشتیبانی می‌کند، مشخصات کامل را به C منتقل‌شده همراه دارد، و مثال‌ها و یکپارچه‌سازی‌های فراوانی با سیستم ساخت دارد. این تنها پلتفرمی است که Intel به‌طور رسمی پشتیبانی می‌کند و بسیاری از پیاده‌سازی‌های بزرگ firmware از آن استفاده می‌کنند. هر کدی که با SDK کامپایل شود با فایل‌های دودویی Rust که برای اهداف UEFI کامپایل شده‌اند سازگار است. می‌توانید آن‌ها را مستقیماً به فایل‌های دودویی Rust خود پیوند دهید، یا از طریق پروتکل‌های UEFI یکدیگر را فراخوانی کنند.</li>
+<li>استفاده از مجموعهٔ <strong>GNU-EFI</strong>. این رویکرد را بسیاری از برنامه‌های UEFI در اکوسیستم Linux/OSS به کار می‌برند. کامپایلر GCC برای کامپایل فایل‌های دودویی ELF استفاده می‌شود، و با یک pre-loader پیوند می‌شود که فایل دودویی ELF را <strong>در زمان اجرا</strong> به PE32+ تبدیل می‌کند. تنها از طریق پروتکل‌های UEFI می‌توانید چنین فایل‌های دودویی‌ای را با اهداف UEFI در Rust ترکیب کنید. پیوند دادن هر دو به یک فایل اجرایی واحد شکست می‌خورد، زیرا یکی فایل اجرایی ELF است و دیگری PE32+. اگر پیوند به فایل‌های اجرایی <strong>GNU-EFI</strong> مطلوب باشد، باید کد Rust خود را به‌صورت بومی برای همان هدف GNU که <strong>GNU-EFI</strong> استفاده می‌کند کامپایل کنید و از pre-loader آن‌ها استفاده کنید. این کار نیازمند بررسی دقیق دربارهٔ این است که هنگام فراخوانی پروتکل‌های بومی UEFI یا فراخوانی کد پیوندشدهٔ <strong>GNU-EFI</strong> از کدام قرارداد فراخوانی استفاده شود (مشابه اینکه این تفاوت‌ها هنگام نوشتن کد C برای <strong>GNU-EFI</strong> باید لحاظ شوند).</li>
+<li>استفاده از اهداف بومی Windows. یعنی کد C خود را برای پلتفرم Windows کامپایل کنید، گویی پلتفرم UEFI است. این روش برای کتابخانه‌های ایستا کار می‌کند، اما هنگام پیوند به یک فایل اجرایی UEFI به تنظیماتی نیاز دارد. با این حال می‌توانید چنین کتابخانه‌های ایستایی را به‌سادگی به کد Rust که برای اهداف UEFI کامپایل شده پیوند دهید. مراقب هر includeی باشید که به‌طور خاص برای اهداف UEFI مناسب نیست (به‌ویژه includeهای کتابخانهٔ استاندارد C همیشه سازگار نیستند). برای جلوگیری از ناسازگاری‌ها، کامپایل freestanding توصیه می‌شود.</li>
+</ul>
+<h2 id="ecosystem"><a class="header" href="#ecosystem">اکوسیستم</a></h2>
+<p>زبان Rust سابقهٔ طولانی در پشتیبانی از اهداف UEFI دارد. crateهای بسیاری برای دسترسی به پروتکل‌های UEFI و راحت‌تر کردن برنامه‌نویسی UEFI در Rust توسعه یافته‌اند. فهرست زیر مروری کوتاه است (به ترتیب الفبایی):</p>
+<ul>
+<li><strong><a href="https://github.com/gurry/efi">efi</a></strong>: <em>اتصال‌های (binding) ارگونومیک Rust برای نوشتن برنامه‌های UEFI</em>. دسترسی <em>rustified</em> به پروتکل‌های UEFI را فراهم می‌کند، تخصیص‌دهنده‌ها را پیاده‌سازی می‌کند و یک محیط امن برای نوشتن برنامه‌های UEFI ارائه می‌دهد.</li>
+<li><strong><a href="https://github.com/r-efi/r-efi">r-efi</a></strong>: <em>ثابت‌ها و تعریف‌های پروتکل در مشخصات مرجع UEFI</em>. یک انتقال خالص مشخصات UEFI به Rust. این crate تعریف‌های خام مشخصات را بدون هیچ کمک‌کنندهٔ توسعه‌یافته یا <em>rustification</em> ارائه می‌دهد. به‌عنوان پایه‌ای برای پیاده‌سازی هر لایهٔ پیچیده‌تر UEFI در Rust به کار می‌رود.</li>
+<li><strong><a href="https://github.com/rust-osdev/uefi-rs">uefi-rs</a></strong>: <em>پوششی امن و آسان برای ساخت برنامه‌های UEFI</em>. یک کتابخانهٔ مفصل که انتزاع‌های امن برای پروتکل‌ها و قابلیت‌های UEFI فراهم می‌کند. تخصیص‌دهنده‌ها را پیاده‌سازی می‌کند و یک محیط اجرا برای برنامه‌های UEFI نوشته‌شده با Rust فراهم می‌کند.</li>
+<li><strong><a href="https://github.com/Richard-W/uefi-run">uefi-run</a></strong>: <em>اجرای برنامه‌های UEFI</em>. یک پوشش کوچک پیرامون <em>qemu</em> برای اجرای برنامه‌های UEFI در یک ماشین شبیه‌سازی‌شدهٔ <code>x86_64</code>.</li>
+</ul>
+<h2 id="example-freestanding"><a class="header" href="#example-freestanding">مثال: Freestanding</a></h2>
+<p>کد زیر یک برنامهٔ UEFI معتبر است که هنگام اجرا بلافاصله با کد خروج 0 برمی‌گردد. یک panic handler نیز ارائه شده است که هنگام panic توسط Rust اجرا می‌شود. برای سادگی، فقط در یک حلقهٔ بی‌نهایت می‌افتیم.</p>
+<p>این مثال را می‌توان به‌عنوان یک crate دودویی با <code>cargo</code> کامپایل کرد:</p>
+<pre><code class="language-sh">cargo build --target x86_64-unknown-uefi
+</code></pre>
+<pre><code class="language-rust ignore (platform-specific eh-personality-is-unstable)">#![no_main]
+#![no_std]
+
+#[panic_handler]
+fn panic_handler(_info: &amp;core::panic::PanicInfo) -&gt; ! {
+    loop {}
+}
+
+#[export_name = "efi_main"]
+pub extern "C" fn main(_h: *mut core::ffi::c_void, _st: *mut core::ffi::c_void) -&gt; usize {
+    0
+}</code></pre>
+<h2 id="example-hello-world"><a class="header" href="#example-hello-world">مثال: Hello World</a></h2>
+<p>این مثال یک برنامهٔ UEFI است که “Hello World!” را چاپ می‌کند، سپس پیش از خروج منتظر ورودی کلید می‌ماند. این مثال پایه‌ای است برای نوشتن برنامه‌های UEFI بدون هیچ ماژول کمکی، جز تعریف‌های مستقل پروتکل UEFI که crate با نام <code>r-efi</code> ارائه می‌دهد.</p>
+<p>این مثال مثال “Freestanding” را گسترش می‌دهد و بر تنظیمات آن بنا می‌شود. برای دستور کامپایل آن به‌عنوان crate دودویی به آنجا مراجعه کنید.</p>
+<p>توجه کنید که UEFI از رشته‌های UTF-16 استفاده می‌کند. چون literalهای Rust با UTF-8 هستند، باید از یک آرایهٔ UTF-16 دستی (open-coded) و پایان‌یافته با صفر به‌عنوان آرگومان <code>output_string()</code> استفاده کنیم. مشابه panic handler، برنامه‌های واقعی باید به‌جای این از ماژول‌های UTF-16 استفاده کنند.</p>
+<pre><code class="language-rust ignore (platform-specific eh-personality-is-unstable)">#![no_main]
+#![no_std]
+
+use r_efi::efi;
+
+#[panic_handler]
+fn panic_handler(_info: &amp;core::panic::PanicInfo) -&gt; ! {
+    loop {}
+}
+
+#[export_name = "efi_main"]
+pub extern "C" fn main(_h: efi::Handle, st: *mut efi::SystemTable) -&gt; efi::Status {
+    let s = [
+        0x0048u16, 0x0065u16, 0x006cu16, 0x006cu16, 0x006fu16, // "Hello"
+        0x0020u16, //                                             " "
+        0x0057u16, 0x006fu16, 0x0072u16, 0x006cu16, 0x0064u16, // "World"
+        0x0021u16, //                                             "!"
+        0x000au16, //                                             "\n"
+        0x0000u16, //                                             NUL
+    ];
+
+    // Print "Hello World!".
+    let r =
+        unsafe { ((*(*st).con_out).output_string)((*st).con_out, s.as_ptr() as *mut efi::Char16) };
+    if r.is_error() {
+        return r;
+    }
+
+    // Wait for key input, by waiting on the `wait_for_key` event hook.
+    let r = unsafe {
+        let mut x: usize = 0;
+        ((*(*st).boot_services).wait_for_event)(1, &amp;mut (*(*st).con_in).wait_for_key, &amp;mut x)
+    };
+    if r.is_error() {
+        return r;
+    }
+
+    efi::Status::SUCCESS
+}</code></pre>
+<h2 id="rust-std-for-uefi"><a class="header" href="#rust-std-for-uefi">std در Rust برای UEFI</a></h2>
+<p>این بخش اطلاعاتی دربارهٔ نحوهٔ استفاده از std در UEFI دارد.</p>
+<h3 id="build-std"><a class="header" href="#build-std">ساخت std</a></h3>
+<p>بخش ساخت std تقریباً همان <a href="https://rustc-dev-guide.rust-lang.org/getting-started.html">مستندات</a> رسمی است. پیوندگری که باید استفاده شود <code>rust-lld</code> است. این یک <code>bootstrap.toml</code> نمونه است:</p>
+<pre><code class="language-toml">[rust]
+lld = true
+</code></pre>
+<p>سپس فقط با <code>x.py</code> بسازید:</p>
+<pre><code class="language-sh">./x.py build --target x86_64-unknown-uefi --stage 1
+</code></pre>
+<p>از طرف دیگر، می‌توان از قابلیت <code>build-std</code> استفاده کرد. با این حال باید از toolchain‌ای استفاده کنید که وصله‌های std برای UEFI را دارد. سپس پروژه را فقط با دستور زیر بسازید:</p>
+<pre><code class="language-sh">cargo build --target x86_64-unknown-uefi -Zbuild-std=std,panic_abort
+</code></pre>
+<h3 id="implemented-features"><a class="header" href="#implemented-features">قابلیت‌های پیاده‌سازی‌شده</a></h3>
+<h4 id="alloc"><a class="header" href="#alloc">alloc</a></h4>
+<ul>
+<li>با <code>EFI_BOOT_SERVICES.AllocatePool()</code> و <code>EFI_BOOT_SERVICES.FreePool()</code> پیاده‌سازی شده است.</li>
+<li>همهٔ آزمون‌ها را با موفقیت می‌گذراند.</li>
+<li>در حال حاضر از <code>EfiLoaderData</code> به‌عنوان <code>EFI_ALLOCATE_POOL-&gt;PoolType</code> استفاده می‌کند.</li>
+</ul>
+<h4 id="cmath"><a class="header" href="#cmath">cmath</a></h4>
+<ul>
+<li>توسط compiler-builtins ارائه می‌شود.</li>
+</ul>
+<h4 id="env"><a class="header" href="#env">env</a></h4>
+<ul>
+<li>فقط چند ثابت سراسری.</li>
+</ul>
+<h4 id="locks"><a class="header" href="#locks">locks</a></h4>
+<ul>
+<li>قفل‌های ارائه‌شده باید روی همهٔ پیاده‌سازی‌های استاندارد تک‌نخی UEFI کار کنند.</li>
+</ul>
+<h4 id="os_str"><a class="header" href="#os_str">os_str</a></h4>
+<ul>
+<li>اگرچه رشته‌ها در UEFI باید UCS-2 معتبر باشند، در عمل بسیاری از پیاده‌سازی‌ها اهمیتی نمی‌دهند و از رشته‌های UTF-16 استفاده می‌کنند.</li>
+<li>بنابراین پیاده‌سازی فعلی از رشته‌های کامل UTF-16 پشتیبانی می‌کند.</li>
+</ul>
+<h4 id="stdio"><a class="header" href="#stdio">stdio</a></h4>
+<ul>
+<li>از <code>Simple Text Input Protocol</code> و <code>Simple Text Output Protocol</code> استفاده می‌کند.</li>
+<li>توجه: UEFI برای خط جدید از CRLF استفاده می‌کند. این یعنی کلید Enter به‌جای LF به‌صورت CR ثبت می‌شود.</li>
+</ul>
+<h4 id="args"><a class="header" href="#args">args</a></h4>
+<ul>
+<li>از <code>EFI_LOADED_IMAGE_PROTOCOL-&gt;LoadOptions</code> استفاده می‌کند</li>
+</ul>
+<h2 id="example-hello-world-with-std"><a class="header" href="#example-hello-world-with-std">مثال: Hello World با std</a></h2>
+<p>کد زیر یک برنامهٔ UEFI معتبر را نشان می‌دهد که شامل <code>stdio</code> و <code>alloc</code> (<code>OsString</code> و <code>Vec</code>) است:</p>
+<p>این مثال را می‌توان به‌عنوان یک crate دودویی با <code>cargo</code> و با استفاده از toolchain ساخته‌شده از سورس بالا (با نام custom) کامپایل کرد:</p>
+<pre><code class="language-sh">cargo +custom build --target x86_64-unknown-uefi
+</code></pre>
+<pre><code class="language-rust ignore (platform-specific)">#![feature(uefi_std)]
+
+use r_efi::{efi, protocols::simple_text_output};
+use std::{
+  ffi::OsString,
+  os::uefi::{env, ffi::OsStrExt}
+};
+
+pub fn main() {
+  println!("Starting Rust Application...");
+
+  // Use System Table Directly
+  let st = env::system_table().as_ptr() as *mut efi::SystemTable;
+  let mut s: Vec&lt;u16&gt; = OsString::from("Hello World!\n").encode_wide().collect();
+  s.push(0);
+  let r =
+      unsafe {
+        let con_out: *mut simple_text_output::Protocol = (*st).con_out;
+        let output_string: extern "efiapi" fn(_: *mut simple_text_output::Protocol, *mut u16) -&gt; efi::Status = (*con_out).output_string;
+        output_string(con_out, s.as_ptr() as *mut efi::Char16)
+      };
+  assert!(!r.is_error())
+}</code></pre>
+<h3 id="bootservices"><a class="header" href="#bootservices">BootServices</a></h3>
+<p>پیاده‌سازی فعلی std پس از فراخوانی <code>ExitBootServices</code>، <code>BootServices</code> را در دسترس قرار نمی‌دهد. برای اطلاعات بیشتر دربارهٔ نحوهٔ مدیریت جابه‌جایی از آدرس‌های فیزیکی به آدرس‌های مجازی، به <a href="https://edk2-docs.gitbook.io/edk-ii-uefi-driver-writer-s-guide/7_driver_entry_point/711_runtime_drivers">Runtime Drivers</a> مراجعه کنید.</p>
+<p>توجه: باید در نظر داشت که آزاد کردن همهٔ حافظهٔ تخصیص‌یافته پیش از فراخوانی <code>ExitBootServices</code> بر عهدهٔ کاربر است.</p><nav class="page-nav"><a href="redox.html">→ *-unknown-redox</a><a href="windows-msvc.html">*-pc-windows-msvc ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

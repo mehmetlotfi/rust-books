@@ -1,0 +1,404 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>مشخصات رسمی ابهام مجموعهٔ دنبال‌کنندهٔ ماکرو (Macro follow-set ambiguity formal specification) — مرجع زبان Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="macro-ambiguity"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="introduction.html" style="color:inherit;text-decoration:none">مرجع زبان Rust</a><small class="en-title" dir="ltr">The Rust Reference</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><div class="rule" id="r-macro.ambiguity"><a class="rule-link" href="#r-macro.ambiguity" title="macro.ambiguity"><span>[macro<wbr>.ambiguity]</span></a>
+</div>
+
+<h1 id="appendix-macro-follow-set-ambiguity-formal-specification"><a class="header" href="#appendix-macro-follow-set-ambiguity-formal-specification">پیوست: مشخصات رسمی ابهام مجموعهٔ دنباله‌رو ماکرو</a></h1>
+<div class="rule" id="r-macro.ambiguity.intro"><a class="rule-link" href="#r-macro.ambiguity.intro" title="macro.ambiguity.intro"><span>[macro<wbr>.ambiguity<wbr>.intro]</span></a>
+</div>
+
+<p>این صفحه مشخصات رسمی قواعد دنباله‌رو در <a href="macros-by-example.html">ماکروهای بر پایهٔ مثال</a> را مستند می‌کند. این قواعد ابتدا در <a href="https://github.com/rust-lang/rfcs/blob/master/text/0550-macro-future-proofing.md">RFC 550</a> تعریف شدند که بخش عمدهٔ این متن از آن گرفته شده و سپس RFCهای بعدی آن را گسترش داده‌اند.</p>
+<div class="rule" id="r-macro.ambiguity.convention"><a class="rule-link" href="#r-macro.ambiguity.convention" title="macro.ambiguity.convention"><span>[macro<wbr>.ambiguity<wbr>.convention]</span></a>
+</div>
+
+<h2 id="definitions--conventions"><a class="header" href="#definitions--conventions">تعریف‌ها و قراردادها</a></h2>
+<div class="rule" id="r-macro.ambiguity.convention.defs"><a class="rule-link" href="#r-macro.ambiguity.convention.defs" title="macro.ambiguity.convention.defs"><span>[macro<wbr>.ambiguity<wbr>.convention<wbr>.defs]</span></a>
+</div>
+
+<ul>
+<li><code>macro</code>: هر چیزی که در کد منبع به‌شکل <code>foo!(...)</code> قابل فراخوانی باشد.</li>
+<li><code>MBE</code>: ماکروی بر پایهٔ مثال؛ ماکروی تعریف‌شده با <code>macro_rules</code>.</li>
+<li><code>matcher</code>: سمت چپ یک قاعده در فراخوانی <code>macro_rules</code> یا بخشی از آن.</li>
+<li><code>macro parser</code>: بخش کد تجزیه‌گر Rust که ورودی را با دستور زبان مشتق‌شده از همهٔ تطبیق‌دهنده‌ها تجزیه می‌کند.</li>
+<li><code>fragment</code>: ردهٔ نحو Rust که یک تطبیق‌دهنده می‌پذیرد یا «تطبیق می‌دهد».</li>
+<li><code>repetition</code>: قطعه‌ای که از الگوی تکرار منظم پیروی می‌کند.</li>
+<li><code>NT</code>: غیرپایانه؛ فرامتغیرها یا تطبیق‌دهنده‌های تکرار که در نحو MBE با <code>$</code> آغازین مشخص می‌شوند.</li>
+<li><code>simple NT</code>: غیرپایانهٔ فرامتغیر که در ادامه توضیح داده می‌شود.</li>
+<li><code>complex NT</code>: غیرپایانهٔ تطبیق تکرار که با عملگرهای <code>*</code>، ‏<code>+</code> یا <code>?</code> مشخص می‌شود.</li>
+<li><code>token</code>: عنصر اتمی تطبیق‌دهنده؛ یعنی شناسه‌ها، عملگرها، جداکننده‌های باز و بسته و NTهای ساده.</li>
+<li><code>token tree</code>: ساختار درختی متشکل از توکن‌ها به‌عنوان برگ، NTهای پیچیده و دنباله‌های متناهی درخت توکن.</li>
+<li><code>delimiter token</code>: توکنی برای جداکردن پایان یک قطعه از آغاز قطعهٔ بعدی.</li>
+<li><code>separator token</code>: توکن جداکنندهٔ اختیاری در NT پیچیده که هر دو عنصر تکرار منطبق را جدا می‌کند.</li>
+<li><code>separated complex NT</code>: ‏NT پیچیده‌ای با توکن جداکنندهٔ خودش.</li>
+<li><code>delimited sequence</code>: دنباله‌ای از درخت‌های توکن با جداکننده‌های باز و بستهٔ مناسب در ابتدا و انتها.</li>
+<li><code>empty fragment</code>: ردهٔ نحو نامرئی Rust که توکن‌ها را جدا می‌کند؛ یعنی فاصلهٔ سفید یا در بعضی بافت‌های واژگانی، دنبالهٔ توکن خالی.</li>
+<li><code>fragment specifier</code>: شناسهٔ درون NT ساده که قطعهٔ پذیرفته‌شده توسط NT را مشخص می‌کند.</li>
+<li><code>language</code>: یک زبان مستقل از متن.</li>
+</ul>
+<p>مثال:</p>
+<pre><code class="language-rust compile_fail">macro_rules! i_am_an_mbe {
+    (start $foo:expr $($i:ident),* end) =&gt; ($foo)
+}</code></pre>
+<div class="rule" id="r-macro.ambiguity.convention.matcher"><a class="rule-link" href="#r-macro.ambiguity.convention.matcher" title="macro.ambiguity.convention.matcher"><span>[macro<wbr>.ambiguity<wbr>.convention<wbr>.matcher]</span></a>
+</div>
+
+<p><code>(start $foo:expr $($i:ident),* end)</code> یک تطبیق‌دهنده است. کل آن دنباله‌ای جداشده با <code>(</code> و <code>)</code> است و <code>$foo</code> و <code>$i</code>، ‏NTهای ساده با مشخص‌کننده‌های قطعهٔ <code>expr</code> و <code>ident</code> هستند.</p>
+<div class="rule" id="r-macro.ambiguity.convention.complex-nt"><a class="rule-link" href="#r-macro.ambiguity.convention.complex-nt" title="macro.ambiguity.convention.complex-nt"><span>[macro<wbr>.ambiguity<wbr>.convention<wbr>.complex-nt]</span></a>
+</div>
+
+<p><code>$(i:ident),*</code> نیز یک NT است؛ NT پیچیده‌ای که تکرار شناسه‌های جداشده با ویرگول را تطبیق می‌دهد. <code>,</code> توکن جداکننده است و میان هر جفت از عناصر قطعهٔ منطبق—در صورت وجود—می‌آید.</p>
+<p>نمونهٔ دیگر NT پیچیده، <code>$(hi $e:expr ;)+</code> است که هر قطعه به‌شکل <code>hi &lt;expr&gt;; hi &lt;expr&gt;; ...</code> را با دست‌کم یک بار وقوع <code>hi &lt;expr&gt;;</code> تطبیق می‌دهد. این NT پیچیده توکن جداکنندهٔ اختصاصی ندارد.</p>
+<p>تجزیه‌گر Rust تضمین می‌کند دنباله‌های جداشده همیشه تودرتویی درست ساختار درخت توکن و جداکننده‌های باز و بستهٔ متناظر داشته باشند.</p>
+<div class="rule" id="r-macro.ambiguity.convention.vars"><a class="rule-link" href="#r-macro.ambiguity.convention.vars" title="macro.ambiguity.convention.vars"><span>[macro<wbr>.ambiguity<wbr>.convention<wbr>.vars]</span></a>
+</div>
+
+<p>ما معمولاً از متغیر «M» برای نمایش یک تطبیق‌دهنده (matcher)، از متغیرهای «t» و «u» برای توکن‌های منفرد دلخواه و از متغیرهای «tt» و «uu» برای درخت‌های توکن دلخواه استفاده می‌کنیم. (استفاده از «tt» به‌دلیل نقش دیگرش به‌عنوان مشخص‌کنندهٔ قطعه (fragment specifier) ابهامی بالقوه ایجاد می‌کند؛ اما از زمینه روشن خواهد بود که کدام تفسیر مدنظر است.)</p>
+<div class="rule" id="r-macro.ambiguity.convention.set"><a class="rule-link" href="#r-macro.ambiguity.convention.set" title="macro.ambiguity.convention.set"><span>[macro<wbr>.ambiguity<wbr>.convention<wbr>.set]</span></a>
+</div>
+
+<p><code>SEP</code> روی توکن‌های جداکننده، <code>OP</code> روی عملگرهای تکرار <code>*</code>، ‏<code>+</code> و <code>?</code>، و <code>OPEN</code>/<code>CLOSE</code> روی جفت‌توکن‌های متناظر پیرامون دنبالهٔ جداشده تغییر می‌کنند؛ مانند <code>[</code> و <code>]</code>.</p>
+<div class="rule" id="r-macro.ambiguity.convention.sequence-vars"><a class="rule-link" href="#r-macro.ambiguity.convention.sequence-vars" title="macro.ambiguity.convention.sequence-vars"><span>[macro<wbr>.ambiguity<wbr>.convention<wbr>.sequence-vars]</span></a>
+</div>
+
+<p>حروف یونانی «α»، «β»، «γ» و «δ» نمایندهٔ دنباله‌هایی از درخت‌های توکن هستند که ممکن است تهی باشند. (با این حال، حرف یونانی «ε» (اپسیلون) در این ارائه نقش ویژه‌ای دارد و نمایندهٔ دنباله‌ای از درخت‌های توکن نیست.)</p>
+<ul>
+<li>این قرارداد حروف یونانی معمولاً تنها زمانی به‌کار می‌رود که وجود یک دنباله جزئیاتی فنی باشد؛ به‌ویژه، هرگاه بخواهیم <em>تأکید</em> کنیم که روی دنباله‌ای از درخت‌های توکن کار می‌کنیم، برای آن دنباله از نمادگذاری «tt …» استفاده می‌کنیم، نه حرف یونانی.</li>
+</ul>
+<p>تطبیق‌دهنده صرفاً یک درخت توکن است. «NT ساده» همان NT فرامتغیر و بنابراین غیرتکراری است. برای نمونه <code>$foo:ty</code> ساده و <code>$($foo:ty)+</code> پیچیده است.</p>
+<p>همچنین در این صورت‌بندی، اصطلاح «توکن» عموماً NTهای ساده را نیز <em>شامل می‌شود</em>.</p>
+<p>در پایان، طبق تعریف‌های این صورت‌بندی هیچ NT ساده و هیچ توکنی قطعهٔ خالی را تطبیق نمی‌دهد؛ بنابراین تنها NT قادر به تطبیق قطعهٔ خالی، NT پیچیده است. این در واقع کاملاً درست نیست، زیرا تطبیق‌دهندهٔ <code>vis</code> می‌تواند قطعهٔ خالی را تطبیق دهد. پس برای صورت‌بندی، با <code>$v:vis</code> مانند <code>$($v:vis)?</code> رفتار می‌کنیم و الزام می‌کنیم تطبیق‌دهنده قطعهٔ خالی را تطبیق دهد.</p>
+<div class="rule" id="r-macro.ambiguity.invariant"><a class="rule-link" href="#r-macro.ambiguity.invariant" title="macro.ambiguity.invariant"><span>[macro<wbr>.ambiguity<wbr>.invariant]</span></a>
+</div>
+
+<h3 id="the-matcher-invariants"><a class="header" href="#the-matcher-invariants">ناورداهای تطبیق‌دهنده</a></h3>
+<div class="rule" id="r-macro.ambiguity.invariant.list"><a class="rule-link" href="#r-macro.ambiguity.invariant.list" title="macro.ambiguity.invariant.list"><span>[macro<wbr>.ambiguity<wbr>.invariant<wbr>.list]</span></a>
+</div>
+
+<p>تطبیق‌دهندهٔ معتبر باید سه ناوردای زیر را برآورده کند. FIRST و FOLLOW بعداً تعریف می‌شوند.</p>
+<ol>
+<li>برای هر دو دنبالهٔ متوالی درخت توکن در تطبیق‌دهندهٔ <code>M</code>، یعنی <code>M = ... tt uu ...</code> با <code>uu ...</code> ناتهی، باید FOLLOW(<code>... tt</code>) ∪ {ε} ⊇ FIRST(<code>uu ...</code>) باشد.</li>
+<li>برای هر NT پیچیدهٔ جداشده در <code>M = ... $(tt ...) SEP OP ...</code> باید <code>SEP</code> ∈ FOLLOW(<code>tt ...</code>) باشد.</li>
+<li>برای NT پیچیدهٔ جدا‌نشده در <code>M = ... $(tt ...) OP ...</code>، اگر OP برابر <code>*</code> یا <code>+</code> باشد باید FOLLOW(<code>tt ...</code>) ⊇ FIRST(<code>tt ...</code>) برقرار باشد.</li>
+</ol>
+<div class="rule" id="r-macro.ambiguity.invariant.follow-matcher"><a class="rule-link" href="#r-macro.ambiguity.invariant.follow-matcher" title="macro.ambiguity.invariant.follow-matcher"><span>[macro<wbr>.ambiguity<wbr>.invariant<wbr>.follow-matcher]</span></a>
+</div>
+
+<p>ناوردای نخست می‌گوید هر توکن واقعی که پس از تطبیق‌دهنده می‌آید باید در مجموعهٔ دنباله‌روی از پیش تعیین‌شده باشد. این تضمین می‌کند حتی با افزودن شکل‌های نحوی جدید به زبان، تعریف قانونی ماکرو همچنان پایان <code>... tt</code> و آغاز <code>uu ...</code> را یکسان تشخیص دهد.</p>
+<div class="rule" id="r-macro.ambiguity.invariant.separated-complex-nt"><a class="rule-link" href="#r-macro.ambiguity.invariant.separated-complex-nt" title="macro.ambiguity.invariant.separated-complex-nt"><span>[macro<wbr>.ambiguity<wbr>.invariant<wbr>.separated-complex-nt]</span></a>
+</div>
+
+<p>ناوردای دوم می‌گوید NT پیچیدهٔ جداشده باید از توکن جداکننده‌ای استفاده کند که عضو مجموعهٔ دنباله‌روی محتوای داخلی NT باشد. این تضمین می‌کند با افزودن نحو جدید، تعریف قانونی ماکرو همچنان قطعهٔ ورودی را به همان دنبالهٔ جداشدهٔ <code>tt ...</code>ها تجزیه کند.</p>
+<div class="rule" id="r-macro.ambiguity.invariant.unseparated-complex-nt"><a class="rule-link" href="#r-macro.ambiguity.invariant.unseparated-complex-nt" title="macro.ambiguity.invariant.unseparated-complex-nt"><span>[macro<wbr>.ambiguity<wbr>.invariant<wbr>.unseparated-complex-nt]</span></a>
+</div>
+
+<p>ناوردای سوم می‌گوید وقتی NT پیچیده می‌تواند دو یا چند کپی یکسان را بدون جدایی تطبیق دهد، قراردادن آن‌ها کنار هم طبق ناوردای نخست باید مجاز باشد. این ناوردا ناتهی‌بودنشان را نیز لازم می‌داند و یک ابهام احتمالی را حذف می‌کند.</p>
+<p><strong>توجه: ناوردای سوم در حال حاضر به‌دلیل یک غفلت تاریخی و وابستگی قابل‌توجه به این رفتار اعمال نمی‌شود. فعلاً مشخص نیست در آینده با این موضوع چه باید کرد. ماکروهایی که این رفتار را رعایت نمی‌کنند ممکن است در ویرایشی آینده از Rust نامعتبر شوند. <a href="https://github.com/rust-lang/rust/issues/56575">issue پیگیری</a> را ببینید.</strong></p>
+<div class="rule" id="r-macro.ambiguity.sets"><a class="rule-link" href="#r-macro.ambiguity.sets" title="macro.ambiguity.sets"><span>[macro<wbr>.ambiguity<wbr>.sets]</span></a>
+</div>
+
+<h3 id="first-and-follow-informally"><a class="header" href="#first-and-follow-informally">FIRST و FOLLOW به‌صورت غیررسمی</a></h3>
+<div class="rule" id="r-macro.ambiguity.sets.intro"><a class="rule-link" href="#r-macro.ambiguity.sets.intro" title="macro.ambiguity.sets.intro"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.intro]</span></a>
+</div>
+
+<p>یک تطبیق‌دهندهٔ M به سه مجموعهٔ FIRST(M)، ‏LAST(M) و FOLLOW(M) نگاشت می‌شود.</p>
+<p>هر سه مجموعه از توکن‌ها تشکیل می‌شوند. FIRST(M) و LAST(M) می‌توانند عنصر متمایز غیرتوکنی ε را نیز داشته باشند که نشان می‌دهد M قطعهٔ خالی را تطبیق می‌دهد. FOLLOW(M) همیشه فقط مجموعه‌ای از توکن‌هاست.</p>
+<p>به‌صورت غیررسمی:</p>
+<div class="rule" id="r-macro.ambiguity.sets.first"><a class="rule-link" href="#r-macro.ambiguity.sets.first" title="macro.ambiguity.sets.first"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.first]</span></a>
+</div>
+
+<ul>
+<li>FIRST(M): توکن‌هایی که احتمالاً نخست در تطبیق قطعه با M استفاده می‌شوند.</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.last"><a class="rule-link" href="#r-macro.ambiguity.sets.last" title="macro.ambiguity.sets.last"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.last]</span></a>
+</div>
+
+<ul>
+<li>LAST(M): توکن‌هایی که احتمالاً آخرین توکن تطبیق قطعه با M هستند.</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.follow"><a class="rule-link" href="#r-macro.ambiguity.sets.follow" title="macro.ambiguity.sets.follow"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.follow]</span></a>
+</div>
+
+<ul>
+<li>
+<p>FOLLOW(M): مجموعهٔ توکن‌هایی که اجازه دارند بلافاصله پس از قطعهٔ منطبق با M بیایند.</p>
+<p>یعنی t ∈ FOLLOW(M) اگر و تنها اگر دنباله‌های توکن احتمالاً خالی α، ‏β، ‏γ و δ وجود داشته باشند که:</p>
+<ul>
+<li>
+<p>M با β تطبیق کند؛</p>
+</li>
+<li>
+<p>t با γ تطبیق کند؛ و</p>
+</li>
+<li>
+<p>الحاق α β γ δ یک برنامهٔ قابل تجزیهٔ Rust باشد.</p>
+</li>
+</ul>
+</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.universe"><a class="rule-link" href="#r-macro.ambiguity.sets.universe" title="macro.ambiguity.sets.universe"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.universe]</span></a>
+</div>
+
+<p>از ANYTOKEN به‌عنوان شکل کوتاه مجموعهٔ همهٔ توکن‌ها، شامل NTهای ساده، استفاده می‌کنیم. اگر هر توکنی پس از M مجاز باشد، FOLLOW(M) = ANYTOKEN است.</p>
+<p>برای مرور درک تعریف‌های غیررسمی، خواننده می‌تواند پیش از تعریف‌های رسمی به <a href="#examples-of-first-and-last">نمونه‌های FIRST/LAST</a> مراجعه کند.</p>
+<div class="rule" id="r-macro.ambiguity.sets.def"><a class="rule-link" href="#r-macro.ambiguity.sets.def" title="macro.ambiguity.sets.def"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def]</span></a>
+</div>
+
+<h3 id="first-last"><a class="header" href="#first-last">FIRST و LAST</a></h3>
+<div class="rule" id="r-macro.ambiguity.sets.def.intro"><a class="rule-link" href="#r-macro.ambiguity.sets.def.intro" title="macro.ambiguity.sets.def.intro"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.intro]</span></a>
+</div>
+
+<p>در ادامه تعریف‌های استقرایی رسمی FIRST و LAST آمده‌اند.</p>
+<div class="rule" id="r-macro.ambiguity.sets.def.notation"><a class="rule-link" href="#r-macro.ambiguity.sets.def.notation" title="macro.ambiguity.sets.def.notation"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.notation]</span></a>
+</div>
+
+<p>«A ∪ B» نمایندهٔ اجتماع مجموعه‌ها، «A ∩ B» نمایندهٔ اشتراک مجموعه‌ها و «A \ B» نمایندهٔ تفاضل مجموعه‌ها است (یعنی همهٔ عناصر A که در B وجود ندارند).</p>
+<div class="rule" id="r-macro.ambiguity.sets.def.first"><a class="rule-link" href="#r-macro.ambiguity.sets.def.first" title="macro.ambiguity.sets.def.first"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.first]</span></a>
+</div>
+
+<h4 id="first"><a class="header" href="#first">FIRST</a></h4>
+<div class="rule" id="r-macro.ambiguity.sets.def.first.intro"><a class="rule-link" href="#r-macro.ambiguity.sets.def.first.intro" title="macro.ambiguity.sets.def.first.intro"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.first<wbr>.intro]</span></a>
+</div>
+
+<p>FIRST(M) با تحلیل حالت روی دنبالهٔ M و ساختار نخستین درخت توکن آن تعریف می‌شود:</p>
+<div class="rule" id="r-macro.ambiguity.sets.def.first.epsilon"><a class="rule-link" href="#r-macro.ambiguity.sets.def.first.epsilon" title="macro.ambiguity.sets.def.first.epsilon"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.first<wbr>.epsilon]</span></a>
+</div>
+
+<ul>
+<li>اگر M دنبالهٔ خالی باشد، FIRST(M) = { ε }؛</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.first.token"><a class="rule-link" href="#r-macro.ambiguity.sets.def.first.token" title="macro.ambiguity.sets.def.first.token"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.first<wbr>.token]</span></a>
+</div>
+
+<ul>
+<li>
+<p>اگر M با توکن t آغاز شود، FIRST(M) = { t }.</p>
+<p>این حالت دنبالهٔ درخت توکن جداشدهٔ <code>M = OPEN tt ... CLOSE ...</code> را نیز پوشش می‌دهد؛ در آن <code>t = OPEN</code> و FIRST(M) = { <code>OPEN</code> } است.</p>
+<p>این تعریف به ویژگی تطبیق‌ندادن قطعهٔ خالی توسط NT ساده متکی است.</p>
+</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.first.complex"><a class="rule-link" href="#r-macro.ambiguity.sets.def.first.complex" title="macro.ambiguity.sets.def.first.complex"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.first<wbr>.complex]</span></a>
+</div>
+
+<ul>
+<li>
+<p>در غیر این صورت، M دنباله‌ای است که با NT پیچیده آغاز می‌شود: <code>M = $( tt ... ) OP α</code> یا <code>M = $( tt ... ) SEP OP α</code>، که <code>α</code> دنبالهٔ احتمالاً خالی ادامهٔ تطبیق‌دهنده است.</p>
+<ul>
+<li>اگر SEP وجود داشته و ε ∈ FIRST(<code>tt ...</code>) باشد، SEP_SET(M) = { SEP }؛ وگرنه SEP_SET(M) = {}.</li>
+</ul>
+</li>
+<li>
+<p>اگر OP برابر <code>*</code> یا <code>?</code> باشد، ALPHA_SET(M) = FIRST(<code>α</code>)؛ و اگر <code>+</code> باشد ALPHA_SET(M) = {}.</p>
+</li>
+<li>
+<p>FIRST(M) = (FIRST(<code>tt ...</code>) \ {ε}) ∪ SEP_SET(M) ∪ ALPHA_SET(M).</p>
+</li>
+</ul>
+<p>تعریف NT پیچیده نیازمند توضیح است. SEP_SET(M) امکان نخستین توکن معتبر بودن جداکننده را بیان می‌کند؛ زمانی که جداکننده وجود دارد و قطعهٔ تکرارشونده می‌تواند خالی باشد. ALPHA_SET(M) امکان خالی‌بودن NT پیچیده را بیان می‌کند؛ در این حالت نخستین توکن‌های معتبر M متعلق به دنبالهٔ بعدی <code>α</code> هستند. این وضعیت با <code>*</code> یا <code>?</code> و صفر تکرار رخ می‌دهد. از نظر نظری با <code>+</code> و قطعهٔ تکرارشوندهٔ احتمالاً خالی نیز ممکن بود، اما ناوردای سوم آن را ممنوع می‌کند.</p>
+<p>بنابراین FIRST(M) می‌تواند هر توکن SEP_SET(M) یا ALPHA_SET(M) را داشته باشد و اگر تطبیق NT پیچیده ناتهی باشد، هر توکن آغازگر FIRST(<code>tt ...</code>) نیز ممکن است. بخش آخر ε است. SEP_SET(M) و FIRST(<code>tt ...</code>) \ {ε} آن را ندارند، اما ALPHA_SET(M) ممکن است داشته باشد. پس M دقیقاً زمانی ε را می‌پذیرد که ε عضو ALPHA_SET(M) باشد. برای پذیرش ε، هم NT پیچیده و هم α باید آن را بپذیرند. با OP برابر <code>+</code>، ‏NT پیچیده خالی نیست و ε ∉ ALPHA_SET(M). در غیر این صورت NT پیچیده صفر تکرار را می‌پذیرد و ALPHA_SET(M) = FOLLOW(<code>α</code>) است.</p>
+<div class="rule" id="r-macro.ambiguity.sets.def.last"><a class="rule-link" href="#r-macro.ambiguity.sets.def.last" title="macro.ambiguity.sets.def.last"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.last]</span></a>
+</div>
+
+<h4 id="last"><a class="header" href="#last">LAST</a></h4>
+<div class="rule" id="r-macro.ambiguity.sets.def.last.intro"><a class="rule-link" href="#r-macro.ambiguity.sets.def.last.intro" title="macro.ambiguity.sets.def.last.intro"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.last<wbr>.intro]</span></a>
+</div>
+
+<p>LAST(M) با تحلیل حالت روی خود M، یعنی دنبالهٔ درخت‌های توکن، تعریف می‌شود:</p>
+<div class="rule" id="r-macro.ambiguity.sets.def.last.empty"><a class="rule-link" href="#r-macro.ambiguity.sets.def.last.empty" title="macro.ambiguity.sets.def.last.empty"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.last<wbr>.empty]</span></a>
+</div>
+
+<ul>
+<li>اگر M دنبالهٔ خالی باشد، LAST(M) = { ε }.</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.last.token"><a class="rule-link" href="#r-macro.ambiguity.sets.def.last.token" title="macro.ambiguity.sets.def.last.token"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.last<wbr>.token]</span></a>
+</div>
+
+<ul>
+<li>اگر M فقط توکن t باشد، LAST(M) = { t }.</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.last.rep-star"><a class="rule-link" href="#r-macro.ambiguity.sets.def.last.rep-star" title="macro.ambiguity.sets.def.last.rep-star"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.last<wbr>.rep-star]</span></a>
+</div>
+
+<ul>
+<li>
+<p>اگر M فقط NT پیچیده‌ای با تکرار صفر یا بیشتر باشد، <code>M = $( tt ... ) *</code> یا <code>M = $( tt ... ) SEP *</code>:</p>
+<ul>
+<li>
+<p>در صورت وجود SEP، ‏sep_set = { SEP }؛ وگرنه sep_set = {}.</p>
+</li>
+<li>
+<p>اگر ε ∈ LAST(<code>tt ...</code>) باشد، LAST(M) = LAST(<code>tt ...</code>) ∪ sep_set.</p>
+</li>
+<li>
+<p>وگرنه دنبالهٔ <code>tt ...</code> ناتهی است و LAST(M) = LAST(<code>tt ...</code>) ∪ {ε}.</p>
+</li>
+</ul>
+</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.last.rep-plus"><a class="rule-link" href="#r-macro.ambiguity.sets.def.last.rep-plus" title="macro.ambiguity.sets.def.last.rep-plus"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.last<wbr>.rep-plus]</span></a>
+</div>
+
+<ul>
+<li>
+<p>اگر M فقط NT پیچیده‌ای با تکرار یک یا بیشتر باشد، <code>M = $( tt ... ) +</code> یا <code>M = $( tt ... ) SEP +</code>:</p>
+<ul>
+<li>
+<p>در صورت وجود SEP، ‏sep_set = { SEP }؛ وگرنه sep_set = {}.</p>
+</li>
+<li>
+<p>اگر ε ∈ LAST(<code>tt ...</code>) باشد، LAST(M) = LAST(<code>tt ...</code>) ∪ sep_set.</p>
+</li>
+<li>
+<p>وگرنه دنبالهٔ <code>tt ...</code> ناتهی است و LAST(M) = LAST(<code>tt ...</code>).</p>
+</li>
+</ul>
+</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.last.rep-question"><a class="rule-link" href="#r-macro.ambiguity.sets.def.last.rep-question" title="macro.ambiguity.sets.def.last.rep-question"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.last<wbr>.rep-question]</span></a>
+</div>
+
+<ul>
+<li>اگر M فقط NT پیچیده‌ای با تکرار صفر یا یک باشد، <code>M = $( tt ...) ?</code>، آنگاه LAST(M) = LAST(<code>tt ...</code>) ∪ {ε}.</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.last.delim"><a class="rule-link" href="#r-macro.ambiguity.sets.def.last.delim" title="macro.ambiguity.sets.def.last.delim"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.last<wbr>.delim]</span></a>
+</div>
+
+<ul>
+<li>اگر M دنبالهٔ جداشدهٔ <code>OPEN tt ... CLOSE</code> باشد، LAST(M) = { <code>CLOSE</code> }.</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.last.sequence"><a class="rule-link" href="#r-macro.ambiguity.sets.def.last.sequence" title="macro.ambiguity.sets.def.last.sequence"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.last<wbr>.sequence]</span></a>
+</div>
+
+<ul>
+<li>
+<p>اگر M دنبالهٔ ناتهی <code>tt uu ...</code> باشد:</p>
+<ul>
+<li>
+<p>اگر ε ∈ LAST(<code>uu ...</code>) باشد، LAST(M) = LAST(<code>tt</code>) ∪ (LAST(<code>uu ...</code>) \ { ε }).</p>
+</li>
+<li>
+<p>وگرنه <code>uu ...</code> ناتهی است و LAST(M) = LAST(<code>uu ...</code>).</p>
+</li>
+</ul>
+</li>
+</ul>
+<h3 id="examples-of-first-and-last"><a class="header" href="#examples-of-first-and-last">نمونه‌های FIRST و LAST</a></h3>
+<p>در ادامه نمونه‌هایی آمده است. به نحوهٔ افزوده و حذف‌شدن عنصر ویژهٔ ε بر اساس تعامل بخش‌های ورودی دقت کنید.</p>
+<p>نمونهٔ نخست ساختار درختی دارد تا ترکیب تحلیل تطبیق‌دهنده روشن شود. بعضی زیردرخت‌های ساده‌تر حذف شده‌اند.</p>
+<pre><code class="language-text">INPUT:  $(  $d:ident   $e:expr   );*    $( $( h )* );*    $( f ; )+   g
+            ~~~~~~~~   ~~~~~~~                ~
+                |         |                   |
+FIRST:   { $d:ident }  { $e:expr }          { h }
+
+
+INPUT:  $(  $d:ident   $e:expr   );*    $( $( h )* );*    $( f ; )+
+            ~~~~~~~~~~~~~~~~~~             ~~~~~~~           ~~~
+                        |                      |               |
+FIRST:          { $d:ident }               { h, ε }         { f }
+
+INPUT:  $(  $d:ident   $e:expr   );*    $( $( h )* );*    $( f ; )+   g
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~    ~~~~~~~~~~~~~~    ~~~~~~~~~   ~
+                        |                       |              |       |
+FIRST:        { $d:ident, ε }            {  h, ε, ;  }      { f }   { g }
+
+
+INPUT:  $(  $d:ident   $e:expr   );*    $( $( h )* );*    $( f ; )+   g
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                                        |
+FIRST:                       { $d:ident, h, ;,  f }
+</code></pre>
+<p>بنابراین:</p>
+<ul>
+<li>FIRST(<code>$($d:ident $e:expr );* $( $(h)* );* $( f ;)+ g</code>) = { <code>$d:ident</code>, <code>h</code>, <code>;</code>, <code>f</code> }</li>
+</ul>
+<p>با این حال توجه کنید که:</p>
+<ul>
+<li>FIRST(<code>$($d:ident $e:expr );* $( $(h)* );* $($( f ;)+ g)*</code>) = { <code>$d:ident</code>, <code>h</code>, <code>;</code>, <code>f</code>, ε }</li>
+</ul>
+<p>نمونه‌های مشابه برای LAST:</p>
+<ul>
+<li>LAST(<code>$d:ident $e:expr</code>) = { <code>$e:expr</code> }</li>
+<li>LAST(<code>$( $d:ident $e:expr );*</code>) = { <code>$e:expr</code>, ε }</li>
+<li>LAST(<code>$( $d:ident $e:expr );* $(h)*</code>) = { <code>$e:expr</code>, ε, <code>h</code> }</li>
+<li>LAST(<code>$( $d:ident $e:expr );* $(h)* $( f ;)+</code>) = { <code>;</code> }</li>
+<li>LAST(<code>$( $d:ident $e:expr );* $(h)* $( f ;)+ g</code>) = { <code>g</code> }</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.follow"><a class="rule-link" href="#r-macro.ambiguity.sets.def.follow" title="macro.ambiguity.sets.def.follow"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.follow]</span></a>
+</div>
+
+<h3 id="followm"><a class="header" href="#followm">FOLLOW(M)</a></h3>
+<div class="rule" id="r-macro.ambiguity.sets.def.follow.intro"><a class="rule-link" href="#r-macro.ambiguity.sets.def.follow.intro" title="macro.ambiguity.sets.def.follow.intro"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.follow<wbr>.intro]</span></a>
+</div>
+
+<p>در پایان، FOLLOW(M) به‌شکل زیر ساخته می‌شود. pat، ‏expr و مانند آن نمایندهٔ غیرپایانه‌های ساده با مشخص‌کنندهٔ قطعهٔ مربوط‌اند.</p>
+<div class="rule" id="r-macro.ambiguity.sets.def.follow.pat"><a class="rule-link" href="#r-macro.ambiguity.sets.def.follow.pat" title="macro.ambiguity.sets.def.follow.pat"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.follow<wbr>.pat]</span></a>
+</div>
+
+<ul>
+<li>FOLLOW(pat) = {<code>=&gt;</code>, <code>,</code>, <code>=</code>, <code>|</code>, <code>if</code>, <code>in</code>}.</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.follow.expr-stmt"><a class="rule-link" href="#r-macro.ambiguity.sets.def.follow.expr-stmt" title="macro.ambiguity.sets.def.follow.expr-stmt"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.follow<wbr>.expr-stmt]</span></a>
+</div>
+
+<ul>
+<li>FOLLOW(expr) = FOLLOW(expr_2021) = FOLLOW(stmt) =  {<code>=&gt;</code>, <code>,</code>, <code>;</code>}`.</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.follow.ty-path"><a class="rule-link" href="#r-macro.ambiguity.sets.def.follow.ty-path" title="macro.ambiguity.sets.def.follow.ty-path"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.follow<wbr>.ty-path]</span></a>
+</div>
+
+<ul>
+<li>FOLLOW(ty) = FOLLOW(path) = {<code>{</code>, <code>[</code>, <code>,</code>, <code>=&gt;</code>, <code>:</code>, <code>=</code>, <code>&gt;</code>, <code>&gt;&gt;</code>, <code>;</code>, <code>|</code>, <code>as</code>, <code>where</code>، غیرپایانه‌های block}.</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.follow.vis"><a class="rule-link" href="#r-macro.ambiguity.sets.def.follow.vis" title="macro.ambiguity.sets.def.follow.vis"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.follow<wbr>.vis]</span></a>
+</div>
+
+<ul>
+<li>FOLLOW(vis) = {<code>,</code>، هر کلیدواژه یا شناسه به‌جز <code>priv</code> غیرخام؛ هر توکن آغازگر نوع؛ غیرپایانه‌های ident، ‏ty و path}.</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.follow.simple"><a class="rule-link" href="#r-macro.ambiguity.sets.def.follow.simple" title="macro.ambiguity.sets.def.follow.simple"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.follow<wbr>.simple]</span></a>
+</div>
+
+<ul>
+<li>برای هر توکن سادهٔ دیگر، از جمله غیرپایانه‌های سادهٔ block، ‏ident، ‏tt، ‏item، ‏lifetime، ‏literal و meta و همهٔ پایانه‌ها، FOLLOW(t) = ANYTOKEN است.</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.follow.other-matcher"><a class="rule-link" href="#r-macro.ambiguity.sets.def.follow.other-matcher" title="macro.ambiguity.sets.def.follow.other-matcher"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.follow<wbr>.other-matcher]</span></a>
+</div>
+
+<ul>
+<li>برای هر M دیگر، FOLLOW(M) اشتراک FOLLOW(t)هاست، هنگامی که t روی LAST(M) \ {ε} تغییر می‌کند.</li>
+</ul>
+<div class="rule" id="r-macro.ambiguity.sets.def.follow.type-first"><a class="rule-link" href="#r-macro.ambiguity.sets.def.follow.type-first" title="macro.ambiguity.sets.def.follow.type-first"><span>[macro<wbr>.ambiguity<wbr>.sets<wbr>.def<wbr>.follow<wbr>.type-first]</span></a>
+</div>
+
+<p>توکن‌هایی که هنگام نگارش این متن می‌توانند یک نوع را آغاز کنند عبارت‌اند از: {<code>(</code>، ‏<code>[</code>، ‏<code>!</code>، ‏<code>*</code>، ‏<code>&amp;</code>، ‏<code>&amp;&amp;</code>، ‏<code>?</code>، طول‌عمرها، ‏<code>&gt;</code>، ‏<code>&gt;&gt;</code>، ‏<code>::</code>، هر شناسهٔ غیرکلیدواژه، ‏<code>super</code>، ‏<code>self</code>، ‏<code>Self</code>، ‏<code>extern</code>، ‏<code>crate</code>، ‏<code>$crate</code>، ‏<code>_</code>، ‏<code>for</code>، ‏<code>impl</code>، ‏<code>fn</code>، ‏<code>unsafe</code>، ‏<code>typeof</code>، ‏<code>dyn</code>}. شاید این فهرست کامل نباشد، زیرا هنگام افزودن موارد جدید همیشه این پیوست به‌روزرسانی نمی‌شود.</p>
+<p>نمونه‌های FOLLOW برای M پیچیده:</p>
+<ul>
+<li>FOLLOW(<code>$( $d:ident $e:expr )*</code>) = FOLLOW(<code>$e:expr</code>)</li>
+<li>FOLLOW(<code>$( $d:ident $e:expr )* $(;)*</code>) = FOLLOW(<code>$e:expr</code>) ∩ ANYTOKEN = FOLLOW(<code>$e:expr</code>)</li>
+<li>FOLLOW(<code>$( $d:ident $e:expr )* $(;)* $( f |)+</code>) = ANYTOKEN</li>
+</ul>
+<h3 id="examples-of-valid-and-invalid-matchers"><a class="header" href="#examples-of-valid-and-invalid-matchers">نمونه‌های تطبیق‌دهندهٔ معتبر و نامعتبر</a></h3>
+<p>با مشخصات بالا می‌توان علت قانونی‌بودن یا نبودن تطبیق‌دهنده‌ها را بیان کرد.</p>
+<ul>
+<li>
+<p><code>($ty:ty &lt; foo ,)</code> نامعتبر است، زیرا FIRST(<code>&lt; foo ,</code>) = { <code>&lt;</code> } ⊈ FOLLOW(<code>ty</code>).</p>
+</li>
+<li>
+<p><code>($ty:ty , foo &lt;)</code> معتبر است، زیرا FIRST(<code>, foo &lt;</code>) = { <code>,</code> } ⊆ FOLLOW(<code>ty</code>).</p>
+</li>
+<li>
+<p><code>($pa:pat $pb:pat $ty:ty ,)</code> نامعتبر است، زیرا FIRST(<code>$pb:pat $ty:ty ,</code>) = { <code>$pb:pat</code> } ⊈ FOLLOW(<code>pat</code>) و نیز FIRST(<code>$ty:ty ,</code>) = { <code>$ty:ty</code> } ⊈ FOLLOW(<code>pat</code>).</p>
+</li>
+<li>
+<p><code>( $($a:tt $b:tt)* ; )</code> معتبر است، زیرا FIRST(<code>$b:tt</code>) = { <code>$b:tt</code> } ⊆ FOLLOW(<code>tt</code>) = ANYTOKEN و FIRST(<code>;</code>) = { <code>;</code> } نیز چنین است.</p>
+</li>
+<li>
+<p><code>( $($t:tt),* , $(t:tt),* )</code> معتبر است، هرچند هر تلاش برای استفادهٔ واقعی از ماکرو هنگام گسترش خطای ابهام محلی می‌دهد.</p>
+</li>
+<li>
+<p><code>($ty:ty $(; not sep)* -)</code> نامعتبر است، زیرا FIRST(<code>$(; not sep)* -</code>) = { <code>;</code>, <code>-</code> } در FOLLOW(<code>ty</code>) نیست.</p>
+</li>
+<li>
+<p><code>($($ty:ty)-+)</code> نامعتبر است، زیرا جداکنندهٔ <code>-</code> در FOLLOW(<code>ty</code>) نیست.</p>
+</li>
+<li>
+<p><code>($($e:expr)*)</code> نامعتبر است، زیرا NTهای expr عضو FOLLOW(expr NT) نیستند.</p>
+</li>
+</ul><nav class="page-nav"><a href="syntax-index.html">→ نمایهٔ نحو (Syntax index)</a><a href="influences.html">تأثیرپذیری‌ها (Influences) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../reference/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

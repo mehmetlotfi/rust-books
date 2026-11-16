@@ -1,0 +1,61 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+        id: pages
+
+      - name: Build site folder (sitemap + robots.txt)
+        env:
+          BASE_URL: ${{ steps.pages.outputs.base_url }}
+        run: |
+          mkdir _site
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude 'README.md' --exclude 'serve.py' ./ _site/
+          cp site/404.html _site/404.html
+          touch _site/.nojekyll
+          python3 - <<'PY'
+          import os
+          base = os.environ["BASE_URL"].rstrip("/")
+          urls = []
+          for d, _, fs in os.walk("_site"):
+              for f in fs:
+                  if f.endswith(".html") and f != "404.html":
+                      rel = os.path.relpath(os.path.join(d, f), "_site").replace(os.sep, "/")
+                      urls.append(base + "/" + ("" if rel == "index.html" else rel))
+          urls.sort()
+          with open("_site/sitemap.xml", "w", encoding="utf-8") as o:
+              o.write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n')
+              for u in urls:
+                  o.write(f"<url><loc>{u}</loc></url>\n")
+              o.write("</urlset>\n")
+          with open("_site/robots.txt", "w") as o:
+              o.write(f"User-agent: *\nAllow: /\nSitemap: {base}/sitemap.xml\n")
+          PY
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

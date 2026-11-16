@@ -1,0 +1,73 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0401 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0401"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>آیتم‌های داخلی، پارامترهای جنریک آیتم‌هایی را که در آن‌ها قرار گرفته‌اند به ارث نمی‌برند.</p>
+<p>نمونه کد خطادار:</p>
+<pre><code class="language-compile_fail E0401">fn foo&lt;T&gt;(x: T) {
+    fn bar(y: T) { // T is defined in the "outer" function
+        // ..
+    }
+    bar(x);
+}
+</code></pre>
+<p>این کد هم کار نمی‌کند:</p>
+<pre><code class="language-compile_fail E0401">fn foo&lt;T&gt;(x: T) {
+    type MaybeT = Option&lt;T&gt;;
+    // ...
+}
+</code></pre>
+<p>یا این:</p>
+<pre><code class="language-compile_fail E0401">fn foo&lt;T&gt;(x: T) {
+    struct Foo {
+        x: T,
+    }
+    // ...
+}
+</code></pre>
+<p>آیتم‌هایی که درون آیتم‌های دیگر تودرتو شده‌اند اساساً مانند آیتم‌های سطح بالا هستند، با این تفاوت که فقط از درون همان آیتمی که در آن قرار دارند قابل استفاده‌اند.</p>
+<p>چند راه‌حل برای این مشکل وجود دارد.</p>
+<p>اگر آیتم یک تابع است، می‌توانید از یک closure استفاده کنید:</p>
+<pre><code>fn foo&lt;T&gt;(x: T) {
+    let bar = |y: T| { // explicit type annotation may not be necessary
+        // ..
+    };
+    bar(x);
+}
+</code></pre>
+<p>برای یک آیتم جنریک می‌توانید پارامترها را کپی کنید:</p>
+<pre><code>fn foo&lt;T&gt;(x: T) {
+    fn bar&lt;T&gt;(y: T) {
+        // ..
+    }
+    bar(x);
+}
+</code></pre>
+<pre><code>fn foo&lt;T&gt;(x: T) {
+    type MaybeT&lt;T&gt; = Option&lt;T&gt;;
+}
+</code></pre>
+<p>حتماً قیدها (bounds) را هم کپی کنید:</p>
+<pre><code>fn foo&lt;T: Copy&gt;(x: T) {
+    fn bar&lt;T: Copy&gt;(y: T) {
+        // ..
+    }
+    bar(x);
+}
+</code></pre>
+<pre><code>fn foo&lt;T: Copy&gt;(x: T) {
+    struct Foo&lt;T: Copy&gt; {
+        x: T,
+    }
+}
+</code></pre>
+<p>ممکن است این کار به راهنمایی‌های نوعی (type hint) بیشتری در بدنه تابع نیاز داشته باشد.</p>
+<p>اگر آیتم یک تابع درون یک <code>impl</code> است، تعریف یک تابع کمکی خصوصی ممکن است ساده‌تر باشد:</p>
+<pre><code># struct Foo&lt;T&gt;(T);
+impl&lt;T&gt; Foo&lt;T&gt; {
+    pub fn foo(&amp;self, x: T) {
+        self.bar(x);
+    }
+
+    fn bar(&amp;self, y: T) {
+        // ..
+    }
+}
+</code></pre>
+<p>برای پیاده‌سازی‌های پیش‌فرض در صفت‌ها (trait)، راه‌حل تابع کمکی خصوصی کار نمی‌کند، اما closureها یا کپی کردن پارامترها همچنان باید کار کنند.</p><nav class="page-nav"><a href="../errors/E0399.html">→ E0399</a><a href="../errors/E0403.html">E0403 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

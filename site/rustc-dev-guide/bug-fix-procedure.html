@@ -1,0 +1,243 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>رویه‌های مربوط به تغییرات ناسازگار — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="bug-fix-procedure"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="procedures-for-breaking-changes"><a class="header" href="#procedures-for-breaking-changes">روال‌های تغییرات شکننده</a></h1>
+<p>این صفحه روال بهترین روش را برای انجام رفع باگ یا اصلاحات soundness در کامپایلر تعریف می‌کند
+که ممکن است باعث شود کد موجود دیگر کامپایل نشود.
+این متن بر اساس <a href="https://github.com/rust-lang/rfcs/blob/master/text/1589-rustc-bug-fix-procedure.md">RFC 1589</a> است.</p>
+<h1 id="motivation"><a class="header" href="#motivation">Motivation</a></h1>
+<p>گاه‌به‌گاه نیاز به رفع باگ، اصلاح soundness یا تغییر دیگری در کامپایلر پیدا می‌کنیم که باعث می‌شود کد موجود دیگر کامپایل نشود.
+وقتی این رخ می‌دهد، مهم است تغییر را
+طوری مدیریت کنیم که انتقال هموار برای کاربران Rust فراهم شود.
+آنچه می‌خواهیم از آن پرهیز کنیم این است که برنامه‌های موجود ناگهان با پیام‌های خطای مبهم کامپایل نشوند:
+ترجیح می‌دهیم دورهٔ تدریجی هشدار داشته باشیم، با راهنمایی روشن دربارهٔ
+مشکل چیست، چگونه رفع می‌شود و چرا تغییر انجام شد.
+این RFC روالی را شرح می‌دهد که برای مدیریت تغییرات شکننده توسعه داده‌ایم
+و هدفش دستیابی به چنین انتقال همواری است.</p>
+<p>یکی از نکات کلیدی این سیاست این است که (الف) در صورت امکان باید ابتدا هشدار صادر شود نه خطای سخت و (ب) هر تغییری که
+باعث شود کد موجود دیگر کامپایل نشود یک issue پیگیری متناظر خواهد داشت.
+این issue نقطه‌ای برای جمع‌آوری بازخورد دربارهٔ نتایج آن تغییر فراهم می‌کند.
+گاهی تغییرات پیامدهای غیرمنتظرهٔ بزرگ دارند یا ممکن است راهی برای
+پرهیز از تغییر باشد که در نظر گرفته نشده بود.
+در آن موارد،
+ممکن است تصمیم بگیریم مسیر را عوض کنیم و تغییر را برگردانیم،
+یا راه‌حل دیگری بیابیم (و اگر از هشدار استفاده می‌شود، انجام این کار به‌ویژه آسان است).</p>
+<h3 id="what-qualifies-as-a-bug-fix"><a class="header" href="#what-qualifies-as-a-bug-fix">چه چیزی رفع باگ به حساب می‌آید؟</a></h3>
+<p>توجه کنید این RFC سعی نمی‌کند تعریف کند چه وقت تغییر شکننده مجاز است.
+آن از قبل تحت <a href="https://github.com/rust-lang/rfcs/blob/master/text/1122-language-semver.md">RFC 1122</a> پوشش داده شده است.
+این سند فرض می‌کند تغییری که انجام می‌شود مطابق آن سیاست‌هاست.
+در ادامه خلاصه‌ای از شرایط RFC 1122 آمده است:</p>
+<ul>
+<li><strong>تغییرات soundness:</strong> رفع حفره‌هایی که در سامانهٔ نوع کشف شده‌اند.</li>
+<li><strong>باگ‌های کامپایلر:</strong> جاهایی که کامپایلر معناشناسی مشخص‌شده در یک RFC یا تصمیم تیم lang را پیاده‌سازی نمی‌کند.</li>
+<li><strong>معناشناسی کم‌مشخص زبان:</strong> روشن‌سازی نواحی خاکستری که کامپایلر در آن‌ها ناسازگار رفتار می‌کند و پیش‌تر رفتار رسمی‌ای تصمیم‌گیری نشده بود.</li>
+</ul>
+<p>لطفاً برای جزئیات کامل <a href="https://github.com/rust-lang/rfcs/blob/master/text/1122-language-semver.md">RFC</a> را ببینید!</p>
+<h1 id="detailed-design"><a class="header" href="#detailed-design">Detailed design</a></h1>
+<p>روال انجام تغییر شکننده به این شرح است (هر یک از این گام‌ها در ادامه با جزئیات بیشتر شرح داده شده):</p>
+<ol>
+<li>یک <strong>اجرای crater</strong> برای ارزیابی اثر تغییر انجام دهید.</li>
+<li>یک <strong>issue پیگیری ویژه</strong> برای تغییر بسازید.</li>
+<li>Do not report an error right away.
+Instead, <strong>issue forwards-compatibility lint warnings</strong>.
+<ul>
+<li>گاهی این ساده نیست.
+متن زیر را برای پیشنهادهایی دربارهٔ تکنیک‌های مختلفی که در گذشته به‌کار برده‌ایم ببینید.</li>
+<li>For cases where warnings are infeasible:
+<ul>
+<li>خطاها را گزارش دهید، اما تمام تلاش را بکنید پیام خطای هدفمندی بدهید
+که کاربران را به issue پیگیری هدایت کند</li>
+<li>Submit PRs to all known affected crates that fix the issue
+<ul>
+<li>یا دست‌کم صاحبان آن crateها را از مشکل مطلع کنید و
+آن‌ها را به issue پیگیری هدایت کنید</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>وقتی تغییر دست‌کم یک چرخه در دنیای واقعی بوده، می‌توانیم
+<strong>تغییر را پایدار کنیم</strong> و آن هشدارها را به خطا تبدیل کنیم.</li>
+</ol>
+<p>در نهایت، برای تغییرات <code>rustc_ast</code> که بر پلاگین‌ها اثر می‌گذارد، سیاست عمومی
+دسته‌بندی‌کردن این تغییرات است.
+این در ادامه با جزئیات بیشتر بحث می‌شود.</p>
+<h3 id="tracking-issue"><a class="header" href="#tracking-issue">Tracking issue</a></h3>
+<p>هر تغییر شکننده باید همراه یک <strong>issue پیگیری اختصاصی</strong> برای آن تغییر باشد.
+متن اصلی این issue باید تغییری را که انجام می‌شود توصیف کند و
+بر آنچه کاربران باید برای رفع کدشان انجام دهند تمرکز داشته باشد.
+issue باید قابل‌فهم و عملی باشد؛ ممکن است منطقی باشد کاربران را برای جزئیات کامل به RFC یا
+issue دیگری هدایت کنید.
+issue همچنین جایی است که کاربران می‌توانند پرسش‌ها یا نگرانی‌های دیگر را کامنت کنند.</p>
+<p>قالبی برای این issueهای پیگیری تغییر شکننده را <a href="https://github.com/rust-lang/rust/issues/new?template=tracking_issue_future.md">اینجا</a> می‌یابید.
+مثالی از اینکه چنین issueای چگونه باید به نظر برسد را <a href="https://gist.github.com/nikomatsakis/631ec8b4af9a18b5d062d9d9b7d3d967">اینجا</a> می‌یابید.</p>
+<h3 id="issuing-future-compatibility-warnings"><a class="header" href="#issuing-future-compatibility-warnings">صدور هشدارهای سازگاری آینده</a></h3>
+<p>بهترین راه مدیریت تغییر شکننده شروع با صدور هشدارهای سازگاری آینده است.
+این‌ها دستهٔ ویژه‌ای از هشدارهای lint هستند.
+افزودن هشدار سازگاری آینده جدید را می‌توان این‌طور انجام داد.</p>
+<pre><code class="language-rust">// 1. Define the lint in `compiler/rustc_lint/src/builtin.rs` and
+//    add the metadata for the future incompatibility:
+declare_lint! {
+    pub YOUR_LINT_HERE,
+    Warn,
+    "illegal use of foo bar baz"
+    @future_incompatible = FutureIncompatibleInfo {
+        reason: fcw!(FutureReleaseError #1234) // your tracking issue here!
+    },
+}
+
+// 2. Add a dedicated lint pass for it.
+//    This step can be skipped if you emit the lint as part of an existing pass.
+
+#[derive(Default)]
+pub struct MyLintPass {
+    ...
+}
+
+impl {Early,Late}LintPass for MyLintPass {
+    ...
+}
+
+impl_lint_pass!(MyLintPass =&gt; [YOUR_LINT_HERE]);
+
+// 3. emit the lint somewhere in your lint pass:
+cx.emit_span_lint(
+    YOUR_LINT_HERE,
+    pat.span,
+    // some diagnostic struct
+    MyDiagnostic {
+        ...
+    },
+);
+</code></pre>
+<p>در نهایت، lint را در <code>compiler/rustc_lint/src/lib.rs</code> ثبت کنید.
+مثال‌های زیادی در آن فایل هست که قبلاً نشان می‌دهند چگونه.</p>
+<h4 id="helpful-techniques"><a class="header" href="#helpful-techniques">Helpful techniques</a></h4>
+<p>اغلب فیلترکردن هشدارهای جدید از خطاهای قدیمی‌تر موجود چالش‌برانگیز است.
+یک تکنیکی که در گذشته به‌کار رفته اجرای کد قدیمی‌تر
+بدون تغییر و جمع‌آوری خطاهایی است که گزارش می‌داد.
+سپس می‌توانید برای هر خطایی که می‌دهید و در آن مجموعهٔ اصلی نیست هشدار صادر کنید.
+گزینهٔ دیگر لغو کامپایل پس از تکمیل کد اصلی است اگر
+خطاها گزارش شوند: آن‌گاه می‌دانید کد جدید شما فقط وقتی اجرا می‌شود که
+پیش‌تر خطایی نبوده باشد.</p>
+<h4 id="crater-and-cratesio"><a class="header" href="#crater-and-cratesio">Crater و crates.io</a></h4>
+<p><a href="./tests/crater.html">Crater</a> رباتی است که همهٔ crateهای crates.io و بسیاری از
+مخازن عمومی github را با کامپایلر دارای تغییرات شما کامپایل می‌کند.
+سپس گزارشی تولید می‌شود از crateهایی که با تغییرات شما کامپایل‌شدن را متوقف یا شروع کردند.
+اجراهای Crater می‌توانند چند روز طول بکشند.</p>
+<p>همیشه باید برای ارزیابی اثر اجرای crater انجام دهیم.
+مؤدبانه و با ملاحظه است که نویسندگان crateهای متأثر از تغییر شکننده را مطلع کنیم.
+حتی بهتر است PRهایی برای رفع شکستگی ارسال کنیم.</p>
+<h4 id="is-it-ever-acceptable-to-go-directly-to-issuing-errors"><a class="header" href="#is-it-ever-acceptable-to-go-directly-to-issuing-errors">آیا هرگز پذیرفتنی است مستقیماً به صدور خطا برویم؟</a></h4>
+<p>تغییراتی که گمان می‌رود اثر ناچیز دارند می‌توانند مستقیماً به صدور خطا بروند.
+یک قاعدهٔ سرانگشتی بررسی با <code>crates.io</code> است: اگر کمتر از
+۱۰ پروژهٔ متأثر <strong>در مجموع</strong> (<strong>نه</strong> خطاهای ریشه) یافت شود، می‌توانیم مستقیماً به خطا برویم.
+در چنین مواردی همچنان باید صفحهٔ «تغییر شکننده» را مثل قبل بسازیم، و باید مطمئن شویم خطا کاربران را به این صفحه هدایت می‌کند.
+به عبارت دیگر، همه‌چیز باید یکسان باشد جز اینکه کاربران خطا می‌گیرند، نه هشدار.
+علاوه بر این، باید PRهایی به پروژه‌های متأثر ارسال کنیم
+(ایده‌آل این است که پیش از land شدن PR پیاده‌سازی تغییر در rustc).</p>
+<p>اگر اثر ناچیز گمان نمی‌شود (مثلاً بیش از ۱۰ crate
+متأثر شوند)، هشدار الزامی است (مگر اینکه تیم کامپایلر موافقت کند
+در مورد خاصی معافیت ویژه بدهد).
+اگر پیاده‌سازی هشدار شدنی نیست،
+باید راهبرد تهاجمی مهاجرت crateها را پیش از land شدن تغییر در پیش بگیریم تا
+تعداد crateهای متأثر کم شود.
+در ادامه چند تکنیک برای رویکرد به این سناریو آمده است:</p>
+<ol>
+<li>برای زیربخش‌های مسئله هشدار صادر کنید و خطاهای جدید را برای کوچک‌ترین مجموعهٔ ممکن موارد نگه دارید.</li>
+<li>سعی کنید پیام خطای بسیار دقیقی بدهید که نحوهٔ رفع مشکل را پیشنهاد می‌کند
+و کاربران را به issue پیگیری هدایت می‌کند.</li>
+<li>It may also make sense to layer the fix:
+<ul>
+<li>ابتدا هر جا ممکن است هشدار اضافه کنید و بگذارید land شوند و سپس به صدور خطا بروید.</li>
+<li>با نویسندگان crateهای متأثر کار کنید تا مطمئن شوید نسخه‌های اصلاح‌شده
+<em>پیش از</em> land شدن رفع در دسترس‌اند، تا کاربران پایین‌دست بتوانند از آن‌ها استفاده کنند.</li>
+</ul>
+</li>
+</ol>
+<h3 id="stabilization"><a class="header" href="#stabilization">Stabilization</a></h3>
+<p>پس از انجام تغییر، با همان فرایندی که برای قابلیت‌های ناپایدار به‌کار می‌بریم تغییر را <strong>پایدار</strong> می‌کنیم:</p>
+<ul>
+<li>
+<p>پس از انتشار نسخهٔ جدید، issueهای پیگیری معوق مربوط به تغییرات شکننده را مرور می‌کنیم و برخی را برای <strong>دورهٔ نظر نهایی</strong> (FCP) نامزد می‌کنیم.</p>
+</li>
+<li>
+<p>FCP برای چنین issueهایی یک چرخه طول می‌کشد.
+در هفتهٔ یا دو هفتهٔ پایانی چرخه، کامنت‌ها را مرور می‌کنیم و تصمیم نهایی می‌گیریم:</p>
+<ul>
+<li>تبدیل به خطا: تغییر باید به خطای سخت تبدیل شود.</li>
+<li>بازگرداندن: باید هشدار را حذف کنیم و همچنان اجازه دهیم کد قدیمی‌تر کامپایل شود.</li>
+<li>به تعویق: هنوز نمی‌توان تصمیم گرفت، بیشتر صبر کنید یا راهبردهای دیگر را امتحان کنید.</li>
+</ul>
+</li>
+</ul>
+<p>ایده‌آل این است که تغییرات شکننده پیش از نهایی‌شدن روی <strong>شاخهٔ stable</strong> کامپایلر land شده باشند.</p>
+<p><a id="guide"></a></p>
+<h3 id="removing-a-lint"><a class="header" href="#removing-a-lint">حذف یک lint</a></h3>
+<p>وقتی تصمیم گرفتیم «هشدار آینده» را به خطای سخت تبدیل کنیم، به PRای نیاز داریم
+که lint سفارشی را حذف کند.
+به‌عنوان مثال، گام‌های لازم برای
+حذف lint سازگاری با نام <code>overlapping_inherent_impls</code> این‌هاست.
+ابتدا نام lint را به حروف بزرگ تبدیل کنید (<code>OVERLAPPING_INHERENT_IMPLS</code>)؛
+آن رشته را در منبع جست‌وجو کنید.
+اساساً هر جایی را که این
+نام lint ذکر شده تبدیل می‌کنیم (در کامپایلر از نام حروف بزرگ استفاده می‌کنیم و ماکرو
+رشتهٔ حروف کوچک را خودکار تولید می‌کند؛ پس جست‌وجوی
+<code>overlapping_inherent_impls</code> چیز زیادی نمی‌یابد).</p>
+<blockquote>
+<p>نکته: این فایل‌های دقیق دیگر وجود ندارند، اما روال همچنان یکسان است.</p>
+</blockquote>
+<h4 id="remove-the-lint"><a class="header" href="#remove-the-lint">lint را حذف کنید.</a></h4>
+<p>اولین ارجاعی که احتمالاً می‌یابید تعریف lint <a href="https://github.com/rust-lang/rust/blob/085d71c3efe453863739c1fb68fd9bd1beff214f/src/librustc/lint/builtin.rs#L171-L175">در
+<code>rustc_session/src/lint/builtin.rs</code> است که شبیه این است</a>:</p>
+<pre><code class="language-rust">declare_lint! {
+    pub OVERLAPPING_INHERENT_IMPLS,
+    Deny, // this may also say Warning
+    "two overlapping inherent impls define an item with the same name were erroneously allowed",
+    @future_incompatible = FutureIncompatibleInfo {
+        reason: fcw!(FutureReleaseError #1234), // your tracking issue here!
+    },
+}</code></pre>
+<p>این ماکروی <code>declare_lint!</code> ساختارهای داده مرتبط را می‌سازد.
+آن را حذف کنید.
+همچنین متوجه می‌شوید در ادامهٔ فایل اشاره‌ای به <code>OVERLAPPING_INHERENT_IMPLS</code> هست که <a href="https://github.com/rust-lang/rust/blob/085d71c3efe453863739c1fb68fd9bd1beff214f/src/librustc/lint/builtin.rs#L252-L290">بخشی از <code>lint_array!</code> است</a>؛ آن را هم حذف کنید.</p>
+<h4 id="add-the-lint-to-the-list-of-removed-lints"><a class="header" href="#add-the-lint-to-the-list-of-removed-lints">lint را به فهرست lintهای حذف‌شده اضافه کنید.</a></h4>
+<p>در <code>compiler/rustc_lint/src/lib.rs</code> فهرستی از «lintهای تغییرنام‌یافته و حذف‌شده» هست.
+می‌توانید این lint را به فهرست اضافه کنید:</p>
+<pre><code class="language-rust">store.register_removed("overlapping_inherent_impls", "converted into hard error, see #36889");</code></pre>
+<p>که در آن <code>#36889</code> issue پیگیری برای lint شماست.</p>
+<h4 id="update-the-places-that-issue-the-lint"><a class="header" href="#update-the-places-that-issue-the-lint">جاهایی را که lint را صادر می‌کنند به‌روز کنید</a></h4>
+<p>در نهایت، آخرین دستهٔ ارجاع‌هایی که می‌بینید جاهایی است که واقعاً
+خود lint را <strong>فعال می‌کنند</strong> (یعنی چیزی که باعث ظاهرشدن هشدارها می‌شود). این‌ها را
+نمی‌خواهید حذف کنید.
+به‌جای آن، می‌خواهید آن‌ها را به خطا تبدیل کنید.
+در این مورد، <a href="https://github.com/rust-lang/rust/blob/085d71c3efe453863739c1fb68fd9bd1beff214f/src/librustc_typeck/coherence/inherent.rs#L300-L303">فراخوانی <code>add_lint</code></a> این‌طور به نظر می‌رسد:</p>
+<pre><code class="language-rust">self.tcx.sess.add_lint(lint::builtin::OVERLAPPING_INHERENT_IMPLS,
+                       node_id,
+                       self.tcx.span_of_impl(item1).unwrap(),
+                       msg);</code></pre>
+<p>همچنین اغلب <code>node_span_lint</code> را برای این به‌کار رفته می‌یابید.</p>
+<p>می‌خواهیم این را به خطا تبدیل کنیم.
+در برخی موارد ممکن است برای این سناریو خطای موجود باشد.
+در موارد دیگر باید کد تشخیصی تازه‌ای تخصیص دهیم.
+<a href="./diagnostics/error-codes.html">دستورالعمل تخصیص کد تشخیصی تازه را اینجا بیابید.</a> ممکن است بخواهید
+در توضیح مفصل بیاورید که رفتار کامپایلر در این مورد تغییر کرده، و پیوندی به issue پیگیری آن تغییر بگذارید.</p>
+<p>فرض کنید <code>E0592</code> را به‌عنوان کد خود پذیرفته‌ایم.
+آن‌گاه می‌توانیم فراخوانی <code>add_lint()</code> بالا را به چیزی شبیه این تغییر دهیم:</p>
+<pre><code class="language-rust">struct_span_code_err!(self.dcx(), self.tcx.span_of_impl(item1).unwrap(), E0592, msg)
+    .emit();</code></pre>
+<p>یا بهتر: یک پیام تشخیصی ساختاریافته مثل این:</p>
+<pre><code class="language-rust">#[derive(Diagnostic)]
+struct MyDiagnostic {
+    #[label]
+    span: Span,
+    ...
+}</code></pre>
+<h4 id="update-tests"><a class="header" href="#update-tests">Update tests</a></h4>
+<p>در نهایت، مجموعهٔ تست را اجرا کنید.
+باید برخی تست‌ها باشند که قبلاً به lint با نام <code>overlapping_inherent_impls</code> ارجاع می‌دادند؛ آن‌ها باید به‌روز شوند.
+عموماً اگر تست قبلاً <code>#[deny(overlapping_inherent_impls)]</code> داشت،
+می‌توان آن را حذف کرد.</p>
+<pre><code>./x test
+</code></pre>
+<h4 id="all-done"><a class="header" href="#all-done">All done!</a></h4>
+<p>یک PR باز کنید.</p>
+<!-- -Links--------------------------------------------------------------------- --><nav class="page-nav"><a href="conventions.html">→ قراردادهای کدنویسی</a><a href="external-repos.html">استفاده از مخازن خارجی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

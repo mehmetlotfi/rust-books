@@ -1,0 +1,64 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0382 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0382"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>یک متغیر پس از آنکه محتوای آن به جای دیگری منتقل (move) شده، استفاده شده است.</p>
+<p>نمونه کد خطادار:</p>
+<pre><code class="language-compile_fail E0382">struct MyStruct { s: u32 }
+
+fn main() {
+    let mut x = MyStruct{ s: 5u32 };
+    let y = x;
+    x.s = 6;
+    println!("{}", x.s);
+}
+</code></pre>
+<p>از آنجا که <code>MyStruct</code> نوعی است که با <code>Copy</code> علامت‌گذاری نشده، هنگام مقداردهی <code>y</code> داده از <code>x</code> بیرون منتقل می‌شود. این موضوع در بنیاد سیستم مالکیت Rust قرار دارد: جز با راه‌حل‌هایی مانند <code>Rc</code>، یک مقدار نمی‌تواند بیش از یک متغیر مالک داشته باشد.</p>
+<p>گاهی لازم نیست مقدار را منتقل کنیم. با استفاده از ارجاع می‌توانیم بدون تغییر مالکیت، اجازه دهیم تابع دیگری مقدار را قرض بگیرد. در مثال زیر، در واقع لازم نیست رشته خود را به <code>calculate_length</code> منتقل کنیم؛ می‌توانیم به‌جای آن با <code>&amp;</code> یک ارجاع به آن بدهیم.</p>
+<pre><code>fn main() {
+    let s1 = String::from("hello");
+
+    let len = calculate_length(&amp;s1);
+
+    println!("The length of '{}' is {}.", s1, len);
+}
+
+fn calculate_length(s: &amp;String) -&gt; usize {
+    s.len()
+}
+</code></pre>
+<p>یک ارجاع تغییرپذیر را می‌توان با <code>&amp;mut</code> ساخت.</p>
+<p>گاهی ارجاع نمی‌خواهیم، بلکه یک نسخه مجزا می‌خواهیم. همه انواعی که با <code>Clone</code> علامت‌گذاری شده‌اند را می‌توان با فراخوانی <code>.clone()</code> تکثیر کرد. تغییرات بعدی روی نسخه کلون‌شده بر متغیر اصلی اثر نمی‌گذارد.</p>
+<p>بیشتر انواع کتابخانه استاندارد با <code>Clone</code> علامت‌گذاری شده‌اند. مثال زیر استفاده از <code>clone()</code> روی یک رشته را نشان می‌دهد. ابتدا <code>s1</code> برابر “many” قرار داده می‌شود و سپس در <code>s2</code> کپی می‌شود. بعد نخستین نویسه <code>s1</code> حذف می‌شود، بدون اینکه بر <code>s2</code> اثر بگذارد. “any many” در کنسول چاپ می‌شود.</p>
+<pre><code>fn main() {
+    let mut s1 = String::from("many");
+    let s2 = s1.clone();
+    s1.remove(0);
+    println!("{} {}", s1, s2);
+}
+</code></pre>
+<p>اگر تعریف یک نوع در اختیار ما باشد، می‌توانیم با <code>#[derive(Clone)]</code> خودمان <code>Clone</code> را برای آن پیاده‌سازی کنیم.</p>
+<p>برخی انواع اصلاً معنای مالکیتی ندارند و تکثیر آن‌ها ساده است. نمونه آن <code>i32</code> و دیگر انواع عددی است. برای کلون کردن آن‌ها لازم نیست <code>.clone()</code> را فراخوانی کنیم، چون علاوه بر <code>Clone</code> با <code>Copy</code> هم علامت‌گذاری شده‌اند. در این حالت کلون ضمنی راحت‌تر است. اگر همه اعضای نوع‌های خودمان نیز با <code>Copy</code> علامت‌گذاری شده باشند، می‌توانیم آن‌ها را هم <code>Copy</code> کنیم.</p>
+<p>در مثال زیر، نوع <code>Point</code> را پیاده‌سازی می‌کنیم. چون این نوع فقط دو عدد صحیح را نگه می‌دارد، با <code>Copy</code> از معنای مالکیتی صرف‌نظر می‌کنیم. سپس می‌توانیم <code>let p2 = p1</code> را بنویسیم بدون اینکه <code>p1</code> منتقل شود.</p>
+<pre><code>#[derive(Copy, Clone)]
+struct Point { x: i32, y: i32 }
+
+fn main() {
+    let mut p1 = Point{ x: -1, y: 2 };
+    let p2 = p1;
+    p1.x = 1;
+    println!("p1: {}, {}", p1.x, p1.y);
+    println!("p2: {}, {}", p2.x, p2.y);
+}
+</code></pre>
+<p>از طرف دیگر، اگر تعریف ساختار در اختیار ما نیست یا مالکیت مشترک تغییرپذیر واقعاً لازم است، می‌توانیم از <code>Rc</code> و <code>RefCell</code> استفاده کنیم:</p>
+<pre><code>use std::cell::RefCell;
+use std::rc::Rc;
+
+struct MyStruct { s: u32 }
+
+fn main() {
+    let mut x = Rc::new(RefCell::new(MyStruct{ s: 5u32 }));
+    let y = x.clone();
+    x.borrow_mut().s = 6;
+    println!("{}", x.borrow().s);
+}
+</code></pre>
+<p>در این رویکرد، <code>x</code> و <code>y</code> مالکیت داده را از طریق <code>Rc</code> (نوع شمارنده ارجاع، reference count) به‌اشتراک می‌گذارند. <code>RefCell</code> در عمل بررسی قرض‌گیری را در زمان اجرا انجام می‌دهد: یعنی تضمین می‌کند که در هر لحظه حداکثر یک نویسنده یا چند خواننده بتوانند به داده دسترسی داشته باشند.</p>
+<p>اگر می‌خواهید درباره‌ی مالکیت در Rust بیشتر بیاموزید، با فصل <a href="../book/ch04-00-understanding-ownership.html">Understanding Ownership</a> در کتاب (Book) شروع کنید.</p><nav class="page-nav"><a href="../errors/E0381.html">→ E0381</a><a href="../errors/E0383.html">E0383 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

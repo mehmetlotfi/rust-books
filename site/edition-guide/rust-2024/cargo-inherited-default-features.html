@@ -1,0 +1,30 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>Cargo: بازنویسی default-features به‌ارث‌رسیده — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2024/cargo-inherited-default-features"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="cargo-override-inherited-default-features"><a class="header" href="#cargo-override-inherited-default-features">Cargo: بازنویسی default-features به‌ارث‌رسیده</a></h1>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<ul>
+<li>از Rust 1.99 به بعد، <code>default-features</code> روی یک وابستگی به‌ارث‌رسیده در یک بستهٔ ویرایش 2024، مقدار تعیین‌شده در <code>[workspace.dependencies]</code> را بازنویسی می‌کند.</li>
+</ul>
+<h2 id="details"><a class="header" href="#details">جزئیات</a></h2>
+<p><a href="../../cargo/reference/specifying-dependencies.html#inheriting-a-dependency-from-a-workspace">ارث‌بری workspace</a> به شما امکان می‌دهد وابستگی‌ها را در یک مکان (workspace) مشخص کنید و سپس از درون یک بسته به آن وابستگی‌های workspace ارجاع دهید.</p>
+<p>در ویرایش‌های قبل از 2024، وقتی وابستگی workspace مقدار <code>default-features = true</code> را مشخص کرده باشد (یا <code>default-features</code> را مشخص نکرده باشد)، <code>default-features = false</code> نادیده گرفته می‌شود. رفتار اولیهٔ ویرایش 2024 در Rust 1.85 تا 1.98 این ترکیب را رد می‌کرد. از Rust 1.99 به بعد، تنظیم <code>default-features</code> در یک بستهٔ ویرایش 2024 تنظیم workspace را بازنویسی می‌کند.</p>
+<p>برای مثال، با یک workspace که این را مشخص می‌کند:</p>
+<pre><code class="language-toml">[workspace.dependencies]
+regex = "1.10.4"
+</code></pre>
+<p>مورد زیر featureهای پیش‌فرض <code>regex</code> را غیرفعال می‌کند:</p>
+<pre><code class="language-toml">[package]
+name = "foo"
+version = "1.0.0"
+edition = "2024"
+
+[dependencies]
+regex = { workspace = true, default-features = false }
+</code></pre>
+<p>فقط حواستان باشد که اگر چند عضو workspace را هم‌زمان بسازید، featureها یکپارچه می‌شوند، به‌طوری که اگر یک عضو <code>default-features = true</code> را تنظیم کند (که در صورت تعیین نشدن صریح، مقدار پیش‌فرض است)، featureهای پیش‌فرض برای همهٔ اعضایی که از آن وابستگی استفاده می‌کنند فعال خواهند شد.</p>
+<h2 id="migration"><a class="header" href="#migration">مهاجرت</a></h2>
+<p>هنگام استفاده از <code>cargo fix --edition</code>، Cargo در این وضعیت <code>default-features = false</code> را به‌طور خودکار حذف می‌کند. بدون این اصلاح، تغییر به ویرایش 2024 در Rust 1.85 تا 1.98 خطا تولید می‌کرد و در Rust 1.99 یا جدیدتر featureهای پیش‌فرض را غیرفعال می‌کرد.</p>
+<p>اگر می‌خواهید از رفتار جدید استفاده کنید، پس از تغییر به ویرایش 2024 این تنظیم را دوباره اضافه کنید. اگر ترجیح می‌دهید ضمن حفظ رفتار پیشین به‌صورت دستی مهاجرت کنید، مدخل‌های متناظر را حذف کنید. ویرایش‌های قبلی باید چیزی شبیه این نمایش دهند:</p>
+<pre><code class="language-text">warning: /home/project/Cargo.toml: `default-features` is ignored for regex,
+since `default-features` was not specified for `workspace.dependencies.regex`;
+overriding workspace `default-features` to false requires Rust 1.99+
+and the 2024 edition
+</code></pre><nav class="page-nav"><a href="cargo-table-key-names.html">→ Cargo: یکپارچگی نام جدول‌ها و کلیدها</a><a href="rustdoc.html">Rustdoc ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

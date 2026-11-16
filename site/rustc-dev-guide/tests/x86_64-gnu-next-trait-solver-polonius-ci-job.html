@@ -1,0 +1,47 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>کار CI پیش از پایدارسازی برای حل‌کنندهٔ بعدی و polonius alpha — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tests/x86_64-gnu-next-trait-solver-polonius-ci-job"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="pre-stabilization-testing-of-the-next-solver-and-polonius-alpha-on-ci"><a class="header" href="#pre-stabilization-testing-of-the-next-solver-and-polonius-alpha-on-ci">تست پیش از پایدارسازی next solver و polonius alpha در CI</a></h1>
+<p>می‌خواهیم پوشش تست پیوستهٔ next solver و polonius
+alpha را بهبود دهیم با هدف پایدارسازی آن‌ها در 2026. برای این، باید مطمئن شویم
+این قابلیت‌های ناپایدار به‌خوبی و به‌طور پیوسته تست می‌شوند تا
+رگرسیون نکنند.</p>
+<p>این نیازمند job اختصاصی در CI با نام <a href="https://github.com/rust-lang/rust/pull/157322"><code>test-x86_64-gnu-next-trait-solver-polonius</code></a> است که
+در CI مربوط به PR و در نتیجه CI مربوط به Merge برای گرفتن رگرسیون‌ها مسدودکننده است.</p>
+<p>برای زمینهٔ بیشتر ببینید:</p>
+<ul>
+<li><a href="https://github.com/rust-lang/compiler-team/issues/996">MCP 996: تست solver جدید و polonius alpha در CI</a></li>
+<li>issue پیگیری: <a href="https://github.com/rust-lang/rust/issues/157780">https://github.com/rust-lang/rust/issues/157780</a></li>
+</ul>
+<h2 id="what-is-tested"><a class="header" href="#what-is-tested">چه چیزی تست می‌شود</a></h2>
+<ul>
+<li>For the next solver:
+<ul>
+<li>می‌خواهیم مطمئن شویم می‌توانیم کتابخانهٔ استاندارد را با next solver بسازیم.</li>
+<li>می‌خواهیم مطمئن شویم می‌توانیم یک toolchain کامل را با next solver bootstrap کنیم.</li>
+<li>هر دو را با ساخت کتابخانهٔ stage 2 در حالی که next solver در
+stage 1 فعال است انجام می‌دهیم.</li>
+</ul>
+</li>
+<li>For the polonius alpha:
+<ul>
+<li>مجموعهٔ تست UI را تحت <a href="./compiletest.html#compare-modes">حالت مقایسهٔ</a> polonius،
+روی کامپایلر/std مرحلهٔ stage 1 که با next solver فعال ساخته شده اجرا می‌کنیم.</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p><strong>Note</strong></p>
+<p>برای بازتولید محلی شکست‌ها:</p>
+<pre><code class="language-console">$ RUSTFLAGS_NOT_BOOTSTRAP="-Znext-solver=globally" ./x build library --stage 2
+</code></pre>
+<pre><code class="language-console">$ RUSTFLAGS_NOT_BOOTSTRAP="-Znext-solver=globally" ./x test tests/ui --compare-mode polonius --stage 1
+</code></pre>
+</blockquote>
+<h2 id="what-failures-and-remedies-might-be-specific-to-this-combination"><a class="header" href="#what-failures-and-remedies-might-be-specific-to-this-combination">کدام شکست‌ها و راه‌حل‌ها ممکن است مخصوص این ترکیب باشند؟</a></h2>
+<ul>
+<li>این ممکن است هنگام استفاده از قابلیت‌های ناپایدار در کتابخانهٔ استاندارد
+یا کامپایلر خطاهای جدید ایجاد کند.</li>
+<li>این گاهی ممکن است نیاز به bless‌کردن تست‌های جدید داشته باشد، یا در موارد نادر، افزودن annotationهای تست
+یا revision.</li>
+</ul>
+<h2 id="point-of-contact"><a class="header" href="#point-of-contact">نقطهٔ تماس</a></h2>
+<p>اگر پرسشی دارید یا دربارهٔ شکست تست در این job مشاوره می‌خواهید، لطفاً
+topic جدیدی در <a href="https://rust-lang.zulipchat.com/#narrow/channel/131828-t-compiler">کانال Zulip مربوط به t-compiler</a> باز کنید.</p><nav class="page-nav"><a href="autodiff-ci-job.html">→ کار CI برای Autodiff</a><a href="optional-x86_64-gnu-parallel-frontend.html">کار CI برای فرانت‌اند موازی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,47 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>تغییر include! تودرتو در Rustdoc — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2024/rustdoc-nested-includes"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="rustdoc-nested-include-change"><a class="header" href="#rustdoc-nested-include-change">تغییر <code>include!</code> تودرتو در Rustdoc</a></h1>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<p>وقتی یک doctest با <code>include_str!</code> گنجانده می‌شود، اگر خود آن doctest نیز از <code>include!</code>، <code>include_str!</code> یا <code>include_bytes!</code> استفاده کند، مسیر نسبت به فایل Markdown تفسیر می‌شود، نه نسبت به فایل سورس Rust.</p>
+<h2 id="details"><a class="header" href="#details">جزئیات</a></h2>
+<p>پیش از ویرایش 2024، افزودن مستندات با <code>#[doc=include_str!("path/file.md")]</code> اطلاعات span را به هیچ doctestی در آن فایل منتقل نمی‌کرد. در نتیجه، اگر فایل Markdown در دایرکتوری‌ای متفاوت از سورس بود، هر مسیر گنجانده‌شده باید نسبت به فایل سورس مشخص می‌شد.</p>
+<p>برای مثال، یک crate کتابخانه‌ای را با این فایل‌ها در نظر بگیرید:</p>
+<ul>
+<li><code>Cargo.toml</code></li>
+<li><code>README.md</code></li>
+<li><code>src/</code>
+<ul>
+<li><code>lib.rs</code></li>
+</ul>
+</li>
+<li><code>examples/</code>
+<ul>
+<li><code>data.bin</code></li>
+</ul>
+</li>
+</ul>
+<p>فرض کنید <code>lib.rs</code> شامل این است:</p>
+<pre><code class="language-rust ignore">#![doc=include_str!("../README.md")]</code></pre>
+<p>و فرض کنید این فایل <code>README.md</code> را دارید:</p>
+<pre><code class="language-markdown">```
+let _ = include_bytes!("../examples/data.bin");
+//                      ^^^ notice this
+```
+</code></pre>
+<p>پیش از ویرایش 2024، مسیر در <code>README.md</code> باید نسبت به فایل <code>lib.rs</code> می‌بود. در 2024 و بعد از آن، اکنون نسبت به خود <code>README.md</code> است، بنابراین <code>README.md</code> را این‌گونه به‌روزرسانی می‌کنیم:</p>
+<pre><code class="language-markdown">```
+let _ = include_bytes!("examples/data.bin");
+```
+</code></pre>
+<h2 id="migration"><a class="header" href="#migration">مهاجرت</a></h2>
+<p>مهاجرت خودکاری برای تبدیل مسیرها در doctestهای تحت‌تأثیر وجود ندارد. اگر یکی از doctestهای شما تحت‌تأثیر باشد، پس از مهاجرت به ویرایش جدید و هنگام ساخت آزمون‌هایتان خطایی مانند این خواهید دید:</p>
+<pre><code class="language-text">error: couldn't read `../examples/data.bin`: No such file or directory (os error 2)
+ --&gt; src/../README.md:2:24
+  |
+2 | let _ = include_bytes!("../examples/data.bin");
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  = note: this error originates in the macro `include_bytes` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: there is a file with the same name in a different directory
+  |
+2 | let _ = include_bytes!("examples/data.bin");
+  |                        ~~~~~~~~~~~~~~~~~~~
+</code></pre>
+<p>برای مهاجرت doctestهای خود به Rust 2024، هر مسیر تحت‌تأثیر را طوری به‌روزرسانی کنید که نسبت به فایل حاوی doctestها باشد.</p><nav class="page-nav"><a href="rustdoc-doctests.html">→ آزمون‌های ترکیبی Rustdoc</a><a href="rustfmt.html">Rustfmt ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

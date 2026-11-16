@@ -1,0 +1,67 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>اصل DRY (خودتان را تکرار نکنید) — Rust با مثال</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="macros/dry"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../rbe/index.html" style="color:inherit;text-decoration:none">Rust با مثال</a><small class="en-title" dir="ltr">Rust By Example</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="dry-dont-repeat-yourself"><a class="header" href="#dry-dont-repeat-yourself">اصل DRY (خودتان را تکرار نکنید)</a></h1>
+<p>ماکروها با بیرون کشیدن بخش‌های مشترک توابع و/یا مجموعه‌آزمون‌ها، امکان نوشتن کد مطابق اصل DRY را فراهم می‌کنند. نمونهٔ زیر عملگرهای <code>+=</code>، <code>*=</code> و <code>-=</code> را برای <code>Vec&lt;T&gt;</code> پیاده‌سازی و آزمایش می‌کند:</p>
+<pre><code class="language-rust editable">use std::ops::{Add, Mul, Sub};
+
+macro_rules! assert_equal_len {
+    // The `tt` (token tree) designator is used for
+    // operators and tokens.
+    ($a:expr, $b:expr, $func:ident, $op:tt) =&gt; {
+        assert!($a.len() == $b.len(),
+                "{:?}: dimension mismatch: {:?} {:?} {:?}",
+                stringify!($func),
+                ($a.len(),),
+                stringify!($op),
+                ($b.len(),));
+    };
+}
+
+macro_rules! op {
+    ($func:ident, $bound:ident, $op:tt, $method:ident) =&gt; {
+        fn $func&lt;T: $bound&lt;T, Output=T&gt; + Copy&gt;(xs: &amp;mut Vec&lt;T&gt;, ys: &amp;Vec&lt;T&gt;) {
+            assert_equal_len!(xs, ys, $func, $op);
+
+            for (x, y) in xs.iter_mut().zip(ys.iter()) {
+                *x = $bound::$method(*x, *y);
+                // *x = x.$method(*y);
+            }
+        }
+    };
+}
+
+// Implement `add_assign`, `mul_assign`, and `sub_assign` functions.
+op!(add_assign, Add, +=, add);
+op!(mul_assign, Mul, *=, mul);
+op!(sub_assign, Sub, -=, sub);
+
+mod test {
+    use std::iter;
+    macro_rules! test {
+        ($func:ident, $x:expr, $y:expr, $z:expr) =&gt; {
+            #[test]
+            fn $func() {
+                for size in 0usize..10 {
+                    let mut x: Vec&lt;_&gt; = iter::repeat($x).take(size).collect();
+                    let y: Vec&lt;_&gt; = iter::repeat($y).take(size).collect();
+                    let z: Vec&lt;_&gt; = iter::repeat($z).take(size).collect();
+
+                    super::$func(&amp;mut x, &amp;y);
+
+                    assert_eq!(x, z);
+                }
+            }
+        };
+    }
+
+    // Test `add_assign`, `mul_assign`, and `sub_assign`.
+    test!(add_assign, 1u32, 2u32, 3u32);
+    test!(mul_assign, 2u32, 3u32, 6u32);
+    test!(sub_assign, 3u32, 2u32, 1u32);
+}</code></pre>
+<pre><code class="language-shell">$ rustc --test dry.rs &amp;&amp; ./dry
+running 3 tests
+test test::mul_assign ... ok
+test test::add_assign ... ok
+test test::sub_assign ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured
+</code></pre><nav class="page-nav"><a href="../../rbe/macros/repeat.html">→ تکرار (Repeat)</a><a href="../../rbe/macros/dsl.html">زبان‌های دامنه‌محور (DSL) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rbe/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

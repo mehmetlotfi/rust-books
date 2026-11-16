@@ -1,0 +1,82 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>repr(Rust) — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="repr-rust"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="reprrust"><a class="header" href="#reprrust">repr(Rust)</a></h1>
+<p>پیش از هر چیز، همهٔ نوع‌ها یک تراز (alignment) دارند که بر حسب بایت مشخص می‌شود. تراز یک نوع مشخص می‌کند که ذخیرهٔ مقدار در چه آدرس‌هایی معتبر است. مقداری با تراز <code>n</code> فقط باید در آدرسی ذخیره شود که مضرب <code>n</code> باشد. پس تراز ۲ یعنی باید در یک آدرس زوج ذخیره شوید، و ۱ یعنی می‌توانید در هر جایی ذخیره شوید. تراز دست‌کم ۱ است و همیشه توانی از ۲ است.</p>
+<p>نوع‌های اولیه معمولاً به اندازهٔ خودشان تراز می‌شوند، هرچند این رفتار وابسته به پلتفرم است. برای مثال، در x86 نوع‌های <code>u64</code> و <code>f64</code> اغلب به ۴ بایت (۳۲ بیت) تراز می‌شوند.</p>
+<p>اندازهٔ یک نوع همیشه باید مضرب ترازش باشد (صفر برای هر ترازی اندازه‌ای معتبر است). این تضمین می‌کند که یک آرایه از آن نوع همیشه با جابه‌جایی به اندازهٔ مضربی از اندازه‌اش قابل اندیس‌گذاری باشد. توجه کنید که اندازه و تراز یک نوع ممکن است در مورد <a href="exotic-sizes.html#dynamically-sized-types-dsts">نوع‌های با اندازهٔ پویا</a> به‌صورت ایستا مشخص نباشد.</p>
+<p>Rust راه‌های زیر را برای چیدمان داده‌های مرکب در اختیارتان می‌گذارد:</p>
+<ul>
+<li>ساختارها (struct؛ نوع‌های حاصل‌ضربی نام‌دار)</li>
+<li>چندتایی‌ها (tuple؛ نوع‌های حاصل‌ضربی بی‌نام)</li>
+<li>آرایه‌ها (نوع‌های حاصل‌ضربی همگن)</li>
+<li>شمارش‌ها (enum؛ نوع‌های حاصل‌جمعی نام‌دار – union‌های برچسب‌دار)</li>
+<li>union‌ها (union‌های بدون برچسب)</li>
+</ul>
+<p>یک شمارش <em>بدون فیلد</em> (field-less) نامیده می‌شود اگر هیچ‌یک از گونه‌هایش داده‌ای وابسته نداشته باشد.</p>
+<p>به‌طور پیش‌فرض، ساختارهای مرکب ترازی برابر با بیشینهٔ ترازهای فیلدهایشان دارند. در نتیجه Rust هر جا لازم باشد پدینگ درج می‌کند تا مطمئن شود همهٔ فیلدها درست تراز شده‌اند و اندازهٔ کل نوع مضرب ترازش است. برای مثال:</p>
+<pre><code class="language-rust">struct A {
+    a: u8,
+    b: u32,
+    c: u16,
+}</code></pre>
+<p>روی هدفی که این نوع‌های اولیه را به اندازهٔ خودشان تراز می‌کند، ۳۲ بیتی تراز خواهد بود. بنابراین کل ساختار اندازه‌ای خواهد داشت که مضرب ۳۲ بیت است. ممکن است چنین شود:</p>
+<pre><code class="language-rust">struct A {
+    a: u8,
+    _pad1: [u8; 3], // to align `b`
+    b: u32,
+    c: u16,
+    _pad2: [u8; 2], // to make overall size multiple of 4
+}</code></pre>
+<p>یا شاید:</p>
+<pre><code class="language-rust">struct A {
+    b: u32,
+    c: u16,
+    a: u8,
+    _pad: u8,
+}</code></pre>
+<p>برای این نوع‌ها <em>هیچ غیرمستقیمی (indirection)</em> وجود ندارد؛ همهٔ داده‌ها درون ساختار ذخیره می‌شوند، همان‌طور که در C انتظار دارید. با این حال، به‌جز آرایه‌ها (که فشرده و به‌ترتیب چیده می‌شوند)، چیدمان داده به‌طور پیش‌فرض مشخص نشده است. با توجه به دو تعریف ساختار زیر:</p>
+<pre><code class="language-rust">struct A {
+    a: i32,
+    b: u64,
+}
+
+struct B {
+    a: i32,
+    b: u64,
+}</code></pre>
+<p>Rust <em>تضمین می‌کند</em> که دو نمونه از A داده‌هایشان دقیقاً به یک شکل چیده شود. با این حال Rust در حال حاضر <em>تضمین نمی‌کند</em> که یک نمونه از A ترتیب فیلدها یا پدینگی مشابه یک نمونه از B داشته باشد.</p>
+<p>با A و B به همین شکلی که نوشته شده‌اند، این نکته ممکن است موشکافانه به نظر برسد، اما چند ویژگی دیگر Rust باعث می‌شود مطلوب باشد که زبان بتواند با چیدمان داده به شیوه‌های پیچیده بازی کند.</p>
+<p>برای مثال، این ساختار را در نظر بگیرید:</p>
+<pre><code class="language-rust">struct Foo&lt;T, U&gt; {
+    count: u16,
+    data1: T,
+    data2: U,
+}</code></pre>
+<p>اکنون monomorphizationهای <code>Foo&lt;u32, u16&gt;</code> و <code>Foo&lt;u16, u32&gt;</code> را در نظر بگیرید. اگر Rust فیلدها را به همان ترتیب مشخص‌شده بچیند، انتظار داریم مقادیر درون ساختار را پدینگ بدهد تا نیازهای ترازشان برآورده شود. پس اگر Rust فیلدها را دوباره مرتب نمی‌کرد، انتظار داشتیم چنین چیزی تولید کند:</p>
+<!-- ignore: explanation code -->
+<pre><code class="language-rust ignore">struct Foo&lt;u16, u32&gt; {
+    count: u16,
+    data1: u16,
+    data2: u32,
+}
+
+struct Foo&lt;u32, u16&gt; {
+    count: u16,
+    _pad1: u16,
+    data1: u32,
+    data2: u16,
+    _pad2: u16,
+}</code></pre>
+<p>حالت دوم به‌سادگی فضا را هدر می‌دهد. استفادهٔ بهینه از فضا مستلزم آن است که monomorphizationهای مختلف <em>ترتیب فیلد متفاوتی</em> داشته باشند.</p>
+<p>شمارش‌ها این ملاحظه را باز هم پیچیده‌تر می‌کنند. به‌طور ساده‌لوحانه، یک شمارش مانند:</p>
+<pre><code class="language-rust">enum Foo {
+    A(u32),
+    B(u64),
+    C(u8),
+}</code></pre>
+<p>ممکن است به این شکل چیده شود:</p>
+<pre><code class="language-rust">struct FooRepr {
+    data: u64, // this is either a u64, u32, or u8 based on `tag`
+    tag: u8,   // 0 = A, 1 = B, 2 = C
+}</code></pre>
+<p>و در واقع تقریباً به همین شکل چیده می‌شود (با صرف‌نظر از اندازه و موقعیت <code>tag</code>).</p>
+<p>با این حال چند حالت وجود دارد که چنین بازنمایی ناکارآمد است. حالت کلاسیک آن «بهینه‌سازی اشاره‌گر تهی» در Rust است: یک شمارش متشکل از یک گونهٔ واحد بیرونی بدون داده (مثلاً <code>None</code>) و یک گونهٔ اشاره‌گر غیرتهی (که ممکن است تودرتو باشد) (مثلاً <code>Some(&amp;T)</code>) نیاز به tag را از بین می‌برد. یک اشاره‌گر تهی را می‌توان با اطمینان به‌عنوان گونهٔ بدون داده (<code>None</code>) تفسیر کرد. نتیجهٔ نهایی این است که، برای مثال، <code>size_of::&lt;Option&lt;&amp;T&gt;&gt;() == size_of::&lt;&amp;T&gt;()</code>.</p>
+<p>انواع زیادی در Rust وجود دارند که اشاره‌گر غیرتهی هستند یا دارند، مانند <code>Box&lt;T&gt;</code>، <code>Vec&lt;T&gt;</code>، <code>String</code>، <code>&amp;T</code> و <code>&amp;mut T</code>. به‌طور مشابه، می‌توان شمارش‌های تودرتویی را تصور کرد که tagهایشان را در یک مشخصهٔ (discriminant) واحد ادغام می‌کنند، چون طبق تعریف دامنهٔ محدودی از مقادیر معتبر دارند. در اصل، شمارش‌ها می‌توانند از الگوریتم‌های نسبتاً پیچیده‌ای استفاده کنند تا بیت‌ها را در سراسر نوع‌های تودرتو با مقادیر ممنوع ذخیره کنند. به همین دلیل <em>به‌ویژه</em> مطلوب است که امروز چیدمان شمارش را نامشخص بگذاریم.</p><nav class="page-nav"><a href="data.html">→ چیدمان داده</a><a href="exotic-sizes.html">نوع‌هایی با اندازهٔ غیرمعمول ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

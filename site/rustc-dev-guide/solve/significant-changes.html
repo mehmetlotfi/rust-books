@@ -1,0 +1,70 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>تغییرات مهم و نکات عجیب — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="solve/significant-changes"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="significant-changes-and-quirks"><a class="header" href="#significant-changes-and-quirks">تغییرات مهم و ویژگی‌های عجیب</a></h2>
+<p>هرچند برخی از موارد زیر پیش‌تر به‌طور جداگانه ذکر شده‌اند، این صفحه
+تغییرات اصلی نسبت به پیاده‌سازی قدیمی سامانهٔ صفت را دنبال می‌کند. همچنین به برخی راه‌هایی
+اشاره می‌کند که حل‌گر به‌طور قابل‌توجهی از یک پیاده‌سازی ایده‌آل فاصله می‌گیرد. این
+سند ساده‌سازی می‌کند و حالت‌های لبه‌ای را نادیده می‌گیرد. توصیه می‌شود به هر گزاره
+یک «عمدتاً» ضمنی اضافه شود.</p>
+<h3 id="canonicalization"><a class="header" href="#canonicalization">Canonicalization</a></h3>
+<p>حل‌گر جدید هنگام ارزیابی goalهای تودرتو از <a href="./canonicalization.html">canonicalization</a> استفاده می‌کند. در صورتی که
+احتمالاً چند candidate وجود داشته باشد، هر candidate بلافاصله canonicalize می‌شود. سپس
+تلاش می‌کنیم پاسخ‌های canonical آن‌ها را ادغام کنیم. این با پیاده‌سازی قدیمی تفاوت دارد
+که درون سامانهٔ صفت از canonicalization استفاده نمی‌کند.</p>
+<p>این موضوع تأثیرات عمده‌ای بر طراحی هر دو حل‌گر دارد. بدون استفاده از
+canonicalization برای نگه‌داری قیدهای candidateها، انتخاب candidate
+باید قیدهای هر candidate را دور بریزد و فقط با ارزیابی دوبارهٔ
+candidate پس از انتخاب شدنش قیدها را اعمال کند: <a href="https://github.com/rust-lang/rust/blob/47dd709bedda8127e8daec33327e0a9d0cdae845/compiler/rustc_trait_selection/src/traits/select/mod.rs#L1232-L1237">منبع</a>.
+بدون canonicalization همچنین نمی‌توان قیدهای استنتاج حاصل از ارزیابی یک goal را کش کرد.
+این باعث می‌شود پیاده‌سازی قدیمی دو سامانه داشته باشد:
+<em>evaluate</em> و <em>fulfill</em>. <em>Evaluation</em> کش می‌شود، قیدهای استنتاج را اعمال نمی‌کند
+و هنگام انتخاب candidateها به کار می‌رود. <em>Fulfillment</em> قیدهای استنتاج و ناحیه را
+اعمال می‌کند، کش نمی‌شود و قیدهای استنتاج را اعمال می‌کند.</p>
+<p>با استفاده از canonicalization، پیاده‌سازی جدید می‌تواند <em>evaluation</em> و
+<em>fulfillment</em> را ادغام کند و از پیچیدگی و تفاوت‌های ظریف رفتاری پرهیز کند. این کار
+کش کردن را بسیار ساده می‌کند و از اتکای ناخواسته به اطلاعات ردیابی‌نشده جلوگیری می‌کند.
+اجازه می‌دهد از ارزیابی دوبارهٔ candidateها پس از انتخاب پرهیز کنیم و امکان ادغام
+پاسخ‌های چند candidate را فراهم می‌کند. با این حال، canonicalize کردن goalها هنگام ارزیابی
+پیاده‌سازی جدید را وادار می‌کند هنگام برخورد با چرخه‌ها در حل صفت از یک الگوریتم نقطهٔ ثابت (fixpoint)
+استفاده کند: <a href="https://github.com/rust-lang/rust/blob/df8ac8f1d74cffb96a93ae702d16e224f5b9ee8c/compiler/rustc_trait_selection/src/solve/search_graph.rs#L382-L387">منبع</a>.</p>
+<h3 id="deferred-alias-equality"><a class="header" href="#deferred-alias-equality">برابری alias به‌تعویق‌افتاده</a></h3>
+<p>پیاده‌سازی جدید هنگام ربط دادن aliasها goalهای <code>AliasRelate</code> صادر می‌کند، در حالی که
+پیاده‌سازی قدیمی به‌جای آن aliasها را به‌صورت ساختاری به هم ربط می‌دهد. این کار به
+حل‌گر جدید امکان می‌دهد برابری را معطل نگه دارد تا بتواند aliasهای مرتبط را نرمال‌سازی کند.</p>
+<p>رفتار حل‌گر قدیمی ناقص است و به نرمال‌سازی زودهنگام متکی است
+که aliasهای مبهم را با متغیرهای استنتاج جایگزین می‌کند. از آنجا که این کار برای
+aliasهایی که شامل متغیرهای مقید هستند ممکن نیست، پیاده‌سازی قدیمی
+aliasهای درون binderها را درست مدیریت نمی‌کند، مثلاً <a href="https://github.com/rust-lang/rust/issues/102048">#102048</a>. برای جزئیات بیشتر فصل
+<a href="../normalization.html">نرمال‌سازی</a> را ببینید.</p>
+<h3 id="eagerly-evaluating-nested-goals"><a class="header" href="#eagerly-evaluating-nested-goals">ارزیابی زودهنگام goalهای تودرتو</a></h3>
+<p>پیاده‌سازی جدید goalهای تودرتو را به‌جای بازگرداندن آن‌ها
+به فراخواننده، بلافاصله مدیریت می‌کند. پیاده‌سازی قدیمی هر دو کار را انجام می‌دهد. در evaluation، goalهای
+تودرتو <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_trait_selection/src/traits/select/mod.rs#L1271-L1277">بلافاصله مدیریت می‌شوند</a>، در حالی که fulfillment صرفاً
+<a href="https://github.com/rust-lang/rust/blob/df8ac8f1d74cffb96a93ae702d16e224f5b9ee8c/compiler/rustc_trait_selection/src/traits/fulfill.rs#L708-L712">آن‌ها را برای پردازش بعدی برمی‌گرداند</a>.</p>
+<p>از آنجا که پیاده‌سازی جدید باید بتواند goalهای تودرتو را برای
+انتخاب candidate بلافاصله مدیریت کند، همیشه این کار را کردن از پیچیدگی می‌کاهد. همچنین ممکن است
+در آینده امکان ادغام candidateهای بیشتر را به ما بدهد.</p>
+<h3 id="nested-goals-are-evaluated-until-reaching-a-fixpoint"><a class="header" href="#nested-goals-are-evaluated-until-reaching-a-fixpoint">goalهای تودرتو تا رسیدن به نقطهٔ ثابت ارزیابی می‌شوند</a></h3>
+<p>پیاده‌سازی جدید همیشه goalها را در یک حلقه تا رسیدن به نقطهٔ ثابت ارزیابی می‌کند.
+پیاده‌سازی قدیمی این کار را فقط در <em>fulfillment</em> انجام می‌دهد، نه در <em>evaluation</em>.
+همیشه این کار را کردن استنتاج را قوی‌تر می‌کند و وابستگی حل‌گر صفت به ترتیب را
+کاهش می‌دهد. <a href="https://github.com/rust-lang/trait-system-refactor-initiative/issues/102">trait-system-refactor-initiative#102</a> را ببینید.</p>
+<h3 id="proof-trees-and-providing-diagnostics-information"><a class="header" href="#proof-trees-and-providing-diagnostics-information">درخت‌های اثبات و فراهم کردن اطلاعات تشخیص‌ها</a></h3>
+<p>پیاده‌سازی جدید اطلاعات تشخیص‌ها را مستقیماً ردیابی نمی‌کند،
+بلکه به‌جای آن <a href="./proof-trees.html">درخت‌های اثبات</a> را فراهم می‌کند که برای محاسبهٔ lazy
+اطلاعات مرتبط به کار می‌روند. این بخش هنوز به‌طور کامل پرورانده نشده و تا حدی هک‌گونه است.
+هدف این است که از ردیابی این اطلاعات در مسیر موفق پرهیز شود تا کارایی بهبود یابد
+و از اتکای ناخواسته به داده‌های تشخیص‌ها برای رفتار جلوگیری شود.</p>
+<h2 id="major-quirks-of-the-new-implementation"><a class="header" href="#major-quirks-of-the-new-implementation">ویژگی‌های عجیب عمدهٔ پیاده‌سازی جدید</a></h2>
+<h3 id="hiding-impls-if-there-are-any-env-candidates"><a class="header" href="#hiding-impls-if-there-are-any-env-candidates">پنهان کردن implها در صورت وجود هر candidate محیطی</a></h3>
+<p>اگر حداقل یک candidate از نوع <code>ParamEnv</code> یا <code>AliasBound</code> برای اثبات
+یک goal از نوع <code>Trait</code> وجود داشته باشد، همهٔ candidateهای impl را هم برای goalهای <code>Trait</code> و هم
+<code>Projection</code> کنار می‌گذاریم: <a href="https://github.com/rust-lang/rust/blob/03994e498df79aa1f97f7bbcfd52d57c8e865049/compiler/rustc_trait_selection/src/solve/assembly/mod.rs#L785-L789">منبع</a>. این کار از استفادهٔ کاربران از
+implای که کاملاً توسط یک قید <code>where</code> پوشش داده می‌شود جلوگیری می‌کند، مطابق با
+رفتار پیاده‌سازی قدیمی و برای پرهیز از برخی خطاهای عجیب،
+مثلاً <a href="https://github.com/rust-lang/trait-system-refactor-initiative/issues/76">trait-system-refactor-initiative#76</a>.</p>
+<h3 id="normalizesto-goals-are-a-function"><a class="header" href="#normalizesto-goals-are-a-function">goalهای <code>NormalizesTo</code> یک تابع هستند</a></h3>
+<p>فصل <a href="../normalization.html">نرمال‌سازی</a> را ببینید. پیش از محاسبهٔ goalهای <code>NormalizesTo</code>، جملهٔ مورد انتظار را با یک متغیر استنتاج
+بدون قید جایگزین می‌کنیم تا از تأثیرگذاری آن بر
+نرمال‌سازی جلوگیری شود. این یعنی goalهای <code>NormalizesTo</code> تا حدی متفاوت
+از همهٔ انواع دیگر goal مدیریت می‌شوند و به پشتیبانی اضافی حل‌گر نیاز دارند. به‌ویژه،
+goalهای تودرتوی مبهم آن‌ها به فراخواننده بازگردانده می‌شوند که سپس آن‌ها را ارزیابی می‌کند.
+برای جزئیات بیشتر <a href="https://github.com/rust-lang/rust/pull/122687">#122687</a> را ببینید.</p><nav class="page-nav"><a href="opaque-types.html">→ نوع‌های Opaque</a><a href="sharing-crates-with-rust-analyzer.html">اشتراک حل‌کنندهٔ صفت با rust-analyzer ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

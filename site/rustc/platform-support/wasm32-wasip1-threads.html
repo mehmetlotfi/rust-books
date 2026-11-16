@@ -1,0 +1,83 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>wasm32-wasip1-threads — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="platform-support/wasm32-wasip1-threads"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="wasm32-wasip1-threads"><a class="header" href="#wasm32-wasip1-threads"><code>wasm32-wasip1-threads</code></a></h1>
+<p><strong>Tier: 2</strong></p>
+<p>هدف <code>wasm32-wasip1-threads</code> هدفی جدید و هنوز (تا ژوئیهٔ ۲۰۲۳) آزمایشی است. این هدف توسعه‌ای بر هدف <code>wasm32-wasip1</code> است که در اصل با نام <code>wasm32-wasi</code> شناخته می‌شد. این هدف، هدف اصلی را با مجموعه‌ای استاندارد از فراخوانی‌های سیستمی (syscall) گسترش می‌دهد که قرار است باینری‌های WebAssembly را به قابلیت‌های چندنخی بومی مجهز کند.</p>
+<blockquote>
+<p><strong>نکته</strong>: پیش از مارس ۲۰۲۴ این هدف با نام <code>wasm32-wasi-preview1-threads</code> شناخته می‌شد و پیش از آن با نام <code>wasm32-wasi-threads</code>.</p>
+</blockquote>
+<h2 id="target-maintainers"><a class="header" href="#target-maintainers">نگهدارندگان هدف</a></h2>
+<p><a href="https://github.com/g0djan">@g0djan</a> <a href="https://github.com/loganek">@loganek</a></p>
+<h2 id="requirements"><a class="header" href="#requirements">الزامات</a></h2>
+<p>این هدف به‌صورت متقابل کامپایل می‌شود. این هدف از <code>std</code> به‌طور کامل پشتیبانی می‌کند.</p>
+<p>تعریف هدف Rust در اینجا از چند جهت جالب است. می‌خواهیم با این هدف به دو کاربرد خدمت کنیم:</p>
+<ul>
+<li>اول، می‌خواهیم استفاده از این هدف در Rust تا حد ممکن بدون دردسر باشد، و در حالت ایده‌آل نیازی به پیکربندی و نصب یک زنجیره‌ابزار محلی wasm32-wasip1-threads نباشد.</li>
+<li>دوم، یکی از کاربردهای اصلی بک‌اند جدید wasm در LLVM و پشتیبانی wasm در LLD این است که هر زبان کامپایل‌شده‌ای بتواند با هر زبان دیگری هم‌کنش داشته باشد. هدف <code>wasm32-wasip1-threads</code> نخستین هدفی است که یک کتابخانهٔ استاندارد C و تعریف مشترک sysroot کارآمد دارد، پس می‌خواهیم کد Rust و C/C++ هنگام کامپایل به <code>wasm32-unknown-unknown</code> با هم هم‌کنش داشته باشند.</li>
+</ul>
+<p>اما توجه می‌کنید که دو هدف بالا تا حدی با یکدیگر در تضادند. برای تلاش در حل هر دو کاربرد به‌یک‌باره، هدفی تعریف می‌کنیم که از ویژگی هدف <code>crt-static</code> (سوءاستفاده‌وار) برای نشان‌دادن اینکه در کدام حالت هستید استفاده می‌کند.</p>
+<h3 id="no-interop-with-c-required"><a class="header" href="#no-interop-with-c-required">بدون نیاز به هم‌کنشی با C</a></h3>
+<p>به‌طور پیش‌فرض ویژگی هدف <code>crt-static</code> فعال است و وقتی فعال باشد یعنی نسخهٔ همراه <code>libc.a</code> که در <code>liblibc.rlib</code> یافت می‌شود استفاده می‌شود. این حالت واقعاً برای هم‌کنشی با C در نظر گرفته نشده است، چون ممکن است کتابخانهٔ C همراه Rust با کتابخانهٔ C کامپایل‌شده توسط ابزار دیگر ناسازگار باشد. با این حال، در این کاربرد از <code>rust-lld</code> و چند فایل شیء راه‌اندازی crt کپی‌شده استفاده می‌کنیم تا مطمئن شویم می‌توانید هدف wasi را برای Rust دانلود کنید و کار را شروع کنید، بدون هیچ پیکربندی بیشتر. در مجموع، به‌طور پیش‌فرض هیچ وابستگی خارجی لازم نیست. می‌توانید باینری‌های <code>wasm32-wasip1-threads</code> را مستقیماً بدون هیچ کار اضافه کامپایل کنید. اما (فعلاً) نمی‌توانید در این حالت به‌طور قابل‌اعتماد با کد C هم‌کنشی داشته باشید.</p>
+<h3 id="interop-with-c-required"><a class="header" href="#interop-with-c-required">نیاز به هم‌کنشی با C</a></h3>
+<p>برای هدف دوم، پرچم <code>target-feature</code> را بازاستفاده می‌کنیم، یعنی برای هم‌کنشی کد C/Rust باید چند کار انجام دهید.</p>
+<ol>
+<li>همهٔ کد Rust باید با <code>-C target-feature=-crt-static</code> کامپایل شود، که نشان می‌دهد کتابخانهٔ استاندارد C همراه در sysroot مربوط به Rust استفاده نخواهد شد.</li>
+<li>اگر از rustc برای ساخت یک آرتیفکت لینک‌شده استفاده می‌کنید، باید <code>-C linker</code> را روی یک باینری <code>clang</code> تنظیم کنید که از <code>wasm32-wasip1-threads</code> پشتیبانی کند و با sysroot مربوط به <code>wasm32-wasip1-threads</code> پیکربندی شده باشد. این کار باعث می‌شود کد Rust با <code>libc.a</code> ارائه‌شده توسط <code>clang</code> مشخص‌شده لینک شود.</li>
+<li>اگر یک staticlib می‌سازید و کد Rust را در جای دیگری یکپارچه می‌کنید، آنگاه کامپایل با <code>-C target-feature=-crt-static</code> تنها کاری است که باید انجام دهید.</li>
+</ol>
+<p>در مجموع، به‌طور پیش‌فرض هیچ وابستگی خارجی لازم نیست. می‌توانید باینری‌های <code>wasm32-wasip1-threads</code> را مستقیماً بدون هیچ کار اضافه کامپایل کنید. اما (فعلاً) نمی‌توانید در این حالت به‌طور قابل‌اعتماد با کد C هم‌کنشی داشته باشید.</p>
+<p>همچنین توجه کنید که در حال حاضر هدف <code>wasm32-wasip1-threads</code> وجود پیشنهادهای wasm ادغام‌شدهٔ دیگر را فرض می‌کند، از جمله (همراه با پرچم‌های ویژگی LLVM آن‌ها):</p>
+<ul>
+<li><a href="https://github.com/WebAssembly/spec/blob/main/proposals/bulk-memory-operations/Overview.md">حافظهٔ انبوه (Bulk memory)</a> - <code>+bulk-memory</code></li>
+<li>مقادیر سراسری import‌شدهٔ تغییرپذیر - <code>+mutable-globals</code></li>
+<li>Atomics - <code>+atomics</code></li>
+</ul>
+<p>این هدف به LLVM 16 نیاز دارد. دلیل آن به پرچم‌های لینکر مربوط است: پیش از LLVM 16، استفادهٔ هم‌زمان از –import-memory و –export-memory مجاز نبود. نیاز به هر دو، پیامد شیوهٔ کار فعلی WASI است؛ برای جزئیات بیشتر https://github.com/WebAssembly/WASI/issues/502 را ببینید.</p>
+<p>این هدف قصد دارد برای ABI مربوط به <code>"C"</code> با هدف متناظر Clang مطابقت داشته باشد.</p>
+<blockquote>
+<p><strong>نکته</strong>: به‌دلیل اینکه این هدف هنوز در روزهای نسبتاً اولیهٔ خود است، هنگام کار با آن ممکن است با اشکالات LLVM مواجه شوید. اگر به یک assertion یا اشکالی برخوردید، توصیه می‌شود یک issue در rust-lang/rust یا ترجیحاً در خود LLVM باز کنید.</p>
+</blockquote>
+<h2 id="platform-requirements"><a class="header" href="#platform-requirements">الزامات پلتفرم</a></h2>
+<p>محیط اجرا باید از همان مجموعه API‌هایی پشتیبانی کند که هر هدف wasi پشتیبانی‌شدهٔ دیگر برای تعامل با محیط میزبان از طریق استاندارد WASI پشتیبانی می‌کند. محیط اجرا همچنین باید پیاده‌سازی <a href="https://github.com/WebAssembly/wasi-threads">پیشنهاد wasi-threads</a> را داشته باشد.</p>
+<p>این هدف یک هدف پایدار نیست. یعنی تعداد کمی موتور اجرا وجود دارند که ویژگی <code>wasi-threads</code> را پیاده‌سازی می‌کنند و در صورت پیاده‌سازی، احتمالاً پشت یک پرچم قرار دارند، برای مثال:</p>
+<ul>
+<li>Wasmtime - <code>--wasi threads</code></li>
+<li><a href="https://github.com/bytecodealliance/wasm-micro-runtime">WAMR</a> - باید با WAMR_BUILD_LIB_WASI_THREADS=1 ساخته شود</li>
+</ul>
+<h2 id="building-the-target"><a class="header" href="#building-the-target">ساخت هدف</a></h2>
+<p>کاربران باید wasi-sdk را از نسخهٔ 20.0 به بعد نصب یا بسازند https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-20 و مسیر <em>wasi-root</em> را در <code>bootstrap.toml</code> مشخص کنند</p>
+<pre><code class="language-toml">[target.wasm32-wasip1-threads]
+wasi-root = ".../wasi-libc/sysroot"
+</code></pre>
+<p>پس از آن کاربران می‌توانند با افزودن آن به فهرست <code>target</code> در <code>bootstrap.toml</code> یا با <code>-Zbuild-std</code> آن را بسازند.</p>
+<h2 id="building-rust-programs"><a class="header" href="#building-rust-programs">ساخت برنامه‌های Rust</a></h2>
+<p>از Rust Nightly 1.71.1 (2023-08-03) به بعد، آرتیفکت‌ها از پیش کامپایل‌شده ارائه می‌شوند:</p>
+<pre><code class="language-text">rustup target add wasm32-wasip1-threads --toolchain nightly
+</code></pre>
+<p>برنامه‌های Rust را می‌توان برای این هدف ساخت:</p>
+<pre><code class="language-text">rustc --target wasm32-wasip1-threads your-code.rs
+</code></pre>
+<h2 id="cross-compilation"><a class="header" href="#cross-compilation">کامپایل متقابل</a></h2>
+<p>این هدف را می‌توان از هر میزبانی به‌صورت متقابل کامپایل کرد.</p>
+<h2 id="testing"><a class="header" href="#testing">آزمایش</a></h2>
+<p>در حال حاضر آزمایش برای <code>wasm32-wasip1-threads</code> به‌خوبی پشتیبانی نمی‌شود و پروژهٔ Rust هیچ آزمونی برای این هدف اجرا نمی‌کند. با این حال، مجموعه آزمون UI را می‌توان به‌صورت دستی با پیروی از این دستورالعمل‌ها اجرا کرد:</p>
+<ol start="0">
+<li>مطمئن شوید <a href="https://github.com/bytecodealliance/wasm-micro-runtime">wamr</a>، <a href="https://github.com/bytecodealliance/wasmtime">wasmtime</a> یا موتور دیگری که از <code>wasi-threads</code> پشتیبانی می‌کند نصب شده و در متغیر محیطی <code>$PATH</code> یافت می‌شود.</li>
+<li>شاخهٔ master را clone کنید.</li>
+<li><a href="https://github.com/g0djan/rust/compare/godjan/wasi-threads...g0djan:rust:godjan/wasi-run-ui-tests?expand=1">این تغییر</a> را با موتوری از گام ۱ اعمال کنید.</li>
+<li><code>./x.py test --target wasm32-wasip1-threads tests/ui</code> را اجرا کنید و فهرست آزمون‌های ناموفق را ذخیره کنید.</li>
+<li>به شاخه‌ای که تغییرات شما را دارد checkout کنید.</li>
+<li><a href="https://github.com/g0djan/rust/compare/godjan/wasi-threads...g0djan:rust:godjan/wasi-run-ui-tests?expand=1">این تغییر</a> را با موتوری از گام ۱ اعمال کنید.</li>
+<li><code>./x.py test --target wasm32-wasip1-threads tests/ui</code> را اجرا کنید و فهرست آزمون‌های ناموفق را ذخیره کنید.</li>
+<li>برای هر دو فهرست آزمون‌های ناموفق، <code>cat list | sort &gt; sorted_list</code> را اجرا کنید و با <code>diff sorted_list1 sorted_list2</code> آن‌ها را مقایسه کنید.</li>
+</ol>
+<h2 id="conditionally-compiling-code"><a class="header" href="#conditionally-compiling-code">کامپایل شرطی کد</a></h2>
+<p>توصیه می‌شود کد این هدف را با این شرط به‌صورت شرطی کامپایل کنید:</p>
+<pre><code class="language-text">#[cfg(all(target_os = "wasi", target_env = "p1", target_feature = "atomics"))]
+</code></pre>
+<p>پیش از Rust 1.80 کلید <code>target_env = "p1"</code> تنظیم نمی‌شد. در حال حاضر <code>target_feature = "atomics"</code> فقط در Nightly موجود است. توجه کنید که <code>#[cfg]</code> دقیقی که برای شناسایی این هدف لازم است ممکن است با پایدارتر شدن هدف تغییر کند.</p>
+<h2 id="enabled-webassembly-features"><a class="header" href="#enabled-webassembly-features">ویژگی‌های فعال WebAssembly</a></h2>
+<p>مجموعهٔ پیش‌فرض ویژگی‌های WebAssembly که برای کامپایل فعال است، علاوه بر آنچه <a href="./wasm32-unknown-unknown.html"><code>wasm32-unknown-unknown</code></a> فعال می‌کند، دو ویژگی دیگر را هم شامل می‌شود:</p>
+<ul>
+<li><code>bulk-memory</code></li>
+<li><code>atomics</code></li>
+</ul>
+<p>برای اطلاعات بیشتر دربارهٔ ویژگی‌ها مستندات <a href="./wasm32-unknown-unknown.html"><code>wasm32-unknown-unknown</code></a> را ببینید، اما توجه کنید که CPU با نام <code>mvp</code> در LLVM از این هدف پشتیبانی نمی‌کند، زیرا لازم است <code>bulk-memory</code>، <code>atomics</code> و <code>mutable-globals</code> همگی فعال باشند.</p><nav class="page-nav"><a href="wasm32-wasip1.html">→ wasm32-wasip1</a><a href="wasm32-wasip2.html">wasm32-wasip2 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

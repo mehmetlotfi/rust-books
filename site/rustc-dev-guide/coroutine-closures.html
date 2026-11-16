@@ -1,0 +1,250 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Closureهای async/«coroutine-closures» — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="coroutine-closures"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="async-closurescoroutine-closures"><a class="header" href="#async-closurescoroutine-closures">closureهای async / «coroutine-closureها»</a></h1>
+<p>لطفاً برای درک انگیزهٔ کلی این ویژگی <a href="https://rust-lang.github.io/rfcs/3668-async-closures.html">RFC 3668</a> را بخوانید. این فصل بسیار فنی و تا حدی «عمودی» است؛ در حالت ایده‌آل باید آن را تقسیم می‌کردیم و در میان همهٔ فصل‌های مرتبط پخش می‌کردیم، اما برای اینکه closureهای async را <em>به‌صورت کل‌نگرانه</em> درک کنیم، همه را در همین یک فصل کنار هم گذاشته‌ام.</p>
+<h2 id="coroutine-closures----a-technical-deep-dive"><a class="header" href="#coroutine-closures----a-technical-deep-dive">Coroutine-closureها – نگاهی فنی و عمیق</a></h2>
+<p>Coroutine-closureها تعمیمی از closureهای async هستند و نحو (syntax) ویژه‌ای برای عبارت‌های closure‌اند که یک coroutine برمی‌گردانند، به‌ویژه coroutine‌ای که اجازه دارد از upvarهای closure capture کند.</p>
+<p>فعلاً تنها نوع قابل‌استفادهٔ coroutine-closure همان closure async است و پشتیبانی از closureهای async دامنهٔ این PR است. ممکن است در نهایت از <code>gen || {}</code> و موارد مشابه هم پشتیبانی کنیم، و بیشتر مشکلات و نکات عجیبی که در این سند توضیح داده شده‌اند دربارهٔ همهٔ coroutine-closureها به‌طور کلی صدق می‌کنند.</p>
+<p>از آنجا که کد تا حدی عمومی است، این سند ممکن است میان نام‌های «closureهای async» و «coroutine-closureها» جابه‌جا شود. future‌ای که closure async برمی‌گرداند معمولاً «coroutine» یا «coroutine فرزند» (child coroutine) نامیده می‌شود.</p>
+<h3 id="hir"><a class="header" href="#hir">HIR</a></h3>
+<p>closureهای async (و در آینده سایر انواع coroutine مانند <code>gen</code>) در HIR به‌صورت <code>hir::Closure</code> نمایش داده می‌شوند. نوع closure (closure-kind) مربوط به <code>hir::Closure</code> برابر <code>ClosureKind::CoroutineClosure(_)</code><sup class="footnote-reference" id="fr-k1-1"><a href="#footnote-k1">1</a></sup> است که یک بلوک async را در بر می‌گیرد و آن هم در HIR به‌صورت <code>hir::Closure</code> نمایش داده می‌شود. نوع closure مربوط به بلوک async برابر <code>ClosureKind::Closure(CoroutineKind::Desugared(_, CoroutineSource::Closure))</code><sup class="footnote-reference" id="fr-k2-1"><a href="#footnote-k2">2</a></sup> است.</p>
+<p>مانند <code>async fn</code>، هنگام lowering بدنهٔ یک closure async باید همهٔ آرگومان‌های closure را بی‌قید و شرط به بدنه منتقل کنیم تا capture شوند. این کار توسط <code>lower_coroutine_body_with_moved_arguments</code><sup class="footnote-reference" id="fr-l1-1"><a href="#footnote-l1">3</a></sup> انجام می‌شود. تنها نکتهٔ قابل‌توجه دربارهٔ این تابع این است که بلوک async‌ای که در نهایت تولید می‌کنیم نوع capture برابر <code>CaptureBy::ByRef</code><sup class="footnote-reference" id="fr-l2-1"><a href="#footnote-l2">4</a></sup> دارد. بعداً همهٔ <em>آرگومان‌های closure</em> را مجبور می‌کنیم به‌صورت by-value capture شوند<sup class="footnote-reference" id="fr-l3-1"><a href="#footnote-l3">5</a></sup>، اما نمی‌خواهیم <em>کل</em> بلوک async طوری رفتار کند که انگار یک <code>async move</code> است، چون این کار هدف از خود-قرض‌گیری (self-borrowing) در closure async را از بین می‌برد.</p>
+<h3 id="rustc_middlety-representation"><a class="header" href="#rustc_middlety-representation">نمایش در <code>rustc_middle::ty</code></a></h3>
+<p>برای اینکه پیاده‌سازی تا حد زیادی با آینده سازگار بماند (یعنی با <code>|| {}</code> از نوع gen و <code>async gen || {}</code>)، بیشتر این بخش closureهای async را «coroutine-closure» می‌نامد.</p>
+<p>مهم‌ترین چیزی که این PR معرفی می‌کند یک <code>TyKind</code> جدید به نام <code>CoroutineClosure</code><sup class="footnote-reference" id="fr-t1-1"><a href="#footnote-t1">6</a></sup> و variantهای متناظر آن در سایر شمارش‌های مرتبط در typeck و borrowck (<code>UpvarArgs</code>، <code>DefiningTy</code>، <code>AggregateKind</code>) است.</p>
+<p>به‌جای تعمیم <code>TyKind::Closure</code> موجود، یک <code>TyKind</code> جدید معرفی می‌کنیم، به دلیل تفاوت‌های عمدهٔ نمایشی در این نوع. تفاوت‌های اصلی <code>CoroutineClosure</code>ها را می‌توان با بررسی <code>CoroutineClosureArgsParts</code> دید، که نمایش «بازشده» (unpacked) جنریک‌های coroutine-closure است.</p>
+<h4 id="similarities-to-closures"><a class="header" href="#similarities-to-closures">شباهت‌ها به closureها</a></h4>
+<p>مانند closure، ما <code>parent_args</code>، یک <code>closure_kind_ty</code> و یک <code>tupled_upvars_ty</code> داریم. این‌ها همان چیزی را نمایش می‌دهند که همتایان closure‌شان نمایش می‌دهند؛ یعنی: جنریک‌هایی که از بدنه‌ای که closure در آن تعریف شده به ارث رسیده‌اند، حداکثر «قابلیت فراخوانی» closure (یعنی آیا برای فراخوانی باید مصرف شود، مانند <code>FnOnce</code>، یا می‌توان آن را by-ref فراخوانی کرد) و upvarهای capture‌شدهٔ خود closure.</p>
+<h4 id="the-signature"><a class="header" href="#the-signature">The signature</a></h4>
+<p>یک closure سنتی یک <code>fn_sig_as_fn_ptr_ty</code> دارد که از آن برای نمایش امضای closure استفاده می‌کند. در مقابل، ما امضای coroutine-closure را به شکلی تا حدی «تجزیه‌شده» ذخیره می‌کنیم، چون coroutine-closureها بسته به اینکه با کدام trait از خانوادهٔ <code>AsyncFn*</code> فراخوانی شوند <em>دو</em> امضا دارند (بخش‌های زیر را ببینید).</p>
+<p>از نظر مفهومی، coroutine-closure را می‌توان شامل چند نوع امضای مختلف دانست، بسته به اینکه by-ref فراخوانی شود یا by-move.</p>
+<p>برای بازسازی راحت هر دو امضا، <code>signature_parts_ty</code> همهٔ بخش‌های مرتبط coroutine‌ای را که این coroutine-closure برمی‌گرداند ذخیره می‌کند. این نوع بخش‌های امضا شکل کلی <code>fn(tupled_inputs, resume_ty) -&gt; (return_ty, yield_ty)</code> را دارد، که در آن <code>resume_ty</code>، <code>return_ty</code> و <code>yield_ty</code> نوع‌های متناظر برای <em>coroutine</em>‌ای هستند که coroutine-closure برمی‌گرداند<sup class="footnote-reference" id="fr-c1-1"><a href="#footnote-c1">7</a></sup>.</p>
+<p>کامپایلر عمدتاً با نوع <code>CoroutineClosureSignature</code><sup class="footnote-reference" id="fr-c2-1"><a href="#footnote-c2">8</a></sup> سروکار دارد، که با استخراج نوع‌های مرتبط از نوع اشاره‌گر <code>fn()</code> که در بالا توضیح داده شد ساخته می‌شود و متدهایی در اختیار می‌گذارد که می‌توان با آن‌ها <em>coroutine</em>‌ای را ساخت که coroutine-closure در نهایت برمی‌گرداند.</p>
+<h4 id="the-data-we-need-to-carry-along-to-construct-a-coroutine-return-type"><a class="header" href="#the-data-we-need-to-carry-along-to-construct-a-coroutine-return-type">داده‌ای که برای ساخت نوع بازگشتی <code>Coroutine</code> باید همراه داشته باشیم</a></h4>
+<p>علاوه بر داده‌ای که در امضا ذخیره می‌شود، برای ساخت یک <code>TyKind::Coroutine</code> جهت بازگرداندن، باید «witness» مربوط به coroutine را هم ذخیره کنیم.</p>
+<p>پس upvarهای <code>Coroutine</code>ای که برگردانده می‌شود چه می‌شوند؟ برای <code>AsyncFnOnce</code> (یعنی فراخوانی by-move) این‌ها صرفاً همان upvarهایی هستند که coroutine برمی‌گرداند. اما برای <code>AsyncFnMut</code>/<code>AsyncFn</code>، coroutine‌ای که از coroutine-closure برگردانده می‌شود داده‌ای را از coroutine-closure با یک طول عمر «محیط» (environment) مشخص قرض می‌گیرد<sup class="footnote-reference" id="fr-c3-1"><a href="#footnote-c3">9</a></sup>. این با طول عمر <code>&amp;self</code><sup class="footnote-reference" id="fr-c4-1"><a href="#footnote-c4">10</a></sup> در امضای فراخوانی <code>AsyncFnMut</code>/<code>AsyncFn</code> و طول عمر GAT مربوط به <code>ByRef</code><sup class="footnote-reference" id="fr-c5-1"><a href="#footnote-c5">11</a></sup> متناظر است.</p>
+<h4 id="actually-getting-the-coroutine-return-types"><a class="header" href="#actually-getting-the-coroutine-return-types">به‌دست آوردن واقعی نوع(های) بازگشتی coroutine</a></h4>
+<p>برای ساخت آسان <code>Coroutine</code>ای که یک coroutine-closure برمی‌گرداند، می‌توانید از کمکی <code>to_coroutine_given_kind_and_upvars</code><sup class="footnote-reference" id="fr-helper-1"><a href="#footnote-helper">12</a></sup> روی <code>CoroutineClosureSignature</code> استفاده کنید، که از <code>CoroutineClosureArgs</code> به دست می‌آید.</p>
+<p>بیشتر آرگومان‌های آن تابع مؤلفه‌هایی هستند که می‌توانید از <code>CoroutineArgs</code> بگیرید، به‌جز <code>goal_kind: ClosureKind</code> که کنترل می‌کند کدام نوع coroutine بر اساس <code>ClosureKind</code> ورودی برگردانده شود – یعنی اگر <code>ClosureKind::Fn | ClosureKind::FnMut</code> باشد coroutine از نوع by-ref را آماده می‌کند، و اگر <code>ClosureKind::FnOnce</code> باشد coroutine از نوع by-move را.</p>
+<h3 id="trait-hierarchy"><a class="header" href="#trait-hierarchy">سلسله‌مراتب صفت‌ها</a></h3>
+<p>ما یک سلسله‌مراتب موازی از صفت‌های <code>Fn*</code> معرفی می‌کنیم که برای پیاده‌سازی شده‌اند. انگیزهٔ معرفی آن‌ها در یک نوشتهٔ وبلاگ توضیح داده شده است: <a href="https://hackmd.io/@compiler-errors/async-closures">Async Closures</a>.</p>
+<p>همهٔ نوع‌های قابل‌فراخوانی که در حال حاضر پایدارند (یعنی closureها، آیتم‌های تابع، اشاره‌گرهای تابع و اشیای صفت <code>dyn Fn*</code>) به‌طور خودکار <code>AsyncFn*() -&gt; T</code> را پیاده‌سازی می‌کنند، اگر <code>Fn*() -&gt; Fut</code> را برای یک نوع خروجی <code>Fut</code> پیاده‌سازی کرده باشند و <code>Fut</code> نیز <code>Future&lt;Output = T&gt;</code> را پیاده‌سازی کند<sup class="footnote-reference" id="fr-tr1-1"><a href="#footnote-tr1">13</a></sup>.</p>
+<p>closureهای async تا جایی <code>AsyncFn*</code> را پیاده‌سازی می‌کنند که بدنه‌شان اجازه دهد؛ یعنی اگر در نهایت از upvarها به شکل سازگاری استفاده کنند (یعنی اگر upvarهایشان را مصرف یا تغییر دهند، ممکن است بر اینکه <code>AsyncFn</code> و <code>AsyncFnMut</code> را پیاده‌سازی کنند یا نه اثر بگذارد…)</p>
+<h4 id="lending"><a class="header" href="#lending">Lending</a></h4>
+<p>ممکن است در آینده <code>AsyncFn*</code> را به مجموعهٔ عمومی‌تری از صفت‌های <code>LendingFn*</code> منتقل کنیم؛ با این حال، چند جزئیات پیاده‌سازی مشخص فنی وجود دارد که توانایی ما را برای استفادهٔ راحت از <code>LendingFn</code> در کامپایلر امروز محدود می‌کند. این‌ها به موارد زیر مربوط‌اند:</p>
+<ul>
+<li>استنتاج امضای closure.</li>
+<li>محدودیت‌های مربوط به کران‌های صفت رتبه‌بالاتر (higher-ranked).</li>
+<li>کاستی‌ها در پیام‌های خطا.</li>
+</ul>
+<p>این محدودیت‌ها، به‌علاوهٔ این واقعیت که صفت زیربنایی نباید هیچ تأثیری بر تجربهٔ کاربر از closureهای async و کران‌های صفت <code>Fn</code> از نوع async داشته باشد، ما را فعلاً به <code>AsyncFn*</code> می‌رساند. برای اطمینان از اینکه در نهایت بتوانیم به این صفت‌های عمومی‌تر مهاجرت کنیم، تعریف‌های دقیق صفت <code>AsyncFn*</code> (از جمله نوع‌های وابسته) به‌عنوان جزئیات پیاده‌سازی رها شده‌اند.</p>
+<h4 id="when-do-async-closures-implement-the-regular-fn-traits"><a class="header" href="#when-do-async-closures-implement-the-regular-fn-traits">چه زمانی closureهای async صفت‌های <code>Fn*</code> معمولی را پیاده‌سازی می‌کنند؟</a></h4>
+<p>در بالا اشاره کردیم که نوع‌های قابل‌فراخوانی «معمولی» می‌توانند <code>AsyncFn*</code> را پیاده‌سازی کنند، اما سؤال معکوس هم وجود دارد: «آیا closureهای async هم می‌توانند <code>Fn*</code> را پیاده‌سازی کنند؟» پاسخ کوتاه این است: «وقتی معتبر باشد»، یعنی وقتی coroutine‌ای که از <code>AsyncFn</code>/<code>AsyncFnMut</code> برگردانده می‌شد در واقع هیچ upvar‌ای نداشته باشد که از coroutine-closure والد «قرض داده شده» (lent) باشد.</p>
+<p>برای پاسخ مفصل‌تر، بخش «follow-up: when do…» را در ادامه ببینید. پاسخ کامل یک heuristic کاملاً جالب و امیدواریم جامع را توصیف می‌کند که برای اطمینان از اینکه بیشتر closureهای async «بدون مشکل کار کنند» به کار می‌رود.</p>
+<h3 id="tale-of-two-bodies"><a class="header" href="#tale-of-two-bodies">داستان دو بدنه…</a></h3>
+<p>وقتی closureهای async با <code>AsyncFn</code>/<code>AsyncFnMut</code> فراخوانی می‌شوند، coroutine‌ای برمی‌گردانند که از closure قرض می‌گیرد. اما وقتی از طریق <code>AsyncFnOnce</code> فراخوانی شوند، آن closure را مصرف می‌کنیم و نمی‌توانیم coroutine‌ای برگردانیم که از داده‌ای قرض می‌گیرد که اکنون drop شده است.</p>
+<p>برای دور زدن این محدودیت، یک بدنهٔ MIR جداگانهٔ by-move برای فراخوانی <code>AsyncFnOnce::call_once</code> روی coroutine-closure‌ای که می‌تواند by-ref فراخوانی شود سنتز می‌کنیم.</p>
+<p>این بدنه دقیقاً مانند coroutine «عادی» که از فراخوانی coroutine-closure برگردانده می‌شود عمل می‌کند، جز اینکه مجموعهٔ متفاوتی از upvarها دارد، چون باید captureها را از coroutine-closure والد به coroutine فرزند <em>منتقل</em> (move) کنیم.</p>
+<h4 id="synthesizing-the-by-move-body"><a class="header" href="#synthesizing-the-by-move-body">سنتز بدنهٔ by-move</a></h4>
+<p>وقتی بخواهیم به بدنهٔ by-move مربوط به coroutine‌ای که از coroutine-closure برگردانده می‌شود دسترسی پیدا کنیم، می‌توانیم از طریق کوئری <code>coroutine_by_move_body_def_id</code><sup class="footnote-reference" id="fr-b1-1"><a href="#footnote-b1">14</a></sup> این کار را بکنیم.</p>
+<p>این کوئری با کپی کردن بدنهٔ MIR مربوط به coroutine و درج derefها و projectionهای فیلد<sup class="footnote-reference" id="fr-b2-1"><a href="#footnote-b2">15</a></sup> اضافی برای حفظ معنای بدنه، یک بدنهٔ MIR جدید سنتز می‌کند.</p>
+<p>چون یک def id جدید سنتز کرده‌ایم، این کوئری مسئول تغذیهٔ (feed) تعداد زیادی کوئری مرتبط دیگر برای بدنهٔ MIR نیز هست. این کوئری هنگام کوئری <code>mir_promoted</code> با <code>ensure()</code><sup class="footnote-reference" id="fr-b3-1"><a href="#footnote-b3">16</a></sup> فراخوانی می‌شود، چون روی MIR <em>ساخته‌شدهٔ</em> coroutine عمل می‌کند.</p>
+<h3 id="closure-signature-inference"><a class="header" href="#closure-signature-inference">استنتاج امضای closure</a></h3>
+<p>الگوریتم استنتاج امضای closure برای closureهای async کمی پیچیده‌تر از الگوریتم استنتاج برای closureهای «سنتی» است. مانند closureها، روی همهٔ بندهایی که ممکن است مرتبط باشند (برای نوع مورد انتظاری که پاس داده شده) پیمایش می‌کنیم<sup class="footnote-reference" id="fr-deduce1-1"><a href="#footnote-deduce1">17</a></sup>.</p>
+<p>برای استخراج یک امضا، دو وضعیت را در نظر می‌گیریم:</p>
+<ul>
+<li>گزاره‌های projection با <code>AsyncFnOnce::Output</code>، که از آن‌ها برای استخراج ورودی‌ها و نوع خروجی closure استفاده می‌کنیم. این با وضعیتی متناظر است که یک کران <code>F: AsyncFn*() -&gt; T</code> وجود داشته است<sup class="footnote-reference" id="fr-deduce2-1"><a href="#footnote-deduce2">18</a></sup>.</li>
+<li>گزاره‌های projection با <code>FnOnce::Output</code>، که از آن‌ها برای استخراج ورودی‌ها استفاده می‌کنیم. برای خروجی، همچنین سعی می‌کنیم با جست‌وجوی گزاره‌های projection مرتبط <code>Future::Output</code> یک خروجی استنتاج کنیم. این با وضعیتی متناظر است که یک کران <code>F: Fn*() -&gt; T, T: Future&lt;Output = U&gt;</code> وجود داشته است.<sup class="footnote-reference" id="fr-deduce3-1"><a href="#footnote-deduce3">19</a></sup> * اگر کران <code>Future</code> وجود نداشته باشد، برای خروجی صرفاً از یک متغیر استنتاج تازه استفاده می‌کنیم. این با حالتی متناظر است که بتوان یک closure async را به یک تابع ترکیب‌کننده مانند <code>Option::map</code> پاس داد.<sup class="footnote-reference" id="fr-deduce4-1"><a href="#footnote-deduce4">20</a></sup>
+<ul>
+<li>If there is no <code>Future</code> bound, we simply use a fresh infer var for the output.
+This corresponds to the case where one can pass an async closure to a combinator function like <code>Option::map</code>.<sup class="footnote-reference" id="fr-deduce4-2"><a href="#footnote-deduce4">20</a></sup></li>
+</ul>
+</li>
+</ul>
+<p>از حالت دوم صرفاً پشتیبانی می‌کنیم تا کاربران بتوانند به‌راحتی نحو <code>async || {}</code> را جایگزین کنند، حتی وقتی APIای را فراخوانی می‌کنند که پیش از وجود صفت‌های درجه‌یک <code>AsyncFn*</code> طراحی شده است.</p>
+<h4 id="calling-a-closure-before-its-kind-has-been-inferred"><a class="header" href="#calling-a-closure-before-its-kind-has-been-inferred">فراخوانی یک closure پیش از استنتاج نوع آن</a></h4>
+<p>محاسبهٔ «نوع» (kind) یک coroutine-closure (یعنی حداکثر حالت فراخوانی آن: <code>AsyncFnOnce</code>/<code>AsyncFnMut</code>/<code>AsyncFn</code>) را تا پایان typeck به تعویق می‌اندازیم<sup class="footnote-reference" id="fr-call1-1"><a href="#footnote-call1">21</a></sup>. با این حال، چون می‌خواهیم بتوانیم آن coroutine-closure را پیش از پایان typeck فراخوانی کنیم، باید پیش از آن نوع بازگشتی coroutine-closure را مشخص کنیم.</p>
+<p>برخلاف closureهای معمولی که نوع بازگشتی‌شان با تغییر صفت <code>Fn*</code> مورد استفاده در فراخوانی تغییر نمی‌کند، coroutine-closureها <em>بسته به</em> نوع صفت <code>AsyncFn*</code> که برای فراخوانی‌شان استفاده می‌شود، نوع‌های coroutine متفاوتی برمی‌گردانند.</p>
+<p>به‌طور مشخص، هرچند def-id مربوط به coroutine برگردانده‌شده تغییر نمی‌کند، upvarها<sup class="footnote-reference" id="fr-call2-1"><a href="#footnote-call2">22</a></sup> (که یا از coroutine-closure والد قرض گرفته می‌شوند یا move می‌شوند) و نوع coroutine (coroutine-kind)<sup class="footnote-reference" id="fr-call3-1"><a href="#footnote-call3">23</a></sup> به حالت فراخوانی بستگی دارند.</p>
+<p>ما یک صفت <code>AsyncFnKindHelper</code> معرفی می‌کنیم که به ما اجازه می‌دهد پرسش «آیا این coroutine-closure از این حالت فراخوانی پشتیبانی می‌کند»<sup class="footnote-reference" id="fr-helper1-1"><a href="#footnote-helper1">24</a></sup> را از طریق یک هدف صفت (trait goal) و پرسش «upvarهای tuple‌شدهٔ این حالت فراخوانی چیست»<sup class="footnote-reference" id="fr-helper2-1"><a href="#footnote-helper2">25</a></sup> را از طریق یک نوع وابسته به تعویق بیندازیم؛ نوع وابسته را می‌توان با افزودن نوع‌های ورودی coroutine-closure به upvarها یا upvarهای «by ref» که در تحلیل upvar محاسبه شده‌اند به دست آورد.</p>
+<h4 id="ok-so-why"><a class="header" href="#ok-so-why">خب، چرا؟</a></h4>
+<p>این کار کمی دور و پیچیده به نظر می‌رسد و اعتراف می‌کنم که هست. اما بیایید گزینهٔ «هیچ‌کاری نکردن» را در نظر بگیریم – می‌توانستیم به‌جای آن همهٔ اهداف <code>AsyncFn*</code> را تا زمان تحلیل upvar مبهم (ambiguous) علامت بزنیم، که در آن زمان دقیقاً می‌دانیم چه چیزی را در upvarهای coroutine برگشتی بگذاریم. اما این کار در واقع برای استنتاج در برنامه <em>بسیار</em> مضر است، چون به این معناست که برنامه‌هایی مانند این معتبر نخواهند بود:</p>
+<pre><code class="language-rust ignore">let c = async || -&gt; String { .. };
+let s = c().await;
+// ^^^ If we can't project `&lt;{c} as AsyncFn&gt;::call()` to a coroutine, then the `IntoFuture::into_future` call inside of the `.await` stalls, and the type of `s` is left unconstrained as an infer var.
+s.as_bytes();
+// ^^^ That means we can't call any methods on the awaited return of a coroutine-closure, like... at all!</code></pre>
+<p>بنابراین <em>به‌جای آن</em>، از این نام مستعار (alias) استفاده می‌کنیم (در این مورد یک projection: <code>AsyncFnKindHelper::Upvars&lt;'env, ...&gt;</code>) تا محاسبهٔ <em>upvarهای tuple‌شده</em> را به تأخیر بیندازیم و چیزی برای قرار دادن در جای آن داشته باشیم، و در عین حال همچنان بتوانیم یک <code>TyKind::Coroutine</code> (که نوعی صلب (rigid) است) برگردانیم و صفت‌های داخلی مورد نیازمان (در مورد ما <code>Future</code>) را با موفقیت تأیید کنیم، چون پیاده‌سازی <code>Future</code> اصلاً به upvarها وابسته نیست.</p>
+<h3 id="upvar-analysis"><a class="header" href="#upvar-analysis">تحلیل upvar</a></h3>
+<p>در مجموع، تحلیل upvar برای coroutine-closureها و coroutineهای فرزندشان مانند تحلیل upvar معمولی پیش می‌رود. با این حال، چند نکتهٔ جالب برای در نظر گرفتن ماهیت ویژهٔ closureهای async وجود دارد:</p>
+<h4 id="forcing-all-inputs-to-be-captured"><a class="header" href="#forcing-all-inputs-to-be-captured">مجبور کردن capture همهٔ ورودی‌ها</a></h4>
+<p>مانند async fn، همهٔ آرگومان‌های ورودی capture می‌شوند. ما صراحتاً همهٔ این ورودی‌ها را مجبور می‌کنیم که by move capture شوند<sup class="footnote-reference" id="fr-f1-1"><a href="#footnote-f1">26</a></sup> تا future coroutine برگشتی از closureهای async به این بستگی نداشته باشد که ورودی در بدنه <em>استفاده</em> شده یا نه، که در غیر این صورت یک خطر جالب semver ایجاد می‌کرد.</p>
+<h4 id="computing-the-by-ref-captures"><a class="header" href="#computing-the-by-ref-captures">محاسبهٔ captureهای by-ref</a></h4>
+<p>برای coroutine-closure‌ای که از <code>AsyncFn</code>/<code>AsyncFnMut</code> پشتیبانی می‌کند، باید رابطهٔ میان captureهای coroutine-closure و coroutine فرزندش را نیز محاسبه کنیم. به‌طور مشخص، coroutine-closure ممکن است یک upvar را به captureهایش <code>move</code> کند، اما coroutine ممکن است فقط آن upvar را قرض بگیرد.</p>
+<p>ما «<code>coroutine_captures_by_ref_ty</code>» را با بررسی همهٔ captureهای coroutine فرزند و مقایسهٔ آن‌ها با capture متناظر در coroutine-closure والد<sup class="footnote-reference" id="fr-br1-1"><a href="#footnote-br1">27</a></sup> محاسبه می‌کنیم. این <code>coroutine_captures_by_ref_ty</code> در نهایت به‌صورت نوع <code>for&lt;'env&gt; fn() -&gt; captures...</code> نمایش داده می‌شود، که طول عمر binder اضافی در آن نمایندهٔ طول عمر «<code>&amp;self</code>» هنگام فراخوانی <code>AsyncFn::async_call</code> یا <code>AsyncFnMut::async_call_mut</code> است. آن binder را بعداً هنگام فراخوانی واقعی متدها نمونه‌سازی (instantiate) می‌کنیم.</p>
+<p>توجه کنید که هر capture از نوع by-ref در coroutine-closure والد به یک قرض «lending» منجر نمی‌شود. برای جزئیات بیشتر بخش <strong>Follow-up: When do async closures implement the regular <code>Fn*</code> traits?</strong> را در ادامه ببینید، چون این موضوع عمیقاً بر اینکه coroutine-closure اجازهٔ پیاده‌سازی خانوادهٔ صفت‌های <code>Fn*</code> را دارد یا نه تأثیر می‌گذارد.</p>
+<h4 id="by-move-body--fnonce-quirk"><a class="header" href="#by-move-body--fnonce-quirk">بدنهٔ by-move + نکتهٔ عجیب <code>FnOnce</code></a></h4>
+<p>چند وضعیت وجود دارد که در آن‌ها تحلیل upvar برای closure، upvarهایی برای coroutine فرزند coroutine-closure استنتاج می‌کند که بیش از حد آزادانه‌اند و در نهایت به خطاهای borrow-checker می‌انجامند. این موضوع با مثال بهتر روشن می‌شود. برای مثال، با فرض:</p>
+<pre><code class="language-rust">fn force_fnonce&lt;T: async FnOnce()&gt;(t: T) -&gt; T { t }
+
+let x = String::new();
+let c = force_fnonce(async move || {
+    println!("{x}");
+});</code></pre>
+<p><code>x</code> به coroutine-closure منتقل (move) می‌شود، اما coroutine‌ای که برگردانده می‌شود فقط <code>&amp;x</code> را قرض می‌گیرد. با این حال، چون <code>force_fnonce</code> coroutine-closure را مجبور به <code>AsyncFnOnce</code> می‌کند، که <em>lending</em> نیست، باید capture را مجبور کنیم by-move انجام شود<sup class="footnote-reference" id="fr-bm1-1"><a href="#footnote-bm1">28</a></sup>.</p>
+<p>به‌طور مشابه:</p>
+<pre><code class="language-rust">let x = String::new();
+let y = String::new();
+let c = async move || {
+    drop(y);
+    println!("{x}");
+};</code></pre>
+<p><code>x</code> به coroutine-closure منتقل می‌شود، اما coroutine‌ای که برگردانده می‌شود فقط <code>&amp;x</code> را قرض می‌گیرد. با این حال، چون <code>y</code> را نیز capture می‌کنیم و drop می‌کنیم، coroutine-closure مجبور می‌شود <code>AsyncFnOnce</code> باشد. باید capture مربوط به <code>x</code> را هم مجبور کنیم by-move انجام شود. برای تشخیص این وضعیت به‌طور خاص، چون برخلاف مثال قبل نوع closure مربوط به coroutine-kind هنوز مقید نشده است، باید بدنهٔ coroutine-closure را تحلیل کنیم تا ببینیم همهٔ upvarها چگونه استفاده شده‌اند و تعیین کنیم آیا به شکلی «مصرفی» استفاده شده‌اند – یعنی به شکلی که آن را مجبور به <code>FnOnce</code> کند<sup class="footnote-reference" id="fr-bm2-1"><a href="#footnote-bm2">29</a></sup>.</p>
+<h4 id="follow-up-when-do-async-closures-implement-the-regular-fn-traits"><a class="header" href="#follow-up-when-do-async-closures-implement-the-regular-fn-traits">Follow-up: چه زمانی closureهای async صفت‌های <code>Fn*</code> معمولی را پیاده‌سازی می‌کنند؟</a></h4>
+<p>خب، اول از همه، همهٔ closureهای async صفت <code>FnOnce</code> را پیاده‌سازی می‌کنند، چون همیشه می‌توان آن‌ها را <em>دست‌کم یک بار</em> فراخوانی کرد.</p>
+<p>برای <code>Fn</code>/<code>FnMut</code>، پاسخ تفصیلی شامل پاسخ دادن به یک پرسش مرتبط است: آیا coroutine-closure از نوع lending است؟ چون اگر باشد، نمی‌تواند صفت‌های غیر-lending یعنی <code>Fn</code>/<code>FnMut</code> را پیاده‌سازی کند.</p>
+<p>تعیین اینکه چه زمانی coroutine-closure باید upvarهایش را <em>قرض بدهد</em> (lend) در تابع کمکی <code>should_reborrow_from_env_of_parent_coroutine_closure</code><sup class="footnote-reference" id="fr-u1-1"><a href="#footnote-u1">30</a></sup> پیاده‌سازی شده است. به‌طور مشخص، این باید در دو جا رخ دهد:</p>
+<ol>
+<li>آیا داده‌ای را قرض می‌گیریم که متعلق به closure والد است؟ می‌توانیم با بررسی اینکه آیا capture والد by-move است این را تشخیص دهیم، مگر اینکه یک projection از نوع deref اعمال کنیم، که به این معناست که ارجاعی را که by-move capture شده دوباره قرض می‌گیریم (reborrow).</li>
+</ol>
+<pre><code class="language-rust">let x = &amp;1i32; // Let's call this lifetime `'1`.
+let c = async move || {
+    println!("{:?}", *x);
+    // Even though the inner coroutine borrows by ref, we're only capturing `*x`,
+    // not `x`, so the inner closure is allowed to reborrow the data for `'1`.
+};</code></pre>
+<ol start="2">
+<li>اگر یک coroutine از یک capture والد به‌صورت mutable قرض بگیرد، آن قرض mutable نمی‌تواند بیش از والد <em>یا</em> قرضی که روی upvar اصلی داریم زنده بماند. بنابراین همیشه باید capture فرزند را با طول عمر محیط (env) coroutine-closure والد قرض بگیریم.</li>
+</ol>
+<pre><code class="language-rust">let mut x = 1i32;
+let c = async || {
+    x = 1;
+    // The parent borrows `x` for some `&amp;'1 mut i32`.
+    // However, when we call `c()`, we implicitly autoref for the signature of
+    // `AsyncFnMut::async_call_mut`. Let's call that lifetime `'call`. Since
+    // the maximum that `&amp;'call mut &amp;'1 mut i32` can be reborrowed is `&amp;'call mut i32`,
+    // the inner coroutine should capture w/ the lifetime of the coroutine-closure.
+};</code></pre>
+<p>اگر هر یک از این دو حالت صدق کند، باید قرض را با طول عمر env مربوط به coroutine-closure والد capture کنیم. خوشبختانه، اگر این تابع درست نباشد، برنامه ناامن (unsound) نمی‌شود، چون همچنان انتخاب‌های انجام‌شده توسط این تابع را borrowck و اعتبارسنجی می‌کنیم – تنها عارضهٔ جانبی این است که کاربر ممکن است خطاهای غیرضروری borrowck دریافت کند.</p>
+<h3 id="instance-resolution"><a class="header" href="#instance-resolution">تفکیک نمونه (Instance resolution)</a></h3>
+<p>اگر coroutine-closure نوع closure برابر <code>FnOnce</code> داشته باشد، پیاده‌سازی‌های <code>AsyncFnOnce::call_once</code> و <code>FnOnce::call_once</code> آن به بدنهٔ coroutine-closure<sup class="footnote-reference" id="fr-res1-1"><a href="#footnote-res1">31</a></sup> تفکیک می‌شوند، و <code>Future::poll</code> مربوط به coroutine‌ای که برگردانده می‌شود به بدنهٔ closure فرزند تفکیک می‌شود.</p>
+<p>اگر coroutine-closure نوع closure برابر <code>FnMut</code>/<code>Fn</code> داشته باشد، همین موضوع دربارهٔ <code>AsyncFn</code> و پیاده‌سازی <code>Future</code> متناظر coroutine برگشتی صدق می‌کند.<sup class="footnote-reference" id="fr-res1-2"><a href="#footnote-res1">31</a></sup> با این حال، برای تولید پیاده‌سازی <code>AsyncFnOnce::call_once</code>/<code>FnOnce::call_once</code><sup class="footnote-reference" id="fr-res2-1"><a href="#footnote-res2">32</a></sup> و نمونه‌های <code>Fn::call</code>/<code>FnMut::call_mut</code> (در صورت وجود)<sup class="footnote-reference" id="fr-res3-1"><a href="#footnote-res3">33</a></sup> از یک MIR shim استفاده می‌کنیم.</p>
+<p>این با <code>ConstructCoroutineInClosureShim</code><sup class="footnote-reference" id="fr-i1-1"><a href="#footnote-i1">34</a></sup> نمایش داده می‌شود. مقدار bool به نام <code>receiver_by_ref</code> اگر این نمونهٔ <code>Fn::call</code>/<code>FnMut::call_mut</code> باشد true خواهد بود.<sup class="footnote-reference" id="fr-i2-1"><a href="#footnote-i2">35</a></sup> coroutine‌ای که همهٔ این نمونه‌ها برمی‌گردانند با بدنهٔ by-move‌ای متناظر است که تا آن مرحله سنتز کرده‌ایم.<sup class="footnote-reference" id="fr-i3-1"><a href="#footnote-i3">36</a></sup></p>
+<h3 id="borrow-checking"><a class="header" href="#borrow-checking">Borrow-checking</a></h3>
+<p>معلوم می‌شود borrow-checking برای closureهای async کاملاً سرراست است. پس از افزودن variant جدید <code>DefiningTy::CoroutineClosure</code><sup class="footnote-reference" id="fr-bck1-1"><a href="#footnote-bck1">37</a></sup> و آموزش دادن به borrowck برای تولید امضای coroutine-closure<sup class="footnote-reference" id="fr-bck2-1"><a href="#footnote-bck2">38</a></sup>، borrowck کاملاً بدون مشکل ادامه می‌دهد.</p>
+<p>یک نکتهٔ قابل‌توجه این است که بدنهٔ مصنوعی‌ای را که برای coroutineهای by-move می‌سازیم borrow-check نمی‌کنیم، چون از طریق ساختار (و اعتبار بدنهٔ coroutine by-ref که از آن مشتق شده) باید معتبر باشد.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-k1">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_ast_lowering/src/expr.rs#L1147">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_ast_lowering/src/expr.rs#L1147</a> <a href="#fr-k1-1">↩</a></p>
+</li>
+<li id="footnote-k2">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_ast_lowering/src/expr.rs#L1117">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_ast_lowering/src/expr.rs#L1117</a> <a href="#fr-k2-1">↩</a></p>
+</li>
+<li id="footnote-l1">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_ast_lowering/src/item.rs#L1096-L1100">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_ast_lowering/src/item.rs#L1096-L1100</a> <a href="#fr-l1-1">↩</a></p>
+</li>
+<li id="footnote-l2">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_ast_lowering/src/item.rs#L1276-L1279">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_ast_lowering/src/item.rs#L1276-L1279</a> <a href="#fr-l2-1">↩</a></p>
+</li>
+<li id="footnote-l3">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_hir_typeck/src/upvar.rs#L250-L256">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_hir_typeck/src/upvar.rs#L250-L256</a> <a href="#fr-l3-1">↩</a></p>
+</li>
+<li id="footnote-t1">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_type_ir/src/ty_kind.rs#L163-L168">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_type_ir/src/ty_kind.rs#L163-L168</a> <a href="#fr-t1-1">↩</a></p>
+</li>
+<li id="footnote-c1">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_type_ir/src/ty_kind/closure.rs#L221-L229">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_type_ir/src/ty_kind/closure.rs#L221-L229</a> <a href="#fr-c1-1">↩</a></p>
+</li>
+<li id="footnote-c2">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_type_ir/src/ty_kind/closure.rs#L362">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_type_ir/src/ty_kind/closure.rs#L362</a> <a href="#fr-c2-1">↩</a></p>
+</li>
+<li id="footnote-c3">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_type_ir/src/ty_kind/closure.rs#L447-L455">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_type_ir/src/ty_kind/closure.rs#L447-L455</a> <a href="#fr-c3-1">↩</a></p>
+</li>
+<li id="footnote-c4">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/library/core/src/ops/async_function.rs#L36">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/library/core/src/ops/async_function.rs#L36</a> <a href="#fr-c4-1">↩</a></p>
+</li>
+<li id="footnote-c5">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/library/core/src/ops/async_function.rs#L30">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/library/core/src/ops/async_function.rs#L30</a> <a href="#fr-c5-1">↩</a></p>
+</li>
+<li id="footnote-helper">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_type_ir/src/ty_kind/closure.rs#L419">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_type_ir/src/ty_kind/closure.rs#L419</a> <a href="#fr-helper-1">↩</a></p>
+</li>
+<li id="footnote-tr1">
+<p><a href="https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_next_trait_solver/src/solve/assembly/structural_traits.rs#L404-L409">https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_next_trait_solver/src/solve/assembly/structural_traits.rs#L404-L409</a> <a href="#fr-tr1-1">↩</a></p>
+</li>
+<li id="footnote-b1">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_mir_transform/src/coroutine/by_move_body.rs#L1-L70">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_mir_transform/src/coroutine/by_move_body.rs#L1-L70</a> <a href="#fr-b1-1">↩</a></p>
+</li>
+<li id="footnote-b2">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_mir_transform/src/coroutine/by_move_body.rs#L131-L195">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_mir_transform/src/coroutine/by_move_body.rs#L131-L195</a> <a href="#fr-b2-1">↩</a></p>
+</li>
+<li id="footnote-b3">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_mir_transform/src/lib.rs#L339-L342">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_mir_transform/src/lib.rs#L339-L342</a> <a href="#fr-b3-1">↩</a></p>
+</li>
+<li id="footnote-deduce1">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_hir_typeck/src/closure.rs#L345-L362">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_hir_typeck/src/closure.rs#L345-L362</a> <a href="#fr-deduce1-1">↩</a></p>
+</li>
+<li id="footnote-deduce2">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_hir_typeck/src/closure.rs#L486-L487">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_hir_typeck/src/closure.rs#L486-L487</a> <a href="#fr-deduce2-1">↩</a></p>
+</li>
+<li id="footnote-deduce3">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_hir_typeck/src/closure.rs#L517-L534">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_hir_typeck/src/closure.rs#L517-L534</a> <a href="#fr-deduce3-1">↩</a></p>
+</li>
+<li id="footnote-deduce4">
+<p><a href="https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_hir_typeck/src/closure.rs#L575-L590">https://github.com/rust-lang/rust/blob/5ca0e9fa9b2f92b463a0a2b0b34315e09c0b7236/compiler/rustc_hir_typeck/src/closure.rs#L575-L590</a> <a href="#fr-deduce4-1">↩</a> <a href="#fr-deduce4-2">↩2</a></p>
+</li>
+<li id="footnote-call1">
+<p><a href="https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_hir_typeck/src/callee.rs#L169-L210">https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_hir_typeck/src/callee.rs#L169-L210</a> <a href="#fr-call1-1">↩</a></p>
+</li>
+<li id="footnote-call2">
+<p><a href="https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_type_ir/src/ty_kind/closure.rs#L574-L576">https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_type_ir/src/ty_kind/closure.rs#L574-L576</a> <a href="#fr-call2-1">↩</a></p>
+</li>
+<li id="footnote-call3">
+<p><a href="https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_type_ir/src/ty_kind/closure.rs#L554-L563">https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_type_ir/src/ty_kind/closure.rs#L554-L563</a> <a href="#fr-call3-1">↩</a></p>
+</li>
+<li id="footnote-helper1">
+<p><a href="https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/library/core/src/ops/async_function.rs#L135-L144">https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/library/core/src/ops/async_function.rs#L135-L144</a> <a href="#fr-helper1-1">↩</a></p>
+</li>
+<li id="footnote-helper2">
+<p><a href="https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/library/core/src/ops/async_function.rs#L146-L154">https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/library/core/src/ops/async_function.rs#L146-L154</a> <a href="#fr-helper2-1">↩</a></p>
+</li>
+<li id="footnote-f1">
+<p><a href="https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_hir_typeck/src/upvar.rs#L250-L259">https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_hir_typeck/src/upvar.rs#L250-L259</a> <a href="#fr-f1-1">↩</a></p>
+</li>
+<li id="footnote-br1">
+<p><a href="https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_hir_typeck/src/upvar.rs#L375-L471">https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_hir_typeck/src/upvar.rs#L375-L471</a> <a href="#fr-br1-1">↩</a></p>
+</li>
+<li id="footnote-bm1">
+<p><a href="https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_hir_typeck/src/upvar.rs#L211-L248">https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_hir_typeck/src/upvar.rs#L211-L248</a> <a href="#fr-bm1-1">↩</a></p>
+</li>
+<li id="footnote-bm2">
+<p><a href="https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_hir_typeck/src/upvar.rs#L532-L539">https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_hir_typeck/src/upvar.rs#L532-L539</a> <a href="#fr-bm2-1">↩</a></p>
+</li>
+<li id="footnote-u1">
+<p><a href="https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_hir_typeck/src/upvar.rs#L1818-L1860">https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_hir_typeck/src/upvar.rs#L1818-L1860</a> <a href="#fr-u1-1">↩</a></p>
+</li>
+<li id="footnote-res1">
+<p><a href="https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_ty_utils/src/instance.rs#L351">https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_ty_utils/src/instance.rs#L351</a> <a href="#fr-res1-1">↩</a> <a href="#fr-res1-2">↩2</a></p>
+</li>
+<li id="footnote-res2">
+<p><a href="https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_ty_utils/src/instance.rs#L341-L349">https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_ty_utils/src/instance.rs#L341-L349</a> <a href="#fr-res2-1">↩</a></p>
+</li>
+<li id="footnote-res3">
+<p><a href="https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_ty_utils/src/instance.rs#L312-L326">https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_ty_utils/src/instance.rs#L312-L326</a> <a href="#fr-res3-1">↩</a></p>
+</li>
+<li id="footnote-i1">
+<p><a href="https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_middle/src/ty/instance.rs#L129-L134">https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_middle/src/ty/instance.rs#L129-L134</a> <a href="#fr-i1-1">↩</a></p>
+</li>
+<li id="footnote-i2">
+<p><a href="https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_middle/src/ty/instance.rs#L136-L141">https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_middle/src/ty/instance.rs#L136-L141</a> <a href="#fr-i2-1">↩</a></p>
+</li>
+<li id="footnote-i3">
+<p><a href="https://github.com/rust-lang/rust/blob/07cbbdd69363da97075650e9be24b78af0bcdd23/compiler/rustc_middle/src/ty/instance.rs#L841">https://github.com/rust-lang/rust/blob/07cbbdd69363da97075650e9be24b78af0bcdd23/compiler/rustc_middle/src/ty/instance.rs#L841</a> <a href="#fr-i3-1">↩</a></p>
+</li>
+<li id="footnote-bck1">
+<p><a href="https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_borrowck/src/universal_regions.rs#L110-L115">https://github.com/rust-lang/rust/blob/705cfe0e966399e061d64dd3661bfbc57553ed87/compiler/rustc_borrowck/src/universal_regions.rs#L110-L115</a> <a href="#fr-bck1-1">↩</a></p>
+</li>
+<li id="footnote-bck2">
+<p><a href="https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_borrowck/src/universal_regions.rs#L743-L790">https://github.com/rust-lang/rust/blob/7c7bb7dc017545db732f5cffec684bbaeae0a9a0/compiler/rustc_borrowck/src/universal_regions.rs#L743-L790</a> <a href="#fr-bck2-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="closure.html">→ استنتاج capture در Closure</a><a href="part-5-intro.html">پیشگفتار ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

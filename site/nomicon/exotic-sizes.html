@@ -1,0 +1,67 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>نوع‌هایی با اندازهٔ غیرمعمول — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="exotic-sizes"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="exotically-sized-types"><a class="header" href="#exotically-sized-types">نوع‌هایی با اندازه‌های عجیب</a></h1>
+<p>در بیشتر مواقع انتظار داریم نوع‌ها اندازه‌ای مثبت و مشخص در زمان کامپایل داشته باشند. در Rust همیشه این‌طور نیست.</p>
+<h2 id="dynamically-sized-types-dsts"><a class="header" href="#dynamically-sized-types-dsts">نوع‌های با اندازه پویا (DSTها)</a></h2>
+<p>Rust از نوع‌های با اندازه پویا (Dynamically Sized Types یا DSTها) پشتیبانی می‌کند: نوع‌هایی که اندازه و ترازبندی (alignment) آن‌ها در زمان کامپایل معلوم نیست. در نگاه اول این کمی بی‌معنی به نظر می‌رسد: Rust <em>باید</em> اندازه و ترازبندی هر چیزی را بداند تا بتواند درست با آن کار کند! از این نظر، DSTها نوع‌های معمولی نیستند. چون اندازه‌ای ایستا و معلوم ندارند، این نوع‌ها فقط پشت یک اشاره‌گر می‌توانند وجود داشته باشند. در نتیجه، هر اشاره‌گر به یک DST به یک اشاره‌گر <em>عریض</em> (wide pointer) تبدیل می‌شود که از خود اشاره‌گر و اطلاعاتی تشکیل شده که آن را «کامل» می‌کند (در ادامه بیشتر توضیح می‌دهیم).</p>
+<p>دو DST اصلی در زبان وجود دارد:</p>
+<ul>
+<li>شیء‌های صفت (trait objects): <code>dyn MyTrait</code></li>
+<li>برش‌ها (slices): <a href="https://doc.rust-lang.org/std/primitive.slice.html"><code>[T]</code></a>، <a href="https://doc.rust-lang.org/std/primitive.str.html"><code>str</code></a> و موارد دیگر</li>
+</ul>
+<p>یک شیء صفت نماینده‌ی نوعی است که صفت‌های مشخص‌شده را پیاده‌سازی می‌کند. نوع اصلی دقیق <em>پاک</em> می‌شود و به‌جای آن بازتاب زمان اجرا (runtime reflection) از طریق یک vtable به کار می‌رود که همه‌ی اطلاعات لازم برای استفاده از آن نوع را در خود دارد. اطلاعاتی که اشاره‌گر شیء صفت را کامل می‌کند، اشاره‌گر به vtable است. اندازه‌ی زمان اجرای شیء مورد اشاره را می‌توان به‌صورت پویا از vtable درخواست کرد.</p>
+<p>یک برش صرفاً نمایی از یک فضای ذخیره‌سازی پیوسته است – معمولاً یک آرایه یا <code>Vec</code>. اطلاعاتی که اشاره‌گر برش را کامل می‌کند فقط تعداد عناصری است که به آن‌ها اشاره می‌کند. اندازه‌ی زمان اجرای شیء مورد اشاره برابر است با اندازه‌ی ایستای شناخته‌شده‌ی یک عنصر ضرب در تعداد عناصر.</p>
+<p>ساختارها (structs) در واقع می‌توانند یک DST را مستقیماً به‌عنوان آخرین فیلد خود نگه دارند، اما این کار آن‌ها را هم به یک DST تبدیل می‌کند:</p>
+<pre><code class="language-rust">// Can't be stored on the stack directly
+struct MySuperSlice {
+    info: u32,
+    data: [u8],
+}</code></pre>
+<p>متأسفانه چنین نوعی بدون راهی برای ساختنش تقریباً بی‌فایده است. در حال حاضر تنها راهی که به‌درستی پشتیبانی می‌شود برای ایجاد یک DST سفارشی این است که نوع خود را جنریک کنید و یک <em>تبدیل اندازه‌زدایی</em> (unsizing coercion) انجام دهید:</p>
+<pre><code class="language-rust">struct MySuperSliceable&lt;T: ?Sized&gt; {
+    info: u32,
+    data: T,
+}
+
+fn main() {
+    let sized: MySuperSliceable&lt;[u8; 8]&gt; = MySuperSliceable {
+        info: 17,
+        data: [0; 8],
+    };
+
+    let dynamic: &amp;MySuperSliceable&lt;[u8]&gt; = &amp;sized;
+
+    // prints: "17 [0, 0, 0, 0, 0, 0, 0, 0]"
+    println!("{} {:?}", dynamic.info, &amp;dynamic.data);
+}</code></pre>
+<p>(بله، DSTهای سفارشی فعلاً قابلیتی نیمه‌کاره هستند.)</p>
+<h2 id="zero-sized-types-zsts"><a class="header" href="#zero-sized-types-zsts">نوع‌های با اندازه صفر (ZSTها)</a></h2>
+<p>Rust همچنین اجازه می‌دهد نوع‌هایی تعریف شوند که هیچ فضایی اشغال نمی‌کنند:</p>
+<pre><code class="language-rust">struct Nothing; // No fields = no size
+
+// All fields have no size = no size
+struct LotsOfNothing {
+    foo: Nothing,
+    qux: (),      // empty tuple has no size
+    baz: [u8; 0], // empty array has no size
+}</code></pre>
+<p>نوع‌های با اندازه صفر (Zero Sized Types یا ZSTها) به‌تنهایی، به دلایل واضح، کاملاً بی‌فایده‌اند. با این حال، مانند بسیاری از انتخاب‌های کنجکاوانه‌ی چیدمان در Rust، توان بالقوه‌ی آن‌ها در بستر جنریک آشکار می‌شود: Rust تا حد زیادی می‌داند که هر عملیاتی که یک ZST تولید یا ذخیره می‌کند را می‌توان به یک عملیات تهی (no-op) کاهش داد. اول اینکه ذخیره‌کردن آن حتی معنا ندارد – چون هیچ فضایی اشغال نمی‌کند. همچنین فقط یک مقدار از آن نوع وجود دارد، بنابراین هر چیزی که آن را بارگیری می‌کند می‌تواند آن را از هیچ تولید کند – که آن هم یک عملیات تهی است چون هیچ فضایی اشغال نمی‌کند.</p>
+<p>یکی از شدیدترین نمونه‌های این موضوع مجموعه‌ها (Sets) و نگاشت‌ها (Maps) است. با داشتن یک <code>Map&lt;Key, Value&gt;</code>، پیاده‌سازی <code>Set&lt;Key&gt;</code> به‌صورت یک لایه‌ی نازک دور <code>Map&lt;Key, UselessJunk&gt;</code> رایج است. در بسیاری از زبان‌ها، این کار مستلزم تخصیص فضا برای UselessJunk و انجام کار برای ذخیره و بارگیری UselessJunk فقط برای دور انداختن آن است. اثبات بی‌مصرف‌بودن این کارها برای کامپایلر تحلیلی دشوار خواهد بود.</p>
+<p>اما در Rust می‌توانیم به‌سادگی بگوییم <code>Set&lt;Key&gt; = Map&lt;Key, ()&gt;</code>. اکنون Rust به‌صورت ایستا می‌داند که هر بارگیری و ذخیره بی‌فایده است و هیچ تخصیصی اندازه‌ای ندارد. نتیجه این است که کد تک‌ریختی‌شده (monomorphized) اساساً یک پیاده‌سازی سفارشی از HashSet است، بدون هیچ‌کدام از سربارهایی که HashMap برای پشتیبانی از مقادیر باید تحمل کند.</p>
+<p>کد امن لازم نیست نگران ZSTها باشد، اما کد <em>unsafe</em> باید مراقب پیامدهای نوع‌های بدون اندازه باشد. به‌ویژه، جابه‌جایی اشاره‌گر (pointer offset) عملیات تهی است، و تخصیص‌دهنده‌ها (allocators) معمولاً <a href="https://doc.rust-lang.org/std/alloc/trait.GlobalAlloc.html#tymethod.alloc">اندازه‌ی غیرصفر را الزامی می‌دانند</a>.</p>
+<p>توجه کنید که ارجاع‌ها به ZSTها (از جمله برش‌های خالی)، درست مانند همه‌ی ارجاع‌های دیگر، باید غیر null و به‌درستی تراز شده باشند. با این حال، بارگیری یا ذخیره از طریق یک اشاره‌گر null به یک ZST برخلاف اشاره‌گر به نوع‌های دیگر، <a href="what-unsafe-does.html">رفتار تعریف‌نشده</a> نیست.</p>
+<h2 id="empty-types"><a class="header" href="#empty-types">نوع‌های تهی</a></h2>
+<p>Rust همچنین اجازه می‌دهد نوع‌هایی تعریف شوند که <em>حتی نمی‌توان از آن‌ها نمونه ساخت</em>. این نوع‌ها فقط در سطح نوع قابل بحث هستند و هرگز در سطح مقدار وجود ندارند. نوع‌های تهی را می‌توان با تعریف یک شمارش بدون هیچ گونه (variant) اعلام کرد:</p>
+<pre><code class="language-rust">enum Void {} // No variants = EMPTY</code></pre>
+<p>نوع‌های تهی حتی از ZSTها حاشیه‌ای‌ترند. اصلی‌ترین مثال انگیزه‌بخش برای یک نوع تهی، دست‌نیافتنی‌بودن در سطح نوع است. برای نمونه، فرض کنید یک API در حالت کلی باید یک Result برگرداند، اما یک حالت خاص در واقع هرگز شکست نمی‌خورد. در واقع می‌توان این را در سطح نوع با برگرداندن <code>Result&lt;T, Void&gt;</code> اعلام کرد. مصرف‌کنندگان API می‌توانند با اطمینان چنین Resultی را unwrap کنند، چون می‌دانند <em>از نظر ایستا غیرممکن</em> است که این مقدار یک <code>Err</code> باشد، زیرا این کار مستلزم ارائه‌ی مقداری از نوع <code>Void</code> است.</p>
+<p>در اصل، Rust می‌تواند بر پایه‌ی این واقعیت تحلیل‌ها و بهینه‌سازی‌های جالبی انجام دهد. برای نمونه، <code>Result&lt;T, Void&gt;</code> فقط به‌صورت <code>T</code> نمایش داده می‌شود، چون حالت <code>Err</code> در واقع وجود ندارد (به بیان دقیق، این فقط یک بهینه‌سازی است که تضمین نشده است، بنابراین مثلاً تبدیل یکی به دیگری با transmute همچنان رفتار تعریف‌نشده است).</p>
+<p>کد زیر هم کامپایل می‌شود:</p>
+<pre><code class="language-rust">enum Void {}
+
+let res: Result&lt;u32, Void&gt; = Ok(0);
+
+// Err doesn't exist anymore, so Ok is actually irrefutable.
+let Ok(num) = res;</code></pre>
+<p>یک نکته‌ی ظریف پایانی درباره‌ی نوع‌های تهی این است که ساختن اشاره‌گر خام به آن‌ها در واقع مجاز است، اما صرف‌نظر کردن (dereference) از آن‌ها رفتار تعریف‌نشده است چون معنایی ندارد.</p>
+<p>توصیه می‌کنیم نوع <code>void*</code> زبان C را با <code>*const Void</code> مدل نکنید. افراد زیادی این کار را شروع کردند، اما به‌سرعت به مشکل خوردند، چون Rust در واقع هیچ حفاظ ایمنی در برابر تلاش برای ساخت نمونه از نوع‌های تهی با کد unsafe ندارد و اگر این کار را بکنید، رفتار تعریف‌نشده است. این موضوع به‌ویژه مشکل‌ساز بود چون توسعه‌دهندگان عادت داشتند اشاره‌گرهای خام را به ارجاع تبدیل کنند و ساختن <code>&amp;Void</code> هم <em>خودش</em> رفتار تعریف‌نشده است.</p>
+<p><code>*const ()</code> (یا معادل آن) برای <code>void*</code> به‌طور معقولی خوب کار می‌کند و می‌توان آن را بدون هیچ مشکل ایمنی به یک ارجاع تبدیل کرد. این هنوز مانع از تلاش برای خواندن یا نوشتن مقادیر نمی‌شود، اما دست‌کم به‌جای رفتار تعریف‌نشده به یک عملیات تهی کامپایل می‌شود.</p>
+<h2 id="extern-types"><a class="header" href="#extern-types">نوع‌های extern</a></h2>
+<p>یک <a href="https://github.com/rust-lang/rfcs/blob/master/text/1861-extern-types.md">RFC پذیرفته‌شده</a> برای افزودن نوع‌های واقعی با اندازه‌ی نامعلوم وجود دارد، به نام <em>نوع‌های extern</em>، که به توسعه‌دهندگان Rust اجازه می‌دهد چیزهایی مانند <code>void*</code> در C و دیگر نوع‌های «اعلام‌شده اما هرگز تعریف‌نشده» را دقیق‌تر مدل کنند. با این حال، از زمان Rust 2018، <a href="https://github.com/rust-lang/rust/issues/43467">این قابلیت در بلاتکلیفی گیر کرده است که <code>size_of_val::&lt;MyExternType&gt;()</code> چگونه باید رفتار کند</a>.</p><nav class="page-nav"><a href="repr-rust.html">→ repr(Rust)</a><a href="other-reprs.html">سایر reprها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

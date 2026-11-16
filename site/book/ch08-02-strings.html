@@ -1,0 +1,254 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>ذخیرهٔ متن با کدگذاری UTF-8 با String — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch08-02-strings"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="storing-utf-8-encoded-text-with-strings"><a class="header" href="#storing-utf-8-encoded-text-with-strings">ذخیره متن‌های کدگذاری شده UTF-8 با رشته‌ها (strings)</a></h2>
+<p>ما در فصل ۴ درباره رشته‌ها صحبت کردیم، اما اکنون به آن‌ها با عمق بیشتری نگاه خواهیم کرد. Rustaceanهای تازه‌وارد معمولاً به دلیل ترکیبی از سه عامل در رشته‌ها دچار مشکل می‌شوند: گرایش Rust به آشکارسازی خطاهای ممکن، رشته‌ها به عنوان یک ساختار داده پیچیده‌تر از آنچه بسیاری از برنامه‌نویسان تصور می‌کنند، و UTF-8. این عوامل به نحوی ترکیب می‌شوند که می‌توانند برای کسانی که از زبان‌های برنامه‌نویسی دیگر می‌آیند دشوار باشند.</p>
+<p>ما رشته‌ها را در زمینه مجموعه‌ها بررسی می‌کنیم، زیرا رشته‌ها به عنوان مجموعه‌ای از بایت‌ها پیاده‌سازی شده‌اند، به علاوه تعدادی متد برای ارائه قابلیت‌های مفید زمانی که این بایت‌ها به عنوان متن تفسیر می‌شوند. در این بخش، درباره عملیات‌هایی که روی <code>String</code> انجام می‌شود و هر نوع مجموعه‌ای آن‌ها را دارد، مانند ایجاد، به‌روزرسانی، و خواندن صحبت خواهیم کرد. همچنین تفاوت‌های <code>String</code> با سایر مجموعه‌ها را مورد بحث قرار می‌دهیم، به‌ویژه نحوه پیچیدگی اندیس‌گذاری در یک <code>String</code> به دلیل تفاوت‌های بین تفسیر داده‌های <code>String</code> توسط انسان‌ها و کامپیوترها.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="what-is-a-string"></a></p>
+<h3 id="defining-strings"><a class="header" href="#defining-strings">رشته (string) چیست؟</a></h3>
+<p>ابتدا تعریف می‌کنیم که منظور ما از اصطلاح <em>رشته</em> چیست. Rust فقط یک نوع رشته در زبان هسته خود دارد که همان قطعه رشته <code>str</code> است که معمولاً به صورت قرض گرفته شده <code>&amp;str</code> دیده می‌شود. در فصل ۴ درباره <em>قطعه‌های رشته</em> صحبت کردیم، که ارجاعاتی به داده‌های رشته‌ای کدگذاری شده UTF-8 هستند که در جای دیگری ذخیره شده‌اند. به عنوان مثال، رشته‌های لیترال در باینری برنامه ذخیره می‌شوند و بنابراین قطعه‌های رشته هستند.</p>
+<p>نوع <code>String</code>، که توسط کتابخانه استاندارد Rust ارائه شده است و نه مستقیماً در زبان هسته کدگذاری شده، یک نوع رشته رشدپذیر، قابل تغییر، و مالک UTF-8 است. وقتی Rustaceanها به “رشته‌ها” در Rust اشاره می‌کنند، ممکن است به نوع <code>String</code> یا قطعه رشته <code>&amp;str</code> اشاره کنند، نه فقط یکی از این دو نوع. اگرچه این بخش عمدتاً درباره <code>String</code> است، اما هر دو نوع در کتابخانه استاندارد Rust به شدت مورد استفاده قرار می‌گیرند و هر دو <code>String</code> و قطعه‌های رشته کدگذاری UTF-8 دارند.</p>
+<h3 id="creating-a-new-string"><a class="header" href="#creating-a-new-string">ایجاد یک رشته (strings) جدید</a></h3>
+<p>بسیاری از عملیات مشابه موجود در <code>Vec&lt;T&gt;</code> برای <code>String</code> نیز در دسترس است، زیرا <code>String</code> در واقع به عنوان یک پوششی بر روی یک بردار از بایت‌ها پیاده‌سازی شده است، با برخی ضمانت‌ها، محدودیت‌ها، و قابلیت‌های اضافی. مثالی از یک تابع که به همان روش با <code>Vec&lt;T&gt;</code> و <code>String</code> کار می‌کند، تابع <code>new</code> برای ایجاد یک نمونه است، همانطور که در لیست ۸-۱۱ نشان داده شده است.</p>
+<figure class="listing" id="listing-8-11">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let mut s = String::new();
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-11">لیست ۸-۱۱</a>: ایجاد یک &lt;code&gt;&lt;/x-listing&gt;String&lt;/code&gt; جدید و خالی</figcaption>
+</figure>
+<p>این خط یک رشته جدید و خالی به نام <code>s</code> ایجاد می‌کند که می‌توانیم داده‌ها را در آن بارگذاری کنیم. اغلب، داده‌های اولیه‌ای خواهیم داشت که می‌خواهیم رشته را با آن‌ها شروع کنیم. برای این کار، از متد <code>to_string</code> استفاده می‌کنیم که بر روی هر نوعی که ویژگی <code>Display</code> را پیاده‌سازی می‌کند، همانند رشته‌های لیترال، در دسترس است. لیست ۸-۱۲ دو مثال را نشان می‌دهد.</p>
+<figure class="listing" id="listing-8-12">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let data = "initial contents";
+
+    let s = data.to_string();
+
+    // The method also works on a literal directly:
+    let s = "initial contents".to_string();
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-12">لیست ۸-۱۲</a>: استفاده از متد &lt;code&gt;&lt;/x-listing&gt;to_string&lt;/code&gt; برای ایجاد یک &lt;code&gt;String&lt;/code&gt; از یک رشته لیترال</figcaption>
+</figure>
+<p>این کد یک رشته حاوی <code>initial contents</code> ایجاد می‌کند.</p>
+<p>ما همچنین می‌توانیم از تابع <code>String::from</code> برای ایجاد یک <code>String</code> از یک رشته لیترال استفاده کنیم. کد در لیست ۸-۱۳ معادل کدی است که در لیست ۸-۱۲ از <code>to_string</code> استفاده می‌کند.</p>
+<figure class="listing" id="listing-8-13">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let s = String::from("initial contents");
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-13">لیست ۸-۱۳</a>: استفاده از تابع &lt;code&gt;&lt;/x-listing&gt;String::from&lt;/code&gt; برای ایجاد یک &lt;code&gt;String&lt;/code&gt; از یک رشته لیترال</figcaption>
+</figure>
+<p>از آنجا که رشته‌ها برای موارد بسیاری استفاده می‌شوند، می‌توانیم از بسیاری از APIهای جنریک مختلف برای رشته‌ها استفاده کنیم که گزینه‌های زیادی را در اختیار ما قرار می‌دهند. برخی از این‌ها ممکن است به نظر اضافی بیایند، اما هرکدام جایگاه خاص خود را دارند! در این مورد، <code>String::from</code> و <code>to_string</code> عملکرد یکسانی دارند، بنابراین انتخاب بین آن‌ها مسئله سبک و خوانایی کد است.</p>
+<p>به یاد داشته باشید که رشته‌ها با کدگذاری UTF-8 هستند، بنابراین می‌توانیم هر داده‌ای که به طور صحیح کدگذاری شده باشد را در آن‌ها قرار دهیم، همانطور که در لیست ۸-۱۴ نشان داده شده است.</p>
+<figure class="listing" id="listing-8-14">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let hello = String::from("السلام عليكم");
+    let hello = String::from("Dobrý den");
+    let hello = String::from("Hello");
+    let hello = String::from("שלום");
+    let hello = String::from("नमस्ते");
+    let hello = String::from("こんにちは");
+    let hello = String::from("안녕하세요");
+    let hello = String::from("你好");
+    let hello = String::from("Olá");
+    let hello = String::from("Здравствуйте");
+    let hello = String::from("Hola");
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-14">لیست ۸-۱۴</a>: ذخیره سلام‌ها به زبان‌های مختلف در رشته‌ها</figcaption>
+</figure>
+<p>تمام این موارد مقادیر معتبر <code>String</code> هستند.</p>
+<h3 id="updating-a-string"><a class="header" href="#updating-a-string">به‌روزرسانی یک رشته</a></h3>
+<p>یک <code>String</code> می‌تواند از نظر اندازه رشد کند و محتوای آن تغییر کند، همانطور که محتوای یک <code>Vec&lt;T&gt;</code> تغییر می‌کند، اگر داده بیشتری به آن اضافه کنیم. علاوه بر این، می‌توانیم به راحتی از عملگر <code>+</code> یا ماکروی <code>format!</code> برای الحاق مقادیر <code>String</code> استفاده کنیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="appending-to-a-string-with-push_str-and-push"></a></p>
+<h4 id="appending-with-push_str-or-push"><a class="header" href="#appending-with-push_str-or-push">الحاق به یک رشته (string) با <code>push_str</code> و <code>push</code></a></h4>
+<p>ما می‌توانیم یک <code>String</code> را با استفاده از متد <code>push_str</code> برای الحاق یک قطعه رشته رشد دهیم، همانطور که در لیست ۸-۱۵ نشان داده شده است.</p>
+<figure class="listing" id="listing-8-15">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let mut s = String::from("foo");
+    s.push_str("bar");
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-15">لیست ۸-۱۵</a>: الحاق یک قطعه رشته به یک &lt;code&gt;&lt;/x-listing&gt;String&lt;/code&gt; با استفاده از متد &lt;code&gt;push_str&lt;/code&gt;</figcaption>
+</figure>
+<p>بعد از این دو خط، مقدار <code>s</code> شامل <code>foobar</code> خواهد بود. متد <code>push_str</code> یک قطعه رشته را به عنوان آرگومان می‌گیرد زیرا ما لزوماً نمی‌خواهیم مالکیت پارامتر را بگیریم. برای مثال، در کدی که در لیست ۸-۱۶ نشان داده شده است، ما می‌خواهیم بتوانیم پس از الحاق محتوای <code>s2</code> به <code>s1</code> همچنان از <code>s2</code> استفاده کنیم.</p>
+<figure class="listing" id="listing-8-16">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let mut s1 = String::from("foo");
+    let s2 = "bar";
+    s1.push_str(s2);
+    println!("s2 is {s2}");
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-16">لیست ۸-۱۶</a>: استفاده از یک قطعه رشته پس از الحاق محتوای آن به یک &lt;code&gt;&lt;/x-listing&gt;String&lt;/code&gt;</figcaption>
+</figure>
+<p>اگر متد <code>push_str</code> مالکیت <code>s2</code> را می‌گرفت، نمی‌توانستیم مقدار آن را در خط آخر چاپ کنیم. با این حال، این کد همانطور که انتظار می‌رود کار می‌کند!</p>
+<p>متد <code>push</code> یک کاراکتر را به عنوان پارامتر می‌گیرد و آن را به <code>String</code> اضافه می‌کند. لیست ۸-۱۷ حرف <em>l</em> را با استفاده از متد <code>push</code> به یک <code>String</code> اضافه می‌کند.</p>
+<figure class="listing" id="listing-8-17">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let mut s = String::from("lo");
+    s.push('l');
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-17">لیست ۸-۱۷</a>: اضافه کردن یک کاراکتر به مقدار &lt;code&gt;&lt;/x-listing&gt;String&lt;/code&gt; با استفاده از &lt;code&gt;push&lt;/code&gt;</figcaption>
+</figure>
+<p>در نتیجه، مقدار <code>s</code> شامل <code>lol</code> خواهد بود.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="concatenation-with-the--operator-or-the-format-macro"></a></p>
+<h4 id="concatenating-with--or-format"><a class="header" href="#concatenating-with--or-format">الحاق با استفاده از عملگر <code>+</code> یا ماکروی <code>format!</code></a></h4>
+<p>اغلب، ممکن است بخواهید دو رشته موجود را با هم ترکیب کنید. یکی از راه‌های انجام این کار استفاده از عملگر <code>+</code> است، همانطور که در لیست ۸-۱۸ نشان داده شده است.</p>
+<figure class="listing" id="listing-8-18">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let s1 = String::from("Hello, ");
+    let s2 = String::from("world!");
+    let s3 = s1 + &amp;s2; // note s1 has been moved here and can no longer be used
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-18">لیست ۸-۱۸</a>: استفاده از عملگر &lt;code&gt;&lt;/x-listing&gt;+&lt;/code&gt; برای ترکیب دو مقدار &lt;code&gt;String&lt;/code&gt; در یک مقدار &lt;code&gt;String&lt;/code&gt; جدید</figcaption>
+</figure>
+<p>مقدار <code>s3</code> شامل <code>Hello, world!</code> خواهد بود. دلیل اینکه <code>s1</code> پس از این الحاق دیگر معتبر نیست و دلیل اینکه ما از یک مرجع به <code>s2</code> استفاده کردیم، به امضای متدی که هنگام استفاده از عملگر <code>+</code> فراخوانی می‌شود مربوط است. عملگر <code>+</code> از متد <code>add</code> استفاده می‌کند که امضای آن به شکل زیر است:</p>
+<pre><code class="language-rust ignore">fn add(self, s: &amp;str) -&gt; String {</code></pre>
+<p>در کتابخانه استاندارد، شما <code>add</code> را خواهید دید که با استفاده از جنریک‌ها و انواع مرتبط تعریف شده است. اینجا، ما انواع مشخصی را جایگزین کرده‌ایم، که این همان چیزی است که هنگام فراخوانی این متد با مقادیر <code>String</code> اتفاق می‌افتد. درباره جنریک‌ها در فصل ۱۰ صحبت خواهیم کرد. این امضا به ما سرنخ‌هایی می‌دهد تا بتوانیم بخش‌های چالش‌برانگیز عملگر <code>+</code> را درک کنیم.</p>
+<p>اول، <code>s2</code> یک <code>&amp;</code> دارد، به این معنی که ما یک <em>مرجع</em> از رشته دوم را به رشته اول اضافه می‌کنیم. این به دلیل پارامتر <code>s</code> در تابع <code>add</code> است: ما فقط می‌توانیم یک <code>&amp;str</code> را به یک <code>String</code> اضافه کنیم؛ نمی‌توانیم دو مقدار <code>String</code> را با هم جمع کنیم. اما صبر کنید—نوع <code>&amp;s2</code>، <code>&amp;String</code> است، نه <code>&amp;str</code> همانطور که در پارامتر دوم <code>add</code> مشخص شده است. پس چرا کد در لیست ۸-۱۸ کامپایل می‌شود؟</p>
+<p>دلیل اینکه می‌توانیم از <code>&amp;s2</code> در فراخوانی <code>add</code> استفاده کنیم این است که کامپایلر می‌تواند آرگومان <code>&amp;String</code> را به <code>&amp;str</code> تبدیل کند. هنگامی که ما متد <code>add</code> را فراخوانی می‌کنیم، Rust از یک <em>coercion deref</em> استفاده می‌کند که در اینجا <code>&amp;s2</code> را به <code>&amp;s2[..]</code> تبدیل می‌کند. ما این موضوع را در فصل ۱۵ به طور عمیق‌تری بررسی خواهیم کرد. از آنجا که <code>add</code> مالکیت پارامتر <code>s</code> را نمی‌گیرد، <code>s2</code> پس از این عملیات همچنان یک <code>String</code> معتبر باقی خواهد ماند.</p>
+<p>دوم، می‌توانیم در امضا ببینیم که <code>add</code> مالکیت <code>self</code> را می‌گیرد زیرا <code>self</code> یک <code>&amp;</code> ندارد. این بدان معناست که <code>s1</code> در لیست ۸-۱۸ به فراخوانی <code>add</code> منتقل می‌شود و پس از آن دیگر معتبر نخواهد بود. بنابراین، اگرچه <code>let s3 = s1 + &amp;s2;</code> به نظر می‌رسد که هر دو رشته را کپی می‌کند و یک رشته جدید ایجاد می‌کند، این عبارت در واقع مالکیت <code>s1</code> را می‌گیرد، یک کپی از محتوای <code>s2</code> را اضافه می‌کند، و سپس مالکیت نتیجه را بازمی‌گرداند. به عبارت دیگر، به نظر می‌رسد که کپی‌های زیادی انجام می‌دهد، اما اینطور نیست؛ پیاده‌سازی کارآمدتر از کپی کردن است.</p>
+<p>اگر نیاز به الحاق چندین رشته داشته باشیم، رفتار عملگر <code>+</code> دست‌وپاگیر می‌شود:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let s1 = String::from("tic");
+    let s2 = String::from("tac");
+    let s3 = String::from("toe");
+
+    let s = s1 + "-" + &amp;s2 + "-" + &amp;s3;
+<span class="boring">}</span></code></pre>
+<p>در این نقطه، مقدار <code>s</code> برابر با <code>tic-tac-toe</code> خواهد بود. با تمام این <code>+</code> و کاراکترهای <code>"</code>، دیدن اینکه چه اتفاقی می‌افتد دشوار است. برای ترکیب رشته‌ها به روش‌های پیچیده‌تر، می‌توانیم به جای آن از ماکروی <code>format!</code> استفاده کنیم:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let s1 = String::from("tic");
+    let s2 = String::from("tac");
+    let s3 = String::from("toe");
+
+    let s = format!("{s1}-{s2}-{s3}");
+<span class="boring">}</span></code></pre>
+<p>این کد نیز مقدار <code>s</code> را به <code>tic-tac-toe</code> تنظیم می‌کند. ماکروی <code>format!</code> شبیه به <code>println!</code> کار می‌کند، اما به جای چاپ خروجی روی صفحه، یک <code>String</code> با محتوای مورد نظر بازمی‌گرداند. نسخه کد با استفاده از <code>format!</code> بسیار خواناتر است و کدی که توسط ماکروی <code>format!</code> تولید می‌شود از مراجع استفاده می‌کند، بنابراین این فراخوانی مالکیت هیچ‌یک از پارامترهایش را نمی‌گیرد.</p>
+<h3 id="indexing-into-strings"><a class="header" href="#indexing-into-strings">اندیس‌گذاری در رشته‌ها</a></h3>
+<p>در بسیاری از زبان‌های برنامه‌نویسی دیگر، دسترسی به کاراکترهای منفرد در یک رشته با اشاره به آن‌ها توسط اندیس (index)یک عملیات معتبر و رایج است. با این حال، اگر تلاش کنید در Rust با استفاده از سینتکس اندیس‌گذاری به بخش‌هایی از یک <code>String</code> دسترسی پیدا کنید، با خطا مواجه می‌شوید. کد نامعتبر در لیست ۸-۱۹ را در نظر بگیرید.</p>
+<figure class="listing" id="listing-8-19">
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">fn main() {
+</span>    let s1 = String::from("hi");
+    let h = s1[0];
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-19">لیست ۸-۱۹</a>: تلاش برای استفاده از سینتکس اندیس‌گذاری با یک &lt;code&gt;&lt;/x-listing&gt;String&lt;/code&gt;</figcaption>
+</figure>
+<p>این کد به خطای زیر منجر خواهد شد:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling collections v0.1.0 (file:///projects/collections)
+error[E0277]: the type `str` cannot be indexed by `{integer}`
+ --&gt; src/main.rs:3:16
+  |
+3 |     let h = s1[0];
+  |                ^ string indices are ranges of `usize`
+  |
+  = help: the trait `SliceIndex&lt;str&gt;` is not implemented for `{integer}`
+  = note: you can use `.chars().nth()` or `.bytes().nth()`
+          for more information, see chapter 8 in The Book: &lt;https://doc.rust-lang.org/book/ch08-02-strings.html#indexing-into-strings&gt;
+help: `usize` implements trait `SliceIndex&lt;T&gt;`
+ --&gt; /rustc/88d9e12ae178fab0fb5cc050a94da85685d449ea/library/core/src/slice/index.rs:179:0
+  |
+  = note: `SliceIndex&lt;[T]&gt;`
+ --&gt; /rustc/88d9e12ae178fab0fb5cc050a94da85685d449ea/library/core/src/bstr/traits.rs:197:0
+  |
+  = note: `SliceIndex&lt;ByteStr&gt;`
+  = note: required for `String` to implement `Index&lt;{integer}&gt;`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `collections` (bin "collections") due to 1 previous error
+</code></pre>
+<p>خطا و توضیحات آن گویای موضوع است: رشته‌های Rust از اندیس‌گذاری پشتیبانی نمی‌کنند. اما چرا؟ برای پاسخ به این سؤال، باید درباره نحوه ذخیره‌سازی رشته‌ها در حافظه توسط Rust صحبت کنیم.</p>
+<h4 id="internal-representation"><a class="header" href="#internal-representation">نمایش داخلی</a></h4>
+<p>یک <code>String</code> در واقع یک پوشش بر روی <code>Vec&lt;u8&gt;</code> است. بیایید به برخی از مثال‌های رشته‌های کدگذاری شده UTF-8 در لیست ۸-۱۴ نگاه کنیم. ابتدا این مورد:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span><span class="boring">    let hello = String::from("السلام عليكم");
+</span><span class="boring">    let hello = String::from("Dobrý den");
+</span><span class="boring">    let hello = String::from("Hello");
+</span><span class="boring">    let hello = String::from("שלום");
+</span><span class="boring">    let hello = String::from("नमस्ते");
+</span><span class="boring">    let hello = String::from("こんにちは");
+</span><span class="boring">    let hello = String::from("안녕하세요");
+</span><span class="boring">    let hello = String::from("你好");
+</span><span class="boring">    let hello = String::from("Olá");
+</span><span class="boring">    let hello = String::from("Здравствуйте");
+</span>    let hello = String::from("Hola");
+<span class="boring">}</span></code></pre>
+<p>در این حالت، مقدار <code>len</code> برابر با <code>4</code> خواهد بود، به این معنی که برداری که رشته <code>"Hola"</code> را ذخیره می‌کند ۴ بایت طول دارد. هر یک از این حروف هنگام کدگذاری در UTF-8 یک بایت می‌گیرد. با این حال، خط زیر ممکن است شما را شگفت‌زده کند (توجه داشته باشید که این رشته با حرف بزرگ سیریلیک <em>Ze</em> آغاز می‌شود، نه عدد ۳):</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span><span class="boring">    let hello = String::from("السلام عليكم");
+</span><span class="boring">    let hello = String::from("Dobrý den");
+</span><span class="boring">    let hello = String::from("Hello");
+</span><span class="boring">    let hello = String::from("שלום");
+</span><span class="boring">    let hello = String::from("नमस्ते");
+</span><span class="boring">    let hello = String::from("こんにちは");
+</span><span class="boring">    let hello = String::from("안녕하세요");
+</span><span class="boring">    let hello = String::from("你好");
+</span><span class="boring">    let hello = String::from("Olá");
+</span>    let hello = String::from("Здравствуйте");
+<span class="boring">    let hello = String::from("Hola");
+</span><span class="boring">}</span></code></pre>
+<p>اگر از شما پرسیده شود طول این رشته چقدر است، ممکن است بگویید ۱۲. اما در واقع، پاسخ Rust ۲۴ است: این تعداد بایت‌هایی است که برای کدگذاری “Здравствуйте” در UTF-8 نیاز است، زیرا هر مقدار اسکالر Unicode در این رشته ۲ بایت فضای ذخیره‌سازی می‌گیرد. بنابراین، یک اندیس (index)در بایت‌های رشته همیشه با یک مقدار اسکالر Unicode معتبر مطابقت ندارد. برای نشان دادن این موضوع، کد نامعتبر زیر در Rust را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore does_not_compile">let hello = "Здравствуйте";
+let answer = &amp;hello[0];</code></pre>
+<p>شما قبلاً می‌دانید که مقدار <code>answer</code> برابر با <code>З</code>، اولین حرف، نخواهد بود. وقتی در UTF-8 کدگذاری می‌شود، اولین بایت از <code>З</code> برابر با <code>208</code> و دومین بایت برابر با <code>151</code> است، بنابراین ممکن است به نظر برسد که <code>answer</code> باید در واقع <code>208</code> باشد، اما <code>208</code> به تنهایی یک کاراکتر معتبر نیست. بازگرداندن <code>208</code> احتمالاً چیزی نیست که یک کاربر بخواهد اگر درخواست اولین حرف این رشته را داشته باشد؛ با این حال، این تنها داده‌ای است که Rust در اندیس (index)بایت ۰ دارد. کاربران به طور کلی نمی‌خواهند مقدار بایت بازگردانده شود، حتی اگر رشته فقط حروف لاتین داشته باشد: اگر <code>&amp;"hi"[0]</code> یک کد معتبر بود که مقدار بایت را بازمی‌گرداند، مقدار <code>104</code> و نه <code>h</code> را بازمی‌گرداند.</p>
+<p>پاسخ این است که برای جلوگیری از بازگرداندن یک مقدار غیرمنتظره و ایجاد باگ‌هایی که ممکن است فوراً کشف نشوند، Rust این کد را اصلاً کامپایل نمی‌کند و از سوءتفاهم‌ها در اوایل فرآیند توسعه جلوگیری می‌کند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="bytes-and-scalar-values-and-grapheme-clusters-oh-my"></a></p>
+<h4 id="bytes-scalar-values-and-grapheme-clusters"><a class="header" href="#bytes-scalar-values-and-grapheme-clusters">بایت‌ها، مقادیر اسکالر و خوشه‌های گرافیمی! اوه خدای من!</a></h4>
+<p>نکته دیگری درباره UTF-8 این است که در واقع سه روش مرتبط برای مشاهده رشته‌ها از دیدگاه Rust وجود دارد: به صورت بایت، مقادیر اسکالر، و خوشه‌های گرافیمی (نزدیک‌ترین چیز به چیزی که ما <em>حروف</em> می‌نامیم).</p>
+<p>اگر به کلمه هندی “नमस्ते” نوشته شده در اسکریپت Devanagari نگاه کنیم، این کلمه به صورت یک بردار از مقادیر <code>u8</code> ذخیره می‌شود که به شکل زیر است:</p>
+<pre><code class="language-text">[224, 164, 168, 224, 164, 174, 224, 164, 184, 224, 165, 141, 224, 164, 164,
+224, 165, 135]
+</code></pre>
+<p>این ۱۸ بایت است و این همان چیزی است که کامپیوترها در نهایت این داده را ذخیره می‌کنند. اگر به آن‌ها به عنوان مقادیر اسکالر Unicode نگاه کنیم، که همان نوع <code>char</code> در Rust است، این بایت‌ها به این صورت به نظر می‌رسند:</p>
+<pre><code class="language-text">['न', 'म', 'स', '्', 'त', 'े']
+</code></pre>
+<p>اینجا شش مقدار <code>char</code> وجود دارد، اما مقدار چهارم و ششم حروف نیستند: این‌ها دیاکریتیک‌هایی هستند که به تنهایی معنایی ندارند. در نهایت، اگر به آن‌ها به عنوان خوشه‌های گرافیمی نگاه کنیم، همان چیزی که یک فرد به عنوان حروف کلمه هندی تشخیص می‌دهد، اینطور خواهد بود:</p>
+<pre><code class="language-text">["न", "म", "स्", "ते"]
+</code></pre>
+<p>Rust روش‌های مختلفی برای تفسیر داده خام رشته ارائه می‌دهد که کامپیوترها ذخیره می‌کنند، بنابراین هر برنامه می‌تواند تفسیری را که نیاز دارد انتخاب کند، صرف نظر از اینکه داده به چه زبان انسانی است.</p>
+<p>یکی دیگر از دلایل اینکه Rust به ما اجازه نمی‌دهد در یک <code>String</code> اندیس‌گذاری کنیم تا یک کاراکتر را دریافت کنیم این است که عملیات اندیس‌گذاری باید همیشه در زمان ثابت (O(1)) انجام شود. اما امکان تضمین این عملکرد با یک <code>String</code> وجود ندارد، زیرا Rust باید محتویات را از ابتدا تا اندیس (index)مرور کند تا تعیین کند که چند کاراکتر معتبر وجود دارد.</p>
+<h3 id="slicing-strings"><a class="header" href="#slicing-strings">برش رشته‌ها</a></h3>
+<p>اندیس‌گذاری در یک رشته اغلب ایده خوبی نیست زیرا مشخص نیست که نوع بازگشتی عملیات اندیس‌گذاری رشته چه باید باشد: یک مقدار بایت، یک کاراکتر، یک خوشه گرافیمی، یا یک قطعه رشته. بنابراین، اگر واقعاً نیاز به استفاده از اندیس‌ها برای ایجاد قطعه‌های رشته دارید، Rust از شما می‌خواهد بیشتر مشخص کنید.</p>
+<p>به جای اندیس‌گذاری با استفاده از <code>[]</code> و یک عدد، می‌توانید از <code>[]</code> با یک بازه استفاده کنید تا یک قطعه رشته که شامل بایت‌های خاصی است ایجاد کنید:</p>
+<pre><code class="language-rust">let hello = "Здравствуйте";
+
+let s = &amp;hello[0..4];</code></pre>
+<p>اینجا، <code>s</code> یک <code>&amp;str</code> خواهد بود که شامل چهار بایت اول رشته است. پیش‌تر اشاره کردیم که هر یک از این کاراکترها دو بایت طول دارند، که به این معنی است که مقدار <code>s</code> برابر با <code>Зд</code> خواهد بود.</p>
+<p>اگر سعی کنیم فقط بخشی از بایت‌های یک کاراکتر را با چیزی مثل <code>&amp;hello[0..1]</code> برش دهیم، Rust در زمان اجرا دچار خطا می‌شود، به همان شکلی که اگر یک اندیس (index)نامعتبر در یک بردار دسترسی داده شود:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling collections v0.1.0 (file:///projects/collections)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.43s
+     Running `target/debug/collections`
+
+thread 'main' (6017738) panicked at src/main.rs:4:19:
+end byte index 1 is not a char boundary; it is inside 'З' (bytes 0..2 of string)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</code></pre>
+<p>هنگام ایجاد قطعه‌های رشته با بازه‌ها باید احتیاط کنید، زیرا این کار ممکن است باعث خرابی برنامه شما شود.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="methods-for-iterating-over-strings"></a></p>
+<h3 id="iterating-over-strings"><a class="header" href="#iterating-over-strings">متدهایی برای پیمایش در رشته‌ها</a></h3>
+<p>بهترین راه برای کار با بخش‌هایی از رشته‌ها این است که به وضوح مشخص کنید که آیا می‌خواهید روی کاراکترها یا بایت‌ها کار کنید. برای مقادیر اسکالر Unicode منفرد، از متد <code>chars</code> استفاده کنید. فراخوانی <code>chars</code> روی <code>"Зд"</code> دو مقدار از نوع <code>char</code> را جدا کرده و بازمی‌گرداند، و می‌توانید با استفاده از نتیجه پیمایش کنید تا به هر عنصر دسترسی پیدا کنید:</p>
+<pre><code class="language-rust">for c in "Зд".chars() {
+    println!("{c}");
+}</code></pre>
+<p>این کد خروجی زیر را چاپ خواهد کرد:</p>
+<pre><code class="language-text">З
+д
+</code></pre>
+<p>به صورت جایگزین، متد <code>bytes</code> هر بایت خام را بازمی‌گرداند که ممکن است برای حوزه کاری شما مناسب باشد:</p>
+<pre><code class="language-rust">for b in "Зд".bytes() {
+    println!("{b}");
+}</code></pre>
+<p>این کد ۴ بایتی را که این رشته را تشکیل می‌دهند چاپ می‌کند:</p>
+<pre><code class="language-text">208
+151
+208
+180
+</code></pre>
+<p>اما حتماً به یاد داشته باشید که مقادیر اسکالر معتبر Unicode ممکن است از بیش از ۱ بایت تشکیل شده باشند.</p>
+<p>دریافت خوشه‌های گرافیمی از رشته‌ها، همانند اسکریپت Devanagari، پیچیده است، بنابراین این قابلیت توسط کتابخانه استاندارد ارائه نمی‌شود. اگر به این قابلیت نیاز دارید، کرایت‌هایی در <a href="https://crates.io/">crates.io</a><!-- ignore --> موجود هستند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="strings-are-not-so-simple"></a></p>
+<h3 id="handling-the-complexities-of-strings"><a class="header" href="#handling-the-complexities-of-strings">رشته‌ها اینقدر ساده نیستند</a></h3>
+<p>به طور خلاصه، رشته‌ها پیچیده هستند. زبان‌های برنامه‌نویسی مختلف انتخاب‌های متفاوتی درباره نحوه نمایش این پیچیدگی به برنامه‌نویس می‌کنند. Rust انتخاب کرده است که مدیریت صحیح داده‌های <code>String</code> رفتار پیش‌فرض برای تمام برنامه‌های Rust باشد، که به این معنی است که برنامه‌نویسان باید در ابتدا بیشتر درباره مدیریت داده‌های UTF-8 فکر کنند. این معامله پیچیدگی بیشتری از رشته‌ها را نسبت به سایر زبان‌های برنامه‌نویسی نشان می‌دهد، اما از مواجهه با خطاهای مربوط به کاراکترهای غیر-ASCII در مراحل بعدی چرخه توسعه جلوگیری می‌کند.</p>
+<p>خبر خوب این است که کتابخانه استاندارد عملکردهای زیادی را بر اساس انواع <code>String</code> و <code>&amp;str</code> برای کمک به مدیریت صحیح این شرایط پیچیده ارائه می‌دهد. حتماً مستندات را برای متدهای مفیدی مانند <code>contains</code> برای جستجو در یک رشته و <code>replace</code> برای جایگزینی بخش‌هایی از یک رشته با رشته‌ای دیگر بررسی کنید.</p>
+<p>بیایید به چیزی کمی کمتر پیچیده برویم: هش مپ‌ها!</p><nav class="page-nav"><a href="ch08-01-vectors.html">→ ذخیرهٔ فهرستی از مقادیر با بردارها</a><a href="ch08-03-hash-maps.html">ذخیرهٔ کلیدها همراه با مقادیر وابسته در نقشه‌های هش ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

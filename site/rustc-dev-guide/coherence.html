@@ -1,0 +1,62 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>بررسی انسجام (Coherence) — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="coherence"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="coherence"><a class="header" href="#coherence">انسجام (Coherence)</a></h1>
+<blockquote>
+<p>نکته: این بخش بر پایهٔ <a href="https://github.com/rust-lang/rust/pull/121848">یادداشت‌های @lcnr</a> است</p>
+</blockquote>
+<p>بررسی انسجام (Coherence) همان چیزی است که هم همپوشانی impl‌های صفت (trait) و هم همپوشانی impl‌های ذاتی را با دیگر impl‌ها تشخیص می‌دهد.
+(یادآوری: <a href="../reference/items/implementations.html#inherent-implementations">impl‌های ذاتی</a> همان impl‌های نوع‌های مشخص هستند، مانند <code>impl MyStruct {}</code>)</p>
+<p>همپوشانی impl‌های صفت همیشه خطا تولید می‌کند،
+در حالی که همپوشانی impl‌های ذاتی فقط در صورتی به خطا می‌انجامد که متدهایی با نام یکسان داشته باشند.</p>
+<p>بررسی همپوشانی به دو بخش تقسیم می‌شود.
+نخست <a href="#overlap-checks">بررسی(های) همپوشانی</a> است،
+که همپوشانی‌های میان صفت‌ها و پیاده‌سازی‌های ذاتی را که کامپایلر در حال حاضر از آن‌ها خبر دارد پیدا می‌کند.</p>
+<p>با این حال، Coherence در صورتی هم به خطا می‌انجامد که impl‌های دیگری <strong>بتوانند</strong> وجود داشته باشند،
+حتی اگر در حال حاضر ناشناخته باشند.
+این موضوع impl‌هایی را در بر می‌گیرد که ممکن است به‌شکلی سازگار با نسخه‌های قبلی به crate‌های بالادستی افزوده شوند،
+و نیز impl‌های crate‌های پایین‌دستی.
+این بررسی «بررسی یتیم» (Orphan check) نام دارد.</p>
+<h2 id="overlap-checks"><a class="header" href="#overlap-checks">بررسی‌های همپوشانی</a></h2>
+<p>بررسی‌های همپوشانی هم برای impl‌های ذاتی و هم برای impl‌های صفت انجام می‌شود.
+این کار از همان کد بررسی همپوشانی استفاده می‌کند، اما در واقع به‌صورت دو تحلیل جداگانه انجام می‌شود.
+بررسی‌های همپوشانی همیشه جفت‌های پیاده‌سازی را در نظر می‌گیرند و آن‌ها را با یکدیگر مقایسه می‌کنند.</p>
+<p>بررسی همپوشانی برای بلوک‌های impl ذاتی از طریق <code>fn check_item</code> (در coherence/inherent_impls_overlap.rs) انجام می‌شود،
+که در آن به‌روشنی می‌توان دید (دست‌کم برای <code>n</code> کوچک) که این بررسی واقعاً <code>n^2</code>
+مقایسه میان impl‌ها انجام می‌دهد.</p>
+<p>در مورد صفت‌ها، این بررسی در حال حاضر به‌عنوان بخشی از ساخت <a href="traits/specialization.html">گراف تخصیص (specialization)</a> انجام می‌شود،
+تا همپوشانی impl‌های تخصیص‌یافته با impl والد خود را مدیریت کند، اما ممکن است این موضوع در آینده تغییر کند.</p>
+<p>در هر دو حالت، همهٔ جفت‌های impl از نظر همپوشانی بررسی می‌شوند.</p>
+<p>همپوشانی گاهی تا حدی مجاز است:</p>
+<ol>
+<li>برای صفت‌های نشانگر (marker trait)</li>
+<li>تحت <a href="traits/specialization.html">تخصیص (specialization)</a></li>
+</ol>
+<p>به‌طور معمول مجاز نیست.</p>
+<p>بررسی همپوشانی حالت‌های گوناگونی دارد (به <a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/traits/specialization_graph/enum.OverlapMode.html"><code>OverlapMode</code></a> نگاه کنید).
+مهم‌تر از همه، بررسی impl منفی صریح و بررسی impl منفی ضمنی وجود دارند.
+هر دو می‌کوشند ثابت کنند که همپوشانی قطعاً ناممکن است.</p>
+<h3 id="the-explicit-negative-impl-check"><a class="header" href="#the-explicit-negative-impl-check">بررسی impl منفی صریح</a></h3>
+<p>این بررسی در <a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_trait_selection/traits/coherence/fn.impl_intersection_has_negative_obligation.html"><code>impl_intersection_has_negative_obligation</code></a> انجام می‌شود.</p>
+<p>این بررسی می‌کوشد یک پیاده‌سازی صفت منفی پیدا کند.
+برای مثال:</p>
+<pre><code class="language-rust">struct MyCustomErrorType;
+
+// both in your own crate
+impl From&lt;&amp;str&gt; for MyCustomErrorType {}
+impl&lt;E&gt; From&lt;E&gt; for MyCustomErrorType where E: Error {}</code></pre>
+<p>در این مثال به این موارد می‌رسیم:
+<code>MyCustomErrorType: From&lt;&amp;str&gt;</code> و <code>MyCustomErrorType: From&lt;?E&gt;</code>، که <code>?E = &amp;str</code> را نتیجه می‌دهد.</p>
+<p>و بنابراین این دو پیاده‌سازی همپوشانی خواهند داشت.
+اما libstd عبارت <code>&amp;str: !Error</code> را فراهم می‌کند و در نتیجه تضمین می‌کند که
+هرگز پیاده‌سازی مثبتی از <code>&amp;str: Error</code> وجود نخواهد داشت، و پس همپوشانی‌ای در کار نیست.</p>
+<p>توجه کنید که برای این نوع بررسی impl منفی، باید پیاده‌سازی‌های منفی صریح فراهم شده باشند.
+این قابلیت در حال حاضر پایدار نیست.</p>
+<h3 id="the-implicit-negative-impl-check"><a class="header" href="#the-implicit-negative-impl-check">بررسی impl منفی ضمنی</a></h3>
+<p>این بررسی در <a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_trait_selection/traits/coherence/fn.impl_intersection_has_impossible_obligation.html"><code>impl_intersection_has_impossible_obligation</code></a> انجام می‌شود،
+و به پیاده‌سازی‌های صفت منفی متکی نیست و پایدار است.</p>
+<p>فرض کنید این‌ها وجود دارند:</p>
+<pre><code class="language-rust">impl From&lt;MyLocalType&gt; for Box&lt;dyn Error&gt; {}  // in your own crate
+impl&lt;E&gt; From&lt;E&gt; for Box&lt;dyn Error&gt; where E: Error {} // in std</code></pre>
+<p>این به <code>Box&lt;dyn Error&gt;: From&lt;MyLocalType&gt;</code> و <code>Box&lt;dyn Error&gt;: From&lt;?E&gt;</code> می‌رسد،
+که <code>?E = MyLocalType</code> را نتیجه می‌دهد.</p>
+<p>در crate شما <code>MyLocalType: Error</code> وجود ندارد، و crate‌های پایین‌دستی نمی‌توانند <code>Error</code> (یک صفت راه‌دور) را برای <code>MyLocalType</code> (یک نوع راه‌دور) پیاده‌سازی کنند.
+بنابراین این دو impl همپوشانی ندارند.
+نکتهٔ مهم این است که این روش حتی زمانی که <code>impl !Error for MyLocalType</code> وجود نداشته باشد هم کار می‌کند.</p><nav class="page-nav"><a href="variance.html">→ واریانس</a><a href="hir-typeck/summary.html">بررسی نوع HIR ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

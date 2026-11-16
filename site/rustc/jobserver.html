@@ -1,0 +1,42 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Jobserver — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="jobserver"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="jobserver"><a class="header" href="#jobserver">Jobserver</a></h1>
+<!-- ignore-tidy-file-tab -->
+<p><code>rustc</code> در داخل خود می‌تواند از موازی‌سازی بهره ببرد. اگر یک <a href="https://www.gnu.org/software/make/manual/html_node/POSIX-Jobserver.html">jobserver در GNU Make</a> از طریق متغیر محیطی <code>MAKEFLAGS</code> به <code>rustc</code> داده شود، <code>rustc</code> با سیستم ساختی که آن را فراخوانی کرده هماهنگ می‌شود. پرچم‌های دیگر نیز ممکن است اثر داشته باشند، مانند <a href="../cargo/reference/environment-variables.html"><code>CARGO_MAKEFLAGS</code></a>. اگر jobserver داده نشود، <code>rustc</code> خودش تعداد کارهایی (jobs) را که باید استفاده شوند انتخاب می‌کند.</p>
+<p>از Rust 1.76.0 به بعد، اگر به نظر برسد که یک jobserver در دسترس است اما <code>rustc</code> نمی‌تواند به آن دسترسی پیدا کند، هشدار می‌دهد؛ برای مثال:</p>
+<pre><code class="language-console">$ echo 'fn main() {}' | MAKEFLAGS=--jobserver-auth=3,4 rustc -
+warning: failed to connect to jobserver from environment variable `MAKEFLAGS="--jobserver-auth=3,4"`: cannot open file descriptor 3 from the jobserver environment variable value: Bad file descriptor (os error 9)
+  |
+  = note: the build environment is likely misconfigured
+</code></pre>
+<h2 id="integration-with-build-systems"><a class="header" href="#integration-with-build-systems">یکپارچه‌سازی با سیستم‌های ساخت</a></h2>
+<p>زیربخش‌های زیر شامل توصیه‌هایی دربارهٔ نحوهٔ یکپارچه‌سازی <code>rustc</code> با سیستم‌های ساخت هستند تا jobserver به‌درستی مدیریت شود.</p>
+<h3 id="gnu-make"><a class="header" href="#gnu-make">GNU Make</a></h3>
+<p>هنگام فراخوانی <code>rustc</code> از GNU Make، توصیه می‌شود همهٔ فراخوانی‌های <code>rustc</code> در <code>Makefile</code> به‌صورت بازگشتی (recursive) علامت‌گذاری شوند (با افزودن نشانگر <code>+</code> به ابتدای خط فرمان) تا GNU Make برای آن‌ها jobserver را فعال کند. برای مثال:</p>
+<pre><code class="language-make">x:
+	+@echo 'fn main() {}' | rustc -
+</code></pre>
+<p>به‌طور خاص، GNU Make نسخهٔ 4.3 (نسخه‌ای که تا سال 2024 به‌طور گسترده استفاده می‌شد) حتی زمانی که jobserver برای فرایند فرزند در دسترس قرار نگرفته باشد نیز یک jobserver ساده از نوع pipe را در <code>MAKEFLAGS</code> ارسال می‌کند، و این به نوبهٔ خود به این معناست که <code>rustc</code> دربارهٔ آن هشدار می‌دهد. برای مثال، اگر نشانگر <code>+</code> از مثال بالا حذف شود و GNU Make با دستوری مانند <code>make -j2</code> اجرا شود، هشدار یادشده نمایش داده خواهد شد.</p>
+<p>برای فراخوانی‌های <code>rustc</code> درون <code>$(shell ...)</code> در یک Make بازگشتی، می‌توان jobserver را با پاک کردن متغیر <code>MAKEFLAGS</code> به‌صورت دستی غیرفعال کرد، برای مثال:</p>
+<pre><code class="language-make">S := $(shell MAKEFLAGS= rustc --print sysroot)
+
+x:
+	@$(MAKE) y
+
+y:
+	@echo $(S)
+</code></pre>
+<h3 id="cmake"><a class="header" href="#cmake">CMake</a></h3>
+<p>CMake نسخهٔ 3.28 از گزینهٔ <code>JOB_SERVER_AWARE</code> در دستور <a href="https://cmake.org/cmake/help/latest/command/add_custom_target.html"><code>add_custom_target</code></a> خود پشتیبانی می‌کند، برای مثال:</p>
+<pre><code class="language-cmake">cmake_minimum_required(VERSION 3.28)
+project(x)
+add_custom_target(x
+    JOB_SERVER_AWARE TRUE
+    COMMAND echo 'fn main() {}' | rustc -
+)
+</code></pre>
+<p>برای نسخه‌های قدیمی‌تر، هنگام استفاده از CMake با مولد Makefile، یک راه‌حل جایگزین این است که <a href="https://www.gnu.org/software/make/manual/html_node/MAKE-Variable.html"><code>$(MAKE)</code></a> را جایی در فرمان قرار دهید تا GNU Make آن را یک فراخوانی بازگشتی Make در نظر بگیرد، برای مثال:</p>
+<pre><code class="language-cmake">cmake_minimum_required(VERSION 3.22)
+project(x)
+add_custom_target(x
+    COMMAND DUMMY_VARIABLE=$(MAKE) echo 'fn main() {}' | rustc -
+)
+</code></pre><nav class="page-nav"><a href="codegen-options/index.html">→ گزینه‌های Codegen</a><a href="lints/index.html">lintها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

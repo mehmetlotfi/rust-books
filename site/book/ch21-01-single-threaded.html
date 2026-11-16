@@ -1,0 +1,388 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>ساخت یک وب‌سرور تک‌نخی — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch21-01-single-threaded"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="building-a-single-threaded-web-server"><a class="header" href="#building-a-single-threaded-web-server">ساخت یک وب سرور Single-Threaded</a></h2>
+<p>ما با راه‌اندازی یک وب سرور Single-Threaded شروع خواهیم کرد. پیش از شروع، بیایید یک مرور سریع بر پروتکل‌های مرتبط با ساخت وب سرورها داشته باشیم. جزئیات این پروتکل‌ها خارج از محدوده این کتاب است، اما یک نمای کلی اطلاعات لازم را به شما می‌دهد.</p>
+<p>دو پروتکل اصلی که در وب سرورها درگیر هستند، <em>Hypertext Transfer Protocol</em> <em>(HTTP)</em> و <em>Transmission Control Protocol</em> <em>(TCP)</em> هستند. هر دو پروتکل <em>request-response</em> هستند، به این معنی که یک <em>client</em> درخواست‌ها را آغاز می‌کند و یک <em>server</em> به درخواست‌ها گوش می‌دهد و پاسخی به client ارائه می‌دهد. محتوای این درخواست‌ها و پاسخ‌ها توسط پروتکل‌ها تعریف شده است.</p>
+<p>TCP یک پروتکل سطح پایین‌تر است که جزئیات چگونگی انتقال اطلاعات از یک سرور به سرور دیگر را توصیف می‌کند اما مشخص نمی‌کند که آن اطلاعات چیست. HTTP بر روی TCP ساخته شده است و محتوای درخواست‌ها و پاسخ‌ها را تعریف می‌کند. از لحاظ فنی امکان استفاده از HTTP با سایر پروتکل‌ها وجود دارد، اما در اکثر موارد، HTTP داده‌های خود را بر روی TCP ارسال می‌کند. ما با بایت‌های خام درخواست‌ها و پاسخ‌های TCP و HTTP کار خواهیم کرد.</p>
+<h3 id="listening-to-the-tcp-connection"><a class="header" href="#listening-to-the-tcp-connection">گوش دادن به اتصال TCP</a></h3>
+<p>وب سرور ما نیاز دارد به اتصال TCP گوش دهد، بنابراین این اولین بخشی است که روی آن کار می‌کنیم. کتابخانه استاندارد یک ماژول <code>std::net</code> ارائه می‌دهد که به ما این امکان را می‌دهد این کار را انجام دهیم. بیایید یک پروژه جدید به روش معمول ایجاد کنیم:</p>
+<pre><code class="language-console">$ cargo new hello
+     Created binary (application) `hello` project
+$ cd hello
+</code></pre>
+<p>حالا کد لیست ۲۱-۱ را در فایل <em>src/main.rs</em> وارد کنید تا شروع کنیم. این کد به آدرس محلی <code>127.0.0.1:7878</code> برای جریان‌های ورودی TCP گوش می‌دهد. وقتی یک جریان ورودی دریافت می‌کند، پیام <code>Connection established!</code> را چاپ می‌کند.</p>
+<figure class="listing" id="listing-21-1">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust no_run">use std::net::TcpListener;
+
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+
+    for stream in listener.incoming() {
+        let stream = stream.unwrap();
+
+        println!("Connection established!");
+    }
+}</code></pre>
+<figcaption><a href="#listing-21-1">لیست ۲۱-۱</a>: گوش دادن به جریان‌های ورودی و چاپ یک پیام هنگام دریافت یک جریان</figcaption>
+</figure>
+<p>با استفاده از <code>TcpListener</code>، می‌توانیم به اتصالات TCP در آدرس <code>127.0.0.1:7878</code> گوش دهیم. در این آدرس، بخش قبل از دونقطه یک آدرس IP است که نمایانگر کامپیوتر شما است (این آدرس روی همه کامپیوترها یکسان است و نمایانگر کامپیوتر نویسندگان نیست) و <code>7878</code> پورت است. این پورت را به دو دلیل انتخاب کرده‌ایم: HTTP معمولاً روی این پورت پذیرفته نمی‌شود، بنابراین احتمالاً سرور ما با هیچ وب سرور دیگری که ممکن است روی دستگاه شما اجرا شود تداخل نخواهد داشت، و 7878 روی تلفن به صورت <em>rust</em> تایپ می‌شود.</p>
+<p>تابع <code>bind</code> در این سناریو مانند تابع <code>new</code> عمل می‌کند به این صورت که یک نمونه جدید از <code>TcpListener</code> بازمی‌گرداند. این تابع <code>bind</code> نامیده می‌شود زیرا در شبکه، اتصال به یک پورت برای گوش دادن به آن به عنوان “binding to a port” شناخته می‌شود.</p>
+<p>تابع <code>bind</code> مقداری از نوع <code>Result&lt;T, E&gt;</code> برمی‌گرداند، که نشان می‌دهد امکان شکست در عملیات bind وجود دارد. برای مثال، اگر دو نمونه از برنامه‌ی ما به‌طور هم‌زمان اجرا شوند و هر دو بخواهند به یک پورت گوش دهند، این عملیات ممکن است شکست بخورد. از آن‌جا که ما در حال نوشتن یک سرور ساده فقط برای اهداف آموزشی هستیم، نگران مدیریت این نوع خطاها نخواهیم بود؛ در عوض، از تابع <code>unwrap</code> استفاده می‌کنیم تا در صورت بروز خطا، برنامه متوقف شود.</p>
+<p>متد <code>incoming</code> روی <code>TcpListener</code> یک iterator بازمی‌گرداند که به ما دنباله‌ای از جریان‌ها (<em>streams</em>) می‌دهد (به طور خاص، جریان‌هایی از نوع <code>TcpStream</code>). یک <em>stream</em> نشان‌دهنده یک اتصال باز بین client و server است. یک <em>connection</em> به فرآیند کامل درخواست و پاسخ گفته می‌شود که در آن یک client به سرور متصل می‌شود، سرور یک پاسخ تولید می‌کند، و سپس اتصال توسط سرور بسته می‌شود. بنابراین، ما از <code>TcpStream</code> برای خواندن آنچه client ارسال کرده استفاده می‌کنیم و سپس پاسخ خود را به جریان می‌نویسیم تا داده‌ها را به client بازگردانیم. به طور کلی، این حلقه <code>for</code> هر اتصال را به نوبت پردازش کرده و یک سری جریان‌ها را برای مدیریت به ما می‌دهد.</p>
+<p>فعلاً، مدیریت ما روی جریان به فراخوانی <code>unwrap</code> محدود می‌شود تا در صورتی که جریان دارای خطا باشد، برنامه متوقف شود. اگر خطایی وجود نداشته باشد، برنامه یک پیام چاپ می‌کند. در لیست بعدی، عملکرد بیشتری برای حالت موفقیت اضافه خواهیم کرد. دلیل اینکه ممکن است از متد <code>incoming</code> هنگام اتصال یک client به سرور خطا دریافت کنیم این است که ما در واقع روی اتصالات تکرار نمی‌کنیم، بلکه روی <em>تلاش‌های اتصال</em> تکرار می‌کنیم. اتصال ممکن است به دلایل مختلف موفقیت‌آمیز نباشد که بسیاری از آن‌ها مربوط به سیستم‌عامل هستند. برای مثال، بسیاری از سیستم‌عامل‌ها محدودیتی برای تعداد اتصالات همزمان باز دارند؛ تلاش‌های اتصال جدیدی که بیش از این تعداد باشند، تا زمانی که برخی از اتصالات باز بسته نشوند، خطا تولید خواهند کرد.</p>
+<p>بیایید اجرای این کد را امتحان کنیم! دستور <code>cargo run</code> را در ترمینال اجرا کنید و سپس آدرس <em>127.0.0.1:7878</em> را در یک مرورگر وب بارگذاری کنید. مرورگر باید پیامی مانند «Connection reset» نمایش دهد، چون سرور در حال حاضر هیچ داده‌ای ارسال نمی‌کند. اما وقتی به ترمینال خود نگاه کنید، باید چندین پیام ببینید که هنگام اتصال مرورگر به سرور چاپ شده‌اند!</p>
+<pre><code class="language-text">     Running `target/debug/hello`
+Connection established!
+Connection established!
+Connection established!
+</code></pre>
+<p>گاهی ممکن است برای یک درخواست مرورگر، چندین پیام چاپ‌شده ببینید؛ دلیل این موضوع می‌تواند این باشد که مرورگر، علاوه بر درخواست صفحه، برای منابع دیگری مانند آیکون <em>favicon.ico</em> که در تب مرورگر نمایش داده می‌شود نیز درخواست ارسال می‌کند.</p>
+<p>همچنین ممکن است مرورگر چندین بار تلاش کند تا به سرور متصل شود، چون سرور هیچ داده‌ای پاسخ نمی‌دهد. وقتی <code>stream</code> از محدوده خارج شده و در انتهای حلقه <code>drop</code> می‌شود، اتصال به عنوان بخشی از پیاده‌سازی <code>drop</code> بسته می‌شود. مرورگرها گاهی با اتصال‌های بسته‌شده با تلاش مجدد برخورد می‌کنند، چون ممکن است مشکل موقتی باشد.</p>
+<p>مرورگرها همچنین گاهی بدون ارسال هیچ درخواستی، چندین اتصال به سرور باز می‌کنند تا اگر بعداً بخواهند درخواستی ارسال کنند، آن درخواست‌ها سریع‌تر انجام شوند. وقتی این اتفاق می‌افتد، سرور ما هر اتصال را مشاهده می‌کند، صرف‌نظر از این‌که آیا درخواستی از طریق آن اتصال وجود دارد یا نه. بسیاری از نسخه‌های مرورگرهای مبتنی بر Chrome این کار را انجام می‌دهند؛ می‌توانید این بهینه‌سازی را با استفاده از حالت مرور خصوصی (private browsing) یا استفاده از مرورگر متفاوت غیرفعال کنید.</p>
+<p>نکته‌ی مهم این است که ما موفق شده‌ایم به یک اتصال TCP دسترسی پیدا کنیم!</p>
+<p>به یاد داشته باشید که پس از اجرای یک نسخه خاص از کد، برنامه را با فشردن <kbd>ctrl</kbd>+<kbd>C</kbd> متوقف کنید. سپس، پس از ایجاد هر مجموعه از تغییرات در کد، با اجرای دستور <code>cargo run</code> برنامه را دوباره اجرا کنید تا مطمئن شوید جدیدترین نسخه‌ی کد را اجرا می‌کنید.</p>
+<h3 id="reading-the-request"><a class="header" href="#reading-the-request">خواندن درخواست</a></h3>
+<p>بیایید عملکرد خواندن درخواست از مرورگر را پیاده‌سازی کنیم! برای جدا کردن نگرانی‌ها از اتصال اولیه و سپس انجام برخی اقدامات با اتصال، یک تابع جدید برای پردازش اتصالات ایجاد می‌کنیم. در این تابع جدید <code>handle_connection</code>، داده‌ها را از جریان TCP می‌خوانیم و آن‌ها را چاپ می‌کنیم تا بتوانیم داده‌هایی که از مرورگر ارسال می‌شوند را ببینیم. کد را تغییر دهید تا شبیه لیست ۲۱-۲ شود.</p>
+<figure class="listing" id="listing-21-2">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust no_run">use std::{
+    io::{BufReader, prelude::*},
+    net::{TcpListener, TcpStream},
+};
+
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+
+    for stream in listener.incoming() {
+        let stream = stream.unwrap();
+
+        handle_connection(stream);
+    }
+}
+
+fn handle_connection(mut stream: TcpStream) {
+    let buf_reader = BufReader::new(&amp;stream);
+    let http_request: Vec&lt;_&gt; = buf_reader
+        .lines()
+        .map(|result| result.unwrap())
+        .take_while(|line| !line.is_empty())
+        .collect();
+
+    println!("Request: {http_request:#?}");
+}</code></pre>
+<figcaption><a href="#listing-21-2">لیست ۲۱-۲</a>: خواندن از &lt;code&gt;&lt;/x-listing&gt;TcpStream&lt;/code&gt; و چاپ داده‌ها</figcaption>
+</figure>
+<p>ما <code>std::io::prelude</code> و <code>std::io::BufReader</code> را وارد دامنه می‌کنیم تا به ویژگی‌ها و نوع‌هایی که به ما اجازه خواندن و نوشتن از جریان را می‌دهند دسترسی داشته باشیم. در حلقه <code>for</code> در تابع <code>main</code>، به جای چاپ یک پیام که می‌گوید یک اتصال برقرار کردیم، حالا تابع جدید <code>handle_connection</code> را فراخوانی می‌کنیم و <code>stream</code> را به آن ارسال می‌کنیم.</p>
+<p>در تابع <code>handle_connection</code>، یک نمونه‌ی جدید از <code>BufReader</code> ایجاد می‌کنیم که یک رفرنس به <code>stream</code> را درون خود نگه می‌دارد. <code>BufReader</code> با مدیریت فراخوانی‌های متدهای trait مربوط به <code>std::io::Read</code>، به ما امکان می‌دهد تا به‌صورت بهینه‌تر از بافر استفاده کنیم.</p>
+<p>ما یک متغیر به نام <code>http_request</code> ایجاد می‌کنیم تا خطوط درخواست ارسالی مرورگر به سرور را جمع‌آوری کنیم. مشخص می‌کنیم که می‌خواهیم این خطوط را در یک بردار جمع‌آوری کنیم با اضافه کردن نوع <code>Vec&lt;_&gt;</code> به عنوان حاشیه‌نویسی.</p>
+<p><code>BufReader</code> trait با نام <code>std::io::BufRead</code> را پیاده‌سازی می‌کند که متد <code>lines</code> را فراهم می‌کند. متد <code>lines</code> با تقسیم جریان داده در هر جا که یک بایت خط جدید ببیند، یک تکرارگر از <code>Result&lt;String, std::io::Error&gt;</code> برمی‌گرداند. برای گرفتن هر <code>String</code>، روی هر <code>Result</code> عمل <code>map</code> و <code>unwrap</code> را انجام می‌دهیم. اگر داده UTF-8 معتبر نباشد یا هنگام خواندن از جریان مشکلی پیش آمده باشد، <code>Result</code> ممکن است یک خطا باشد. باز هم، یک برنامهٔ محیط تولید باید این خطاها را با ظرافت بیشتری مدیریت کند، اما ما برای سادگی انتخاب می‌کنیم در صورت خطا برنامه را متوقف کنیم.</p>
+<p>مرورگر پایان یک درخواست HTTP را با ارسال دو کاراکتر newline متوالی نشان می‌دهد، بنابراین برای دریافت یک درخواست از جریان، خطوط را می‌گیریم تا زمانی که به یک خط خالی برسیم. پس از جمع‌آوری خطوط در بردار، آن‌ها را با استفاده از فرمت دیباگ زیبا چاپ می‌کنیم تا بتوانیم دستورالعمل‌هایی که مرورگر وب به سرور ما ارسال می‌کند را ببینیم.</p>
+<p>بیایید این کد را امتحان کنیم! برنامه را اجرا کنید و دوباره یک درخواست در مرورگر وب ارسال کنید. توجه داشته باشید که همچنان در مرورگر یک صفحه خطا خواهیم دید، اما خروجی برنامه در ترمینال اکنون مشابه این خواهد بود:</p>
+<!-- manual-regeneration
+cd listings/ch21-web-server/listing-21-02
+cargo run
+make a request to 127.0.0.1:7878
+Can't automate because the output depends on making requests
+-->
+<pre><code class="language-console">$ cargo run
+   Compiling hello v0.1.0 (file:///projects/hello)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.42s
+     Running `target/debug/hello`
+Request: [
+    "GET / HTTP/1.1",
+    "Host: 127.0.0.1:7878",
+    "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:99.0) Gecko/20100101 Firefox/99.0",
+    "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language: en-US,en;q=0.5",
+    "Accept-Encoding: gzip, deflate, br",
+    "DNT: 1",
+    "Connection: keep-alive",
+    "Upgrade-Insecure-Requests: 1",
+    "Sec-Fetch-Dest: document",
+    "Sec-Fetch-Mode: navigate",
+    "Sec-Fetch-Site: none",
+    "Sec-Fetch-User: ?1",
+    "Cache-Control: max-age=0",
+]
+</code></pre>
+<p>بسته به مرورگری که استفاده می‌کنید، ممکن است خروجی کمی متفاوت دریافت کنید. اکنون که داده‌های درخواست را چاپ می‌کنیم، می‌توانیم دلیل دریافت چندین اتصال از یک درخواست مرورگر را با نگاه کردن به مسیر بعد از <code>GET</code> در خط اول درخواست متوجه شویم. اگر اتصالات تکراری همه <em>/</em> را درخواست کنند، می‌دانیم که مرورگر سعی دارد <em>/</em> را بارها و بارها درخواست کند زیرا پاسخی از برنامه ما دریافت نمی‌کند.</p>
+<p>بیایید این داده‌های درخواست را تجزیه کنیم تا متوجه شویم مرورگر از برنامه ما چه چیزی می‌خواهد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="a-closer-look-at-an-http-request"></a>
+<a id="looking-closer-at-an-http-request"></a></p>
+<h3 id="looking-more-closely-at-an-http-request"><a class="header" href="#looking-more-closely-at-an-http-request">نگاهی دقیق‌تر به یک درخواست HTTP</a></h3>
+<p>HTTP یک پروتکل مبتنی بر متن است و یک درخواست فرمت زیر را دارد:</p>
+<pre><code class="language-text">Method Request-URI HTTP-Version CRLF
+headers CRLF
+message-body
+</code></pre>
+<p>خط اول <em>خط درخواست</em> است که اطلاعاتی درباره آنچه client درخواست می‌کند را نگه می‌دارد. قسمت اول خط درخواست، <em>method</em> استفاده‌شده را نشان می‌دهد، مانند <code>GET</code> یا <code>POST</code>، که توضیح می‌دهد client چگونه این درخواست را انجام می‌دهد. client ما از یک درخواست <code>GET</code> استفاده کرده است، به این معنی که در حال درخواست اطلاعات است.</p>
+<p>بخش بعدی از خط درخواست، <em>/</em> است که نشان‌دهنده‌ی <em>شناسه‌ی یکنواخت منبع</em> یا <em>(uniform resource identifier)</em> است که کلاینت آن را درخواست کرده است؛ یک URI تقریباً، اما نه کاملاً، همانند <em>نشانی یکنواخت منبع</em> یا <em>(uniform resource locator)</em> یا همان URL است. تفاوت بین URI و URL برای اهداف ما در این فصل اهمیت خاصی ندارد، اما مشخصات HTTP از اصطلاح <em>URI</em> استفاده می‌کند، بنابراین می‌توانیم در ذهن خود به‌جای URI از URL استفاده کنیم.</p>
+<p>آخرین بخش نسخه‌ی HTTP است که کلاینت استفاده می‌کند، و سپس خط درخواست با یک دنباله‌ی CRLF به پایان می‌رسد. (CRLF مخفف <em>carriage return</em> و <em>line feed</em> است، که اصطلاحاتی مربوط به دوران ماشین تحریر هستند!) دنباله‌ی CRLF همچنین به‌صورت <code>\r\n</code> نیز نوشته می‌شود، جایی که <code>\r</code> به معنای carriage return و <code>\n</code> به معنای line feed است. <em>دنباله‌ی CRLF</em> خط درخواست را از باقی داده‌های درخواست جدا می‌کند. توجه داشته باشید که هنگام چاپ CRLF، ما شروع یک خط جدید را می‌بینیم، نه <code>\r\n</code>.</p>
+<p>با نگاه کردن به داده‌های خط درخواست که تاکنون از اجرای برنامه خود دریافت کرده‌ایم، می‌بینیم که <code>GET</code> متد است، <em>/</em> شناسه URI درخواست‌شده است، و <code>HTTP/1.1</code> نسخه است.</p>
+<p>بعد از خط درخواست، خطوط باقی‌مانده از <code>Host:</code> به بعد هدرها هستند. درخواست‌های <code>GET</code> بدنه ندارند.</p>
+<p>سعی کنید یک درخواست از مرورگری دیگر یا آدرسی متفاوت، مانند <em>127.0.0.1:7878/test</em>، ارسال کنید تا ببینید داده‌های درخواست چگونه تغییر می‌کنند.</p>
+<p>اکنون که می‌دانیم مرورگر چه چیزی می‌خواهد، بیایید داده‌ای را به آن بازگردانیم!</p>
+<h3 id="writing-a-response"><a class="header" href="#writing-a-response">نوشتن یک پاسخ</a></h3>
+<p>ما قصد داریم ارسال داده در پاسخ به یک درخواست client را پیاده‌سازی کنیم. پاسخ‌ها فرمت زیر را دارند:</p>
+<pre><code class="language-text">HTTP-Version Status-Code Reason-Phrase CRLF
+headers CRLF
+message-body
+</code></pre>
+<p>خط اول یک <em>خط وضعیت</em> است که شامل نسخه HTTP استفاده‌شده در پاسخ، یک کد وضعیت عددی که نتیجه درخواست را خلاصه می‌کند، و یک عبارت دلیل که توضیح متنی برای کد وضعیت ارائه می‌دهد. پس از دنباله CRLF، هر هدر و سپس یک دنباله CRLF دیگر و بدنه پاسخ قرار می‌گیرد.</p>
+<p>در اینجا یک مثال پاسخ آورده شده است که از نسخه HTTP 1.1 استفاده می‌کند، کد وضعیت 200 دارد، عبارت دلیل “OK” است، هیچ هدر و بدنه‌ای ندارد:</p>
+<pre><code class="language-text">HTTP/1.1 200 OK\r\n\r\n
+</code></pre>
+<p>کد وضعیت 200 پاسخ استاندارد موفقیت است. این متن یک پاسخ HTTP کوچک و موفقیت‌آمیز است. بیایید این را به عنوان پاسخ خود به یک درخواست موفق به جریان بنویسیم! از تابع <code>handle_connection</code>، <code>println!</code> که داده‌های درخواست را چاپ می‌کرد، حذف کنید و آن را با کد موجود در لیست ۲۱-۳ جایگزین کنید.</p>
+<figure class="listing" id="listing-21-3">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust no_run"><span class="boring">use std::{
+</span><span class="boring">    io::{BufReader, prelude::*},
+</span><span class="boring">    net::{TcpListener, TcpStream},
+</span><span class="boring">};
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+</span><span class="boring">
+</span><span class="boring">    for stream in listener.incoming() {
+</span><span class="boring">        let stream = stream.unwrap();
+</span><span class="boring">
+</span><span class="boring">        handle_connection(stream);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn handle_connection(mut stream: TcpStream) {
+    let buf_reader = BufReader::new(&amp;stream);
+    let http_request: Vec&lt;_&gt; = buf_reader
+        .lines()
+        .map(|result| result.unwrap())
+        .take_while(|line| !line.is_empty())
+        .collect();
+
+    let response = "HTTP/1.1 200 OK\r\n\r\n";
+
+    stream.write_all(response.as_bytes()).unwrap();
+}</code></pre>
+<figcaption><a href="#listing-21-3">لیست ۲۱-۳</a>: نوشتن یک پاسخ HTTP کوچک و موفقیت‌آمیز به جریان</figcaption>
+</figure>
+<p>خط جدید اول متغیر <code>response</code> را تعریف می‌کند که داده پیام موفقیت را در خود نگه می‌دارد. سپس با فراخوانی <code>as_bytes</code> روی <code>response</code> داده رشته‌ای را به بایت‌ها تبدیل می‌کنیم. متد <code>write_all</code> روی <code>stream</code> یک <code>&amp;[u8]</code> می‌گیرد و آن بایت‌ها را مستقیماً به اتصال ارسال می‌کند. از آنجا که عملیات <code>write_all</code> ممکن است شکست بخورد، مانند قبل، روی هر نتیجه خطا از <code>unwrap</code> استفاده می‌کنیم. باز هم، در یک برنامه واقعی باید اینجا مدیریت خطا اضافه کنید.</p>
+<p>با این تغییرات، بیایید کد خود را اجرا کنیم و یک درخواست ارسال کنیم. دیگر هیچ داده‌ای به ترمینال چاپ نمی‌کنیم، بنابراین هیچ خروجی‌ای به غیر از خروجی Cargo نخواهید دید. وقتی آدرس <em>127.0.0.1:7878</em> را در یک مرورگر وب بارگذاری می‌کنید، باید یک صفحه خالی به جای یک خطا دریافت کنید. شما اکنون دریافت یک درخواست HTTP و ارسال یک پاسخ را به صورت دستی کدنویسی کرده‌اید!</p>
+<h3 id="returning-real-html"><a class="header" href="#returning-real-html">بازگرداندن HTML واقعی</a></h3>
+<p>بیایید عملکرد بازگرداندن چیزی بیش از یک صفحه خالی را پیاده‌سازی کنیم. فایل جدیدی به نام <em>hello.html</em> در ریشه دایرکتوری پروژه خود ایجاد کنید، نه در دایرکتوری <em>src</em>. می‌توانید هر HTML که می‌خواهید وارد کنید؛ لیست ۲۱-۴ یک نمونه را نشان می‌دهد.</p>
+<figure class="listing" id="listing-21-4">
+<span class="file-name">Filename: hello.html</span>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;
+    &lt;meta charset="utf-8"&gt;
+    &lt;title&gt;Hello!&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;h1&gt;Hello!&lt;/h1&gt;
+    &lt;p&gt;Hi from Rust&lt;/p&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<figcaption><a href="#listing-21-4">لیست ۲۱-۴</a>: یک فایل نمونه HTML برای بازگرداندن در پاسخ</figcaption>
+</figure>
+<p>این یک سند HTML5 حداقلی با یک عنوان و مقداری متن است. برای بازگرداندن این فایل از سرور هنگام دریافت یک درخواست، کد <code>handle_connection</code> را همان‌طور که در لیست ۲۱-۵ نشان داده شده است تغییر می‌دهیم تا فایل HTML را بخواند، آن را به عنوان بدنه پاسخ اضافه کند و ارسال کند.</p>
+<figure class="listing" id="listing-21-5">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust no_run">use std::{
+    fs,
+    io::{BufReader, prelude::*},
+    net::{TcpListener, TcpStream},
+};
+// --snip--
+
+<span class="boring">fn main() {
+</span><span class="boring">    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+</span><span class="boring">
+</span><span class="boring">    for stream in listener.incoming() {
+</span><span class="boring">        let stream = stream.unwrap();
+</span><span class="boring">
+</span><span class="boring">        handle_connection(stream);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn handle_connection(mut stream: TcpStream) {
+    let buf_reader = BufReader::new(&amp;stream);
+    let http_request: Vec&lt;_&gt; = buf_reader
+        .lines()
+        .map(|result| result.unwrap())
+        .take_while(|line| !line.is_empty())
+        .collect();
+
+    let status_line = "HTTP/1.1 200 OK";
+    let contents = fs::read_to_string("hello.html").unwrap();
+    let length = contents.len();
+
+    let response =
+        format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}");
+
+    stream.write_all(response.as_bytes()).unwrap();
+}</code></pre>
+<figcaption><a href="#listing-21-5">لیست ۲۱-۵</a>: ارسال محتوای <em>hello.html</em> به عنوان بدنه پاسخ</figcaption>
+</figure>
+<p>ما <code>fs</code> را به دستور <code>use</code> اضافه کرده‌ایم تا ماژول سیستم فایل کتابخانه استاندارد را وارد دامنه کنیم. کدی که محتوای یک فایل را به یک رشته می‌خواند باید آشنا به نظر برسد؛ ما در فصل ۱۲ زمانی که محتوای یک فایل را برای پروژه ورودی/خروجی خود خواندیم از آن استفاده کردیم (لیست ۱۲-۴).</p>
+<p>سپس، از <code>format!</code> برای اضافه کردن محتوای فایل به عنوان بدنه پاسخ موفقیت استفاده می‌کنیم. برای اطمینان از یک پاسخ HTTP معتبر، هدر <code>Content-Length</code> را اضافه می‌کنیم که به اندازه بدنه پاسخ ما تنظیم شده است، که در این مورد اندازه فایل <code>hello.html</code> است.</p>
+<p>این کد را با دستور <code>cargo run</code> اجرا کنید و آدرس <em>127.0.0.1:7878</em> را در مرورگر خود بارگذاری کنید؛ باید HTML خود را که به درستی رندر شده است ببینید!</p>
+<p>در حال حاضر، ما داده‌های درخواست در <code>http_request</code> را نادیده می‌گیریم و فقط محتوای فایل HTML را بدون شرط بازمی‌گردانیم. این بدان معناست که اگر در مرورگر خود آدرس <em>127.0.0.1:7878/something-else</em> را درخواست کنید، همچنان همین پاسخ HTML را دریافت خواهید کرد. در این لحظه، سرور ما بسیار محدود است و کارهایی که اکثر وب سرورها انجام می‌دهند را انجام نمی‌دهد. ما می‌خواهیم پاسخ‌های خود را بر اساس درخواست سفارشی کنیم و فقط فایل HTML را برای یک درخواست خوش‌ساخت به <em>/</em> بازگردانیم.</p>
+<h3 id="validating-the-request-and-selectively-responding"><a class="header" href="#validating-the-request-and-selectively-responding">اعتبارسنجی درخواست و پاسخ‌دهی انتخابی</a></h3>
+<p>در حال حاضر، وب سرور ما محتوای فایل HTML را بدون توجه به درخواست client بازمی‌گرداند. بیایید عملکردی اضافه کنیم تا بررسی کند که مرورگر <em>/</em> را درخواست کرده باشد، سپس فایل HTML را بازگرداند و اگر مرورگر چیز دیگری درخواست کرد، یک خطا بازگرداند. برای این کار باید تابع <code>handle_connection</code> را همان‌طور که در لیست ۲۱-۶ نشان داده شده است تغییر دهیم. این کد جدید محتوای درخواست دریافتی را با آنچه که می‌دانیم یک درخواست برای <em>/</em> باید به نظر برسد مقایسه می‌کند و بلوک‌های <code>if</code> و <code>else</code> را اضافه می‌کند تا درخواست‌ها به صورت متفاوتی مدیریت شوند.</p>
+<figure class="listing" id="listing-21-6">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust no_run"><span class="boring">use std::{
+</span><span class="boring">    fs,
+</span><span class="boring">    io::{BufReader, prelude::*},
+</span><span class="boring">    net::{TcpListener, TcpStream},
+</span><span class="boring">};
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+</span><span class="boring">
+</span><span class="boring">    for stream in listener.incoming() {
+</span><span class="boring">        let stream = stream.unwrap();
+</span><span class="boring">
+</span><span class="boring">        handle_connection(stream);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>// --snip--
+
+fn handle_connection(mut stream: TcpStream) {
+    let buf_reader = BufReader::new(&amp;stream);
+    let request_line = buf_reader.lines().next().unwrap().unwrap();
+
+    if request_line == "GET / HTTP/1.1" {
+        let status_line = "HTTP/1.1 200 OK";
+        let contents = fs::read_to_string("hello.html").unwrap();
+        let length = contents.len();
+
+        let response = format!(
+            "{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}"
+        );
+
+        stream.write_all(response.as_bytes()).unwrap();
+    } else {
+        // some other request
+    }
+}</code></pre>
+<figcaption><a href="#listing-21-6">لیست ۲۱-۶</a>: مدیریت درخواست‌های <em>/</em> به صورت متفاوت با سایر درخواست‌ها</figcaption>
+</figure>
+<p>ما فقط به خط اول درخواست HTTP نگاه خواهیم کرد، بنابراین به جای خواندن کل درخواست در یک بردار، از <code>next</code> استفاده می‌کنیم تا اولین آیتم از iterator را بگیریم. اولین <code>unwrap</code> مقدار <code>Option</code> را مدیریت می‌کند و اگر iterator هیچ آیتمی نداشته باشد برنامه را متوقف می‌کند. دومین <code>unwrap</code> مقدار <code>Result</code> را مدیریت می‌کند و همان اثری را دارد که <code>unwrap</code> در <code>map</code> اضافه‌شده در لیست ۲۱-۲ داشت.</p>
+<p>سپس، مقدار <code>request_line</code> را بررسی می‌کنیم تا ببینیم آیا برابر با خط درخواست یک درخواست GET به مسیر <em>/</em> است یا خیر. اگر این‌طور باشد، بلوک <code>if</code> محتوای فایل HTML ما را بازمی‌گرداند.</p>
+<p>اگر مقدار <code>request_line</code> برابر با درخواست GET به مسیر <em>/</em> نباشد، به این معنی است که یک درخواست دیگر دریافت کرده‌ایم. در بلوک <code>else</code> کدی اضافه خواهیم کرد تا به سایر درخواست‌ها پاسخ دهد.</p>
+<p>این کد را اجرا کنید و آدرس <em>127.0.0.1:7878</em> را درخواست کنید؛ باید HTML موجود در فایل <em>hello.html</em> را دریافت کنید. اگر درخواست دیگری مانند <em>127.0.0.1:7878/something-else</em> ارسال کنید، یک خطای اتصال مشابه آنچه در اجرای کدهای لیست ۲۱-۱ و ۲۱-۲ دیدید دریافت خواهید کرد.</p>
+<p>حالا کد موجود در لیست ۲۱-۷ را به بلوک <code>else</code> اضافه کنید تا پاسخی با کد وضعیت 404 بازگرداند، که نشان می‌دهد محتوای درخواست‌شده پیدا نشد. همچنین مقداری HTML برای یک صفحه خطا بازمی‌گردانیم تا در مرورگر به کاربر نهایی نمایش داده شود.</p>
+<figure class="listing" id="listing-21-7">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust no_run"><span class="boring">use std::{
+</span><span class="boring">    fs,
+</span><span class="boring">    io::{BufReader, prelude::*},
+</span><span class="boring">    net::{TcpListener, TcpStream},
+</span><span class="boring">};
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+</span><span class="boring">
+</span><span class="boring">    for stream in listener.incoming() {
+</span><span class="boring">        let stream = stream.unwrap();
+</span><span class="boring">
+</span><span class="boring">        handle_connection(stream);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">fn handle_connection(mut stream: TcpStream) {
+</span><span class="boring">    let buf_reader = BufReader::new(&amp;stream);
+</span><span class="boring">    let request_line = buf_reader.lines().next().unwrap().unwrap();
+</span><span class="boring">
+</span><span class="boring">    if request_line == "GET / HTTP/1.1" {
+</span><span class="boring">        let status_line = "HTTP/1.1 200 OK";
+</span><span class="boring">        let contents = fs::read_to_string("hello.html").unwrap();
+</span><span class="boring">        let length = contents.len();
+</span><span class="boring">
+</span><span class="boring">        let response = format!(
+</span><span class="boring">            "{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}"
+</span><span class="boring">        );
+</span><span class="boring">
+</span><span class="boring">        stream.write_all(response.as_bytes()).unwrap();
+</span>    // --snip--
+    } else {
+        let status_line = "HTTP/1.1 404 NOT FOUND";
+        let contents = fs::read_to_string("404.html").unwrap();
+        let length = contents.len();
+
+        let response = format!(
+            "{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}"
+        );
+
+        stream.write_all(response.as_bytes()).unwrap();
+    }
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-21-7">لیست ۲۱-۷</a>: پاسخ‌دهی با کد وضعیت 404 و یک صفحه خطا اگر چیزی به غیر از <em>/</em> درخواست شود</figcaption>
+</figure>
+<p>در اینجا، پاسخ ما یک خط وضعیت با کد وضعیت 404 و عبارت دلیل <code>NOT FOUND</code> دارد. بدنه پاسخ HTML موجود در فایل <em>404.html</em> خواهد بود. باید فایل <em>404.html</em> را در کنار فایل <em>hello.html</em> برای صفحه خطا ایجاد کنید؛ باز هم، می‌توانید هر HTML که می‌خواهید استفاده کنید یا از HTML نمونه موجود در لیست ۲۱-۸ استفاده کنید.</p>
+<figure class="listing" id="listing-21-8">
+<span class="file-name">Filename: 404.html</span>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;
+    &lt;meta charset="utf-8"&gt;
+    &lt;title&gt;Hello!&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;h1&gt;Oops!&lt;/h1&gt;
+    &lt;p&gt;Sorry, I don't know what you're asking for.&lt;/p&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<figcaption><a href="#listing-21-8">لیست ۲۱-۸</a>: محتوای نمونه برای صفحه‌ای که با هر پاسخ 404 بازگردانده می‌شود</figcaption>
+</figure>
+<p>با این تغییرات، سرور خود را دوباره اجرا کنید. درخواست آدرس <em>127.0.0.1:7878</em> باید محتوای فایل <em>hello.html</em> را بازگرداند، و هر درخواست دیگری مانند <em>127.0.0.1:7878/foo</em> باید HTML خطا از فایل <em>404.html</em> را بازگرداند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="a-touch-of-refactoring"></a></p>
+<h3 id="refactoring"><a class="header" href="#refactoring">بازآرایی کد (Refactoring)</a></h3>
+<p>در حال حاضر، بلوک‌های <code>if</code> و <code>else</code> مقدار زیادی تکرار دارند: هر دو فایل‌ها را می‌خوانند و محتوای فایل‌ها را به جریان می‌نویسند. تنها تفاوت‌ها خط وضعیت و نام فایل هستند. بیایید کد را مختصرتر کنیم و این تفاوت‌ها را به خطوط جداگانه <code>if</code> و <code>else</code> انتقال دهیم که مقادیر خط وضعیت و نام فایل را به متغیرها اختصاص دهند؛ سپس می‌توانیم از این متغیرها به طور شرطی برای خواندن فایل و نوشتن پاسخ استفاده کنیم. لیست ۲۱-۹ کد نتیجه‌شده پس از جایگزینی بلوک‌های بزرگ <code>if</code> و <code>else</code> را نشان می‌دهد.</p>
+<figure class="listing" id="listing-21-9">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust no_run"><span class="boring">use std::{
+</span><span class="boring">    fs,
+</span><span class="boring">    io::{BufReader, prelude::*},
+</span><span class="boring">    net::{TcpListener, TcpStream},
+</span><span class="boring">};
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+</span><span class="boring">
+</span><span class="boring">    for stream in listener.incoming() {
+</span><span class="boring">        let stream = stream.unwrap();
+</span><span class="boring">
+</span><span class="boring">        handle_connection(stream);
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>// --snip--
+
+fn handle_connection(mut stream: TcpStream) {
+    // --snip--
+<span class="boring">    let buf_reader = BufReader::new(&amp;stream);
+</span><span class="boring">    let request_line = buf_reader.lines().next().unwrap().unwrap();
+</span>
+    let (status_line, filename) = if request_line == "GET / HTTP/1.1" {
+        ("HTTP/1.1 200 OK", "hello.html")
+    } else {
+        ("HTTP/1.1 404 NOT FOUND", "404.html")
+    };
+
+    let contents = fs::read_to_string(filename).unwrap();
+    let length = contents.len();
+
+    let response =
+        format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}");
+
+    stream.write_all(response.as_bytes()).unwrap();
+}</code></pre>
+<figcaption><a href="#listing-21-9">لیست ۲۱-۹</a>: بازسازی بلوک‌های &lt;code&gt;&lt;/x-listing&gt;if&lt;/code&gt; و &lt;code&gt;else&lt;/code&gt; برای شامل شدن تنها کدی که بین دو حالت متفاوت است</figcaption>
+</figure>
+<p>اکنون بلوک‌های <code>if</code> و <code>else</code> تنها مقادیر مناسب برای خط وضعیت و نام فایل را در یک تاپل بازمی‌گردانند؛ سپس با استفاده از یک الگو در دستور <code>let</code>، این دو مقدار به <code>status_line</code> و <code>filename</code> تخصیص داده می‌شوند، همان‌طور که در فصل ۱۹ بحث شد.</p>
+<p>کدی که قبلاً تکراری بود اکنون خارج از بلوک‌های <code>if</code> و <code>else</code> قرار دارد و از متغیرهای <code>status_line</code> و <code>filename</code> استفاده می‌کند. این کار تشخیص تفاوت بین دو حالت را آسان‌تر می‌کند و به این معنی است که اگر بخواهیم نحوه خواندن فایل و نوشتن پاسخ را تغییر دهیم، تنها یک مکان برای به‌روزرسانی کد داریم. رفتار کد در لیست ۲۱-۹ با لیست ۲۱-۷ یکسان خواهد بود.</p>
+<p>عالی! اکنون یک وب سرور ساده با تقریباً ۴۰ خط کد Rust داریم که به یک درخواست با یک صفحه محتوا پاسخ می‌دهد و به تمام درخواست‌های دیگر یک پاسخ 404 می‌دهد.</p>
+<p>در حال حاضر، سرور ما در یک Thread اجرا می‌شود، به این معنی که تنها می‌تواند یک درخواست را در یک زمان سرویس دهد. بیایید بررسی کنیم که چگونه این موضوع می‌تواند مشکل‌ساز شود، با شبیه‌سازی برخی درخواست‌های کند. سپس سرور را طوری بهبود می‌دهیم که بتواند چندین درخواست را همزمان مدیریت کند.</p><nav class="page-nav"><a href="ch21-00-final-project-a-web-server.html">→ پروژهٔ نهایی: ساخت یک وب‌سرور چندنخی</a><a href="ch21-02-multithreaded.html">از سرور تک‌نخی به سرور چندنخی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

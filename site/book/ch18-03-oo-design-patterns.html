@@ -1,0 +1,616 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>پیاده‌سازی یک الگوی طراحی شیءگرا — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch18-03-oo-design-patterns"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="implementing-an-object-oriented-design-pattern"><a class="header" href="#implementing-an-object-oriented-design-pattern">پیاده‌سازی یک الگوی طراحی شی‌گرا</a></h2>
+<p><em>الگوی وضعیت</em> یک الگوی طراحی شی‌گرا است. هسته این الگو این است که مجموعه‌ای از وضعیت‌ها را که یک مقدار می‌تواند به‌طور داخلی داشته باشد، تعریف کنیم. این وضعیت‌ها با مجموعه‌ای از <em>اشیای وضعیت</em> نمایش داده می‌شوند و رفتار مقدار بر اساس وضعیت آن تغییر می‌کند. قصد داریم مثالی از یک ساختار blog post (پست وبلاگ) را بررسی کنیم که یک فیلد برای نگه‌داشتن وضعیت دارد. این وضعیت یک شیء از مجموعه “پیش‌نویس” (draft)، “در حال بررسی” (review)، یا “منتشرشده” (published) خواهد بود.</p>
+<p>اشیای وضعیت قابلیت‌هایی را به اشتراک می‌گذارند: در Rust، البته، ما از ساختارها (structs) و صفت‌ها (traits) به جای اشیا و ارث‌بری استفاده می‌کنیم. هر شیء وضعیت مسئول رفتار خود و مدیریت زمانی است که باید به وضعیت دیگری تغییر کند. مقداری که یک شیء وضعیت را نگه می‌دارد، هیچ اطلاعی از رفتارهای مختلف وضعیت‌ها یا زمان تغییر وضعیت ندارد.</p>
+<p>مزیت استفاده از الگوی وضعیت این است که وقتی نیازهای تجاری برنامه تغییر می‌کنند، نیازی به تغییر کد مقداری که وضعیت را نگه می‌دارد یا کدی که از آن مقدار استفاده می‌کند، نداریم. تنها لازم است کد داخل یکی از اشیای وضعیت را برای تغییر قوانین آن یا شاید اضافه کردن اشیای وضعیت جدید به‌روزرسانی کنیم.</p>
+<p>ابتدا الگوی وضعیت را به روش سنتی شی‌گرایی پیاده‌سازی می‌کنیم، سپس از رویکردی که در Rust طبیعی‌تر است استفاده خواهیم کرد. بیایید به‌صورت مرحله‌به‌مرحله پیاده‌سازی یک فرآیند کاری پست وبلاگ با استفاده از الگوی وضعیت را بررسی کنیم.</p>
+<p>قابلیت نهایی به این شکل خواهد بود:</p>
+<ol>
+<li>یک پست وبلاگ به‌صورت یک پیش‌نویس خالی شروع می‌شود.</li>
+<li>وقتی پیش‌نویس تمام شد، بررسی پست درخواست می‌شود.</li>
+<li>وقتی پست تأیید شد، منتشر می‌شود.</li>
+<li>تنها پست‌های وبلاگی که منتشر شده‌اند متن را برای چاپ بازمی‌گردانند، بنابراین پست‌های تأییدنشده نمی‌توانند به‌طور تصادفی منتشر شوند.</li>
+</ol>
+<p>هر تغییر دیگری که روی یک پست تلاش شود نباید تأثیری داشته باشد. برای مثال، اگر بخواهیم یک پست وبلاگ پیش‌نویس را قبل از درخواست بررسی تأیید کنیم، پست باید به‌عنوان پیش‌نویس منتشرنشده باقی بماند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="a-traditional-object-oriented-attempt"></a></p>
+<h3 id="attempting-traditional-object-oriented-style"><a class="header" href="#attempting-traditional-object-oriented-style">تلاش برای سبک سنتی شیءگرا</a></h3>
+<p>راه‌های بی‌شماری برای ساختاردهی کد به‌منظور حل یک مسئله وجود دارد که هرکدام با معایب و مزایای متفاوتی همراه‌اند. پیاده‌سازی این بخش بیشتر به سبک سنتی شیءگرایانه نزدیک است، که در Rust قابل نوشتن است، اما از برخی نقاط قوت Rust بهره نمی‌برد. در ادامه، راه‌حل متفاوتی را نشان خواهیم داد که هنوز از الگوی طراحی شیءگرایانه استفاده می‌کند اما به‌گونه‌ای ساختار یافته که ممکن است برای برنامه‌نویسان با تجربه‌ی شیءگرایی کمتر آشنا باشد. این دو راه‌حل را با هم مقایسه خواهیم کرد تا تفاوت‌ها و معایب و مزایای طراحی کد Rust به شکلی متفاوت نسبت به زبان‌های دیگر را تجربه کنیم.</p>
+<p>لیستینگ 18-11 این روند کاری را به‌صورت کد نشان می‌دهد: این یک نمونه استفاده از API است که در کتابخانه‌ای به نام <code>blog</code> پیاده‌سازی خواهیم کرد. این کد هنوز کامپایل نمی‌شود، زیرا <code>crate</code> مربوط به <code>blog</code> را پیاده‌سازی نکرده‌ایم.</p>
+<figure class="listing" id="listing-18-11">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">use blog::Post;
+
+fn main() {
+    let mut post = Post::new();
+
+    post.add_text("I ate a salad for lunch today");
+    assert_eq!("", post.content());
+
+    post.request_review();
+    assert_eq!("", post.content());
+
+    post.approve();
+    assert_eq!("I ate a salad for lunch today", post.content());
+}</code></pre>
+<figcaption><a href="#listing-18-11">لیست ۱۸-۱۱</a>: کدی که رفتار مورد نظر ما برای crate &lt;code&gt;&lt;/x-listing&gt;blog&lt;/code&gt; را نشان می‌دهد</figcaption>
+</figure>
+<p>ما می‌خواهیم به کاربر اجازه دهیم یک پست وبلاگ پیش‌نویس جدید با <code>Post::new</code> ایجاد کند. می‌خواهیم امکان اضافه کردن متن به پست وبلاگ را فراهم کنیم. اگر فوراً بخواهیم محتوای پست را دریافت کنیم، قبل از تأیید، نباید هیچ متنی دریافت کنیم، زیرا پست هنوز یک پیش‌نویس است. ما از <code>assert_eq!</code> در کد برای اهداف نمایشی استفاده کرده‌ایم. یک تست واحد عالی برای این مورد این است که تأیید کنیم یک پست وبلاگ پیش‌نویس یک رشته خالی از متد <code>content</code> بازمی‌گرداند، اما قصد نداریم برای این مثال تست بنویسیم.</p>
+<p>سپس می‌خواهیم امکان درخواست بررسی برای پست فراهم شود و می‌خواهیم <code>content</code> در حین انتظار برای بررسی یک رشته خالی بازگرداند. وقتی پست تأیید شود، باید منتشر شود، به این معنی که متن پست هنگام فراخوانی <code>content</code> بازگردانده خواهد شد.</p>
+<p>توجه کنید که تنها نوعی که از crate با آن تعامل داریم، نوع <code>Post</code> است. این نوع از الگوی حالت (state pattern) استفاده خواهد کرد و یک مقدار نگه می‌دارد که یکی از سه شیء حالت مختلف را نمایندگی می‌کند—حالت‌های پیش‌نویس (draft)، بازبینی (review) یا منتشر شده (published). تغییر از یک حالت به حالت دیگر به‌صورت داخلی و درون نوع <code>Post</code> مدیریت می‌شود. این حالت‌ها در پاسخ به متدهایی که کاربران کتابخانه روی نمونه‌ی <code>Post</code> فراخوانی می‌کنند تغییر می‌کنند، اما کاربران نیازی به مدیریت مستقیم تغییرات حالت ندارند. همچنین، کاربران نمی‌توانند در مدیریت حالت‌ها اشتباه کنند، مثلاً ارسال پستی قبل از بازبینی آن.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="defining-post-and-creating-a-new-instance-in-the-draft-state"></a></p>
+<h4 id="defining-post-and-creating-a-new-instance"><a class="header" href="#defining-post-and-creating-a-new-instance">تعریف <code>Post</code> و ایجاد یک نمونه‌ی جدید در حالت پیش‌نویس (Draft)</a></h4>
+<p>بیایید پیاده‌سازی کتابخانه را شروع کنیم! می‌دانیم که به یک ساختار <code>Post</code> عمومی نیاز داریم که مقداری محتوا را نگه می‌دارد، بنابراین با تعریف این ساختار و یک تابع مرتبط <code>new</code> عمومی برای ایجاد یک نمونه از <code>Post</code> شروع می‌کنیم. این تعاریف در لیستینگ 18-12 آمده‌اند. همچنین، یک صفت خصوصی <code>State</code> ایجاد خواهیم کرد که رفتاری را که تمام اشیای وضعیت برای <code>Post</code> باید داشته باشند تعریف می‌کند.</p>
+<p>سپس، <code>Post</code> یک شیء صفت <code>Box&lt;dyn State&gt;</code> را درون یک <code>Option&lt;T&gt;</code> در یک فیلد خصوصی به نام <code>state</code> نگه خواهد داشت تا شیء وضعیت را مدیریت کند. در ادامه خواهید دید که چرا <code>Option&lt;T&gt;</code> ضروری است.</p>
+<figure class="listing" id="listing-18-12">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">pub struct Post {
+    state: Option&lt;Box&lt;dyn State&gt;&gt;,
+    content: String,
+}
+
+impl Post {
+    pub fn new() -&gt; Post {
+        Post {
+            state: Some(Box::new(Draft {})),
+            content: String::new(),
+        }
+    }
+}
+
+trait State {}
+
+struct Draft {}
+
+impl State for Draft {}</code></pre>
+<figcaption><a href="#listing-18-12">لیست ۱۸-۱۲</a>: تعریف یک ساختار &lt;code&gt;&lt;/x-listing&gt;Post&lt;/code&gt; و یک تابع &lt;code&gt;new&lt;/code&gt; که یک نمونه جدید از &lt;code&gt;Post&lt;/code&gt; ایجاد می‌کند، یک صفت &lt;code&gt;State&lt;/code&gt;، و یک ساختار &lt;code&gt;Draft&lt;/code&gt;</figcaption>
+</figure>
+<p>صفت <code>State</code> رفتاری را که وضعیت‌های مختلف پست‌ها به اشتراک می‌گذارند تعریف می‌کند. اشیای وضعیت شامل <code>Draft</code>, <code>PendingReview</code> و <code>Published</code> هستند و همه آن‌ها صفت <code>State</code> را پیاده‌سازی خواهند کرد. فعلاً صفت هیچ متدی ندارد و ما با تعریف تنها وضعیت <code>Draft</code> شروع می‌کنیم، زیرا این وضعیت است که می‌خواهیم پست در آن شروع شود.</p>
+<p>وقتی یک <code>Post</code> جدید ایجاد می‌کنیم، فیلد <code>state</code> آن را به یک مقدار <code>Some</code> تنظیم می‌کنیم که یک <code>Box</code> را نگه می‌دارد. این <code>Box</code> به یک نمونه جدید از ساختار <code>Draft</code> اشاره می‌کند. این کار تضمین می‌کند که هرگاه یک نمونه جدید از <code>Post</code> ایجاد شود، به‌عنوان یک پیش‌نویس شروع شود. از آنجا که فیلد <code>state</code> در <code>Post</code> خصوصی است، هیچ راهی برای ایجاد یک <code>Post</code> در وضعیت دیگری وجود ندارد! در تابع <code>Post::new</code>، فیلد <code>content</code> را به یک <code>String</code> جدید و خالی تنظیم می‌کنیم.</p>
+<h4 id="storing-the-text-of-the-post-content"><a class="header" href="#storing-the-text-of-the-post-content">ذخیرهٔ متن محتوای پست</a></h4>
+<p>در لیستینگ 18-11 دیدیم که می‌خواهیم بتوانیم یک متد به نام <code>add_text</code> فراخوانی کنیم و یک <code>&amp;str</code> به آن بدهیم که به عنوان محتوای متنی پست وبلاگ اضافه شود. این کار را به‌صورت یک متد پیاده‌سازی می‌کنیم تا فیلد <code>content</code> را به‌جای تعریف آن به‌صورت <code>pub</code> کنترل کنیم و بتوانیم در آینده متدی برای کنترل چگونگی خواندن داده فیلد <code>content</code> پیاده‌سازی کنیم. متد <code>add_text</code> نسبتاً ساده است، بنابراین بیایید پیاده‌سازی آن را به بلوک <code>impl Post</code> در لیستینگ 18-13 اضافه کنیم:</p>
+<figure class="listing" id="listing-18-13">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">pub struct Post {
+</span><span class="boring">    state: Option&lt;Box&lt;dyn State&gt;&gt;,
+</span><span class="boring">    content: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Post {
+    // --snip--
+<span class="boring">    pub fn new() -&gt; Post {
+</span><span class="boring">        Post {
+</span><span class="boring">            state: Some(Box::new(Draft {})),
+</span><span class="boring">            content: String::new(),
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span>    pub fn add_text(&amp;mut self, text: &amp;str) {
+        self.content.push_str(text);
+    }
+}
+<span class="boring">
+</span><span class="boring">trait State {}
+</span><span class="boring">
+</span><span class="boring">struct Draft {}
+</span><span class="boring">
+</span><span class="boring">impl State for Draft {}</span></code></pre>
+<figcaption><a href="#listing-18-13">لیست ۱۸-۱۳</a>: پیاده‌سازی متد &lt;code&gt;&lt;/x-listing&gt;add_text&lt;/code&gt; برای افزودن متن به &lt;code&gt;content&lt;/code&gt; یک پست</figcaption>
+</figure>
+<p>متد <code>add_text</code> یک ارجاع تغییرپذیر به <code>self</code> می‌گیرد، زیرا نمونهٔ <code>Post</code> را که <code>add_text</code> را روی آن فراخوانی می‌کنیم تغییر می‌دهیم. سپس <code>push_str</code> را روی <code>String</code> درون <code>content</code> فراخوانی می‌کنیم و آرگومان <code>text</code> را می‌دهیم تا به <code>content</code> ذخیره‌شده اضافه شود. این رفتار به وضعیتی که پست در آن قرار دارد بستگی ندارد، بنابراین بخشی از الگوی حالت (state pattern) نیست. متد <code>add_text</code> اصلاً با فیلد <code>state</code> تعامل ندارد، اما بخشی از رفتاری است که می‌خواهیم پشتیبانی کنیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="ensuring-the-content-of-a-draft-post-is-empty"></a></p>
+<h4 id="ensuring-that-the-content-of-a-draft-post-is-empty"><a class="header" href="#ensuring-that-the-content-of-a-draft-post-is-empty">اطمینان از اینکه محتوای یک پست پیش‌نویس خالی است</a></h4>
+<p>حتی پس از آن‌که <code>add_text</code> را فراخوانی کردیم و مقداری محتوا به پست اضافه کردیم، همچنان می‌خواهیم متد <code>content</code> یک برش رشتهٔ خالی بازگرداند، چون پست هنوز در وضعیت پیش‌نویس (draft) است، همان‌طور که با اولین <code>assert_eq!</code> در لیستینگ ۱۸-۱۱ نشان داده شده است. فعلاً متد <code>content</code> را با ساده‌ترین کاری که این نیاز را برآورده می‌کند پیاده‌سازی می‌کنیم: همیشه یک برش رشتهٔ خالی بازگرداندن. این را بعداً، وقتی قابلیت تغییر وضعیت پست را برای منتشر شدن پیاده‌سازی کردیم، تغییر خواهیم داد. تا اینجا، پست‌ها فقط می‌توانند در وضعیت پیش‌نویس باشند، بنابراین محتوای پست باید همیشه خالی باشد. لیستینگ ۱۸-۱۴ این پیاده‌سازی موقت (placeholder) را نشان می‌دهد.</p>
+<figure class="listing" id="listing-18-14">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">pub struct Post {
+</span><span class="boring">    state: Option&lt;Box&lt;dyn State&gt;&gt;,
+</span><span class="boring">    content: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Post {
+    // --snip--
+<span class="boring">    pub fn new() -&gt; Post {
+</span><span class="boring">        Post {
+</span><span class="boring">            state: Some(Box::new(Draft {})),
+</span><span class="boring">            content: String::new(),
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn add_text(&amp;mut self, text: &amp;str) {
+</span><span class="boring">        self.content.push_str(text);
+</span><span class="boring">    }
+</span><span class="boring">
+</span>    pub fn content(&amp;self) -&gt; &amp;str {
+        ""
+    }
+}
+<span class="boring">
+</span><span class="boring">trait State {}
+</span><span class="boring">
+</span><span class="boring">struct Draft {}
+</span><span class="boring">
+</span><span class="boring">impl State for Draft {}</span></code></pre>
+<figcaption><a href="#listing-18-14">لیست ۱۸-۱۴</a>: افزودن یک پیاده‌سازی موقت برای متد &lt;code&gt;&lt;/x-listing&gt;content&lt;/code&gt; در &lt;code&gt;Post&lt;/code&gt; که همیشه یک برش رشته خالی بازمی‌گرداند</figcaption>
+</figure>
+<p>با این متد <code>content</code> که اضافه شد، همه‌چیز در لیستینگ ۱۸-۱۱ تا اولین <code>assert_eq!</code> همان‌طور که انتظار می‌رود کار می‌کند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="requesting-a-review-of-the-post-changes-its-state"></a>
+<a id="requesting-a-review-changes-the-posts-state"></a></p>
+<h4 id="requesting-a-review-which-changes-the-posts-state"><a class="header" href="#requesting-a-review-which-changes-the-posts-state">درخواست بازبینی، وضعیت پست را تغییر می‌دهد</a></h4>
+<p>در مرحله‌ی بعد، باید قابلیت درخواست بازبینی برای یک پست را اضافه کنیم، که باید وضعیت آن را از <code>Draft</code> به <code>PendingReview</code> تغییر دهد. لیستینگ 18-15 این کد را نشان می‌دهد.</p>
+<figure class="listing" id="listing-18-15">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">pub struct Post {
+</span><span class="boring">    state: Option&lt;Box&lt;dyn State&gt;&gt;,
+</span><span class="boring">    content: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Post {
+    // --snip--
+<span class="boring">    pub fn new() -&gt; Post {
+</span><span class="boring">        Post {
+</span><span class="boring">            state: Some(Box::new(Draft {})),
+</span><span class="boring">            content: String::new(),
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn add_text(&amp;mut self, text: &amp;str) {
+</span><span class="boring">        self.content.push_str(text);
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn content(&amp;self) -&gt; &amp;str {
+</span><span class="boring">        ""
+</span><span class="boring">    }
+</span><span class="boring">
+</span>    pub fn request_review(&amp;mut self) {
+        if let Some(s) = self.state.take() {
+            self.state = Some(s.request_review())
+        }
+    }
+}
+
+trait State {
+    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt;;
+}
+
+struct Draft {}
+
+impl State for Draft {
+    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+        Box::new(PendingReview {})
+    }
+}
+
+struct PendingReview {}
+
+impl State for PendingReview {
+    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+        self
+    }
+}</code></pre>
+<figcaption><a href="#listing-18-15">لیست ۱۸-۱۵</a>: پیاده‌سازی متدهای &lt;code&gt;&lt;/x-listing&gt;request_review&lt;/code&gt; برای &lt;code&gt;Post&lt;/code&gt; و صفت &lt;code&gt;State&lt;/code&gt;</figcaption>
+</figure>
+<p>یک متد عمومی به نام <code>request_review</code> به <code>Post</code> می‌دهیم که یک ارجاع تغییرپذیر به <code>self</code> می‌گیرد. سپس یک متد داخلی <code>request_review</code> را روی وضعیت فعلی <code>Post</code> فراخوانی می‌کنیم، و این متد <code>request_review</code> دوم وضعیت فعلی را مصرف می‌کند و یک وضعیت جدید بازمی‌گرداند.</p>
+<p>ما متد <code>request_review</code> را به صفت <code>State</code> اضافه می‌کنیم؛ تمام انواعی که این صفت را پیاده‌سازی می‌کنند اکنون باید متد <code>request_review</code> را پیاده‌سازی کنند. توجه داشته باشید که به جای <code>self</code>، <code>&amp;self</code> یا <code>&amp;mut self</code> به‌عنوان اولین پارامتر متد، از <code>self: Box&lt;Self&gt;</code> استفاده کرده‌ایم. این نحو به این معنی است که متد فقط زمانی معتبر است که روی یک <code>Box</code> نگه‌دارنده نوع فراخوانی شود. این نحو مالکیت <code>Box&lt;Self&gt;</code> را می‌گیرد و وضعیت قدیمی را باطل می‌کند تا مقدار وضعیت <code>Post</code> بتواند به یک وضعیت جدید تبدیل شود.</p>
+<p>برای مصرف وضعیت قدیمی، متد <code>request_review</code> باید مالکیت مقدار وضعیت را بگیرد. اینجا است که <code>Option</code> در فیلد <code>state</code> از <code>Post</code> وارد می‌شود: متد <code>take</code> را فراخوانی می‌کنیم تا مقدار <code>Some</code> را از فیلد <code>state</code> بیرون بکشد و به‌جای آن یک <code>None</code> بگذارد، چون Rust اجازه نمی‌دهد فیلدهای پُرنشده (unpopulated) در struct‌ها داشته باشیم. این کار به ما اجازه می‌دهد مقدار <code>state</code> را به‌جای قرض گرفتن، از <code>Post</code> بیرون منتقل کنیم (move). سپس <code>state</code> پست را برابر با نتیجهٔ این عملیات قرار می‌دهیم.</p>
+<p>باید به‌طور موقت <code>state</code> را به <code>None</code> تنظیم کنیم، نه اینکه مستقیماً آن را با کدی مانند <code>self.state = self.state.request_review();</code> تنظیم کنیم، تا مالکیت مقدار <code>state</code> را بدست آوریم. این کار اطمینان می‌دهد که <code>Post</code> نمی‌تواند از مقدار قدیمی <code>state</code> پس از تبدیل آن به یک وضعیت جدید استفاده کند.</p>
+<p>متد <code>request_review</code> روی <code>Draft</code> یک نمونهٔ جدیدِ box‌شده از یک struct جدید به نام <code>PendingReview</code> بازمی‌گرداند، که وضعیتی را نشان می‌دهد که پست در انتظار بازبینی است. struct ـ<code>PendingReview</code> نیز متد <code>request_review</code> را پیاده‌سازی می‌کند اما هیچ تبدیلی انجام نمی‌دهد. در عوض خودش را بازمی‌گرداند، چون وقتی برای پستی که از قبل در وضعیت <code>PendingReview</code> است درخواست بازبینی می‌کنیم، باید در وضعیت <code>PendingReview</code> باقی بماند.</p>
+<p>اکنون می‌توانیم مزایای الگوی وضعیت را مشاهده کنیم: متد <code>request_review</code> در <code>Post</code> بدون توجه به مقدار <code>state</code> آن یکسان است. هر وضعیت مسئول قوانین خاص خود است.</p>
+<p>متد <code>content</code> روی <code>Post</code> را همان‌طور که هست، با بازگرداندن یک برش رشتهٔ خالی، رها می‌کنیم. اکنون می‌توانیم یک <code>Post</code> هم در وضعیت <code>PendingReview</code> و هم در وضعیت <code>Draft</code> داشته باشیم، اما می‌خواهیم در وضعیت <code>PendingReview</code> هم همان رفتار را داشته باشیم. لیستینگ ۱۸-۱۱ اکنون تا دومین فراخوانی <code>assert_eq!</code> کار می‌کند!</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="adding-the-approve-method-that-changes-the-behavior-of-content"></a>
+<a id="adding-approve-to-change-the-behavior-of-content"></a></p>
+<h4 id="adding-approve-to-change-contents-behavior"><a class="header" href="#adding-approve-to-change-contents-behavior">افزودن متد <code>approve</code> برای تغییر رفتار <code>content</code></a></h4>
+<p>متد <code>approve</code> شبیه به متد <code>request_review</code> خواهد بود: این متد فیلد <code>state</code> را به مقداری تغییر می‌دهد که وضعیت فعلی (<code>state</code> فعلی) تعیین می‌کند که هنگام تأیید آن وضعیت، باید به آن تغییر یابد؛ همان‌طور که در لیستینگ 18-16 نشان داده شده است.</p>
+<figure class="listing" id="listing-18-16">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">pub struct Post {
+</span><span class="boring">    state: Option&lt;Box&lt;dyn State&gt;&gt;,
+</span><span class="boring">    content: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Post {
+    // --snip--
+<span class="boring">    pub fn new() -&gt; Post {
+</span><span class="boring">        Post {
+</span><span class="boring">            state: Some(Box::new(Draft {})),
+</span><span class="boring">            content: String::new(),
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn add_text(&amp;mut self, text: &amp;str) {
+</span><span class="boring">        self.content.push_str(text);
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn content(&amp;self) -&gt; &amp;str {
+</span><span class="boring">        ""
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn request_review(&amp;mut self) {
+</span><span class="boring">        if let Some(s) = self.state.take() {
+</span><span class="boring">            self.state = Some(s.request_review())
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span>    pub fn approve(&amp;mut self) {
+        if let Some(s) = self.state.take() {
+            self.state = Some(s.approve())
+        }
+    }
+}
+
+trait State {
+    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt;;
+    fn approve(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt;;
+}
+
+struct Draft {}
+
+impl State for Draft {
+    // --snip--
+<span class="boring">    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        Box::new(PendingReview {})
+</span><span class="boring">    }
+</span><span class="boring">
+</span>    fn approve(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+        self
+    }
+}
+
+struct PendingReview {}
+
+impl State for PendingReview {
+    // --snip--
+<span class="boring">    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        self
+</span><span class="boring">    }
+</span><span class="boring">
+</span>    fn approve(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+        Box::new(Published {})
+    }
+}
+
+struct Published {}
+
+impl State for Published {
+    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+        self
+    }
+
+    fn approve(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+        self
+    }
+}</code></pre>
+<figcaption><a href="#listing-18-16">لیست ۱۸-۱۶</a>: پیاده‌سازی متد &lt;code&gt;&lt;/x-listing&gt;approve&lt;/code&gt; در &lt;code&gt;Post&lt;/code&gt; و صفت &lt;code&gt;State&lt;/code&gt;</figcaption>
+</figure>
+<p>ما متد <code>approve</code> را به صفت <code>State</code> اضافه می‌کنیم و یک ساختار جدید که صفت <code>State</code> را پیاده‌سازی می‌کند، یعنی وضعیت <code>Published</code>، اضافه می‌کنیم.</p>
+<p>مشابه روشی که متد <code>request_review</code> در حالت <code>PendingReview</code> کار می‌کند، اگر متد <code>approve</code> را روی حالت <code>Draft</code> فراخوانی کنیم، هیچ تأثیری نخواهد داشت زیرا <code>approve</code> در این حالت خودِ <code>self</code> را باز می‌گرداند. زمانی که متد <code>approve</code> را روی حالت <code>PendingReview</code> فراخوانی کنیم، یک نمونه‌ی جدید از ساختار <code>Published</code> را به‌صورت جعبه‌شده (boxed) باز می‌گرداند. ساختار <code>Published</code> نیز <code>trait</code> مربوط به <code>State</code> را پیاده‌سازی می‌کند، و برای هر دو متد <code>request_review</code> و <code>approve</code>، خودِ <code>self</code> را برمی‌گرداند، زیرا در این موارد پست باید در وضعیت <code>Published</code> باقی بماند.</p>
+<p>اکنون باید متد <code>content</code> روی <code>Post</code> را به‌روزرسانی کنیم. می‌خواهیم مقداری که از <code>content</code> بازگردانده می‌شود به وضعیت فعلی <code>Post</code> بستگی داشته باشد، بنابراین <code>Post</code> را وادار می‌کنیم کار را به متد <code>content</code> تعریف‌شده روی <code>state</code> خودش واگذار (delegate) کند، همان‌طور که در لیستینگ ۱۸-۱۷ نشان داده شده است.</p>
+<figure class="listing" id="listing-18-17">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">pub struct Post {
+</span><span class="boring">    state: Option&lt;Box&lt;dyn State&gt;&gt;,
+</span><span class="boring">    content: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Post {
+    // --snip--
+<span class="boring">    pub fn new() -&gt; Post {
+</span><span class="boring">        Post {
+</span><span class="boring">            state: Some(Box::new(Draft {})),
+</span><span class="boring">            content: String::new(),
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn add_text(&amp;mut self, text: &amp;str) {
+</span><span class="boring">        self.content.push_str(text);
+</span><span class="boring">    }
+</span><span class="boring">
+</span>    pub fn content(&amp;self) -&gt; &amp;str {
+        self.state.as_ref().unwrap().content(self)
+    }
+    // --snip--
+<span class="boring">
+</span><span class="boring">    pub fn request_review(&amp;mut self) {
+</span><span class="boring">        if let Some(s) = self.state.take() {
+</span><span class="boring">            self.state = Some(s.request_review())
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn approve(&amp;mut self) {
+</span><span class="boring">        if let Some(s) = self.state.take() {
+</span><span class="boring">            self.state = Some(s.approve())
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span>}
+<span class="boring">
+</span><span class="boring">trait State {
+</span><span class="boring">    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt;;
+</span><span class="boring">    fn approve(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt;;
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct Draft {}
+</span><span class="boring">
+</span><span class="boring">impl State for Draft {
+</span><span class="boring">    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        Box::new(PendingReview {})
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    fn approve(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        self
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct PendingReview {}
+</span><span class="boring">
+</span><span class="boring">impl State for PendingReview {
+</span><span class="boring">    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        self
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    fn approve(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        Box::new(Published {})
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct Published {}
+</span><span class="boring">
+</span><span class="boring">impl State for Published {
+</span><span class="boring">    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        self
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    fn approve(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        self
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-18-17">لیست ۱۸-۱۷</a>: به‌روزرسانی متد &lt;code&gt;&lt;/x-listing&gt;content&lt;/code&gt; در &lt;code&gt;Post&lt;/code&gt; برای ارجاع به متد &lt;code&gt;content&lt;/code&gt; در &lt;code&gt;State&lt;/code&gt;</figcaption>
+</figure>
+<p>چون هدف این است که تمام این قوانین در داخل ساختارهایی که صفت <code>State</code> را پیاده‌سازی می‌کنند باقی بماند، ما یک متد <code>content</code> را روی مقدار <code>state</code> فراخوانی می‌کنیم و نمونه پست (یعنی <code>self</code>) را به‌عنوان آرگومان به آن می‌دهیم. سپس مقداری که از متد <code>content</code> روی مقدار <code>state</code> بازمی‌گردد را بازمی‌گردانیم.</p>
+<p>ما متد <code>as_ref</code> را روی <code>Option</code> فراخوانی می‌کنیم زیرا می‌خواهیم یک ارجاع به مقدار داخل <code>Option</code> داشته باشیم، نه مالکیت مقدار. چون <code>state</code> یک <code>Option&lt;Box&lt;dyn State&gt;&gt;</code> است، وقتی <code>as_ref</code> را فراخوانی می‌کنیم، یک <code>Option&lt;&amp;Box&lt;dyn State&gt;&gt;</code> بازمی‌گردد. اگر <code>as_ref</code> را فراخوانی نکنیم، با یک خطا مواجه می‌شویم زیرا نمی‌توانیم <code>state</code> را از <code>&amp;self</code> که به‌عنوان پارامتر به تابع داده شده است خارج کنیم.</p>
+<p>سپس متد <code>unwrap</code> را فراخوانی می‌کنیم که می‌دانیم هرگز باعث panic نمی‌شود، زیرا متدهایی که روی <code>Post</code> تعریف کرده‌ایم تضمین می‌کنند که پس از اجرای این متدها، مقدار <code>state</code> همیشه <code>Some</code> باشد. این مورد یکی از همان حالت‌هایی است که در بخش <a href="ch09-03-to-panic-or-not-to-panic.html#cases-in-which-you-have-more-information-than-the-compiler">«حالتی که شما اطلاعات بیشتری نسبت به کامپایلر دارید»</a><!-- ignore --> در فصل ۹ اشاره کردیم، یعنی زمانی که می‌دانیم مقدار <code>None</code> هرگز رخ نمی‌دهد ولی کامپایلر قادر به تشخیص آن نیست.</p>
+<p>در این مرحله، وقتی متد <code>content</code> را روی <code>&amp;Box&lt;dyn State&gt;</code> فراخوانی می‌کنیم، عمل deref coercion روی <code>&amp;</code> و <code>Box</code> اتفاق می‌افتد و در نهایت متد <code>content</code> روی نوعی که <code>trait</code> مربوط به <code>State</code> را پیاده‌سازی کرده است فراخوانی خواهد شد. این بدان معناست که باید متد <code>content</code> را به تعریف <code>trait</code> مربوط به <code>State</code> اضافه کنیم؛ و این همان جایی است که منطق بازگرداندن محتوا را، بر اساس وضعیت فعلیِ پست، قرار می‌دهیم. این موضوع در لیستینگ 18-18 نشان داده شده است.</p>
+<figure class="listing" id="listing-18-18">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">pub struct Post {
+</span><span class="boring">    state: Option&lt;Box&lt;dyn State&gt;&gt;,
+</span><span class="boring">    content: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Post {
+</span><span class="boring">    pub fn new() -&gt; Post {
+</span><span class="boring">        Post {
+</span><span class="boring">            state: Some(Box::new(Draft {})),
+</span><span class="boring">            content: String::new(),
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn add_text(&amp;mut self, text: &amp;str) {
+</span><span class="boring">        self.content.push_str(text);
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn content(&amp;self) -&gt; &amp;str {
+</span><span class="boring">        self.state.as_ref().unwrap().content(self)
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn request_review(&amp;mut self) {
+</span><span class="boring">        if let Some(s) = self.state.take() {
+</span><span class="boring">            self.state = Some(s.request_review())
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn approve(&amp;mut self) {
+</span><span class="boring">        if let Some(s) = self.state.take() {
+</span><span class="boring">            self.state = Some(s.approve())
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>trait State {
+    // --snip--
+<span class="boring">    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt;;
+</span><span class="boring">    fn approve(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt;;
+</span><span class="boring">
+</span>    fn content&lt;'a&gt;(&amp;self, post: &amp;'a Post) -&gt; &amp;'a str {
+        ""
+    }
+}
+
+// --snip--
+<span class="boring">
+</span><span class="boring">struct Draft {}
+</span><span class="boring">
+</span><span class="boring">impl State for Draft {
+</span><span class="boring">    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        Box::new(PendingReview {})
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    fn approve(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        self
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct PendingReview {}
+</span><span class="boring">
+</span><span class="boring">impl State for PendingReview {
+</span><span class="boring">    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        self
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    fn approve(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        Box::new(Published {})
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>struct Published {}
+
+impl State for Published {
+    // --snip--
+<span class="boring">    fn request_review(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        self
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    fn approve(self: Box&lt;Self&gt;) -&gt; Box&lt;dyn State&gt; {
+</span><span class="boring">        self
+</span><span class="boring">    }
+</span><span class="boring">
+</span>    fn content&lt;'a&gt;(&amp;self, post: &amp;'a Post) -&gt; &amp;'a str {
+        &amp;post.content
+    }
+}</code></pre>
+<figcaption><a href="#listing-18-18">لیست ۱۸-۱۸</a>: افزودن متد &lt;code&gt;&lt;/x-listing&gt;content&lt;/code&gt; به &lt;code&gt;trait&lt;/code&gt; مربوط به &lt;code&gt;State&lt;/code&gt;</figcaption>
+</figure>
+<p>یک پیاده‌سازی پیش‌فرض برای متد <code>content</code> اضافه می‌کنیم که یک برش رشتهٔ خالی بازمی‌گرداند. این یعنی لازم نیست <code>content</code> را روی struct‌های <code>Draft</code> و <code>PendingReview</code> پیاده‌سازی کنیم. struct ـ<code>Published</code> متد <code>content</code> را override می‌کند و مقدار موجود در <code>post.content</code> را بازمی‌گرداند. گرچه این کار راحت است، اما این‌که متد <code>content</code> روی <code>State</code> محتوای <code>Post</code> را تعیین کند، مرز میان مسئولیت <code>State</code> و مسئولیت <code>Post</code> را کم‌رنگ می‌کند.</p>
+<p>توجه داشته باشید که برای این متد نیاز به حاشیه‌نویسی طول عمر داریم، همان‌طور که در فصل 10 توضیح داده شد. چون یک ارجاع به یک <code>post</code> را به‌عنوان آرگومان می‌گیریم و یک ارجاع به بخشی از آن <code>post</code> را بازمی‌گردانیم، طول عمر ارجاع بازگشتی به طول عمر آرگومان <code>post</code> مرتبط است.</p>
+<p>و تمام—اکنون تمام لیستینگ 18-11 کار می‌کند! ما الگوی وضعیت را با قوانین مربوط به فرآیند کاری پست وبلاگ پیاده‌سازی کرده‌ایم. منطق مربوط به قوانین در اشیای وضعیت قرار دارد، نه اینکه در سراسر <code>Post</code> پراکنده باشد.</p>
+<section class="note" aria-role="note">
+<h3 id="why-not-an-enum"><a class="header" href="#why-not-an-enum">چرا از enum استفاده نمی‌کنیم؟</a></h3>
+<p>شاید برایتان این سؤال پیش آمده باشد که چرا از یک <code>enum</code> با حالت‌های ممکن مختلف پست به‌عنوان واریانت‌ها استفاده نکردیم.<br> قطعاً این راه‌حل نیز قابل استفاده است؛ آن را امتحان کنید و نتایج نهایی را مقایسه کنید تا ببینید کدام روش را ترجیح می‌دهید! یکی از معایب استفاده از <code>enum</code> این است که در هر جایی که نیاز دارید مقدار آن enum را بررسی کنید، مجبورید از یک عبارت <code>match</code> (یا چیزی مشابه آن) استفاده کنید تا تمام حالت‌های ممکن را مدیریت کنید. این موضوع می‌تواند در مقایسه با راه‌حل trait object که اینجا استفاده کردیم، منجر به تکرار کد بیشتری شود.</p>
+</section>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="trade-offs-of-the-state-pattern"></a></p>
+<h4 id="evaluating-the-state-pattern"><a class="header" href="#evaluating-the-state-pattern">معایب و مزایای الگوی حالت (State Pattern)</a></h4>
+<p>ما نشان داده‌ایم که Rust قادر است الگوی وضعیت شی‌گرا را برای کپسوله کردن رفتارهای مختلف یک پست در هر حالت پیاده‌سازی کند. متدهای <code>Post</code> هیچ اطلاعی از رفتارهای مختلف ندارند. با روشی که کد را سازمان‌دهی کرده‌ایم، تنها باید در یک مکان به‌دنبال راه‌های مختلف رفتار یک پست منتشرشده بگردیم: پیاده‌سازی صفت <code>State</code> روی ساختار <code>Published</code>.</p>
+<p>اگر می‌خواستیم یک پیاده‌سازی جایگزین ایجاد کنیم که از الگوی حالت (state pattern) استفاده نکند، احتمالاً مجبور بودیم در متدهای ساختار <code>Post</code> و یا حتی در کد تابع <code>main</code>، از عبارات <code>match</code> استفاده کنیم تا وضعیت فعلی پست را بررسی کرده و رفتار مناسب را در آن‌جا انتخاب کنیم. در این حالت، برای درک تمام اثرات ناشی از قرار گرفتن پست در وضعیت منتشرشده (<code>published</code>)، باید چندین نقطه‌ی مختلف از کد را بررسی می‌کردیم.</p>
+<p>اما با استفاده از الگوی حالت، متدهای ساختار <code>Post</code> و مکان‌هایی که از <code>Post</code> استفاده می‌کنیم، نیازی به عبارات <code>match</code> ندارند. همچنین، برای افزودن یک حالت جدید تنها کافی است یک ساختار جدید ایجاد کرده و متدهای <code>trait</code> را فقط برای همان ساختار جدید و در یک محل واحد پیاده‌سازی کنیم.</p>
+<p>پیاده‌سازی با استفاده از الگوی وضعیت به‌راحتی قابلیت گسترش برای اضافه کردن عملکردهای بیشتر را دارد. برای دیدن سادگی نگهداری کدی که از الگوی وضعیت استفاده می‌کند، چند پیشنهاد زیر را امتحان کنید:</p>
+<ul>
+<li>یک متد <code>reject</code> اضافه کنید که وضعیت پست را از <code>PendingReview</code> به <code>Draft</code> تغییر دهد.</li>
+<li>دو فراخوانی به <code>approve</code> نیاز داشته باشید تا وضعیت به <code>Published</code> تغییر کند.</li>
+<li>اجازه دهید کاربران فقط زمانی که یک پست در حالت <code>Draft</code> است متن محتوا اضافه کنند. نکته: بگذارید شیء وضعیت مسئول تغییراتی باشد که ممکن است در محتوا ایجاد شود، اما مسئول اصلاح مستقیم <code>Post</code> نباشد.</li>
+</ul>
+<p>یکی از معایب الگوی وضعیت این است که به دلیل اینکه وضعیت‌ها انتقال بین حالت‌ها را پیاده‌سازی می‌کنند، برخی از وضعیت‌ها به یکدیگر وابسته هستند. اگر یک حالت دیگر بین <code>PendingReview</code> و <code>Published</code> اضافه کنیم، مانند <code>Scheduled</code>، باید کد در <code>PendingReview</code> را تغییر دهیم تا به <code>Scheduled</code> منتقل شود. اگر نیازی نبود که <code>PendingReview</code> با اضافه شدن یک حالت جدید تغییر کند، کار کمتری می‌داشتیم، اما این به معنای تغییر به یک الگوی طراحی دیگر خواهد بود.</p>
+<p>نکته‌ی منفی دیگر این است که ما در اینجا منطق‌هایی را تکرار کرده‌ایم. برای حذف بخشی از این تکرارها، ممکن است تلاش کنیم پیاده‌سازی پیش‌فرضی برای متدهای <code>request_review</code> و <code>approve</code> در <code>trait</code> مربوط به <code>State</code> ایجاد کنیم که مقدار <code>self</code> را بازگردانند. اما این رویکرد جواب نمی‌دهد: وقتی از <code>State</code> به عنوان یک trait object استفاده می‌کنیم، آن trait دقیقاً نمی‌داند که نوع مشخص <code>self</code> چیست، بنابراین نوع بازگشتی در زمان کامپایل قابل تشخیص نیست. (این یکی از همان قواعد مربوط به سازگاری با <code>dyn</code> است که پیش‌تر به آن اشاره شد.)</p>
+<p>سایر موارد تکرار شامل پیاده‌سازی‌های مشابه متدهای <code>request_review</code> و <code>approve</code> در <code>Post</code> است. هر دو متد از <code>Option::take</code> با فیلد <code>state</code> از ساختار <code>Post</code> استفاده می‌کنند و اگر مقدار <code>state</code> برابر با <code>Some</code> باشد، عملیات به پیاده‌سازی همان متد در مقدار درون آن منتقل می‌شود و نتیجه‌ی آن را به فیلد <code>state</code> اختصاص می‌دهد. اگر متدهای زیادی در <code>Post</code> داشته باشیم که از این الگو تبعیت می‌کنند، ممکن است بخواهیم برای حذف تکرار، یک ماکرو تعریف کنیم (به بخش <a href="ch20-05-macros.html#macros">«ماکروها»</a><!-- ignore --> در فصل ۲۰ مراجعه کنید).</p>
+<p>با پیاده‌سازی الگوی حالت دقیقاً همان‌طور که برای زبان‌های شیءگرای سنتی تعریف شده است، ما به‌طور کامل از نقاط قوت زبان Rust استفاده نمی‌کنیم. بیایید تغییراتی را بررسی کنیم که می‌توانیم در <code>crate</code> مربوط به <code>blog</code> ایجاد کنیم تا حالت‌ها و انتقال‌های نادرست را به خطاهای زمان کامپایل تبدیل کنیم.</p>
+<h3 id="encoding-states-and-behavior-as-types"><a class="header" href="#encoding-states-and-behavior-as-types">کدگذاری حالت‌ها و رفتار به‌صورت نوع‌ها</a></h3>
+<p>به شما نشان خواهیم داد که چگونه الگوی وضعیت را دوباره طراحی کنید تا مجموعه‌ای متفاوت از مزایا و معایب به دست آورید. به‌جای اینکه وضعیت‌ها و انتقالات را کاملاً کپسوله کنیم تا کد خارجی از آن‌ها اطلاعی نداشته باشد، وضعیت‌ها را به انواع مختلف کدگذاری می‌کنیم. در نتیجه، سیستم بررسی نوع Rust تلاش برای استفاده از پست‌های پیش‌نویس در جاهایی که فقط پست‌های منتشرشده مجاز هستند را با صدور یک خطای کامپایلر متوقف می‌کند.</p>
+<p>ابتدا قسمت اول <code>main</code> در لیستینگ 18-11 را در نظر بگیرید:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">use blog::Post;
+</span><span class="boring">
+</span>fn main() {
+    let mut post = Post::new();
+
+    post.add_text("I ate a salad for lunch today");
+    assert_eq!("", post.content());
+<span class="boring">
+</span><span class="boring">    post.request_review();
+</span><span class="boring">    assert_eq!("", post.content());
+</span><span class="boring">
+</span><span class="boring">    post.approve();
+</span><span class="boring">    assert_eq!("I ate a salad for lunch today", post.content());
+</span>}</code></pre>
+</figure>
+<p>ما همچنان اجازه می‌دهیم که پست‌های جدید در حالت پیش‌نویس (draft) توسط متد <code>Post::new</code> ایجاد شوند و امکان اضافه کردن متن به محتوای پست را نیز خواهیم داشت. اما به جای این‌که یک متد <code>content</code> روی پست پیش‌نویس تعریف کنیم که یک رشته‌ی خالی برمی‌گرداند، کاری می‌کنیم که پست‌های پیش‌نویس اصلاً متد <code>content</code> نداشته باشند. به این ترتیب، اگر تلاش کنیم محتوای یک پست پیش‌نویس را بخوانیم، کامپایلر به ما خطا می‌دهد و اعلام می‌کند که چنین متدی وجود ندارد. در نتیجه، غیرممکن خواهد شد که به‌صورت تصادفی محتوای یک پست پیش‌نویس را در محیط نهایی (production) نمایش دهیم، زیرا اساساً چنین کدی کامپایل نمی‌شود. لیستینگ 18-19 تعریف ساختارهای <code>Post</code> و <code>DraftPost</code> و همچنین متدهای مربوط به هرکدام را نشان می‌دهد.</p>
+<figure class="listing" id="listing-18-19">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">pub struct Post {
+    content: String,
+}
+
+pub struct DraftPost {
+    content: String,
+}
+
+impl Post {
+    pub fn new() -&gt; DraftPost {
+        DraftPost {
+            content: String::new(),
+        }
+    }
+
+    pub fn content(&amp;self) -&gt; &amp;str {
+        &amp;self.content
+    }
+}
+
+impl DraftPost {
+    pub fn add_text(&amp;mut self, text: &amp;str) {
+        self.content.push_str(text);
+    }
+}</code></pre>
+<figcaption><a href="#listing-18-19">لیست ۱۸-۱۹</a>: یک &lt;code&gt;&lt;/x-listing&gt;Post&lt;/code&gt; با یک متد &lt;code&gt;content&lt;/code&gt; و یک &lt;code&gt;DraftPost&lt;/code&gt; بدون متد &lt;code&gt;content&lt;/code&gt;</figcaption>
+</figure>
+<p>هر دو ساختار <code>Post</code> و <code>DraftPost</code> دارای یک فیلد خصوصی به نام <code>content</code> هستند که متن پست وبلاگ را ذخیره می‌کند. این ساختارها دیگر فیلد <code>state</code> ندارند زیرا کدگذاری وضعیت را به انواع ساختارها منتقل کرده‌ایم. ساختار <code>Post</code> نماینده یک پست منتشرشده است و دارای متد <code>content</code> است که مقدار <code>content</code> را بازمی‌گرداند.</p>
+<p>ما همچنان یک تابع <code>Post::new</code> داریم، اما به‌جای بازگرداندن نمونه‌ای از <code>Post</code>، یک نمونه از <code>DraftPost</code> بازمی‌گرداند. از آنجا که <code>content</code> خصوصی است و هیچ تابعی وجود ندارد که <code>Post</code> را بازگرداند، در حال حاضر امکان ایجاد نمونه‌ای از <code>Post</code> وجود ندارد.</p>
+<p>ساختار <code>DraftPost</code> یک متد <code>add_text</code> دارد، بنابراین می‌توانیم همانند قبل متن را به <code>content</code> اضافه کنیم، اما توجه کنید که <code>DraftPost</code> متد <code>content</code> تعریف‌شده ندارد! بنابراین اکنون برنامه تضمین می‌کند که تمام پست‌ها به‌صورت پست‌های پیش‌نویس شروع می‌شوند و پست‌های پیش‌نویس محتوای خود را برای نمایش در دسترس ندارند. هر تلاشی برای دور زدن این محدودیت‌ها منجر به خطای کامپایلر خواهد شد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="implementing-transitions-as-transformations-into-different-types"></a></p>
+<p>حال چگونه یک پست منتشرشده خواهیم داشت؟ می‌خواهیم این قانون را اجباری کنیم که یک پستِ پیش‌نویس حتماً باید پیش از انتشار، بازبینی و تأیید شود. همچنین پستی که در وضعیت انتظار بازبینی (PendingReview) است، همچنان نباید هیچ محتوایی را نمایش دهد. بیایید این محدودیت‌ها را با اضافه کردن یک ساختار دیگر به نام <code>PendingReviewPost</code> پیاده‌سازی کنیم. سپس متد <code>request_review</code> را در ساختار <code>DraftPost</code> طوری تعریف می‌کنیم که یک <code>PendingReviewPost</code> بازگرداند و همچنین متد <code>approve</code> را در ساختار <code>PendingReviewPost</code> تعریف می‌کنیم تا یک <code>Post</code> بازگرداند. این روند در لیستینگ 18-20 نشان داده شده است.</p>
+<figure class="listing" id="listing-18-20">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">pub struct Post {
+</span><span class="boring">    content: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct DraftPost {
+</span><span class="boring">    content: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Post {
+</span><span class="boring">    pub fn new() -&gt; DraftPost {
+</span><span class="boring">        DraftPost {
+</span><span class="boring">            content: String::new(),
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    pub fn content(&amp;self) -&gt; &amp;str {
+</span><span class="boring">        &amp;self.content
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl DraftPost {
+    // --snip--
+<span class="boring">    pub fn add_text(&amp;mut self, text: &amp;str) {
+</span><span class="boring">        self.content.push_str(text);
+</span><span class="boring">    }
+</span><span class="boring">
+</span>    pub fn request_review(self) -&gt; PendingReviewPost {
+        PendingReviewPost {
+            content: self.content,
+        }
+    }
+}
+
+pub struct PendingReviewPost {
+    content: String,
+}
+
+impl PendingReviewPost {
+    pub fn approve(self) -&gt; Post {
+        Post {
+            content: self.content,
+        }
+    }
+}</code></pre>
+<figcaption><a href="#listing-18-20">لیست ۱۸-۲۰</a>: یک &lt;code&gt;&lt;/x-listing&gt;PendingReviewPost&lt;/code&gt; که با فراخوانی &lt;code&gt;request_review&lt;/code&gt; روی &lt;code&gt;DraftPost&lt;/code&gt; ایجاد می‌شود و یک متد &lt;code&gt;approve&lt;/code&gt; که یک &lt;code&gt;PendingReviewPost&lt;/code&gt; را به یک &lt;code&gt;Post&lt;/code&gt; منتشرشده تبدیل می‌کند</figcaption>
+</figure>
+<p>متدهای <code>request_review</code> و <code>approve</code> مالکیت <code>self</code> را می‌گیرند، بنابراین نمونه‌های <code>DraftPost</code> و <code>PendingReviewPost</code> را مصرف کرده و آن‌ها را به‌ترتیب به یک <code>PendingReviewPost</code> و یک <code>Post</code> منتشرشده تبدیل می‌کنند. به این ترتیب، پس از فراخوانی <code>request_review</code> روی یک <code>DraftPost</code> و به همین ترتیب، هیچ نمونه‌ای از <code>DraftPost</code> باقی نمی‌ماند. ساختار <code>PendingReviewPost</code> متد <code>content</code> تعریف‌شده‌ای ندارد، بنابراین تلاش برای خواندن محتوای آن منجر به خطای کامپایلر می‌شود، همان‌طور که در مورد <code>DraftPost</code> اتفاق می‌افتد. چون تنها راه برای گرفتن یک نمونه از <code>Post</code> منتشرشده که متد <code>content</code> تعریف‌شده‌ای دارد، فراخوانی متد <code>approve</code> روی یک <code>PendingReviewPost</code> است، و تنها راه برای گرفتن یک <code>PendingReviewPost</code> فراخوانی متد <code>request_review</code> روی یک <code>DraftPost</code> است، ما اکنون فرآیند کاری پست وبلاگ را به سیستم نوع کدگذاری کرده‌ایم.</p>
+<p>اما همچنین باید تغییرات کوچکی در <code>main</code> ایجاد کنیم. متدهای <code>request_review</code> و <code>approve</code> نمونه‌های جدیدی بازمی‌گردانند به‌جای اینکه ساختاری که روی آن فراخوانی شده‌اند را تغییر دهند، بنابراین باید تخصیص‌های مجدد با <code>let post =</code> اضافه کنیم تا نمونه‌های بازگشتی را ذخیره کنیم. همچنین نمی‌توانیم تأییدیه‌های مربوط به خالی بودن محتوای پست‌های پیش‌نویس و در انتظار بررسی را داشته باشیم، و نیازی به آن‌ها نیست: دیگر نمی‌توانیم کدی که سعی می‌کند محتوای پست‌های در این حالت‌ها را استفاده کند، کامپایل کنیم. کد به‌روزشده در <code>main</code> در لیستینگ 18-21 نشان داده شده است:</p>
+<figure class="listing" id="listing-18-21">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore">use blog::Post;
+
+fn main() {
+    let mut post = Post::new();
+
+    post.add_text("I ate a salad for lunch today");
+
+    let post = post.request_review();
+
+    let post = post.approve();
+
+    assert_eq!("I ate a salad for lunch today", post.content());
+}</code></pre>
+<figcaption><a href="#listing-18-21">لیست ۱۸-۲۱</a>: تغییرات در &lt;code&gt;&lt;/x-listing&gt;main&lt;/code&gt; برای استفاده از پیاده‌سازی جدید فرآیند کاری پست وبلاگ</figcaption>
+</figure>
+<p>تغییراتی که باید در <code>main</code> برای تخصیص مجدد <code>post</code> انجام می‌دادیم، به این معناست که این پیاده‌سازی دیگر کاملاً از الگوی وضعیت شی‌گرا پیروی نمی‌کند: انتقالات بین حالت‌ها دیگر به‌طور کامل در پیاده‌سازی <code>Post</code> کپسوله نشده‌اند. اما، مزیت ما این است که اکنون وضعیت‌های نامعتبر به دلیل سیستم نوع و بررسی نوعی که در زمان کامپایل انجام می‌شود، غیرممکن هستند! این تضمین می‌کند که برخی از باگ‌ها، مانند نمایش محتوای یک پست منتشرنشده، قبل از رسیدن به تولید کشف شوند.</p>
+<p>تکالیف پیشنهادی در ابتدای این بخش را روی crate <code>blog</code> همان‌طور که پس از لیستینگ 18-21 است امتحان کنید تا ببینید درباره طراحی این نسخه از کد چه نظری دارید. توجه داشته باشید که برخی از تکالیف ممکن است در این طراحی از پیش انجام شده باشند.</p>
+<p>دیدیم که حتی با وجود اینکه Rust قادر به پیاده‌سازی الگوهای طراحی شی‌گرا است، الگوهای دیگر، مانند کدگذاری حالت در سیستم نوع، نیز در Rust در دسترس هستند. این الگوها مزایا و معایب متفاوتی دارند. اگرچه ممکن است با الگوهای شی‌گرا بسیار آشنا باشید، بازاندیشی مسئله برای بهره‌بردن از ویژگی‌های Rust می‌تواند مزایایی مانند جلوگیری از برخی باگ‌ها در زمان کامپایل را فراهم کند. الگوهای شی‌گرا همیشه بهترین راه‌حل در Rust نخواهند بود، به دلیل ویژگی‌هایی مانند مالکیت که زبان‌های شی‌گرا ندارند.</p>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<p>فارغ از اینکه پس از خواندن این فصل فکر می‌کنید Rust یک زبان شی‌گرا است یا نه، اکنون می‌دانید که می‌توانید از اشیای صفت برای دریافت برخی ویژگی‌های شی‌گرایی در Rust استفاده کنید. تخصیص پویا (Dynamic Dispatch) می‌تواند انعطاف‌پذیری به کد شما بدهد، اما در ازای آن کمی از عملکرد زمان اجرا را قربانی می‌کند. می‌توانید از این انعطاف‌پذیری برای پیاده‌سازی الگوهای شی‌گرا که می‌توانند به نگه‌داری کد شما کمک کنند، استفاده کنید. Rust همچنین دارای ویژگی‌های دیگری مانند مالکیت است که زبان‌های شی‌گرا ندارند. یک الگوی شی‌گرا همیشه بهترین راه برای بهره‌بردن از نقاط قوت Rust نخواهد بود، اما به‌عنوان یک گزینه در دسترس است.</p>
+<p>در ادامه، به بررسی الگوها خواهیم پرداخت که یکی دیگر از ویژگی‌های Rust است که انعطاف‌پذیری زیادی را فراهم می‌کنند. در طول کتاب به‌طور مختصر به آن‌ها اشاره کرده‌ایم، اما هنوز به‌طور کامل توانایی آن‌ها را ندیده‌ایم. برویم!</p><nav class="page-nav"><a href="ch18-02-trait-objects.html">→ استفاده از شیء صفت برای انتزاع رفتار مشترک</a><a href="ch19-00-patterns.html">الگوها و تطبیق ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

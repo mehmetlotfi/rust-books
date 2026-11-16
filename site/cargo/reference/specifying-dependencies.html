@@ -1,0 +1,326 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>مشخص‌کردن وابستگی‌ها — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/specifying-dependencies"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="specifying-dependencies"><a class="header" href="#specifying-dependencies">مشخص کردن وابستگی‌ها</a></h1>
+<p>crateهای شما می‌توانند به کتابخانه‌های دیگری از <a href="https://crates.io/">crates.io</a> یا رجیستری‌های دیگر، مخزن‌های <code>git</code> یا زیرپوشه‌هایی در سیستم فایل محلی شما وابسته باشند. همچنین می‌توانید مکان یک وابستگی را به‌طور موقت جایگزین کنید — برای مثال، برای اینکه بتوانید رفع یک باگ در وابستگی‌ای را که به‌صورت محلی روی آن کار می‌کنید آزمایش کنید. می‌توانید برای پلتفرم‌های مختلف وابستگی‌های متفاوتی داشته باشید و وابستگی‌هایی داشته باشید که فقط در زمان توسعه استفاده می‌شوند. بیایید ببینیم هر کدام از این موارد چگونه انجام می‌شود.</p>
+<h2 id="specifying-dependencies-from-cratesio"><a class="header" href="#specifying-dependencies-from-cratesio">مشخص کردن وابستگی‌ها از crates.io</a></h2>
+<p>Cargo به‌طور پیش‌فرض طوری پیکربندی شده که وابستگی‌ها را در <a href="https://crates.io/">crates.io</a> جست‌وجو کند. در این حالت فقط نام و یک رشتهٔ نسخه لازم است. در <a href="../guide/index.html">راهنمای cargo</a>، یک وابستگی به crate با نام <code>time</code> مشخص کردیم:</p>
+<pre><code class="language-toml">[dependencies]
+time = "0.1.12"
+</code></pre>
+<p>رشتهٔ نسخهٔ <code>"0.1.12"</code> یک <a href="#version-requirement-syntax">نیازمندی نسخه</a> نامیده می‌شود. این رشته بازه‌ای از نسخه‌ها را مشخص می‌کند که هنگام <a href="resolver.html">حل وابستگی‌ها</a> می‌توان از میان آن‌ها انتخاب کرد. در این مورد، <code>"0.1.12"</code> نمایانگر بازهٔ نسخهٔ <code>&gt;=0.1.12, &lt;0.2.0</code> است. به‌روزرسانی در صورتی مجاز است که در همین بازه باشد. در این مورد، اگر <code>cargo update time</code> را اجرا کنیم، cargo باید ما را به نسخهٔ <code>0.1.13</code> به‌روزرسانی کند، به شرطی که آخرین انتشار <code>0.1.z</code> باشد، اما ما را به <code>0.2.0</code> به‌روزرسانی نخواهد کرد.</p>
+<h2 id="version-requirement-syntax"><a class="header" href="#version-requirement-syntax">نحو نیازمندی نسخه</a></h2>
+<h3 id="default-requirements"><a class="header" href="#default-requirements">نیازمندی‌های پیش‌فرض</a></h3>
+<p><strong>نیازمندی‌های پیش‌فرض</strong> یک نسخهٔ حداقل را همراه با امکان به‌روزرسانی به نسخه‌های سازگار با <a href="https://semver.org">SemVer</a> مشخص می‌کنند. نسخه‌ها در صورتی سازگار در نظر گرفته می‌شوند که چپ‌ترین مؤلفهٔ غیرصفر major/minor/patch یکسان باشد. این با <a href="https://semver.org">SemVer</a> تفاوت دارد، که همهٔ بسته‌های پیش از 1.0.0 را ناسازگار می‌داند.</p>
+<p><code>1.2.3</code> نمونه‌ای از یک نیازمندی پیش‌فرض است.</p>
+<pre><code class="language-notrust">1.2.3  :=  &gt;=1.2.3, &lt;2.0.0
+1.2    :=  &gt;=1.2.0, &lt;2.0.0
+1      :=  &gt;=1.0.0, &lt;2.0.0
+0.2.3  :=  &gt;=0.2.3, &lt;0.3.0
+0.2    :=  &gt;=0.2.0, &lt;0.3.0
+0.0.3  :=  &gt;=0.0.3, &lt;0.0.4
+0.0    :=  &gt;=0.0.0, &lt;0.1.0
+0      :=  &gt;=0.0.0, &lt;1.0.0
+</code></pre>
+<h3 id="caret-requirements"><a class="header" href="#caret-requirements">نیازمندی‌های caret</a></h3>
+<p><strong>نیازمندی‌های caret</strong> راهبرد پیش‌فرض نیازمندی نسخه هستند. این راهبرد نسخه، به‌روزرسانی‌های سازگار با <a href="https://semver.org">SemVer</a> را مجاز می‌کند. این نیازمندی‌ها به‌صورت نیازمندی نسخه با یک caret (<code>^</code>) در ابتدا مشخص می‌شوند.</p>
+<p><code>^1.2.3</code> نمونه‌ای از یک نیازمندی caret است.</p>
+<p>حذف caret نحوی ساده‌شده و هم‌ارز با استفاده از نیازمندی‌های caret است. اگرچه نیازمندی‌های caret پیش‌فرض هستند، توصیه می‌شود در صورت امکان از نحو ساده‌شده استفاده کنید.</p>
+<p><code>log = "^1.2.3"</code> دقیقاً هم‌ارز با <code>log = "1.2.3"</code> است.</p>
+<h3 id="tilde-requirements"><a class="header" href="#tilde-requirements">نیازمندی‌های tilde</a></h3>
+<p><strong>نیازمندی‌های tilde</strong> یک نسخهٔ حداقل را با امکان محدودی برای به‌روزرسانی مشخص می‌کنند. اگر نسخهٔ major، minor و patch را یا فقط major و minor را مشخص کنید، فقط تغییرات در سطح patch مجاز است. اگر فقط نسخهٔ major را مشخص کنید، تغییرات در سطح minor و patch مجاز است.</p>
+<p><code>~1.2.3</code> نمونه‌ای از یک نیازمندی tilde است.</p>
+<pre><code class="language-notrust">~1.2.3  := &gt;=1.2.3, &lt;1.3.0
+~1.2    := &gt;=1.2.0, &lt;1.3.0
+~1      := &gt;=1.0.0, &lt;2.0.0
+</code></pre>
+<h3 id="wildcard-requirements"><a class="header" href="#wildcard-requirements">نیازمندی‌های wildcard</a></h3>
+<p><strong>نیازمندی‌های wildcard</strong> هر نسخه‌ای را در جایی که wildcard قرار گرفته است مجاز می‌کنند.</p>
+<p><code>*</code>، <code>1.*</code> و <code>1.2.*</code> نمونه‌هایی از نیازمندی‌های wildcard هستند.</p>
+<pre><code class="language-notrust">*     := &gt;=0.0.0
+1.*   := &gt;=1.0.0, &lt;2.0.0
+1.2.* := &gt;=1.2.0, &lt;1.3.0
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>(https://crates.io/) نسخه‌های <code>*</code> تنها را مجاز نمی‌کند.</p>
+</blockquote>
+<h3 id="comparison-requirements"><a class="header" href="#comparison-requirements">نیازمندی‌های مقایسه‌ای</a></h3>
+<p><strong>نیازمندی‌های مقایسه‌ای</strong> امکان تعیین دستی یک بازهٔ نسخه یا یک نسخهٔ دقیق برای وابستگی را فراهم می‌کنند.</p>
+<p>در اینجا چند نمونه از نیازمندی‌های مقایسه‌ای آمده است:</p>
+<pre><code class="language-notrust">&gt;= 1.2.0
+&gt; 1
+&lt; 2
+= 1.2.3
+</code></pre>
+<p><span id="multiple-requirements"></span></p>
+<h3 id="multiple-version-requirements"><a class="header" href="#multiple-version-requirements">نیازمندی‌های نسخهٔ چندگانه</a></h3>
+<p>همان‌طور که در نمونه‌های بالا نشان داده شد، چند نیازمندی نسخه را می‌توان با ویرگول جدا کرد، مثلاً <code>&gt;= 1.2, &lt; 1.5</code>. همهٔ نیازمندی‌ها باید برآورده شوند، بنابراین نیازمندی‌های بدون هم‌پوشانی مانند <code>&lt;1.2, ^1.2.2</code> به هیچ نسخهٔ منطبقی منجر نمی‌شوند.</p>
+<h3 id="pre-releases"><a class="header" href="#pre-releases">نسخه‌های پیش‌انتشار</a></h3>
+<p>نیازمندی‌های نسخه <a href="manifest.html#the-version-field">نسخه‌های پیش‌انتشار</a> مانند <code>1.0.0-alpha</code> را کنار می‌گذارند، مگر اینکه صراحتاً درخواست شده باشند. برای مثال، اگر <code>1.0.0-alpha</code> از بستهٔ <code>foo</code> منتشر شده باشد، نیازمندی <code>foo = "1.0"</code> با آن <em>منطبق نخواهد شد</em> و یک خطا برمی‌گرداند. نسخهٔ پیش‌انتشار باید مشخص شود، مثلاً <code>foo = "1.0.0-alpha"</code>. به‌طور مشابه، <a href="../commands/cargo-install.html"><code>cargo install</code></a> از نسخه‌های پیش‌انتشار پرهیز می‌کند، مگر اینکه صراحتاً درخواست نصب یکی از آن‌ها شود.</p>
+<p>Cargo اجازه می‌دهد پیش‌انتشارهای «جدیدتر» به‌طور خودکار استفاده شوند. برای مثال، اگر <code>1.0.0-beta</code> منتشر شود، نیازمندی <code>foo = "1.0.0-alpha"</code> اجازهٔ به‌روزرسانی به نسخهٔ <code>beta</code> را می‌دهد. توجه کنید که این فقط روی همان نسخهٔ انتشار کار می‌کند؛ <code>foo = "1.0.0-alpha"</code> اجازهٔ به‌روزرسانی به <code>foo = "1.0.1-alpha"</code> یا <code>foo = "1.0.1-beta"</code> را نمی‌دهد.</p>
+<p>Cargo همچنین به‌طور خودکار از پیش‌انتشارها به نسخه‌های منتشرشدهٔ سازگار با semver ارتقا می‌دهد. نیازمندی <code>foo = "1.0.0-alpha"</code> اجازهٔ به‌روزرسانی به <code>foo = "1.0.0"</code> و همچنین <code>foo = "1.2.0"</code> را می‌دهد.</p>
+<p>حواستان باشد که نسخه‌های پیش‌انتشار می‌توانند ناپایدار باشند و بنابراین هنگام استفاده از آن‌ها باید احتیاط کرد. برخی پروژه‌ها ممکن است تغییرات ناسازگار را بین نسخه‌های پیش‌انتشار منتشر کنند. توصیه می‌شود اگر کتابخانهٔ شما خودش پیش‌انتشار نیست، در آن از وابستگی‌های پیش‌انتشار استفاده نکنید. همچنین هنگام به‌روزرسانی <a href="../guide/cargo-toml-vs-cargo-lock.html"><code>Cargo.lock</code></a> باید دقت کرد و آمادهٔ این بود که یک به‌روزرسانی پیش‌انتشار مشکل ایجاد کند.</p>
+<h3 id="version-metadata"><a class="header" href="#version-metadata">فراداده نسخه</a></h3>
+<p><a href="manifest.html#the-version-field">فراداده نسخه</a>، مانند <code>1.0.0+21AF26D3</code>، نادیده گرفته می‌شود و نباید در نیازمندی‌های نسخه استفاده شود.</p>
+<blockquote class="blockquote-tag blockquote-tag-caution">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Caution</p>
+<p>وقتی تردید دارید، از عملگر نیازمندی نسخهٔ پیش‌فرض استفاده کنید.</p>
+<p>در شرایط نادر، بسته‌ای که یک «وابستگی عمومی» دارد (وابستگی را دوباره صادر می‌کند یا در API عمومی خود با آن تعامل دارد) و با چند نسخهٔ ناسازگار از نظر semver سازگار است (مثلاً فقط از یک نوع ساده استفاده می‌کند که بین انتشارها تغییر نکرده است، مانند یک <code>Id</code>) ممکن است به کاربران اجازه دهد انتخاب کنند از کدام نسخهٔ «وابستگی عمومی» استفاده شود. در این حالت، یک نیازمندی نسخه مانند <code>"&gt;=0.4, &lt;2"</code> ممکن است مورد توجه باشد. <em>با این حال</em> کاربران آن بسته احتمالاً با خطا مواجه می‌شوند و اگر خودشان هم به آن وابسته باشند باید نسخهٔ «وابستگی عمومی» را از طریق <code>cargo update</code> به‌صورت دستی انتخاب کنند، زیرا Cargo ممکن است هنگام <a href="resolver.html">حل نسخه‌های وابستگی</a> نسخه‌های متفاوتی از «وابستگی عمومی» را انتخاب کند (نگاه کنید به <a href="https://github.com/rust-lang/cargo/issues/10599">#10599</a>).</p>
+<p>از محدود کردن کران بالای یک نسخه به چیزی کمتر از نسخهٔ ناسازگار بعدی از نظر semver پرهیز کنید (مثلاً از <code>"&gt;=2.0, &lt;2.4"</code>، <code>"2.0.*"</code> یا <code>~2.0</code> پرهیز کنید)، زیرا بسته‌های دیگر در درخت وابستگی ممکن است به نسخهٔ جدیدتری نیاز داشته باشند و این به خطای غیرقابل حل منجر شود (نگاه کنید به <a href="https://github.com/rust-lang/cargo/issues/9029">#9029</a>). در نظر بگیرید که آیا کنترل نسخه در <code>Cargo.lock</code> خودتان مناسب‌تر است یا نه.</p>
+<p>در برخی موارد این اهمیتی ندارد یا مزایا ممکن است بر هزینه بچربند، از جمله:</p>
+<ul>
+<li>وقتی هیچ‌کس دیگری به بستهٔ شما وابسته نیست؛ مثلاً فقط یک <code>[[bin]]</code> دارد</li>
+<li>وقتی به یک بستهٔ پیش‌انتشار وابسته هستید و می‌خواهید از تغییرات ناسازگار جلوگیری کنید، ممکن است یک نیازمندی کاملاً مشخص مانند <code>"=1.2.3-alpha.3"</code> موجه باشد (نگاه کنید به <a href="https://github.com/rust-lang/cargo/issues/2222">#2222</a>)</li>
+<li>وقتی کتابخانه‌ای یک proc-macro را دوباره صادر می‌کند اما proc-macro کدی تولید می‌کند که کتابخانهٔ صادرکنندهٔ مجدد را فراخوانی می‌کند، ممکن است یک <code>=1.2.3</code> کاملاً مشخص موجه باشد تا اطمینان حاصل شود proc-macro جدیدتر از کتابخانهٔ صادرکنندهٔ مجدد نیست و کدی تولید نمی‌کند که از بخش‌هایی از API استفاده کند که در نسخهٔ فعلی وجود ندارند</li>
+</ul>
+</blockquote>
+<h2 id="specifying-dependencies-from-other-registries"><a class="header" href="#specifying-dependencies-from-other-registries">مشخص کردن وابستگی‌ها از رجیستری‌های دیگر</a></h2>
+<p>برای مشخص کردن وابستگی از رجیستری‌ای غیر از <a href="https://crates.io/">crates.io</a>، کلید <code>registry</code> را روی نام رجیستری مورد نظر تنظیم کنید:</p>
+<pre><code class="language-toml">[dependencies]
+some-crate = { version = "1.0", registry = "my-registry" }
+</code></pre>
+<p>که در آن <code>my-registry</code> نام رجیستری‌ای است که در فایل <code>.cargo/config.toml</code> پیکربندی شده است. برای اطلاعات بیشتر، <a href="registries.html">مستندات رجیستری‌ها</a> را ببینید.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>(https://crates.io/) اجازه نمی‌دهد بسته‌ها با وابستگی به کدی که بیرون از <a href="https://crates.io/">crates.io</a> منتشر شده است منتشر شوند.</p>
+</blockquote>
+<h2 id="specifying-dependencies-from-git-repositories"><a class="header" href="#specifying-dependencies-from-git-repositories">مشخص کردن وابستگی‌ها از مخزن‌های <code>git</code></a></h2>
+<p>برای وابستگی به کتابخانه‌ای که در یک مخزن <code>git</code> قرار دارد، حداقل اطلاعاتی که باید مشخص کنید مکان مخزن با کلید <code>git</code> است:</p>
+<pre><code class="language-toml">[dependencies]
+regex = { git = "https://github.com/rust-lang/regex.git" }
+</code></pre>
+<p>Cargo مخزن <code>git</code> را در آن مکان دریافت می‌کند و درخت فایل را پیمایش می‌کند تا فایل <code>Cargo.toml</code> مربوط به crate درخواستی را در هر جای مخزن <code>git</code> پیدا کند. برای مثال، <code>regex-lite</code> و <code>regex-syntax</code> اعضای مخزن <code>rust-lang/regex</code> هستند و می‌توان با URL ریشهٔ مخزن (<code>https://github.com/rust-lang/regex.git</code>) به آن‌ها ارجاع داد، فارغ از اینکه در کجای درخت فایل قرار دارند.</p>
+<pre><code class="language-toml">regex-lite   = { git = "https://github.com/rust-lang/regex.git" }
+regex-syntax = { git = "https://github.com/rust-lang/regex.git" }
+</code></pre>
+<p>قاعدهٔ بالا برای <a href="#specifying-path-dependencies">وابستگی‌های <code>path</code></a> صدق نمی‌کند.</p>
+<h3 id="choice-of-commit"><a class="header" href="#choice-of-commit">انتخاب commit</a></h3>
+<p>اگر فقط URL مخزن را مشخص کنیم، مانند نمونه‌های بالا، Cargo فرض می‌کند که قصد داریم از آخرین commit روی شاخهٔ پیش‌فرض برای ساخت بستهٔ خود استفاده کنیم.</p>
+<p>می‌توانید کلید <code>git</code> را با کلیدهای <code>rev</code>، <code>tag</code> یا <code>branch</code> ترکیب کنید تا دربارهٔ اینکه از کدام commit استفاده شود دقیق‌تر باشید. این نمونه‌ای از استفاده از آخرین commit روی شاخه‌ای با نام <code>next</code> است:</p>
+<pre><code class="language-toml">[dependencies]
+regex = { git = "https://github.com/rust-lang/regex.git", branch = "next" }
+</code></pre>
+<p>هر چیزی که شاخه یا تگ نباشد زیر کلید <code>rev</code> قرار می‌گیرد. این می‌تواند یک هش commit مانند <code>rev = "4c59b707"</code> یا یک ارجاع نام‌دار باشد که مخزن راه دور آن را در دسترس قرار می‌دهد، مانند <code>rev = "refs/pull/493/head"</code>.</p>
+<p>اینکه چه ارجاع‌هایی برای کلید <code>rev</code> در دسترس هستند به محل میزبانی مخزن بستگی دارد. GitHub برای آخرین commit هر pull request یک ارجاع در دسترس قرار می‌دهد، مانند نمونهٔ بالا. میزبان‌های git دیگر ممکن است چیزی معادل آن را با طرح نام‌گذاری متفاوتی ارائه دهند.</p>
+<p><strong>نمونه‌های بیشتر از وابستگی <code>git</code>:</strong></p>
+<pre><code class="language-toml"># .git suffix can be omitted if the host accepts such URLs - both examples work the same
+regex = { git = "https://github.com/rust-lang/regex" }
+regex = { git = "https://github.com/rust-lang/regex.git" }
+
+# a commit with a particular tag
+regex = { git = "https://github.com/rust-lang/regex.git", tag = "1.10.3" }
+
+# a commit by its SHA1 hash
+regex = { git = "https://github.com/rust-lang/regex.git", rev = "0c0990399270277832fbb5b91a1fa118e6f63dba" }
+
+# HEAD commit of PR 493
+regex = { git = "https://github.com/rust-lang/regex.git", rev = "refs/pull/493/head" }
+
+# INVALID EXAMPLES
+
+# specifying the commit after # ignores the commit ID and generates a warning
+regex = { git = "https://github.com/rust-lang/regex.git#4c59b70" }
+
+# git and path cannot be used at the same time
+regex = { git = "https://github.com/rust-lang/regex.git#4c59b70", path = "../regex" }
+</code></pre>
+<p>Cargo در زمان افزودن وابستگی‌های <code>git</code>، commitهای آن‌ها را در فایل <code>Cargo.lock</code> قفل می‌کند و فقط وقتی دستور <code>cargo update</code> را اجرا کنید به‌روزرسانی‌ها را بررسی می‌کند.</p>
+<h3 id="the-role-of-the-version-key"><a class="header" href="#the-role-of-the-version-key">نقش کلید <code>version</code></a></h3>
+<p>کلید <code>version</code> همیشه دلالت بر این دارد که بسته در یک رجیستری در دسترس است، فارغ از وجود کلیدهای <code>git</code> یا <code>path</code>.</p>
+<p>کلید <code>version</code> بر اینکه Cargo هنگام دریافت وابستگی <code>git</code> از کدام commit استفاده کند تأثیری <em>ندارد</em>، اما Cargo اطلاعات نسخهٔ موجود در فایل <code>Cargo.toml</code> وابستگی را با کلید <code>version</code> مقایسه می‌کند و اگر بررسی ناموفق باشد، خطا می‌دهد.</p>
+<p>در این نمونه، Cargo آخرین commit (HEAD) شاخه‌ای به نام <code>next</code> را از Git دریافت می‌کند و بررسی می‌کند که آیا نسخهٔ crate با <code>version = "1.10.3"</code> سازگار است:</p>
+<pre><code class="language-toml">[dependencies]
+regex = { version = "1.10.3", git = "https://github.com/rust-lang/regex.git", branch = "next" }
+</code></pre>
+<p>کلیدهای <code>version</code>، <code>git</code> و <code>path</code> مکان‌های جداگانه‌ای برای حل وابستگی در نظر گرفته می‌شوند. برای توضیحات کامل به بخش <a href="#multiple-locations">مکان‌های چندگانه</a> در ادامه مراجعه کنید.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>(https://crates.io/) اجازه نمی‌دهد بسته‌ها با وابستگی به کدی که بیرون از خود <a href="https://crates.io/">crates.io</a> منتشر شده است منتشر شوند (<a href="#development-dependencies">dev-dependencies</a> نادیده گرفته می‌شوند). برای یک راهکار جایگزین برای وابستگی‌های <code>git</code> و <code>path</code>، بخش <a href="#multiple-locations">مکان‌های چندگانه</a> را ببینید.</p>
+</blockquote>
+<h3 id="git-submodules"><a class="header" href="#git-submodules">زیرماژول‌های Git</a></h3>
+<p>هنگام کلون کردن یک وابستگی <code>git</code>، Cargo به‌طور خودکار زیرماژول‌های آن را به‌صورت بازگشتی دریافت می‌کند تا همهٔ کد لازم برای ساخت در دسترس باشد.</p>
+<p>برای صرف‌نظر از دریافت زیرماژول‌هایی که به ساخت مربوط نیستند، می‌توانید <a href="https://git-scm.com/docs/gitmodules#Documentation/gitmodules.txt-submodulenameupdate"><code>submodule.&lt;name&gt;.update = none</code></a> را در <code>.gitmodules</code> مخزن وابستگی تنظیم کنید. این کار به دسترسی نوشتن به مخزن نیاز دارد و به‌طور کلی‌تر به‌روزرسانی زیرماژول‌ها را غیرفعال می‌کند.</p>
+<h3 id="accessing-private-git-repositories"><a class="header" href="#accessing-private-git-repositories">دسترسی به مخزن‌های خصوصی Git</a></h3>
+<p>برای راهنمایی دربارهٔ احراز هویت Git برای مخزن‌های خصوصی، <a href="../appendix/git-authentication.html">احراز هویت Git</a> را ببینید.</p>
+<h2 id="specifying-path-dependencies"><a class="header" href="#specifying-path-dependencies">مشخص کردن وابستگی‌های path</a></h2>
+<p>با گذشت زمان، بستهٔ <code>hello_world</code> ما از <a href="../guide/index.html">راهنما</a> به‌طور قابل‌توجهی بزرگ شده است! به جایی رسیده‌ایم که احتمالاً می‌خواهیم یک crate جداگانه برای استفادهٔ دیگران جدا کنیم. برای این کار Cargo از <strong>وابستگی‌های path</strong> پشتیبانی می‌کند که معمولاً زیر-crateهایی هستند که درون یک مخزن قرار دارند. بیایید با ساختن یک crate جدید درون بستهٔ <code>hello_world</code> شروع کنیم:</p>
+<pre><code class="language-console"># inside of hello_world/
+$ cargo new hello_utils
+</code></pre>
+<p>این کار یک پوشهٔ جدید به نام <code>hello_utils</code> ایجاد می‌کند که درون آن یک <code>Cargo.toml</code> و پوشهٔ <code>src</code> آمادهٔ پیکربندی هستند. برای اطلاع دادن این موضوع به Cargo، فایل <code>hello_world/Cargo.toml</code> را باز کنید و <code>hello_utils</code> را به وابستگی‌های خود اضافه کنید:</p>
+<pre><code class="language-toml">[dependencies]
+hello_utils = { path = "hello_utils" }
+</code></pre>
+<p>این به Cargo می‌گوید که ما به crate‌ای به نام <code>hello_utils</code> وابسته‌ایم که در پوشهٔ <code>hello_utils</code> و نسبت به فایل <code>Cargo.toml</code> که این خط در آن نوشته شده است قرار دارد.</p>
+<p><code>cargo build</code> بعدی به‌طور خودکار <code>hello_utils</code> و همهٔ وابستگی‌های آن را می‌سازد.</p>
+<h3 id="no-local-path-traversal"><a class="header" href="#no-local-path-traversal">بدون پیمایش مسیر محلی</a></h3>
+<p>مسیرهای محلی باید دقیقاً به پوشهٔ حاوی <code>Cargo.toml</code> وابستگی اشاره کنند. برخلاف وابستگی‌های <code>git</code>، Cargo مسیرهای محلی را پیمایش نمی‌کند. برای مثال، اگر <code>regex-lite</code> و <code>regex-syntax</code> اعضای یک مخزن <code>rust-lang/regex</code> کلون‌شده به‌صورت محلی باشند، باید با مسیر کامل به آن‌ها ارجاع داد:</p>
+<pre><code class="language-toml"># git key accepts the repo root URL and Cargo traverses the tree to find the crate
+[dependencies]
+regex-lite   = { git = "https://github.com/rust-lang/regex.git" }
+regex-syntax = { git = "https://github.com/rust-lang/regex.git" }
+
+# path key requires the member name to be included in the local path
+[dependencies]
+regex-lite   = { path = "../regex/regex-lite" }
+regex-syntax = { path = "../regex/regex-syntax" }
+</code></pre>
+<h3 id="local-paths-in-published-crates"><a class="header" href="#local-paths-in-published-crates">مسیرهای محلی در crateهای منتشرشده</a></h3>
+<p>crateهایی که از وابستگی‌هایی استفاده می‌کنند که فقط با path مشخص شده‌اند، در <a href="https://crates.io/">crates.io</a> مجاز نیستند.</p>
+<p>اگر بخواهیم crate با نام <code>hello_world</code> را منتشر کنیم، باید نسخه‌ای از <code>hello_utils</code> را به‌عنوان یک crate جداگانه در <a href="https://crates.io/">crates.io</a> منتشر کنیم و نسخهٔ آن را در خط وابستگی‌های <code>hello_world</code> مشخص کنیم:</p>
+<pre><code class="language-toml">[dependencies]
+hello_utils = { path = "hello_utils", version = "0.1.0" }
+</code></pre>
+<p>استفادهٔ هم‌زمان از کلیدهای <code>path</code> و <code>version</code> در بخش <a href="#multiple-locations">مکان‌های چندگانه</a> توضیح داده شده است.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>(https://crates.io/) اجازه نمی‌دهد بسته‌ها با وابستگی به کدی بیرون از <a href="https://crates.io/">crates.io</a> منتشر شوند، به‌جز <a href="#development-dependencies">dev-dependencies</a>. برای یک راهکار جایگزین برای وابستگی‌های <code>git</code> و <code>path</code>، بخش <a href="#multiple-locations">مکان‌های چندگانه</a> را ببینید.</p>
+</blockquote>
+<h2 id="multiple-locations"><a class="header" href="#multiple-locations">مکان‌های چندگانه</a></h2>
+<p>می‌توان هم یک نسخهٔ رجیستری و هم یک مکان <code>git</code> یا <code>path</code> را مشخص کرد. وابستگی <code>git</code> یا <code>path</code> به‌صورت محلی استفاده خواهد شد (که در آن صورت <code>version</code> با نسخهٔ محلی بررسی می‌شود) و هنگام انتشار در یک رجیستری مانند <a href="https://crates.io/">crates.io</a>، از نسخهٔ رجیستری استفاده خواهد کرد. ترکیب‌های دیگر مجاز نیستند. نمونه‌ها:</p>
+<pre><code class="language-toml">[dependencies]
+# Uses `my-bitflags` when used locally, and uses
+# version 1.0 from crates.io when published.
+bitflags = { path = "my-bitflags", version = "1.0" }
+
+# Uses the given git repo when used locally, and uses
+# version 1.0 from crates.io when published.
+smallvec = { git = "https://github.com/servo/rust-smallvec.git", version = "1.0" }
+
+# Note: if a version doesn't match, Cargo will fail to compile!
+</code></pre>
+<p>یک نمونه که این قابلیت در آن مفید است، زمانی است که یک کتابخانه را به چند بسته در همان workspace تقسیم کرده‌اید. در این صورت می‌توانید از وابستگی‌های <code>path</code> برای اشاره به بسته‌های محلی درون workspace استفاده کنید تا هنگام توسعه از نسخهٔ محلی استفاده شود و پس از انتشار، از نسخهٔ <a href="https://crates.io/">crates.io</a> استفاده شود. این شبیه مشخص کردن یک <a href="overriding-dependencies.html">جایگزین (override)</a> است، اما فقط برای همین یک اعلان وابستگی اعمال می‌شود.</p>
+<h2 id="platform-specific-dependencies"><a class="header" href="#platform-specific-dependencies">وابستگی‌های مختص پلتفرم</a></h2>
+<p>وابستگی‌های مختص پلتفرم همان قالب را دارند، اما زیر بخش <code>target</code> فهرست می‌شوند. معمولاً از <a href="../../reference/conditional-compilation.html">نحو <code>#[cfg]</code></a> شبیه Rust برای تعریف این بخش‌ها استفاده می‌شود:</p>
+<pre><code class="language-toml">[target.'cfg(windows)'.dependencies]
+winhttp = "0.4.0"
+
+[target.'cfg(unix)'.dependencies]
+openssl = "1.0.1"
+
+[target.'cfg(target_arch = "x86")'.dependencies]
+native-i686 = { path = "native/i686" }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+native-x86_64 = { path = "native/x86_64" }
+</code></pre>
+<p>مانند Rust، نحو اینجا از عملگرهای <code>not</code>، <code>any</code> و <code>all</code> برای ترکیب جفت‌های مختلف نام/مقدار cfg پشتیبانی می‌کند.</p>
+<p>اگر می‌خواهید بدانید کدام هدف‌های cfg روی پلتفرم شما در دسترس هستند، <code>rustc --print=cfg</code> را از خط فرمان اجرا کنید. اگر می‌خواهید بدانید کدام هدف‌های <code>cfg</code> برای پلتفرم دیگری، مانند ویندوز ۶۴ بیتی، در دسترس هستند، <code>rustc --print=cfg --target=x86_64-pc-windows-msvc</code> را اجرا کنید.</p>
+<p>برخلاف کد منبع Rust شما، نمی‌توانید از <code>[target.'cfg(feature = "fancy-feature")'.dependencies]</code> برای افزودن وابستگی‌ها بر اساس featureهای اختیاری استفاده کنید. به‌جای آن از <a href="features.html">بخش <code>[features]</code></a> استفاده کنید:</p>
+<pre><code class="language-toml">[dependencies]
+foo = { version = "1.0", optional = true }
+bar = { version = "1.0", optional = true }
+
+[features]
+fancy-feature = ["foo", "bar"]
+</code></pre>
+<p>همین موضوع دربارهٔ <code>cfg(debug_assertions)</code>، <code>cfg(test)</code> و <code>cfg(proc_macro)</code> نیز صدق می‌کند. این مقادیر مطابق انتظار کار نخواهند کرد و همیشه مقدار پیش‌فرضی را خواهند داشت که <code>rustc --print=cfg</code> برمی‌گرداند. در حال حاضر راهی برای افزودن وابستگی‌ها بر اساس این مقادیر پیکربندی وجود ندارد.</p>
+<p>علاوه بر نحو <code>#[cfg]</code>، Cargo همچنین از فهرست کردن هدف کامل که وابستگی‌ها بر آن اعمال می‌شوند پشتیبانی می‌کند:</p>
+<pre><code class="language-toml">[target.x86_64-pc-windows-gnu.dependencies]
+winhttp = "0.4.0"
+
+[target.i686-unknown-linux-gnu.dependencies]
+openssl = "1.0.1"
+</code></pre>
+<h3 id="custom-target-specifications"><a class="header" href="#custom-target-specifications">مشخصات هدف سفارشی</a></h3>
+<p>اگر از یک مشخصات هدف سفارشی استفاده می‌کنید (مانند <code>--target foo/bar.json</code>)، از نام پایهٔ فایل بدون پسوند <code>.json</code> استفاده کنید:</p>
+<pre><code class="language-toml">[target.bar.dependencies]
+winhttp = "0.4.0"
+
+[target.my-special-i686-platform.dependencies]
+openssl = "1.0.1"
+native = { path = "native/i686" }
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>مشخصات هدف سفارشی روی کانال stable قابل استفاده نیستند.</p>
+</blockquote>
+<h2 id="development-dependencies"><a class="header" href="#development-dependencies">وابستگی‌های توسعه</a></h2>
+<p>می‌توانید یک بخش <code>[dev-dependencies]</code> به <code>Cargo.toml</code> خود اضافه کنید که قالب آن با <code>[dependencies]</code> هم‌ارز است:</p>
+<pre><code class="language-toml">[dev-dependencies]
+tempdir = "0.3"
+</code></pre>
+<p>وابستگی‌های توسعه هنگام کامپایل یک بسته برای ساخت استفاده نمی‌شوند، اما برای کامپایل آزمون‌ها، مثال‌ها و benchmarkها استفاده می‌شوند.</p>
+<p>این وابستگی‌ها به بسته‌های دیگری که به این بسته وابسته‌اند منتقل <em>نمی‌شوند</em>.</p>
+<p>همچنین می‌توانید با استفاده از <code>dev-dependencies</code> به‌جای <code>dependencies</code> در سرصفحهٔ بخش target، وابستگی‌های توسعهٔ مختص هدف داشته باشید. برای مثال:</p>
+<pre><code class="language-toml">[target.'cfg(unix)'.dev-dependencies]
+mio = "0.0.1"
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>وقتی یک بسته منتشر می‌شود، فقط dev-dependencyهایی که <code>version</code> مشخص می‌کنند در crate منتشرشده گنجانده می‌شوند. در بیشتر موارد استفاده، هنگام انتشار dev-dependencyها لازم نیستند، هرچند برخی کاربران (مانند بسته‌بندهای سیستم‌عامل) ممکن است بخواهند آزمون‌ها را درون یک crate اجرا کنند، بنابراین در صورت امکان ارائهٔ <code>version</code> همچنان می‌تواند مفید باشد.</p>
+</blockquote>
+<h2 id="build-dependencies"><a class="header" href="#build-dependencies">وابستگی‌های ساخت</a></h2>
+<p>می‌توانید به crateهای دیگر مبتنی بر Cargo برای استفاده در اسکریپت‌های ساخت خود وابسته باشید. وابستگی‌ها از طریق بخش <code>build-dependencies</code> در manifest اعلام می‌شوند:</p>
+<pre><code class="language-toml">[build-dependencies]
+cc = "1.0.3"
+</code></pre>
+<p>همچنین می‌توانید با استفاده از <code>build-dependencies</code> به‌جای <code>dependencies</code> در سرصفحهٔ بخش target، وابستگی‌های ساخت مختص هدف داشته باشید. برای مثال:</p>
+<pre><code class="language-toml">[target.'cfg(unix)'.build-dependencies]
+cc = "1.0.3"
+</code></pre>
+<p>در این مورد، وابستگی فقط وقتی ساخته می‌شود که پلتفرم میزبان با هدف مشخص‌شده مطابقت داشته باشد.</p>
+<p>اسکریپت ساخت به وابستگی‌های فهرست‌شده در بخش <code>dependencies</code> یا <code>dev-dependencies</code> دسترسی <strong>ندارد</strong>. وابستگی‌های ساخت نیز در دسترس خود بسته نخواهند بود، مگر اینکه زیر بخش <code>dependencies</code> هم فهرست شده باشند. یک بسته و اسکریپت ساخت آن جداگانه ساخته می‌شوند، بنابراین لازم نیست وابستگی‌هایشان یکسان باشند. با استفاده از وابستگی‌های مستقل برای مقاصد مستقل، Cargo ساده‌تر و تمیزتر نگه داشته می‌شود.</p>
+<h2 id="choosing-features"><a class="header" href="#choosing-features">انتخاب featureها</a></h2>
+<p>اگر بسته‌ای که به آن وابسته‌اید featureهای شرطی ارائه می‌دهد، می‌توانید مشخص کنید کدام‌ها استفاده شوند:</p>
+<pre><code class="language-toml">[dependencies.awesome]
+version = "1.3.5"
+default-features = false # do not include the default features, and optionally
+                         # cherry-pick individual features
+features = ["secure-password", "civet"]
+</code></pre>
+<p>اطلاعات بیشتر دربارهٔ featureها را می‌توانید در <a href="features.html#dependency-features">فصل featureها</a> بیابید.</p>
+<h2 id="renaming-dependencies-in-cargotoml"><a class="header" href="#renaming-dependencies-in-cargotoml">تغییر نام وابستگی‌ها در <code>Cargo.toml</code></a></h2>
+<p>وقتی بخش <code>[dependencies]</code> را در <code>Cargo.toml</code> می‌نویسید، کلیدی که برای یک وابستگی می‌نویسید معمولاً با نام crate‌ای که در کد از آن import می‌کنید یکی است. با این حال، در برخی پروژه‌ها ممکن است بخواهید در کد با نام دیگری به crate ارجاع دهید، فارغ از اینکه در crates.io چگونه منتشر شده است. برای مثال ممکن است بخواهید:</p>
+<ul>
+<li>از نیاز به <code>use foo as bar</code> در کد منبع Rust اجتناب کنید.</li>
+<li>به چند نسخه از یک crate وابسته شوید.</li>
+<li>به crateهایی با نام یکسان از رجیستری‌های مختلف وابسته شوید.</li>
+</ul>
+<p>برای پشتیبانی از این موارد، Cargo در بخش <code>[dependencies]</code> یک کلید <code>package</code> را پشتیبانی می‌کند که مشخص می‌کند به کدام بسته باید وابسته شد:</p>
+<pre><code class="language-toml">[package]
+name = "mypackage"
+version = "0.0.1"
+
+[dependencies]
+foo = "0.1"
+bar = { git = "https://github.com/example/project.git", package = "foo" }
+baz = { version = "0.1", registry = "custom", package = "foo" }
+</code></pre>
+<p>در این مثال، اکنون سه crate در کد Rust شما در دسترس هستند:</p>
+<pre><code class="language-rust ignore">extern crate foo; // crates.io
+extern crate bar; // git repository
+extern crate baz; // registry `custom`</code></pre>
+<p>هر سه این crateها در <code>Cargo.toml</code> خودشان نام بستهٔ <code>foo</code> را دارند، بنابراین ما صراحتاً از کلید <code>package</code> استفاده می‌کنیم تا به Cargo اطلاع دهیم که بستهٔ <code>foo</code> را می‌خواهیم، هرچند به‌صورت محلی آن را با نام دیگری می‌نامیم. کلید <code>package</code>، اگر مشخص نشود، به‌طور پیش‌فرض نام وابستگی درخواست‌شده را می‌گیرد.</p>
+<p>توجه کنید که اگر یک وابستگی اختیاری مانند زیر داشته باشید:</p>
+<pre><code class="language-toml">[dependencies]
+bar = { version = "0.1", package = 'foo', optional = true }
+</code></pre>
+<p>شما به crate با نام <code>foo</code> از crates.io وابسته‌اید، اما crate شما به‌جای feature با نام <code>foo</code>، یک feature با نام <code>bar</code> دارد. یعنی وقتی نام تغییر داده شده باشد، نام featureها از نام وابستگی پیروی می‌کنند، نه نام بسته.</p>
+<p>فعال کردن وابستگی‌های تراگذری نیز به‌طور مشابه کار می‌کند؛ برای مثال می‌توانیم موارد زیر را به manifest بالا اضافه کنیم:</p>
+<pre><code class="language-toml">[features]
+log-debug = ['bar/log-debug'] # using 'foo/log-debug' would be an error!
+</code></pre>
+<h2 id="inheriting-a-dependency-from-a-workspace"><a class="header" href="#inheriting-a-dependency-from-a-workspace">به ارث بردن یک وابستگی از workspace</a></h2>
+<p>وابستگی‌ها را می‌توان از workspace به ارث برد، به این صورت که وابستگی را در جدول <a href="workspaces.html#the-dependencies-table"><code>[workspace.dependencies]</code></a> مربوط به workspace مشخص کنید. سپس آن را با <code>workspace = true</code> به جدول <code>[dependencies]</code> اضافه کنید.</p>
+<p>علاوه بر کلید <code>workspace</code>، وابستگی‌ها می‌توانند این کلیدها را نیز داشته باشند:</p>
+<ul>
+<li><a href="features.html#optional-dependencies"><code>optional</code></a>: توجه کنید که جدول <code>[workspace.dependencies]</code> اجازه ندارد <code>optional</code> را مشخص کند.</li>
+<li><a href="features.html"><code>features</code></a>: این‌ها به featureهایی که در <code>[workspace.dependencies]</code> اعلام شده‌اند افزوده می‌شوند.</li>
+<li><a href="features.html#dependency-features"><code>default-features</code></a> (بسته‌های Edition 2024، به Rust 1.99+ نیاز دارد): مقدار تنظیم‌شده در <code>[workspace.dependencies]</code> را بازنویسی می‌کند. اگر نه بسته و نه workspace <code>default-features</code> را مشخص نکنند، مقدار پیش‌فرض آن <code>true</code> است. پیش از Rust 1.99، یا در editionهای قدیمی‌تر، مقدار <code>default-features = false</code> در سطح بسته ممکن است نادیده گرفته یا رد شود، مگر اینکه وابستگی workspace نیز featureهای پیش‌فرض را غیرفعال کرده باشد.</li>
+</ul>
+<p>به‌جز <code>optional</code>، <code>features</code> و <code>default-features</code>، وابستگی‌های به ارث‌برده‌شده نمی‌توانند از هیچ کلید وابستگی دیگری (مانند <code>version</code>) استفاده کنند.</p>
+<p>وابستگی‌ها در بخش‌های <code>[dependencies]</code>، <code>[dev-dependencies]</code>، <code>[build-dependencies]</code> و <code>[target."...".dependencies]</code> از ارجاع به تعریف <code>[workspace.dependencies]</code> برای وابستگی‌ها پشتیبانی می‌کنند.</p>
+<pre><code class="language-toml">[package]
+name = "bar"
+version = "0.2.0"
+edition = "2024"
+
+[dependencies]
+regex = { workspace = true, features = ["unicode"] }
+serde = { workspace = true, default-features = false }
+
+[build-dependencies]
+cc.workspace = true
+
+[dev-dependencies]
+rand = { workspace = true, optional = true }
+</code></pre><nav class="page-nav"><a href="workspaces.html">→ Workspaceها</a><a href="overriding-dependencies.html">بازنویسی وابستگی‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

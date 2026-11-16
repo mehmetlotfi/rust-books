@@ -1,0 +1,328 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Impl Trait در جایگاه بازگشتی در صفت — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="return-position-impl-trait-in-trait"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="return-position-impl-trait-in-trait"><a class="header" href="#return-position-impl-trait-in-trait">impl Trait در موقعیت بازگشتی در صفت (RPITIT)</a></h1>
+<p>Return-position impl trait in trait (RPITIT) از نظر مفهومی (و از <a href="https://github.com/rust-lang/rust/pull/112988">#112988</a> به بعد، به‌معنای واقعی) شکر نحوی (sugar) است که
+RPITها در متدهای صفت را به
+نوع‌های وابستهٔ جنریک (GAT) تبدیل می‌کند، بدون اینکه کاربر لازم باشد آن
+GAT را در سمت صفت یا سمت impl تعریف کند.</p>
+<p>RPITIT در ابتدا در <a href="https://github.com/rust-lang/rust/pull/101224">#101224</a> پیاده‌سازی شد که پشتیبانی از
+async fn در صفت (AFIT) را اضافه کرد، چون پیاده‌سازی RPITIT به‌صورت رایگان
+بخشی از پیاده‌سازی AFIT شد که پیش‌تر RFC شده بود.
+سپس به‌طور مستقل در <a href="https://github.com/rust-lang/rfcs/pull/3425">RFC 3425</a> RFC شد و T-lang آن را
+تأیید کرد.</p>
+<h2 id="how-does-it-work"><a class="header" href="#how-does-it-work">چگونه کار می‌کند؟</a></h2>
+<p>این سند عمدتاً بر اساس خط لولهٔ کامپایل مرتب شده است:</p>
+<ol>
+<li>پایین‌آوری AST (AST -&gt; HIR)</li>
+<li>پایین‌آوری نوع HIR (HIR -&gt; نوع‌های داده‌ای rustc_middle::ty)</li>
+<li>typeck (بررسی نوع)</li>
+</ol>
+<h3 id="ast-lowering"><a class="header" href="#ast-lowering">پایین‌آوری AST (AST lowering)</a></h3>
+<p>پایین‌آوری AST برای RPITITها تقریباً همان پایین‌آوری RPITهاست.
+همچنان آن‌ها را به‌صورت
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/struct.OpaqueTy.html"><code>hir::ItemKind::OpaqueTy</code></a> پایین می‌آوریم.
+دو تفاوت این است که:</p>
+<p><code>in_trait</code> را برای opaque ثبت می‌کنیم.
+این نشان می‌دهد opaque یک RPITIT است، برای پایین‌آوری نوع HIR،
+تشخیص‌هایی (diagnostics) که با HIR سروکار دارند و غیره.</p>
+<p><code>lifetime_mapping</code>ها را برای نوع opaque ثبت می‌کنیم که در ادامه توضیح داده می‌شود.</p>
+<h4 id="aside-opaque-lifetime-duplication"><a class="header" href="#aside-opaque-lifetime-duplication">حاشیه: تکثیر طول عمر در opaque</a></h4>
+<p><em>همهٔ opaqueها</em> (نه فقط RPITITها) در نهایت طول عمرهای capture‌شدهٔ خود را
+به پارامترهای طول عمر جدیدی محلی برای opaque تکثیر می‌کنند.
+دلیل اصلی این کار این است که RPITها باید بتوانند هر آرگومان late-bound capture‌شده را «واقعیت‌بخشی (reify)»<sup class="footnote-reference" id="fr-1-1"><a href="#footnote-1">1</a></sup> کنند
+یا آن‌ها را early-bound کنند.
+این برای آن است که بتوان آن‌ها را به‌عنوان آرگومان‌های جنریک برای opaque و بعداً برای
+نمونه‌سازی نوع‌های پنهان به کار برد.
+چون در حین پایین‌آوری AST نمی‌دانیم کدام طول عمرها early یا late-bound هستند،
+این کار را برای همهٔ طول عمرها انجام می‌دهیم.</p>
+<p>افزودهٔ اصلی برای RPITITها این است که در حین پایین‌آوری، رابطهٔ میان
+طول عمرهای capture‌شده و طول عمرهای تکثیرشدهٔ متناظر را در یک فیلد اضافی
+پیگیری می‌کنیم:
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/struct.OpaqueTy.html#structfield.lifetime_mapping"><code>OpaqueTy::lifetime_mapping</code></a>.
+بعداً در <code>clauses_of</code> از این نگاشت طول عمر استفاده می‌کنیم تا
+کران‌هایی نصب کنیم که برابری میان این طول عمرهای تکثیرشده و
+طول عمرهای منبعشان را اعمال کنند تا بررسی نوع این GATها درست انجام شود، که در ادامه بحث می‌شود.</p>
+<h5 id="note"><a class="header" href="#note">نکته</a></h5>
+<p>شاید بهتر باشد بتوانیم بدون تکثیر پایین بیاوریم، و برای آن
+فکر می‌کنم باید تمایز میان طول عمرهای early و late bound را کنار بگذاریم.
+پس به راه‌حلی مانند <a href="https://github.com/rust-lang/rust/pull/103448">Account for late-bound lifetimes in generics
+#103448</a> نیاز داریم و سپس یک
+PR مشابه <a href="https://github.com/rust-lang/rust/pull/103449">Inherit function lifetimes for impl-trait
+#103449</a>.</p>
+<h3 id="hir-ty-lowering"><a class="header" href="#hir-ty-lowering">پایین‌آوری نوع HIR (HIR ty lowering)</a></h3>
+<p>تغییر اصلی در پایین‌آوری نوع HIR این است که <code>hir::TyKind::OpaqueDef</code>
+مربوط به یک RPITIT را به‌جای opaque به یک projection پایین می‌آوریم، با استفاده از یک
+def-id تازه‌ساخته برای یک نوع وابستهٔ جدید در صفت.
+در بخش بعد توضیح می‌دهیم دقیقاً چگونه این def-id را به دست می‌آوریم.</p>
+<p>این یعنی هر بار <code>lower_ty</code> را روی RPITIT فراخوانی می‌کنیم، در نهایت
+به‌جای opaque یک projection پس می‌گیریم.
+سپس این projection را می‌توان به مقدار درست نرمال کرد – یا opaque اصلی اگر
+در صفت باشیم، یا نوع استنتاج‌شدهٔ RPITIT اگر در impl باشیم.</p>
+<h4 id="lowering-to-synthetic-associated-types"><a class="header" href="#lowering-to-synthetic-associated-types">پایین‌آوری به نوع‌های وابستهٔ مصنوعی (synthetic)</a></h4>
+<p>با استفاده از تغذیهٔ query (query feeding)، نوع‌های وابستهٔ جدید را هم در سمت
+صفت و هم در سمت impl برای RPITITهایی که در متدها ظاهر می‌شوند می‌سازیم.</p>
+<h5 id="lowering-rpitits-in-traits"><a class="header" href="#lowering-rpitits-in-traits">پایین‌آوری RPITITها در صفت‌ها</a></h5>
+<p>وقتی <code>tcx.associated_item_def_ids(trait_def_id)</code> روی یک صفت فراخوانی می‌شود تا
+همهٔ نوع‌های وابستهٔ صفت را گردآوری کند، query پیش‌تر فقط
+def-idهای آیتم‌های HIR را که فرزند صفت‌اند برمی‌گرداند.
+پس از <a href="https://github.com/rust-lang/rust/pull/112988">#112988</a>، افزون بر آن، برای هر متد در صفت، def-idهایی را که
+<code>tcx.associated_types_for_impl_traits_in_associated_fn(trait_method_def_id)</code> برمی‌گرداند اضافه می‌کنیم،
+که روی هر متد صفت پیمایش می‌کند، هر RPITIT را که در
+امضا ظاهر شود گردآوری می‌کند و سپس برای هر RPITIT <code>associated_type_for_impl_trait_in_trait</code> را فراخوانی می‌کند که
+یک نوع وابستهٔ جدید می‌سازد.</p>
+<h5 id="lowering-rpitits-in-impls"><a class="header" href="#lowering-rpitits-in-impls">پایین‌آوری RPITITها در impl‌ها</a></h5>
+<p>به‌همین‌ترتیب، در کنار آیتم‌های HIR مربوط به impl، برای هر متد impl، همهٔ
+<code>associated_types_for_impl_traits_in_associated_fn</code> مربوط به آن متد impl را هم اضافه می‌کنیم.
+این <code>associated_type_for_impl_trait_in_impl</code> را فراخوانی می‌کند که
+برای هر RPITIT که از متد صفت متناظر می‌آید یک تعریف نوع وابسته
+می‌سازد.</p>
+<h4 id="synthesizing-new-associated-types"><a class="header" href="#synthesizing-new-associated-types">ساخت نوع‌های وابستهٔ جدید</a></h4>
+<p>از تغذیهٔ query
+(<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/query/plumbing/struct.TyCtxtAt.html#method.create_def"><code>TyCtxtAt::create_def</code></a>)
+برای ساخت یک def-id جدید برای GATهای مصنوعی هر RPITIT استفاده می‌کنیم.</p>
+<p>به‌صورت محلی، بیشتر queryهای rustc برای محاسبهٔ مقادیرشان روی HIR یک آیتم تطبیق می‌دهند.
+چون RPITIT واقعاً HIR مرتبطی با خود ندارد، یا دست‌کم
+HIR‌ای که با یک نوع وابسته متناظر باشد، باید
+بسیاری از queryها را مشتاقانه محاسبه و <a href="https://github.com/rust-lang/rust/pull/104940">تغذیه (feed)</a> کنیم، مانند
+<code>opt_def_kind</code>، <code>associated_item</code>، <code>visibility</code> و <code>defaultness</code>.</p>
+<p>مقادیر بیشتر این queryها بدیهی است، چون RPITIT
+از نظر مفهومی بیشتر اطلاعاتش را از تابع والد به ارث می‌برد
+(مثلاً <code>visibility</code>)، یا چون به‌سادگی قابل دانستن است، زیرا یک
+نوع وابسته است (<code>opt_def_kind</code>).</p>
+<p>برخی queryهای دیگر پیچیده‌ترند یا نمی‌توان آن‌ها را تغذیه کرد، و
+موارد جالب آن‌ها را در ادامه مستند می‌کنیم:</p>
+<h5 id="generics_of-for-the-trait"><a class="header" href="#generics_of-for-the-trait"><code>generics_of</code> برای صفت</a></h5>
+<p>GAT مربوط به یک RPITIT از نظر مفهومی همان جنریک‌های RPIT منبع خود را به ارث می‌برد.
+اما به‌جای اینکه متد والد جنریک‌ها باشد، صفت والد است.</p>
+<p>در حال حاضر با گرفتن جنریک‌های RPIT و جنریک‌های متد و
+هموار کردن هر دو در یک فهرست جنریک جدید، و حفظ
+def-id هر پارامتر، کار را راه می‌اندازیم.
+(این ممکن است به مشکلاتی با def-idهایی که والد نادرست دارند بینجامد، اما در بدترین حالت به
+مشکلات diagnostics می‌انجامد.
+اگر این به مشکل تبدیل شود، می‌توانیم
+def-idهای جدیدی برای پارامترهای جنریک بسازیم که والدشان GAT است.)</p>
+<details> <summary> <b>یک مثال تصویری</b> </summary>
+<pre><code class="language-rust">trait Foo {
+    fn method&lt;'early: 'early, 'late, T&gt;() -&gt; impl Sized + Captures&lt;'early, 'late&gt;;
+}</code></pre>
+<p>به این desugar می‌شود…</p>
+<pre><code class="language-rust">trait Foo {
+    //       vvvvvvvvv method's generics
+    //                  vvvvvvvvvvvvvvvvvvvvvvvv opaque's generics
+    type Gat&lt;'early, T, 'early_duplicated, 'late&gt;: Sized + Captures&lt;'early_duplicated, 'late&gt;;
+
+    fn method&lt;'early: 'early, 'late, T&gt;() -&gt; Self::Gat&lt;'early, T, 'early, 'late&gt;;
+}</code></pre>
+</details>
+<h5 id="generics_of-for-the-impl"><a class="header" href="#generics_of-for-the-impl"><code>generics_of</code> برای impl</a></h5>
+<p>جنریک‌های GAT مربوط به impl کمی جالب‌ترند.
+آن‌ها از جنریک‌های خود RPITIT (از تعریف صفت) تشکیل شده‌اند که به
+جنریک‌های متدهای impl افزوده می‌شوند.
+این همان مشکل بالا را دارد،
+که جنریک‌های GAT پارامترهایی دارند که def-idهایشان والد
+نادرست دارند، اما این فقط باید در diagnostics مشکل ایجاد کند.</p>
+<p>اگر def-idهای جنریک جدیدی بسازیم، می‌توانیم این را هم به‌همین‌ترتیب رفع کنیم،
+اما این را می‌توان بعداً به شیوه‌ای سازگار با آینده انجام داد،
+شاید توسط یک مشارکت‌کنندهٔ جدید علاقه‌مند.</p>
+<h5 id="opt_rpitit_info"><a class="header" href="#opt_rpitit_info"><code>opt_rpitit_info</code></a></h5>
+<p>برخی queryها به محاسبهٔ اطلاعاتی متکی‌اند که اگر مشتاقانه تغذیه‌شان کنیم به چرخه می‌انجامند،
+مانند <code>explicit_clauses_of</code>.
+بنابراین به provider ‏<code>clauses_of</code> واگذار می‌کنیم تا مقدار درست را برای GAT مربوط به RPITIT ما برگرداند.
+این کار را با تشخیص زودهنگام در query انجام می‌دهیم که آیا نوع وابسته مصنوعی است یا نه، با استفاده از
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.TyCtxt.html#method.opt_rpitit_info"><code>opt_rpitit_info</code></a>،
+که اگر نوع وابسته مصنوعی باشد <code>Some</code> برمی‌گرداند.</p>
+<p>سپس، در حین queryای مانند <code>explicit_clauses_of</code>، می‌توانیم تشخیص دهیم آیا
+نوع وابسته مصنوعی است، مثلاً این‌گونه:</p>
+<pre><code class="language-rust">fn explicit_clauses_of(tcx: TyCtxt&lt;'_&gt;, def_id: LocalDefId) -&gt; ... {
+    if let Some(rpitit_info) = tcx.opt_rpitit_info(def_id) {
+        // Do something special for RPITITs...
+        return ...;
+    }
+
+    // The regular computation which relies on access to the HIR of `def_id`.
+}</code></pre>
+<h5 id="explicit_clauses_of"><a class="header" href="#explicit_clauses_of"><code>explicit_clauses_of</code></a></h5>
+<p>RPITITها با کپی کردن گزاره‌های متدی که آن را تعریف کرده شروع می‌کنند،
+هم در سمت صفت و هم در سمت impl.</p>
+<p>افزون بر این، گزاره‌های «outlives دوطرفه» نصب می‌کنیم.
+به‌طور مشخص، برای هر طول عمر early-bound capture‌شده clauseهای region-outlives را در هر دو جهت اضافه می‌کنیم که آن را مقید می‌کند
+با طول عمر early-bound تکثیرشده که از پایین‌آوری حاصل می‌شود برابر باشد.
+این را بهتر است در یک مثال نشان داد:</p>
+<pre><code class="language-rust">trait Foo&lt;'a&gt; {
+    fn bar() -&gt; impl Sized + 'a;
+}
+
+// Desugars into...
+
+trait Foo&lt;'a&gt; {
+    type Gat&lt;'a_duplicated&gt;: Sized + 'a
+    where
+        'a: 'a_duplicated,
+        'a_duplicated: 'a;
+    //~^ Specifically, we should be able to assume that the
+    // duplicated `'a_duplicated` lifetime always stays in
+    // sync with the `'a` lifetime.
+
+    fn bar() -&gt; Self::Gat&lt;'a&gt;;
+}</code></pre>
+<h5 id="assumed_wf_types"><a class="header" href="#assumed_wf_types"><code>assumed_wf_types</code></a></h5>
+<p>GATها هم در صفت و هم در impl، <code>assumed_wf_types</code> متد صفتی را که
+RPITIT را تعریف می‌کند به ارث می‌برند.
+این برای اطمینان از این است که کد زیر هنگام پایین‌آوری well-formed باشد.</p>
+<pre><code class="language-rust">trait Foo {
+    fn iter&lt;'a, T&gt;(x: &amp;'a [T]) -&gt; impl Iterator&lt;Item = &amp;'a T&gt;;
+}
+
+// which is lowered to...
+
+trait FooDesugared {
+    type Iter&lt;'a, T&gt;: Iterator&lt;Item = &amp;'a T&gt;;
+    //~^ assumed wf: `&amp;'a [T]`
+    // Without assumed wf types, the GAT would not be well-formed on its own.
+
+    fn iter&lt;'a, T&gt;(x: &amp;'a [T]) -&gt; Self::Iter&lt;'a, T&gt;;
+}</code></pre>
+<p>چون <code>assumed_wf_types</code> فقط برای def idهای محلی تعریف شده است، برای
+پیاده‌سازی درست <code>assumed_wf_types</code> برای impl‌های صفت‌های بیرونی
+که RPIT دارند، باید نوع‌های wf فرض‌شدهٔ RPITITها را در یک query بیرونی
+کدگذاری کنیم:
+<a href="https://github.com/rust-lang/rust/blob/a17c7968b727d8413801961fc4e89869b6ab00d3/compiler/rustc_ty_utils/src/implied_bounds.rs#L14"><code>assumed_wf_types_for_rpitit</code></a>.</p>
+<h3 id="typechecking"><a class="header" href="#typechecking">بررسی نوع (Typechecking)</a></h3>
+<h4 id="the-rpitit-inference-algorithm"><a class="header" href="#the-rpitit-inference-algorithm">الگوریتم استنتاج RPITIT</a></h4>
+<p>الگوریتم استنتاج RPITIT در
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_analysis/check/compare_impl_item/fn.collect_return_position_impl_trait_in_trait_tys.html"><code>collect_return_position_impl_trait_in_trait_tys</code></a> پیاده‌سازی شده است.</p>
+<p><strong>سطح بالا:</strong> با داشتن یک متد impl و یک متد صفت، متد
+صفت را می‌گیریم و هر RPITIT را در امضا با یک متغیر استنتاج نمونه‌سازی می‌کنیم.
+سپس این امضای متد صفت را با امضای متد impl برابر می‌کنیم
+و همهٔ تعهدهایی را که پدید می‌آیند پردازش می‌کنیم تا نوع
+همهٔ RPITITها در متد را استنتاج کنیم.</p>
+<p>این متد همچنین مسئول اطمینان از این است که نوع‌های پنهان
+هر RPITIT واقعاً کران‌های <code>impl Trait</code> را برآورده می‌کنند، یعنی اینکه
+اگر <code>impl Trait = Foo</code> استنتاج کنیم، <code>Foo: Trait</code> برقرار است.</p>
+<details> <summary><b>یک مثال...</b></summary>
+<pre><code class="language-rust">#![feature(return_position_impl_trait_in_trait)]
+
+use std::ops::Deref;
+
+trait Foo {
+    fn bar() -&gt; impl Deref&lt;Target = impl Sized&gt;;
+             // ^- RPITIT ?0        ^- RPITIT ?1
+}
+
+impl Foo for () {
+    fn bar() -&gt; Box&lt;String&gt; { Box::new(String::new()) }
+}</code></pre>
+<p>در نهایت به امضای صفتی می‌رسیم که شبیه <code>fn() -&gt; ?0</code> است و
+تعهدهای تودرتوی <code>?0: Deref&lt;Target = ?1&gt;</code>، <code>?1: Sized</code>.
+امضای impl برابر <code>fn() -&gt; Box&lt;String&gt;</code> است.</p>
+<p>برابر کردن این امضاها <code>?0 = Box&lt;String&gt;</code> را به ما می‌دهد، که سپس پس از
+پردازش تعهد <code>Box&lt;String&gt;: Deref&lt;Target = ?1&gt;</code> به <code>?1 = String</code> می‌رسیم و تعهد دیگر <code>String: Sized</code> به true ارزیابی می‌شود.</p>
+<p>در پایان الگوریتم، به نگاشتی میان
+def-idهای نوع وابسته و نوع‌های مشخص استنتاج‌شده از امضا می‌رسیم.
+سپس می‌توانیم از این نگاشت برای پیاده‌سازی <code>type_of</code> برای نوع‌های وابستهٔ
+مصنوعی در impl استفاده کنیم، چون این نگاشت نوعی را توصیف می‌کند که باید
+برای هر RPITIT بعد از <code>=</code> در <code>type Assoc = ...</code> بیاید.</p>
+</details>
+<h5 id="implied-bounds-in-rpitit-hidden-type-inference"><a class="header" href="#implied-bounds-in-rpitit-hidden-type-inference">کران‌های ضمنی در استنتاج نوع پنهان RPITIT</a></h5>
+<p>چون <code>collect_return_position_impl_trait_in_trait_tys</code> fulfillment و
+حل ناحیه انجام می‌دهد، باید <code>assumed_wf_types</code> را به آن بدهیم تا بتوانیم
+تعهدهای ناحیه را با همان کران‌های ضمنی مورد انتظاری که <code>compare_method_clause_entailment</code> دارد اثبات کنیم.</p>
+<p>چون نوع بازگشتی یک متد یکی از نوع‌های WF فرض‌شده شناخته می‌شود،
+و ما نوع بازگشتی را مشتاقانه با متغیرهای استنتاج fold می‌کنیم تا
+استنتاج نوع opaque را انجام دهیم، پس از استنتاج نوع opaque، نوع بازگشتی
+طوری حل می‌شود که شامل نوع‌های پنهان RPITITها باشد.
+این یعنی نوع‌های پنهان RPITITها well-formed فرض می‌شدند
+بدون اینکه مستقلاً اثبات شده باشد که هستند.
+این به یک <a href="https://github.com/rust-lang/rust/pull/116072">باگ ناسالمی ظریف</a> انجامید.
+برای جلوگیری از این استدلال دوری، در عوض نوع‌های پنهان
+RPITITها را در نوع بازگشتی متد با <em>جانگهدارها (placeholders)</em> جایگزین می‌کنیم که به
+هیچ کران ضمنی well-formedness‌ای نمی‌انجامند.</p>
+<h4 id="default-trait-body"><a class="header" href="#default-trait-body">بدنهٔ پیش‌فرض صفت</a></h4>
+<p>بررسی نوع یک بدنهٔ پیش‌فرض صفت مانند مثال زیر به یک هک جالب نیاز دارد.</p>
+<pre><code class="language-rust">trait Foo {
+    fn bar() -&gt; impl Sized {
+        1i32
+    }
+}</code></pre>
+<p>باید یک گزارهٔ projection
+در param-env مربوط به <code>Foo::bar</code> نصب کنیم که به ما اجازه دهد فرض کنیم GAT مربوط به
+RPITIT به نوع opaque مربوط به RPITIT نرمال می‌شود.
+این بر این مشاهده استوار است که یک متد صفت و GAT مربوط به RPITIT همیشه «هم‌گام» خواهند بود.
+یعنی یکی فقط وقتی بازنویسی (override) می‌شود که دیگری هم بازنویسی شود.</p>
+<p>این را با desugaring مشابه کد بالا مقایسه کنید که شکست می‌خورد
+چون نمی‌توانیم به همین فرض تکیه کنیم:</p>
+<pre><code class="language-rust">#![feature(impl_trait_in_assoc_type)]
+#![feature(associated_type_defaults)]
+
+trait Foo {
+    type RPITIT = impl Sized;
+
+    fn bar() -&gt; Self::RPITIT {
+        01i32
+    }
+}</code></pre>
+<p>شکست می‌خورد چون یک impl پایین‌دست در نظر می‌تواند
+پیاده‌سازی <code>RPITIT</code> را بدون ارائهٔ پیاده‌سازی <code>bar</code> فراهم کند:</p>
+<pre><code class="language-text">error[E0308]: mismatched types
+--&gt; src/lib.rs:8:9
+ |
+5 |     type RPITIT = impl Sized;
+ |     ------------------------- associated type defaults can't be assumed inside the trait defining them
+6 |
+7 |     fn bar() -&gt; Self::RPITIT {
+ |                 ------------ expected `&lt;Self as Foo&gt;::RPITIT` because of return type
+8 |         01i32
+ |         ^^^^^ expected associated type, found `i32`
+ |
+ = note: expected associated type `&lt;Self as Foo&gt;::RPITIT`
+                       found type `i32`
+</code></pre>
+<h4 id="well-formedness-checking"><a class="header" href="#well-formedness-checking">بررسی well-formedness</a></h4>
+<p>well-formedness مربوط به RPITITها را درست مانند نوع‌های وابستهٔ معمولی بررسی می‌کنیم.</p>
+<p>چون در <code>clauses_of</code> کران‌های طول عمری اضافه کردیم که
+طول عمرهای early-bound تکثیرشده را به طول عمرهای اصلی‌شان پیوند می‌دهد، و
+<code>assumed_wf_types</code> را پیاده‌سازی کردیم که نوع‌های WF متدی را که
+RPITIT از آن منشأ می‌گیرد به ارث می‌برد (<a href="https://github.com/rust-lang/rust/pull/113704">#113704</a>)، در WF-check کردن
+GAT گویی یک GAT معمولی است مشکلی نداریم.</p>
+<h3 id="whats-broken-whats-weird-etc"><a class="header" href="#whats-broken-whats-weird-etc">چه چیزی خراب است، چه چیزی عجیب است و غیره</a></h3>
+<h5 id="specialization-is-super-busted"><a class="header" href="#specialization-is-super-busted">specialization به‌شدت خراب است</a></h5>
+<p>«متدهای پیش‌فرض صفت» که بالا توضیح داده شد با
+specialization خوب تعامل ندارد، چون آن کران‌های projection را فقط در
+متدهای پیش‌فرض صفت نصب می‌کنیم و نه در متدهای impl.
+با توجه به اینکه specialization از پیش کاملاً خراب است، وارد جزئیات نمی‌شوم، اما در حال حاضر باگی است که در
+این‌جا پیگیری می‌شود:
+* <code>tests/ui/impl-trait/in-trait/specialization-broken.rs</code></p>
+<h5 id="projections-dont-have-variances"><a class="header" href="#projections-dont-have-variances">projectionها واریانس ندارند</a></h5>
+<p>این کد شکست می‌خورد چون projectionها واریانس ندارند:</p>
+<pre><code class="language-rust">#![feature(return_position_impl_trait_in_trait)]
+
+trait Foo {
+    // Note that the RPITIT below does *not* capture `'lt`.
+    fn bar&lt;'lt: 'lt&gt;() -&gt; impl Eq;
+}
+
+fn test&lt;'a, 'b, T: Foo&gt;() -&gt; bool {
+    &lt;T as Foo&gt;::bar::&lt;'a&gt;() == &lt;T as Foo&gt;::bar::&lt;'b&gt;()
+    //~^ ERROR
+    // (requires that `'a == 'b`)
+}</code></pre>
+<p>این به این دلیل است که نمی‌توانیم <code>&lt;T as Foo&gt;::Rpitit&lt;'a&gt;</code> و <code>&lt;T as Foo&gt;::Rpitit&lt;'b&gt;</code> را به هم مرتبط کنیم، حتی اگر طول عمرشان را capture نکنند.
+اگر از نوع‌های opaque معمولی استفاده می‌کردیم این کار می‌کرد، چون
+نسبت به آن پارامتر طول عمر دووردا (bivariant) می‌بودند:</p>
+<pre><code class="language-rust">#![feature(return_position_impl_trait_in_trait)]
+
+fn bar&lt;'lt: 'lt&gt;() -&gt; impl Eq {
+    ()
+}
+
+fn test&lt;'a, 'b&gt;() -&gt; bool {
+    bar::&lt;'a&gt;() == bar::&lt;'b&gt;()
+}</code></pre>
+<p>اما احتمالاً اشکالی ندارد، چون رفتار capture در RPITITها احتمالاً
+به‌هرحال به capture کردن همهٔ طول عمرهای در دسترس تغییر خواهد کرد.
+همچنین می‌توان این را بعداً به شیوه‌ای سازگار با آینده تعدیل کرد، اگر
+هنگام مرتبط کردن projectionها واریانس RPITITها را در نظر بگیریم.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-1">
+<p>این اصطلاح compiler-errors است، ادعا نمی‌کنم دقیق باشد :^) <a href="#fr-1-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="opaque-types-impl-trait-inference.html">→ جزئیات استنتاج</a><a href="borrow-check/opaque-types-region-inference-restrictions.html">محدودیت‌های استنتاج ناحیه ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

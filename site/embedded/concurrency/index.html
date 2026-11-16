@@ -1,0 +1,336 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>همروندی — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="concurrency/index"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="concurrency"><a class="header" href="#concurrency">همروندی</a></h1>
+<p>همروندی (concurrency) هر زمانی پیش می‌آید که بخش‌های مختلف برنامهٔ شما ممکن است در زمان‌های متفاوت یا خارج از ترتیب اجرا شوند. در یک بستر توکار، این شامل موارد زیر است:</p>
+<ul>
+<li>کنترل‌کنندهٔ وقفه‌ها (interrupt handler)، که هر بار رخ دادن وقفهٔ مربوط به خود اجرا می‌شوند،</li>
+<li>انواع گوناگون چندنخی (multithreading)، که در آن ریزپردازندهٔ شما به‌طور منظم میان بخش‌های برنامه جابه‌جا می‌شود،</li>
+<li>و در برخی سیستم‌ها، ریزپردازنده‌های چندهسته‌ای، که در آن‌ها هر هسته می‌تواند به‌طور مستقل و هم‌زمان بخش دیگری از برنامهٔ شما را اجرا کند.</li>
+</ul>
+<p>از آن‌جا که بسیاری از برنامه‌های توکار باید با وقفه‌ها سروکار داشته باشند، همروندی معمولاً دیر یا زود پیش می‌آید و جایی است که بسیاری از باگ‌های ظریف و دشوار هم رخ می‌دهند. خوشبختانه Rust تعدادی انتزاع و تضمین ایمنی فراهم می‌کند که به ما کمک می‌کنند کد درست بنویسیم.</p>
+<h2 id="no-concurrency"><a class="header" href="#no-concurrency">بدون همروندی</a></h2>
+<p>ساده‌ترین همروندی برای یک برنامهٔ توکار این است که اصلاً همروندی نباشد: نرم‌افزار شما از یک حلقهٔ اصلی تشکیل می‌شود که فقط به اجرا ادامه می‌دهد و هیچ وقفه‌ای در کار نیست. گاهی این رویکرد برای مسئلهٔ پیش رو کاملاً مناسب است! معمولاً حلقهٔ شما چند ورودی را می‌خواند، مقداری پردازش انجام می‌دهد و چند خروجی را می‌نویسد.</p>
+<pre><code class="language-rust ignore">#[entry]
+fn main() {
+    let peripherals = setup_peripherals();
+    loop {
+        let inputs = read_inputs(&amp;peripherals);
+        let outputs = process(inputs);
+        write_outputs(&amp;peripherals, outputs);
+    }
+}</code></pre>
+<p>از آن‌جا که همروندی وجود ندارد، لازم نیست نگران اشتراک داده میان بخش‌های برنامه یا همگام‌سازی دسترسی به دستگاه‌های جانبی باشید. اگر می‌توانید با چنین رویکرد ساده‌ای کارتان را راه بیندازید، این می‌تواند راه‌حل بسیار خوبی باشد.</p>
+<h2 id="global-mutable-data"><a class="header" href="#global-mutable-data">دادهٔ سراسری تغییرپذیر</a></h2>
+<p>برخلاف Rust غیرتوکار، معمولاً این امکان را نداریم که تخصیص‌های heap بسازیم و ارجاع‌هایی به آن داده را به نخی که تازه ساخته شده بدهیم. در عوض، کنترل‌کنندهٔ وقفه‌های ما ممکن است در هر لحظه فراخوانی شوند و باید بدانند به هر حافظهٔ اشتراکی‌ای که استفاده می‌کنیم چگونه دسترسی پیدا کنند. در پایین‌ترین سطح، این یعنی باید حافظهٔ تغییرپذیری داشته باشیم که <em>به‌صورت ایستا تخصیص داده شده</em> باشد و هم کنترل‌کنندهٔ وقفه و هم کد اصلی بتوانند به آن اشاره کنند.</p>
+<p>در Rust، چنین متغیرهای <a href="https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html#accessing-or-modifying-a-mutable-static-variable"><code>static mut</code></a> همیشه خواندن یا نوشتنشان ناایمن (unsafe) است، زیرا اگر مراقبت ویژه‌ای نکنید، ممکن است یک شرایط رقابتی (race condition) پدید آورید که در آن دسترسی شما به متغیر در میانه‌اش با وقفه‌ای قطع می‌شود که آن هم به همان متغیر دسترسی دارد.</p>
+<p>برای نمونه‌ای از اینکه این رفتار چگونه می‌تواند خطاهای ظریفی در کد شما ایجاد کند، یک برنامهٔ توکار را در نظر بگیرید که لبه‌های صعودی یک سیگنال ورودی را در هر بازهٔ یک‌ثانیه‌ای می‌شمارد (یک فرکانس‌شمار):</p>
+<pre><code class="language-rust ignore">static mut COUNTER: u32 = 0;
+
+#[entry]
+fn main() -&gt; ! {
+    set_timer_1hz();
+    let mut last_state = false;
+    loop {
+        let state = read_signal_level();
+        if state &amp;&amp; !last_state {
+            // DANGER - Not actually safe! Could cause data races.
+            unsafe { COUNTER += 1 };
+        }
+        last_state = state;
+    }
+}
+
+#[interrupt]
+fn timer() {
+    unsafe { COUNTER = 0; }
+}</code></pre>
+<p>هر ثانیه، وقفهٔ تایمر شمارنده را دوباره روی 0 می‌گذارد. در همین حال، حلقهٔ اصلی پیوسته سیگنال را اندازه می‌گیرد و هر وقت تغییر از پایین به بالا ببیند، شمارنده را افزایش می‌دهد. ناچار شده‌ایم برای دسترسی به <code>COUNTER</code> از <code>unsafe</code> استفاده کنیم، چون <code>static mut</code> است و این یعنی به کامپایلر قول می‌دهیم که هیچ رفتار تعریف‌نشده‌ای ایجاد نخواهیم کرد. می‌توانید شرایط رقابتی را پیدا کنید؟ تضمینی وجود ندارد که افزایش <code>COUNTER</code> اتمی (atomic) باشد؛ در واقع در بیشتر پلتفرم‌های توکار، این عمل به یک بارگذاری (load)، سپس افزایش، و بعد یک ذخیره‌سازی (store) شکسته می‌شود. اگر وقفه بعد از بارگذاری و پیش از ذخیره‌سازی رخ دهد، بازنشانی به 0 پس از بازگشت از وقفه نادیده گرفته می‌شود — و ما در آن بازه دو برابرِ تعداد گذارهای واقعی را خواهیم شمرد.</p>
+<h2 id="critical-sections"><a class="header" href="#critical-sections">بخش‌های بحرانی</a></h2>
+<p>پس برای رقابت‌های داده‌ای چه می‌توانیم بکنیم؟ یک رویکرد ساده استفاده از <em>بخش‌های بحرانی</em> (critical section) است، یعنی بستری که در آن وقفه‌ها غیرفعال هستند. با پیچیدن دسترسی به <code>COUNTER</code> در <code>main</code> درون یک بخش بحرانی، می‌توانیم مطمئن باشیم که وقفهٔ تایمر تا وقتی افزایش <code>COUNTER</code> را تمام نکرده‌ایم رخ نخواهد داد:</p>
+<pre><code class="language-rust ignore">static mut COUNTER: u32 = 0;
+
+#[entry]
+fn main() -&gt; ! {
+    set_timer_1hz();
+    let mut last_state = false;
+    loop {
+        let state = read_signal_level();
+        if state &amp;&amp; !last_state {
+            // New critical section ensures synchronised access to COUNTER
+            cortex_m::interrupt::free(|_| {
+                unsafe { COUNTER += 1 };
+            });
+        }
+        last_state = state;
+    }
+}
+
+#[interrupt]
+fn timer() {
+    unsafe { COUNTER = 0; }
+}</code></pre>
+<p>در این مثال از <code>cortex_m::interrupt::free</code> استفاده می‌کنیم، اما پلتفرم‌های دیگر سازوکارهای مشابهی برای اجرای کد در یک بخش بحرانی دارند. این کار همچنین با غیرفعال کردن وقفه‌ها، اجرای مقداری کد و سپس فعال کردن دوبارهٔ وقفه‌ها یکی است.</p>
+<p>توجه کنید که لازم نبود درون وقفهٔ تایمر بخش بحرانی بگذاریم، به دو دلیل:</p>
+<ul>
+<li>نوشتن 0 در <code>COUNTER</code> نمی‌تواند تحت تأثیر رقابت قرار بگیرد، چون آن را نمی‌خوانیم</li>
+<li>به‌هر حال هرگز نخ <code>main</code> آن را قطع نخواهد کرد</li>
+</ul>
+<p>اگر <code>COUNTER</code> میان چند کنترل‌کنندهٔ وقفه به اشتراک گذاشته می‌شد که ممکن است یکدیگر را <em>پیش‌دستی</em> (preempt) کنند، آنگاه هر کدام از آن‌ها هم ممکن بود به یک بخش بحرانی نیاز داشته باشد.</p>
+<p>این کار مشکل فوری ما را حل می‌کند، اما هنوز مجبوریم مقدار زیادی کد ناایمن بنویسیم که باید با دقت دربارهٔ آن استدلال کنیم، و ممکن است بخش‌های بحرانی را بی‌دلیل به کار ببریم. چون هر بخش بحرانی پردازش وقفه را موقتاً متوقف می‌کند، هزینه‌ای همراه آن است: اندازهٔ کد کمی بیشتر و تأخیر (latency) و لرزش (jitter) بالاتر برای وقفه‌ها (پردازش وقفه‌ها ممکن است بیشتر طول بکشد و زمان تا پردازش آن‌ها متغیرتر باشد). اینکه این موضوع مشکل‌ساز باشد یا نه به سیستم شما بستگی دارد، اما به‌طور کلی دوست داریم از آن اجتناب کنیم.</p>
+<p>شایان ذکر است که اگرچه بخش بحرانی تضمین می‌کند هیچ وقفه‌ای رخ نمی‌دهد، در سیستم‌های چندهسته‌ای تضمین انحصار فراهم نمی‌کند! هستهٔ دیگر می‌تواند بی‌هیچ مشکلی و حتی بدون وقفه به همان حافظه‌ای دسترسی داشته باشد که هستهٔ شما به آن دسترسی دارد. اگر از چند هسته استفاده می‌کنید، به اولیه‌های همگام‌سازی (synchronisation primitive) قوی‌تری نیاز خواهید داشت.</p>
+<h2 id="atomic-access"><a class="header" href="#atomic-access">دسترسی اتمی</a></h2>
+<p>در برخی پلتفرم‌ها دستورهای اتمی ویژه‌ای در دسترس است که برای عملیات خواندن-تغییر-نوشتن (read-modify-write) تضمین‌هایی فراهم می‌کنند. به‌طور مشخص برای Cortex-M: <code>thumbv6</code> (Cortex-M0 و Cortex-M0+) فقط دستورهای بارگذاری و ذخیره‌سازی اتمی دارد، در حالی که <code>thumbv7</code> (Cortex-M3 و بالاتر) دستورهای کامل Compare and Swap (CAS) را فراهم می‌کند. این دستورهای CAS جایگزینی برای غیرفعال کردن سنگین‌دستانهٔ همهٔ وقفه‌ها به دست می‌دهند: می‌توانیم افزایش را امتحان کنیم؛ در بیشتر مواقع موفق می‌شود، اما اگر قطع شده باشد، به‌طور خودکار کل عملیات افزایش را دوباره تلاش می‌کند. این عملیات اتمی حتی روی چند هسته هم ایمن‌اند.</p>
+<pre><code class="language-rust ignore">use core::sync::atomic::{AtomicUsize, Ordering};
+
+static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+#[entry]
+fn main() -&gt; ! {
+    set_timer_1hz();
+    let mut last_state = false;
+    loop {
+        let state = read_signal_level();
+        if state &amp;&amp; !last_state {
+            // Use `fetch_add` to atomically add 1 to COUNTER
+            COUNTER.fetch_add(1, Ordering::Relaxed);
+        }
+        last_state = state;
+    }
+}
+
+#[interrupt]
+fn timer() {
+    // Use `store` to write 0 directly to COUNTER
+    COUNTER.store(0, Ordering::Relaxed)
+}</code></pre>
+<p>این بار <code>COUNTER</code> یک متغیر <code>static</code> ایمن است. به لطف نوع <code>AtomicUsize</code>، <code>COUNTER</code> را می‌توان هم از کنترل‌کنندهٔ وقفه و هم از نخ اصلی بدون غیرفعال کردن وقفه‌ها به‌طور ایمن تغییر داد. در صورت امکان، این راه‌حل بهتری است — اما ممکن است در پلتفرم شما پشتیبانی نشود.</p>
+<p>یک نکته دربارهٔ <a href="https://doc.rust-lang.org/core/sync/atomic/enum.Ordering.html"><code>Ordering</code></a>: این پارامتر بر نحوهٔ جابه‌جایی ترتیب دستورها توسط کامپایلر و سخت‌افزار اثر می‌گذارد و پیامدهایی هم برای دیده‌شدن در حافظهٔ نهان (cache) دارد. با فرض اینکه هدف یک پلتفرم تک‌هسته‌ای است، <code>Relaxed</code> در این مورد خاص کافی و کارآمدترین انتخاب است. ترتیب سخت‌گیرانه‌تر باعث می‌شود کامپایلر پیرامون عملیات اتمی مانع‌های حافظه (memory barrier) تولید کند؛ بسته به اینکه از عملیات اتمی برای چه کاری استفاده می‌کنید، ممکن است به این موضوع نیاز داشته باشید یا نداشته باشید! جزئیات دقیق مدل اتمی پیچیده است و بهتر است در جای دیگری توضیح داده شود.</p>
+<p>برای جزئیات بیشتر دربارهٔ عملیات اتمی (atomics) و ترتیب (ordering)، به <a href="../../nomicon/atomics.html">nomicon</a> نگاه کنید.</p>
+<h2 id="abstractions-send-and-sync"><a class="header" href="#abstractions-send-and-sync">انتزاع‌ها، Send و Sync</a></h2>
+<p>هیچ‌یک از راه‌حل‌های بالا چندان رضایت‌بخش نیستند. آن‌ها به بلوک‌های <code>unsafe</code> نیاز دارند که باید با دقت بسیار زیاد بررسی شوند و ارگونومیک نیستند. حتماً در Rust می‌توانیم بهتر عمل کنیم!</p>
+<p>می‌توانیم شمارندهٔ خود را در یک رابط ایمن انتزاع کنیم که در هر جای دیگر کدمان بتوان با خیال راحت از آن استفاده کرد. برای این مثال از شمارندهٔ مبتنی بر بخش بحرانی استفاده می‌کنیم، اما می‌توانید با عملیات اتمی هم کاری بسیار مشابه انجام دهید.</p>
+<pre><code class="language-rust ignore">use core::cell::UnsafeCell;
+use cortex_m::interrupt;
+
+// Our counter is just a wrapper around UnsafeCell&lt;u32&gt;, which is the heart
+// of interior mutability in Rust. By using interior mutability, we can have
+// COUNTER be `static` instead of `static mut`, but still able to mutate
+// its counter value.
+struct CSCounter(UnsafeCell&lt;u32&gt;);
+
+const CS_COUNTER_INIT: CSCounter = CSCounter(UnsafeCell::new(0));
+
+impl CSCounter {
+    pub fn reset(&amp;self, _cs: &amp;interrupt::CriticalSection) {
+        // By requiring a CriticalSection be passed in, we know we must
+        // be operating inside a CriticalSection, and so can confidently
+        // use this unsafe block (required to call UnsafeCell::get).
+        unsafe { *self.0.get() = 0 };
+    }
+
+    pub fn increment(&amp;self, _cs: &amp;interrupt::CriticalSection) {
+        unsafe { *self.0.get() += 1 };
+    }
+}
+
+// Required to allow static CSCounter. See explanation below.
+unsafe impl Sync for CSCounter {}
+
+// COUNTER is no longer `mut` as it uses interior mutability;
+// therefore it also no longer requires unsafe blocks to access.
+static COUNTER: CSCounter = CS_COUNTER_INIT;
+
+#[entry]
+fn main() -&gt; ! {
+    set_timer_1hz();
+    let mut last_state = false;
+    loop {
+        let state = read_signal_level();
+        if state &amp;&amp; !last_state {
+            // No unsafe here!
+            interrupt::free(|cs| COUNTER.increment(cs));
+        }
+        last_state = state;
+    }
+}
+
+#[interrupt]
+fn timer() {
+    // We do need to enter a critical section here just to obtain a valid
+    // cs token, even though we know no other interrupt could pre-empt
+    // this one.
+    interrupt::free(|cs| COUNTER.reset(cs));
+
+    // We could use unsafe code to generate a fake CriticalSection if we
+    // really wanted to, avoiding the overhead:
+    // let cs = unsafe { interrupt::CriticalSection::new() };
+}</code></pre>
+<p>کد <code>unsafe</code> خود را به درون انتزاعی که با دقت طراحی شده منتقل کرده‌ایم، و اکنون کد برنامهٔ ما هیچ بلوک <code>unsafe</code>ای ندارد.</p>
+<p>این طراحی لازم می‌کند که برنامه یک توکن <code>CriticalSection</code> را بفرستد: این توکن‌ها فقط توسط <code>interrupt::free</code> به‌صورت ایمن تولید می‌شوند، پس با الزام به ارسال یکی از آن‌ها، مطمئن می‌شویم که درون یک بخش بحرانی عمل می‌کنیم، بی‌آنکه واقعاً خودمان قفل را بگیریم. این تضمین به‌صورت ایستا توسط کامپایلر فراهم می‌شود: هیچ سربار زمان اجرایی‌ای برای <code>cs</code> وجود نخواهد داشت. اگر چند شمارنده داشتیم، همه‌شان می‌توانستند همان <code>cs</code> را بگیرند، بدون اینکه به چند بخش بحرانی تو در تو نیاز باشد.</p>
+<p>این موضوع همچنین یک مبحث مهم برای همروندی در Rust را پیش می‌کشد: traitهای <a href="../../nomicon/send-and-sync.html"><code>Send</code> و <code>Sync</code></a>. برای خلاصه‌کردن کتاب Rust، یک نوع وقتی Send است که بتوان آن را با خیال راحت به نخ دیگری منتقل کرد، و وقتی Sync است که بتوان آن را با خیال راحت میان چند نخ به اشتراک گذاشت. در بستر توکار، وقفه‌ها را نخی جدا از کد برنامه در حال اجرا در نظر می‌گیریم، بنابراین متغیرهایی که هم وقفه و هم کد اصلی به آن‌ها دسترسی دارند باید Sync باشند.</p>
+<p>برای بیشتر نوع‌ها در Rust، هر دوی این صفت‌ها به‌طور خودکار توسط کامپایلر برایتان مشتق می‌شوند. اما چون <code>CSCounter</code> یک <a href="https://doc.rust-lang.org/core/cell/struct.UnsafeCell.html"><code>UnsafeCell</code></a> دارد، Sync نیست و بنابراین نمی‌توانستیم یک <code>static CSCounter</code> بسازیم: متغیرهای <code>static</code> <em>باید</em> Sync باشند، چون ممکن است چند نخ به آن‌ها دسترسی داشته باشند.</p>
+<p>برای اینکه به کامپایلر بگوییم مراقب بوده‌ایم و <code>CSCounter</code> در واقع برای اشتراک میان نخ‌ها ایمن است، صفت Sync را به‌صراحت پیاده‌سازی می‌کنیم. مانند استفادهٔ قبلی از بخش‌های بحرانی، این فقط روی پلتفرم‌های تک‌هسته‌ای ایمن است: با چند هسته باید برای تضمین ایمنی به تدابیر بیشتری متوسل شوید.</p>
+<h2 id="mutexes"><a class="header" href="#mutexes">میوتکس‌ها</a></h2>
+<p>یک انتزاع مفید مختص مسئلهٔ شمارندهٔ خودمان ساخته‌ایم، اما انتزاع‌های رایج بسیاری برای همروندی وجود دارند.</p>
+<p>یکی از این <em>اولیه‌های همگام‌سازی</em> (synchronisation primitive) میوتکس (mutex) است که مخفف mutual exclusion، یعنی انحصار متقابل، است. این ساختارها دسترسی انحصاری به یک متغیر، مانند شمارندهٔ ما، را تضمین می‌کنند. یک نخ می‌تواند تلاش کند میوتکس را <em>قفل کند</em> (lock) یا <em>به دست آورد</em> (acquire)، و یا بی‌درنگ موفق می‌شود، یا مسدود می‌شود و منتظر می‌ماند تا قفل به دست آید، یا خطایی برمی‌گرداند مبنی بر اینکه میوتکس قابل قفل شدن نبود. تا زمانی که آن نخ قفل را نگه می‌دارد، به دادهٔ محافظت‌شده دسترسی دارد. وقتی نخ کارش تمام شد، میوتکس را <em>باز می‌کند</em> (unlock) یا <em>رها می‌کند</em> (release) تا نخ دیگری بتواند آن را قفل کند. در Rust معمولاً بازکردن قفل را با صفت <a href="https://doc.rust-lang.org/core/ops/trait.Drop.html"><code>Drop</code></a> پیاده‌سازی می‌کنیم تا اطمینان یابیم هر وقت میوتکس از محدوده خارج شود، همیشه رها می‌شود.</p>
+<p>استفاده از میوتکس با کنترل‌کنندهٔ وقفه‌ها می‌تواند پیچیده باشد: معمولاً قابل‌قبول نیست که کنترل‌کنندهٔ وقفه مسدود شود، و به‌ویژه فاجعه‌بار خواهد بود اگر برای منتظر ماندن تا نخ اصلی قفلی را رها کند مسدود شود، چون در آن صورت دچار <em>بن‌بست</em> (deadlock) می‌شویم (نخ اصلی هرگز قفل را رها نخواهد کرد چون اجرا در کنترل‌کنندهٔ وقفه می‌ماند). بن‌بست ناایمن به حساب نمی‌آید: حتی در Rust ایمن هم ممکن است رخ دهد.</p>
+<p>برای اجتناب کامل از این رفتار، می‌توانیم میوتکسی پیاده‌سازی کنیم که برای قفل شدن به یک بخش بحرانی نیاز دارد، دقیقاً مانند مثال شمارندهٔ خودمان. تا وقتی بخش بحرانی باید به‌اندازهٔ قفل دوام بیاورد، می‌توانیم مطمئن باشیم دسترسی انحصاری به متغیر پیچیده‌شده داریم، بدون اینکه حتی نیاز باشد وضعیت قفل/بازکردن میوتکس را ردیابی کنیم.</p>
+<p>این کار در واقع برایمان در crate به نام <code>cortex_m</code> انجام شده است! می‌توانستیم شمارندهٔ خود را با آن بنویسیم:</p>
+<pre><code class="language-rust ignore">use core::cell::Cell;
+use cortex_m::interrupt::Mutex;
+
+static COUNTER: Mutex&lt;Cell&lt;u32&gt;&gt; = Mutex::new(Cell::new(0));
+
+#[entry]
+fn main() -&gt; ! {
+    set_timer_1hz();
+    let mut last_state = false;
+    loop {
+        let state = read_signal_level();
+        if state &amp;&amp; !last_state {
+            interrupt::free(|cs|
+                COUNTER.borrow(cs).set(COUNTER.borrow(cs).get() + 1));
+        }
+        last_state = state;
+    }
+}
+
+#[interrupt]
+fn timer() {
+    // We still need to enter a critical section here to satisfy the Mutex.
+    interrupt::free(|cs| COUNTER.borrow(cs).set(0));
+}</code></pre>
+<p>اکنون از <a href="https://doc.rust-lang.org/core/cell/struct.Cell.html"><code>Cell</code></a> استفاده می‌کنیم که همراه هم‌خانوادهٔ خود <code>RefCell</code> برای فراهم کردن تغییرپذیری درونی (interior mutability) ایمن به کار می‌رود. پیش‌تر <code>UnsafeCell</code> را دیده‌ایم که لایهٔ پایه‌ای تغییرپذیری درونی در Rust است: به شما اجازه می‌دهد چند ارجاع تغییرپذیر به مقدارش به دست آورید، اما فقط با کد ناایمن. یک <code>Cell</code> مانند <code>UnsafeCell</code> است اما رابطی ایمن فراهم می‌کند: فقط اجازه می‌دهد یک کپی از مقدار فعلی بگیرید یا آن را جایگزین کنید، نه اینکه ارجاعی بگیرید، و چون Sync نیست، نمی‌توان آن را میان نخ‌ها به اشتراک گذاشت. این محدودیت‌ها یعنی استفاده از آن ایمن است، اما نمی‌توانستیم مستقیماً آن را در یک متغیر <code>static</code> به کار ببریم، چون یک <code>static</code> باید Sync باشد.</p>
+<p>پس چرا مثال بالا کار می‌کند؟ <code>Mutex&lt;T&gt;</code> برای هر <code>T</code> ای که Send باشد — مانند یک <code>Cell</code> — صفت Sync را پیاده‌سازی می‌کند. این کار را می‌تواند با ایمنی انجام دهد چون فقط در طول یک بخش بحرانی به محتویاتش دسترسی می‌دهد. بنابراین می‌توانیم یک شمارندهٔ ایمن بدون هیچ کد ناایمنی به دست آوریم!</p>
+<p>این برای نوع‌های ساده مانند <code>u32</code> شمارندهٔ ما عالی است، اما دربارهٔ نوع‌های پیچیده‌تری که Copy نیستند چه؟ یک نمونهٔ بسیار رایج در بستر توکار ساختار دستگاه جانبی است که معمولاً Copy نیست. برای آن می‌توانیم به <code>RefCell</code> روی بیاوریم.</p>
+<h2 id="sharing-peripherals"><a class="header" href="#sharing-peripherals">اشتراک‌گذاری دستگاه‌های جانبی</a></h2>
+<p>crateهای دستگاه که با <code>svd2rust</code> و انتزاع‌های مشابه تولید می‌شوند، با اِعمال این قاعده که در هر زمان فقط یک نمونه از ساختار دستگاه جانبی می‌تواند وجود داشته باشد، دسترسی ایمن به دستگاه‌های جانبی را فراهم می‌کنند. این ایمنی را تضمین می‌کند، اما دسترسی به یک دستگاه جانبی از هر دو نخ اصلی و کنترل‌کنندهٔ وقفه را دشوار می‌کند.</p>
+<p>برای اشتراک‌گذاری ایمن دسترسی به دستگاه جانبی، می‌توانیم از <code>Mutex</code>ای که پیش‌تر دیدیم استفاده کنیم. همچنین باید از <a href="https://doc.rust-lang.org/core/cell/struct.RefCell.html"><code>RefCell</code></a> استفاده کنیم که از یک بررسی در زمان اجرا بهره می‌برد تا مطمئن شود در هر زمان فقط یک ارجاع به دستگاه جانبی داده می‌شود. این سربار بیشتری از <code>Cell</code> ساده دارد، اما چون ارجاع می‌دهیم نه کپی، باید مطمئن باشیم در هر لحظه فقط یکی وجود دارد.</p>
+<p>در نهایت، باید به نحوی هم تدبیری بیندیشیم تا دستگاه جانبی پس از مقداردهی اولیه در کد اصلی به درون متغیر مشترک منتقل شود. برای این کار می‌توانیم از نوع <code>Option</code> استفاده کنیم که با <code>None</code> مقداردهی اولیه می‌شود و بعداً با نمونهٔ دستگاه جانبی تنظیم می‌شود.</p>
+<pre><code class="language-rust ignore">use core::cell::RefCell;
+use cortex_m::interrupt::{self, Mutex};
+use stm32f4::stm32f405;
+
+static MY_GPIO: Mutex&lt;RefCell&lt;Option&lt;stm32f405::GPIOA&gt;&gt;&gt; =
+    Mutex::new(RefCell::new(None));
+
+#[entry]
+fn main() -&gt; ! {
+    // Obtain the peripheral singletons and configure it.
+    // This example is from an svd2rust-generated crate, but
+    // most embedded device crates will be similar.
+    let dp = stm32f405::Peripherals::take().unwrap();
+    let gpioa = &amp;dp.GPIOA;
+
+    // Some sort of configuration function.
+    // Assume it sets PA0 to an input and PA1 to an output.
+    configure_gpio(gpioa);
+
+    // Store the GPIOA in the mutex, moving it.
+    interrupt::free(|cs| MY_GPIO.borrow(cs).replace(Some(dp.GPIOA)));
+    // We can no longer use `gpioa` or `dp.GPIOA`, and instead have to
+    // access it via the mutex.
+
+    // Be careful to enable the interrupt only after setting MY_GPIO:
+    // otherwise the interrupt might fire while it still contains None,
+    // and as-written (with `unwrap()`), it would panic.
+    set_timer_1hz();
+    let mut last_state = false;
+    loop {
+        // We'll now read state as a digital input, via the mutex
+        let state = interrupt::free(|cs| {
+            let gpioa = MY_GPIO.borrow(cs).borrow();
+            gpioa.as_ref().unwrap().idr.read().idr0().bit_is_set()
+        });
+
+        if state &amp;&amp; !last_state {
+            // Set PA1 high if we've seen a rising edge on PA0.
+            interrupt::free(|cs| {
+                let gpioa = MY_GPIO.borrow(cs).borrow();
+                gpioa.as_ref().unwrap().odr.modify(|_, w| w.odr1().set_bit());
+            });
+        }
+        last_state = state;
+    }
+}
+
+#[interrupt]
+fn timer() {
+    // This time in the interrupt we'll just clear PA0.
+    interrupt::free(|cs| {
+        // We can use `unwrap()` because we know the interrupt wasn't enabled
+        // until after MY_GPIO was set; otherwise we should handle the potential
+        // for a None value.
+        let gpioa = MY_GPIO.borrow(cs).borrow();
+        gpioa.as_ref().unwrap().odr.modify(|_, w| w.odr1().clear_bit());
+    });
+}</code></pre>
+<p>این مطلب زیادی برای هضم کردن است، پس بیایید خطوط مهم را بشکافیم.</p>
+<pre><code class="language-rust ignore">static MY_GPIO: Mutex&lt;RefCell&lt;Option&lt;stm32f405::GPIOA&gt;&gt;&gt; =
+    Mutex::new(RefCell::new(None));</code></pre>
+<p>متغیر مشترک ما اکنون یک <code>Mutex</code> است که یک <code>RefCell</code> را در بر می‌گیرد که خود یک <code>Option</code> دارد. <code>Mutex</code> تضمین می‌کند که فقط در طول یک بخش بحرانی دسترسی داریم، و بنابراین متغیر را Sync می‌کند، هرچند یک <code>RefCell</code> ساده Sync نخواهد بود. <code>RefCell</code> تغییرپذیری درونی را همراه با ارجاع‌ها به ما می‌دهد، که برای استفاده از <code>GPIOA</code> خود به آن نیاز خواهیم داشت. <code>Option</code> به ما اجازه می‌دهد این متغیر را با چیزی خالی مقداردهی اولیه کنیم و فقط بعداً متغیر واقعی را در آن منتقل کنیم. نمی‌توانیم به‌صورت ایستا به singleton دستگاه جانبی دسترسی پیدا کنیم، فقط در زمان اجرا می‌توانیم، پس این لازم است.</p>
+<pre><code class="language-rust ignore">interrupt::free(|cs| MY_GPIO.borrow(cs).replace(Some(dp.GPIOA)));</code></pre>
+<p>درون یک بخش بحرانی می‌توانیم <code>borrow()</code> را روی میوتکس صدا بزنیم که ارجاعی به <code>RefCell</code> به ما می‌دهد. سپس <code>replace()</code> را صدا می‌زنیم تا مقدار جدید خود را به درون <code>RefCell</code> منتقل کنیم.</p>
+<pre><code class="language-rust ignore">interrupt::free(|cs| {
+    let gpioa = MY_GPIO.borrow(cs).borrow();
+    gpioa.as_ref().unwrap().odr.modify(|_, w| w.odr1().set_bit());
+});</code></pre>
+<p>سرانجام، از <code>MY_GPIO</code> به شیوه‌ای ایمن و همروند استفاده می‌کنیم. بخش بحرانی طبق معمول مانع رخ دادن وقفه می‌شود و به ما اجازه می‌دهد میوتکس را قرض بگیریم. سپس <code>RefCell</code> یک <code>&amp;Option&lt;GPIOA&gt;</code> به ما می‌دهد و پیگیری می‌کند که چه مدت قرض‌گرفته‌شده می‌ماند — وقتی آن ارجاع از محدوده خارج شود، <code>RefCell</code> به‌روز می‌شود تا نشان دهد دیگر قرض گرفته نشده است.</p>
+<p>چون نمی‌توانیم <code>GPIOA</code> را از درون <code>&amp;Option</code> بیرون بکشیم، باید آن را با <code>as_ref()</code> به یک <code>&amp;Option&lt;&amp;GPIOA&gt;</code> تبدیل کنیم، که سرانجام می‌توانیم <code>unwrap()</code> کنیم تا <code>&amp;GPIOA</code>ای را به دست آوریم که به ما اجازه می‌دهد دستگاه جانبی را تغییر دهیم.</p>
+<p>اگر به یک ارجاع تغییرپذیر به یک منبع مشترک نیاز داشته باشیم، باید به‌جای آن‌ها از <code>borrow_mut</code> و <code>deref_mut</code> استفاده کرد. کد زیر نمونه‌ای را با استفاده از تایمر TIM2 نشان می‌دهد.</p>
+<pre><code class="language-rust ignore">use core::cell::RefCell;
+use core::ops::DerefMut;
+use cortex_m::interrupt::{self, Mutex};
+use cortex_m::asm::wfi;
+use stm32f4::stm32f405;
+
+static G_TIM: Mutex&lt;RefCell&lt;Option&lt;Timer&lt;stm32::TIM2&gt;&gt;&gt;&gt; =
+	Mutex::new(RefCell::new(None));
+
+#[entry]
+fn main() -&gt; ! {
+    let mut cp = cm::Peripherals::take().unwrap();
+    let dp = stm32f405::Peripherals::take().unwrap();
+
+    // Some sort of timer configuration function.
+    // Assume it configures the TIM2 timer, its NVIC interrupt,
+    // and finally starts the timer.
+    let tim = configure_timer_interrupt(&amp;mut cp, dp);
+
+    interrupt::free(|cs| {
+        G_TIM.borrow(cs).replace(Some(tim));
+    });
+
+    loop {
+        wfi();
+    }
+}
+
+#[interrupt]
+fn timer() {
+    interrupt::free(|cs| {
+        if let Some(ref mut tim)) =  G_TIM.borrow(cs).borrow_mut().deref_mut() {
+            tim.start(1.hz());
+        }
+    });
+}
+</code></pre>
+<p>اوف! این ایمن است، اما کمی هم دست‌وپاگیر است. آیا کار دیگری هست که بتوانیم بکنیم؟</p>
+<h2 id="rtic"><a class="header" href="#rtic">RTIC</a></h2>
+<p>یک جایگزین <a href="https://rtic.rs/2/book/en">چارچوب RTIC</a> است که مخفف Real Time Interrupt-driven Concurrency (همروندی بلادرنگ مبتنی بر وقفه) است. این چارچوب اولویت‌های ایستا را اِعمال می‌کند و دسترسی‌ها به متغیرهای <code>static mut</code> («منابع») را ردیابی می‌کند تا به‌صورت ایستا تضمین کند منابع مشترک همیشه به‌طور ایمن در دسترس قرار می‌گیرند، بدون اینکه سربار ورود دائم به بخش‌های بحرانی و استفاده از شمارش ارجاع (مانند <code>RefCell</code>) لازم باشد. این رویکرد مزایای متعددی دارد، از جمله تضمین نبود بن‌بست و سربار بسیار کم زمانی و حافظه‌ای.</p>
+<p>RTIC همراه با یک اجراکنندهٔ ناهمگام (asynchronous executor) عرضه می‌شود، پس وظایف نرم‌افزاری شما توابع <code>async</code> هستند که در آن‌ها می‌توانید افزون بر APIهای همگام معمولی از APIهای <code>async</code> هم استفاده کنید.</p>
+<p>این چارچوب قابلیت‌های دیگری هم دارد، مانند ارسال پیام، که نیاز به حالت مشترک صریح را کاهش می‌دهد، و امکان زمان‌بندی اجرای وظایف در زمانی مشخص، که می‌توان از آن برای پیاده‌سازی وظایف دوره‌ای استفاده کرد. برای اطلاعات بیشتر <a href="https://rtic.rs">مستندات</a> را ببینید!</p>
+<h2 id="embassy"><a class="header" href="#embassy">Embassy</a></h2>
+<p>Embassy اکوسیستمی از کتابخانه‌هاست که بر استفاده از نحو <code>async</code> / <code>await</code> موجود در Rust برای همروندی تمرکز دارد. هستهٔ embassy <a href="https://docs.rs/embassy-executor/latest/embassy_executor/">اجراکنندهٔ ناهمگام</a> آن است که از بیشتر معماری‌های رایج MCU پشتیبانی می‌کند.</p>
+<p>embassy همچنین رویکرد «باتری‌ها همراه آن است» را دارد و مؤلفه‌های دیگر فراوانی عرضه می‌کند، برای مثال:</p>
+<ul>
+<li><a href="https://docs.rs/embassy-time/latest/embassy_time/">کتابخانهٔ زمان</a></li>
+<li>کتابخانه‌های HAL گوناگون که پشتیبانی از کتابخانهٔ زمان را هم فراهم می‌کنند.</li>
+<li><a href="https://docs.embassy.dev/embassy-sync/git/default/index.html">embassy-sync</a> برای اولیه‌های همگام‌سازی</li>
+</ul>
+<p>برای اطلاعات بیشتر می‌توانید <a href="https://embassy.dev/">وب‌سایت</a> و <a href="https://embassy.dev/book/">کتاب</a> آن را ببینید.</p>
+<h2 id="real-time-operating-systems"><a class="header" href="#real-time-operating-systems">سیستم‌عامل‌های بلادرنگ</a></h2>
+<p>مدل رایج دیگری برای همروندی در سیستم‌های توکار، سیستم‌عامل بلادرنگ (RTOS) است. اگرچه در حال حاضر در Rust کمتر کاویده شده‌اند، در توسعهٔ توکار سنتی به‌طور گسترده به کار می‌روند. نمونه‌های متن‌باز شامل <a href="https://freertos.org/">FreeRTOS</a> و <a href="http://chibios.org/">ChibiOS</a> هستند. این RTOSها از اجرای چند نخ برنامه پشتیبانی می‌کنند که CPU میان آن‌ها جابه‌جا می‌شود، یا وقتی نخ‌ها کنترل را واگذار می‌کنند (چندوظیفگی همکارانه یا cooperative multitasking) یا بر پایهٔ یک تایمر منظم یا وقفه‌ها (چندوظیفگی پیش‌دستانه یا preemptive multitasking). RTOS معمولاً میوتکس (mutex) و دیگر ابزارهای پایهٔ همگام‌سازی (synchronisation primitives) را فراهم می‌کند و اغلب با قابلیت‌های سخت‌افزاری مانند موتورهای DMA همکاری می‌کند.</p>
+<p>در زمان نگارش، نمونه‌های چندانی از RTOS در Rust نیست که به آن‌ها اشاره کنیم، اما این حوزه جذاب است، پس آن را زیر نظر داشته باشید!</p>
+<h2 id="multiple-cores"><a class="header" href="#multiple-cores">چندهسته‌ای</a></h2>
+<p>داشتن دو یا چند هسته در پردازنده‌های توکار رایج‌تر می‌شود، که لایهٔ پیچیدگی اضافه‌ای به همروندی می‌افزاید. همهٔ مثال‌هایی که از بخش بحرانی استفاده می‌کنند (از جمله <code>cortex_m::interrupt::Mutex</code>) فرض می‌کنند تنها نخ اجرایی دیگر، نخ وقفه است، اما در یک سیستم چندهسته‌ای دیگر چنین نیست. در عوض، به اولیه‌های همگام‌سازی‌ای نیاز خواهیم داشت که برای چند هسته طراحی شده‌اند (که SMP، مخفف symmetric multi-processing یا چندپردازشی متقارن، هم نامیده می‌شود).</p>
+<p>این‌ها معمولاً از همان دستورهای اتمی‌ای استفاده می‌کنند که پیش‌تر دیدیم، چون سیستم پردازشی تضمین می‌کند که اتمی بودن در همهٔ هسته‌ها حفظ شود.</p>
+<p>پوشش جزئیات این موضوعات در حال حاضر خارج از دامنهٔ این کتاب است، اما الگوهای کلی همان الگوهای حالت تک‌هسته‌ای هستند.</p><nav class="page-nav"><a href="../../embedded/portability/index.html">→ قابلیت حمل</a><a href="../../embedded/collections/index.html">مجموعه‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

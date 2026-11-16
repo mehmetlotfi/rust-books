@@ -1,0 +1,298 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>نوع Slice — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch04-03-slices"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="the-slice-type"><a class="header" href="#the-slice-type">نوع Slice</a></h2>
+<p><em>Slices</em> به شما اجازه می‌دهند که به یک دنباله‌ی متوالی از عناصر در یک <a href="ch08-00-common-collections.html">مجموعه</a> ارجاع دهید. اسلایس نوعی ارجاع است، بنابراین مالکیت ندارد.</p>
+<p>یک مسئله‌ی کوچک برنامه‌نویسی داریم: تابعی بنویسید که یک رشته شامل کلمات جداشده با فاصله دریافت کند و اولین کلمه‌ای را که در آن رشته پیدا می‌کند بازگرداند. اگر تابع فاصله‌ای در رشته نیابد، کل رشته یک کلمه محسوب می‌شود و باید کل رشته بازگردانده شود.</p>
+<blockquote>
+<p>نکته: برای معرفی اسلایس‌های رشته‌ای در این بخش، فرض بر این است که تنها با ASCII سروکار داریم؛ بحث جامع‌تر درباره‌ی مدیریت UTF-8 در بخش <a href="ch08-02-strings.html#storing-utf-8-encoded-text-with-strings">«ذخیره متن کدگذاری‌شده UTF-8 با رشته‌ها»</a> در فصل ۸ ارائه شده است.</p>
+</blockquote>
+<p>بیایید بررسی کنیم چگونه امضای این تابع را بدون استفاده از اسلایس‌ها می‌نویسیم تا مشکل‌هایی که اسلایس‌ها حل می‌کنند را درک کنیم:</p>
+<pre><code class="language-rust ignore">fn first_word(s: &amp;String) -&gt; ?</code></pre>
+<p>تابع <code>first_word</code> یک پارامتر از نوع <code>&amp;String</code> دریافت می‌کند.<br> ما نیازی به مالکیت نداریم، پس این کار درست است.<br> (در Rust ایدئومیک، توابع معمولاً مالکیت آرگومان‌های<br> خود را نمی‌گیرند مگر اینکه واقعاً لازم باشد، و دلایل<br> این موضوع با پیش رفتن توضیح داده خواهد شد.) اما<br> چه چیزی باید بازگردانیم؟ در واقع راهی برای اشاره به<br> <em>بخشی</em> از رشته نداریم. با این حال، می‌توانیم اندیس<br> پایان کلمه را که با یک فاصله مشخص می‌شود، بازگردانیم.<br> بیایید این روش را امتحان کنیم، همان‌طور که در فهرست 4-7<br> نشان داده شده است.</p>
+<figure class="listing" id="listing-4-7">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn first_word(s: &amp;String) -&gt; usize {
+    let bytes = s.as_bytes();
+
+    for (i, &amp;item) in bytes.iter().enumerate() {
+        if item == b' ' {
+            return i;
+        }
+    }
+
+    s.len()
+}
+<span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+<figcaption><a href="#listing-4-7">لیست ۴-۷</a>: تابع &lt;code&gt;&lt;/x-listing&gt;first_word&lt;/code&gt; که یک مقدار شاخص بایت در &lt;code&gt;String&lt;/code&gt; پارامتر را برمی‌گرداند</figcaption>
+</figure>
+<p>چون باید <code>String</code> را عنصر به عنصر پیمایش کنیم و بررسی کنیم که آیا یک مقدار فاصله است یا نه، <code>String</code> خود را با استفاده از متد <code>as_bytes</code> به آرایه‌ای از بایت‌ها تبدیل می‌کنیم.</p>
+<pre><code class="language-rust ignore"><span class="boring">fn first_word(s: &amp;String) -&gt; usize {
+</span>    let bytes = s.as_bytes();
+<span class="boring">
+</span><span class="boring">    for (i, &amp;item) in bytes.iter().enumerate() {
+</span><span class="boring">        if item == b' ' {
+</span><span class="boring">            return i;
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    s.len()
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+<p>در مرحله بعد، یک iterator روی آرایه بایت‌ها با استفاده از متد <code>iter</code> ایجاد می‌کنیم:</p>
+<pre><code class="language-rust ignore"><span class="boring">fn first_word(s: &amp;String) -&gt; usize {
+</span><span class="boring">    let bytes = s.as_bytes();
+</span><span class="boring">
+</span>    for (i, &amp;item) in bytes.iter().enumerate() {
+<span class="boring">        if item == b' ' {
+</span><span class="boring">            return i;
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    s.len()
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+<p>ما در <a href="ch13-02-iterators.html">فصل 13</a><!-- ignore --> بیشتر درباره iterators بحث خواهیم کرد. فعلاً بدانید که <code>iter</code> یک متد است که هر عنصر در یک مجموعه را برمی‌گرداند و <code>enumerate</code> نتیجه <code>iter</code> را می‌پیچد و هر عنصر را به عنوان بخشی از یک tuple برمی‌گرداند. اولین عنصر tuple برگردانده شده از <code>enumerate</code> شاخص است و دومین عنصر ارجاع به عنصر است. این کار کمی راحت‌تر از محاسبه شاخص به صورت دستی است.</p>
+<p>زیرا متد <code>enumerate</code> یک tuple برمی‌گرداند، می‌توانیم از الگوها برای جدا کردن این tuple استفاده کنیم. ما در <a href="ch06-02-match.html#patterns-that-bind-to-values">فصل 6</a><!-- ignore --> بیشتر درباره الگوها صحبت خواهیم کرد. در حلقه <code>for</code>، الگویی مشخص می‌کنیم که <code>i</code> برای شاخص در tuple و <code>&amp;item</code> برای بایت منفرد در tuple باشد. زیرا ما یک ارجاع به عنصر از <code>.iter().enumerate()</code> دریافت می‌کنیم، از <code>&amp;</code> در الگو استفاده می‌کنیم.</p>
+<p>داخل حلقه <code>for</code>، به دنبال بایتی که نماینده فاصله باشد می‌گردیم با استفاده از نحوه نوشتن بایت به صورت literale. اگر یک فاصله پیدا کردیم، موقعیت را برمی‌گردانیم. در غیر این صورت، طول رشته را با استفاده از <code>s.len()</code> برمی‌گردانیم.</p>
+<pre><code class="language-rust ignore"><span class="boring">fn first_word(s: &amp;String) -&gt; usize {
+</span><span class="boring">    let bytes = s.as_bytes();
+</span><span class="boring">
+</span><span class="boring">    for (i, &amp;item) in bytes.iter().enumerate() {
+</span>        if item == b' ' {
+            return i;
+        }
+    }
+
+    s.len()
+<span class="boring">}
+</span><span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+<p>اکنون راهی برای یافتن شاخص انتهای اولین کلمه در رشته داریم، اما مشکلی وجود دارد. ما یک <code>usize</code> به تنهایی برمی‌گردانیم، اما این تنها یک عدد معنادار در زمینه <code>&amp;String</code> است. به عبارت دیگر، زیرا این مقدار از <code>String</code> جدا است، هیچ تضمینی وجود ندارد که در آینده همچنان معتبر باشد. برنامه‌ای که در لیستینگ 4-8 استفاده می‌شود و از تابع <code>first_word</code> از لیستینگ 4-7 استفاده می‌کند را در نظر بگیرید.</p>
+<figure class="listing" id="listing-4-8">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">fn first_word(s: &amp;String) -&gt; usize {
+</span><span class="boring">    let bytes = s.as_bytes();
+</span><span class="boring">
+</span><span class="boring">    for (i, &amp;item) in bytes.iter().enumerate() {
+</span><span class="boring">        if item == b' ' {
+</span><span class="boring">            return i;
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    s.len()
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn main() {
+    let mut s = String::from("hello world");
+
+    let word = first_word(&amp;s); // word will get the value 5
+
+    s.clear(); // this empties the String, making it equal to ""
+
+    // word still has the value 5 here, but s no longer has any content that we
+    // could meaningfully use with the value 5, so word is now totally invalid!
+}</code></pre>
+<figcaption><a href="#listing-4-8">لیست ۴-۸</a>: ذخیره نتیجه از فراخوانی تابع &lt;code&gt;&lt;/x-listing&gt;first_word&lt;/code&gt; و سپس تغییر محتوای &lt;code&gt;String&lt;/code&gt;</figcaption>
+</figure>
+<p>این برنامه بدون هیچ خطایی کامپایل می‌شود و حتی اگر <code>word</code> را بعد از فراخوانی <code>s.clear()</code> استفاده کنیم، همچنان درست کار خواهد کرد. زیرا <code>word</code> اصلاً به حالت <code>s</code> متصل نیست، <code>word</code> همچنان مقدار <code>5</code> را دارد. ما می‌توانیم از مقدار <code>5</code> همراه با متغیر <code>s</code> استفاده کنیم تا تلاش کنیم اولین کلمه را استخراج کنیم، اما این یک باگ خواهد بود زیرا محتوای <code>s</code> از زمانی که <code>5</code> را در <code>word</code> ذخیره کردیم، تغییر کرده است.</p>
+<p>نگران هماهنگ نگه داشتن شاخص در <code>word</code> با داده‌های موجود در <code>s</code> بودن، خسته‌کننده و مستعد خطاست! مدیریت این شاخص‌ها حتی شکننده‌تر می‌شود اگر بخواهیم یک تابع <code>second_word</code> بنویسیم. امضای آن باید به این صورت باشد:</p>
+<pre><code class="language-rust ignore">fn second_word(s: &amp;String) -&gt; (usize, usize) {</code></pre>
+<p>حالا ما یک شاخص شروع و یک شاخص پایان را دنبال می‌کنیم و مقادیر بیشتری داریم که از داده‌ها در یک وضعیت خاص محاسبه شده‌اند اما اصلاً به آن وضعیت مرتبط نیستند. ما سه متغیر نامرتبط داریم که باید همگام نگه داشته شوند.</p>
+<p>خوشبختانه، Rust یک راه‌حل برای این مشکل دارد: برش‌های رشته‌ای.</p>
+<h3 id="string-slices"><a class="header" href="#string-slices">برش‌های رشته‌ای</a></h3>
+<p><em>string slice</em> یک ارجاع به دنباله‌ای متوالی از عناصر یک <code>String</code> است و به این صورت نمایش داده می‌شود:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let s = String::from("hello world");
+
+    let hello = &amp;s[0..5];
+    let world = &amp;s[6..11];
+<span class="boring">}</span></code></pre>
+<p><code>hello</code> به‌جای ارجاع به کل <code>String</code>، ارجاعی به بخشی از <code>String</code> است که با قطعهٔ اضافی <code>[0..5]</code> مشخص شده است. ما slice‌ها را با استفاده از یک بازه داخل کروشه و با مشخص‌کردن <code>[starting_index..ending_index]</code> می‌سازیم، که در آن <em><code>starting_index</code></em> اولین موقعیت در slice و <em><code>ending_index</code></em> یکی بیشتر از آخرین موقعیت در slice است. در داخل، ساختار داده‌ای slice موقعیت شروع و طول slice را ذخیره می‌کند، که برابر است با <em><code>ending_index</code></em> منهای <em><code>starting_index</code></em>. بنابراین در مورد <code>let world = &amp;s[6..11];</code>، مقدار <code>world</code> یک slice خواهد بود که شامل یک اشاره‌گر به بایتِ شاخص ۶ از <code>s</code> و با طول <code>5</code> است.</p>
+<p>شکل 4-7 این موضوع را در یک نمودار نشان می‌دهد.</p>
+<img alt="سه جدول: جدولی که داده‌های پشته‌ای s را نشان می‌دهد، که به بایت در شاخص 0 در یک جدول از داده‌های رشته &quot;hello world&quot; در heap اشاره می‌کند. جدول سوم داده‌های پشته‌ای برش world را نشان می‌دهد که دارای مقدار طول 5 است و به بایت 6 از جدول داده‌های heap اشاره می‌کند." src="img/trpl04-07.svg" class="center" style="width: 50%;">
+<p><span class="caption">شکل 4-7: برش رشته‌ای اشاره به بخشی از یک <code>String</code></span></p>
+<p>با استفاده از نحوی محدوده <code>..</code> در Rust، اگر می‌خواهید از شاخص 0 شروع کنید، می‌توانید مقدار قبل از دو نقطه را حذف کنید. به عبارت دیگر، این دو معادل هستند:</p>
+<pre><code class="language-rust">let s = String::from("hello");
+
+let slice = &amp;s[0..2];
+let slice = &amp;s[..2];</code></pre>
+<p>به همین ترتیب، اگر برش شما شامل آخرین بایت <code>String</code> باشد، می‌توانید عدد پایانی را حذف کنید. این به این معناست که این دو معادل هستند:</p>
+<pre><code class="language-rust">let s = String::from("hello");
+
+let len = s.len();
+
+let slice = &amp;s[3..len];
+let slice = &amp;s[3..];</code></pre>
+<p>شما همچنین می‌توانید هر دو مقدار را حذف کنید تا یک برش از کل رشته بگیرید. بنابراین این دو معادل هستند:</p>
+<pre><code class="language-rust">let s = String::from("hello");
+
+let len = s.len();
+
+let slice = &amp;s[0..len];
+let slice = &amp;s[..];</code></pre>
+<blockquote>
+<p>توجه: اندیس‌های بازه‌ی slice برای <code>String</code> باید در مرزهای معتبر کاراکترهای UTF-8 قرار داشته باشند. اگر سعی کنید یک slice از رشته را در میانه‌ی یک کاراکتر چندبایتی ایجاد کنید، برنامه‌ی شما با خطا متوقف خواهد شد.</p>
+</blockquote>
+<p>با در نظر گرفتن این اطلاعات، بیایید <code>first_word</code> را بازنویسی کنیم تا یک برش برگرداند. نوعی که نشان‌دهنده “برش رشته‌ای” است به صورت <code>&amp;str</code> نوشته می‌شود:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn first_word(s: &amp;String) -&gt; &amp;str {
+    let bytes = s.as_bytes();
+
+    for (i, &amp;item) in bytes.iter().enumerate() {
+        if item == b' ' {
+            return &amp;s[0..i];
+        }
+    }
+
+    &amp;s[..]
+}
+<span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+</figure>
+<p>ما شاخص پایان کلمه را به همان روشی که در لیستینگ 4-7 انجام دادیم، پیدا می‌کنیم، یعنی با جستجوی اولین فضای خالی. وقتی یک فضای خالی پیدا می‌کنیم، یک برش رشته‌ای با استفاده از شروع رشته و شاخص فضای خالی به‌عنوان شاخص‌های شروع و پایان برمی‌گردانیم.</p>
+<p>اکنون وقتی <code>first_word</code> را فراخوانی می‌کنیم، یک مقدار واحد دریافت می‌کنیم که به داده‌های پایه متصل است. این مقدار شامل یک ارجاع به نقطه شروع برش و تعداد عناصر موجود در برش است.</p>
+<p>بازگرداندن یک برش برای یک تابع <code>second_word</code> نیز کار می‌کند:</p>
+<pre><code class="language-rust ignore">fn second_word(s: &amp;String) -&gt; &amp;str {</code></pre>
+<p>اکنون یک API ساده داریم که بسیار سخت‌تر است اشتباه شود زیرا کامپایلر اطمینان حاصل می‌کند که ارجاع‌ها به داخل <code>String</code> معتبر باقی می‌مانند. به یاد دارید خطای منطقی برنامه در لیستینگ 4-8، وقتی شاخص انتهای اولین کلمه را به دست آوردیم اما سپس رشته را پاک کردیم، بنابراین شاخص ما نامعتبر شد؟ آن کد منطقی نادرست بود اما هیچ خطای فوری نشان نمی‌داد. مشکلات بعداً وقتی تلاش می‌کردیم از شاخص اولین کلمه با یک رشته خالی استفاده کنیم، ظاهر می‌شد. برش‌ها این خطا را غیرممکن می‌کنند و به ما اطلاع می‌دهند که مشکلی در کد ما وجود دارد خیلی زودتر. استفاده از نسخه برش <code>first_word</code> یک خطای زمان کامپایل ایجاد می‌کند:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">fn first_word(s: &amp;String) -&gt; &amp;str {
+</span><span class="boring">    let bytes = s.as_bytes();
+</span><span class="boring">
+</span><span class="boring">    for (i, &amp;item) in bytes.iter().enumerate() {
+</span><span class="boring">        if item == b' ' {
+</span><span class="boring">            return &amp;s[0..i];
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    &amp;s[..]
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn main() {
+    let mut s = String::from("hello world");
+
+    let word = first_word(&amp;s);
+
+    s.clear(); // error!
+
+    println!("the first word is: {word}");
+}</code></pre>
+</figure>
+<p>این هم خطای کامپایلر:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling ownership v0.1.0 (file:///projects/ownership)
+error[E0502]: cannot borrow `s` as mutable because it is also borrowed as immutable
+  --&gt; src/main.rs:18:5
+   |
+16 |     let word = first_word(&amp;s);
+   |                           -- immutable borrow occurs here
+17 |
+18 |     s.clear(); // error!
+   |     ^^^^^^^^^ mutable borrow occurs here
+19 |
+20 |     println!("the first word is: {word}");
+   |                                   ---- immutable borrow later used here
+
+For more information about this error, try `rustc --explain E0502`.
+error: could not compile `ownership` (bin "ownership") due to 1 previous error
+</code></pre>
+<p>به یاد بیاورید از قوانین وام گرفتن که اگر ما یک ارجاع غیرقابل تغییر به چیزی داشته باشیم، نمی‌توانیم یک ارجاع قابل تغییر نیز بگیریم. از آنجایی که <code>clear</code> نیاز دارد که <code>String</code> را کوتاه کند، نیاز دارد یک ارجاع قابل تغییر بگیرد. <code>println!</code> بعد از فراخوانی به <code>clear</code> از ارجاع در <code>word</code> استفاده می‌کند، بنابراین ارجاع غیرقابل تغییر باید هنوز در آن نقطه فعال باشد. Rust ارجاع قابل تغییر در <code>clear</code> و ارجاع غیرقابل تغییر در <code>word</code> را از همزمان وجود داشتن ممنوع می‌کند و کامپایل شکست می‌خورد. نه تنها Rust API ما را آسان‌تر کرده، بلکه یک دسته کامل از خطاها را در زمان کامپایل حذف کرده است!</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="string-literals-are-slices"></a></p>
+<h4 id="string-literals-as-slices"><a class="header" href="#string-literals-as-slices">رشته‌های متنی به عنوان برش</a></h4>
+<p>به یاد بیاورید که ما درباره ذخیره رشته‌های متنی در داخل باینری صحبت کردیم. اکنون که درباره برش‌ها می‌دانیم، می‌توانیم رشته‌های متنی را به درستی درک کنیم:</p>
+<pre><code class="language-rust">let s = "Hello, world!";</code></pre>
+<p>نوع <code>s</code> در اینجا <code>&amp;str</code> است: این یک برش است که به یک نقطه خاص از باینری اشاره می‌کند. این همچنین دلیل غیرقابل تغییر بودن رشته‌های متنی است؛ <code>&amp;str</code> یک ارجاع غیرقابل تغییر است.</p>
+<h4 id="string-slices-as-parameters"><a class="header" href="#string-slices-as-parameters">برش‌های رشته‌ای به عنوان پارامترها</a></h4>
+<p>دانستن اینکه می‌توانید برش‌هایی از رشته‌های متنی و مقادیر <code>String</code> بگیرید ما را به یک بهبود دیگر در <code>first_word</code> می‌رساند، و آن امضای آن است:</p>
+<pre><code class="language-rust ignore">fn first_word(s: &amp;String) -&gt; &amp;str {</code></pre>
+<p>یک برنامه‌نویس باتجربه‌تر Rust امضای نشان داده شده در لیستینگ 4-9 را می‌نویسد زیرا این اجازه را می‌دهد که از همان تابع برای مقادیر <code>&amp;String</code> و <code>&amp;str</code> استفاده کنیم.</p>
+<figure class="listing" id="listing-4-9">
+<pre><code class="language-rust ignore">fn first_word(s: &amp;str) -&gt; &amp;str {
+<span class="boring">    let bytes = s.as_bytes();
+</span><span class="boring">
+</span><span class="boring">    for (i, &amp;item) in bytes.iter().enumerate() {
+</span><span class="boring">        if item == b' ' {
+</span><span class="boring">            return &amp;s[0..i];
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    &amp;s[..]
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let my_string = String::from("hello world");
+</span><span class="boring">
+</span><span class="boring">    // `first_word` works on slices of `String`s, whether partial or whole.
+</span><span class="boring">    let word = first_word(&amp;my_string[0..6]);
+</span><span class="boring">    let word = first_word(&amp;my_string[..]);
+</span><span class="boring">    // `first_word` also works on references to `String`s, which are equivalent
+</span><span class="boring">    // to whole slices of `String`s.
+</span><span class="boring">    let word = first_word(&amp;my_string);
+</span><span class="boring">
+</span><span class="boring">    let my_string_literal = "hello world";
+</span><span class="boring">
+</span><span class="boring">    // `first_word` works on slices of string literals, whether partial or
+</span><span class="boring">    // whole.
+</span><span class="boring">    let word = first_word(&amp;my_string_literal[0..6]);
+</span><span class="boring">    let word = first_word(&amp;my_string_literal[..]);
+</span><span class="boring">
+</span><span class="boring">    // Because string literals *are* string slices already,
+</span><span class="boring">    // this works too, without the slice syntax!
+</span><span class="boring">    let word = first_word(my_string_literal);
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-4-9">لیست ۴-۹</a>: بهبود تابع &lt;code&gt;&lt;/x-listing&gt;first_word&lt;/code&gt; با استفاده از برش رشته‌ای برای نوع پارامتر &lt;code&gt;s&lt;/code&gt;</figcaption>
+</figure>
+<p>اگر ما یک برش رشته‌ای داشته باشیم، می‌توانیم آن را مستقیماً ارسال کنیم. اگر یک <code>String</code> داشته باشیم، می‌توانیم یک برش از <code>String</code> یا یک ارجاع به <code>String</code> ارسال کنیم. این انعطاف‌پذیری از ویژگی <em>دریف کوئرسین</em> استفاده می‌کند، که در بخش <a href="ch15-02-deref.html#using-deref-coercions-in-functions-and-methods">“Implicit Deref Coercions with Functions and Methods”</a><!--ignore--> در فصل 15 به آن خواهیم پرداخت.</p>
+<p>تعریف یک تابع برای گرفتن یک برش رشته‌ای به جای یک ارجاع به <code>String</code>، API ما را عمومی‌تر و مفیدتر می‌کند بدون اینکه هیچ کاربردی از دست برود:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">fn first_word(s: &amp;str) -&gt; &amp;str {
+</span><span class="boring">    let bytes = s.as_bytes();
+</span><span class="boring">
+</span><span class="boring">    for (i, &amp;item) in bytes.iter().enumerate() {
+</span><span class="boring">        if item == b' ' {
+</span><span class="boring">            return &amp;s[0..i];
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    &amp;s[..]
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn main() {
+    let my_string = String::from("hello world");
+
+    // `first_word` works on slices of `String`s, whether partial or whole.
+    let word = first_word(&amp;my_string[0..6]);
+    let word = first_word(&amp;my_string[..]);
+    // `first_word` also works on references to `String`s, which are equivalent
+    // to whole slices of `String`s.
+    let word = first_word(&amp;my_string);
+
+    let my_string_literal = "hello world";
+
+    // `first_word` works on slices of string literals, whether partial or
+    // whole.
+    let word = first_word(&amp;my_string_literal[0..6]);
+    let word = first_word(&amp;my_string_literal[..]);
+
+    // Because string literals *are* string slices already,
+    // this works too, without the slice syntax!
+    let word = first_word(my_string_literal);
+}</code></pre>
+</figure>
+<h3 id="other-slices"><a class="header" href="#other-slices">برش‌های دیگر</a></h3>
+<p>برش‌های رشته‌ای، همانطور که تصور می‌کنید، مختص رشته‌ها هستند. اما یک نوع برش عمومی‌تر نیز وجود دارد. این آرایه را در نظر بگیرید:</p>
+<pre><code class="language-rust">let a = [1, 2, 3, 4, 5];</code></pre>
+<p>همانطور که ممکن است بخواهیم به بخشی از یک رشته ارجاع دهیم، ممکن است بخواهیم به بخشی از یک آرایه نیز ارجاع دهیم. این کار را می‌توانیم به این شکل انجام دهیم:</p>
+<pre><code class="language-rust">let a = [1, 2, 3, 4, 5];
+
+let slice = &amp;a[1..3];
+
+assert_eq!(slice, &amp;[2, 3]);</code></pre>
+<p>این برش دارای نوع <code>&amp;[i32]</code> است. این دقیقاً همانطور که برش‌های رشته‌ای کار می‌کنند، با ذخیره یک ارجاع به اولین عنصر و یک طول عمل می‌کند. شما از این نوع برش برای انواع دیگر مجموعه‌ها نیز استفاده خواهید کرد. ما این مجموعه‌ها را به تفصیل وقتی درباره وکتورها در فصل 8 صحبت کنیم، بررسی خواهیم کرد.</p>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<p>مفاهیم مالکیت، وام گرفتن، و برش‌ها، ایمنی حافظه را در برنامه‌های Rust در زمان کامپایل تضمین می‌کنند. زبان Rust به شما همان کنترلی بر استفاده از حافظه می‌دهد که سایر زبان‌های برنامه‌نویسی سیستم ارائه می‌دهند، اما این واقعیت که مالک داده به طور خودکار آن داده را هنگامی که مالک از حوزه خارج می‌شود، پاکسازی می‌کند، به این معنی است که نیازی به نوشتن و اشکال‌زدایی کد اضافی برای دستیابی به این کنترل ندارید.</p>
+<p>مالکیت بر نحوه عملکرد بسیاری از بخش‌های دیگر Rust تأثیر می‌گذارد، بنابراین در طول بقیه کتاب این مفاهیم را بیشتر بررسی خواهیم کرد. بیایید به فصل 5 برویم و نگاهی به گروه‌بندی قطعات داده در یک <code>struct</code> بیندازیم.</p><nav class="page-nav"><a href="ch04-02-references-and-borrowing.html">→ ارجاع‌ها و قرض‌گیری</a><a href="ch05-00-structs.html">استفاده از ساختارها برای سازمان‌دهی داده‌های مرتبط ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

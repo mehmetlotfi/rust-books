@@ -1,0 +1,27 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>سازگاری — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="design-patterns/hal/interoperability"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="interoperability"><a class="header" href="#interoperability">قابلیت همکاری</a></h1>
+<p><a id="c-free"></a></p>
+<h2 id="wrapper-types-provide-a-destructor-method-c-free"><a class="header" href="#wrapper-types-provide-a-destructor-method-c-free">نوع‌های پوششی یک متد مخرب فراهم می‌کنند (C-FREE)</a></h2>
+<p>هر نوع پوششی غیر <code>Copy</code> که HAL فراهم می‌کند باید یک متد <code>free</code> داشته باشد که پوشش را مصرف کند و دستگاه جانبی خام (و احتمالاً اشیای دیگر) را که از آن ساخته شده بود، پس بدهد.</p>
+<p>این متد باید در صورت لزوم دستگاه جانبی را خاموش و بازنشانی کند. فراخوانی <code>new</code> با دستگاه جانبی خامی که <code>free</code> برگردانده است نباید به‌خاطر وضعیت غیرمنتظرهٔ دستگاه جانبی شکست بخورد.</p>
+<p>اگر نوع HAL برای ساخته شدن به اشیای غیر <code>Copy</code> دیگری نیاز دارد (برای نمونه پایه‌های I/O)، هر یک از این اشیا نیز باید توسط <code>free</code> آزاد و برگردانده شود. در آن صورت <code>free</code> باید یک چندتایی (tuple) برگرداند.</p>
+<p>برای مثال:</p>
+<pre><code class="language-rust"><span class="boring">pub struct TIMER0;
+</span>pub struct Timer(TIMER0);
+
+impl Timer {
+    pub fn new(periph: TIMER0) -&gt; Self {
+        Self(periph)
+    }
+
+    pub fn free(self) -&gt; TIMER0 {
+        self.0
+    }
+}</code></pre>
+<p><a id="c-reexport-pac"></a></p>
+<h2 id="hals-reexport-their-register-access-crate-c-reexport-pac"><a class="header" href="#hals-reexport-their-register-access-crate-c-reexport-pac">HALها crate دسترسی به ثبات‌های خود را دوباره صادر می‌کنند (C-REEXPORT-PAC)</a></h2>
+<p>HALها را می‌توان بر پایهٔ PACهای تولیدشده با <a href="https://github.com/rust-embedded/svd2rust">svd2rust</a> یا بر پایهٔ crateهای دیگری نوشت که دسترسی خام به ثبات‌ها را فراهم می‌کنند. HALها باید همیشه crate دسترسی به ثبات‌هایی را که بر آن بنا شده‌اند در ریشهٔ crate خود دوباره صادر کنند.</p>
+<p>یک PAC باید با نام <code>pac</code> دوباره صادر شود، صرف‌نظر از نام واقعی crate، چون نام HAL باید از پیش روشن کند که چه PACای مورد دسترسی است.</p>
+<p><a id="c-hal-traits"></a></p>
+<h2 id="types-implement-the-embedded-hal-traits-c-hal-traits"><a class="header" href="#types-implement-the-embedded-hal-traits-c-hal-traits">نوع‌ها صفت‌های <code>embedded-hal</code> را پیاده‌سازی می‌کنند (C-HAL-TRAITS)</a></h2>
+<p>نوع‌هایی که HAL فراهم می‌کند باید همهٔ صفت‌های قابل‌اِعمالی را که crate به نام <a href="https://github.com/rust-embedded/embedded-hal"><code>embedded-hal</code></a> ارائه می‌دهد پیاده‌سازی کنند.</p>
+<p>چند صفت ممکن است برای یک نوع واحد پیاده‌سازی شوند.</p><nav class="page-nav"><a href="../../../embedded/design-patterns/hal/naming.html">→ نام‌گذاری</a><a href="../../../embedded/design-patterns/hal/predictability.html">پیش‌بینی‌پذیری ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../embedded/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

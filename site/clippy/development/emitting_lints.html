@@ -1,0 +1,139 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>صدور lint — کتاب Clippy</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="development/emitting_lints"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Clippy</a><small class="en-title" dir="ltr">The Clippy Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="emitting-a-lint"><a class="header" href="#emitting-a-lint">صدور یک lint</a></h1>
+<p>پس از آنکه <a href="defining_lints.html">یک lint را تعریف کردیم</a>، <a href="writing_tests.html">آزمون‌های UI</a> را نوشتیم و <a href="lint_passes.html">گذر lint</a> مناسب lint را انتخاب کردیم، می‌توانیم پیاده‌سازی منطق lint را آغاز کنیم تا بتوانیم آن را صادر کنیم و به‌تدریج به lintی برسیم که مطابق انتظار رفتار می‌کند.</p>
+<p>توجه کنید که در این فصل وارد پیاده‌سازی عملی منطق یک lint نمی‌شویم. جزئیات را در فصل‌های بعدی و همچنین در دو نمونه از lintهای واقعی Clippy بررسی خواهیم کرد.</p>
+<p>برای صدور یک lint، باید یک گذر (به <a href="lint_passes.html">گذرهای lint</a> نگاه کنید) برای lintی که اعلام کرده‌ایم پیاده‌سازی کنیم. در این مثال یک lint از نوع «late» را پیاده‌سازی می‌کنیم، پس مستندات <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.LateLintPass.html">LateLintPass</a> را ببینید که تعداد زیادی متد برای پیاده‌سازی در lint ما فراهم می‌کند.</p>
+<pre><code class="language-rust">pub trait LateLintPass&lt;'tcx&gt;: LintPass {
+    // Trait methods
+}</code></pre>
+<p>متدی که با اختلاف بیشترین استفاده را در lintهای Clippy دارد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.LateLintPass.html#method.check_expr">متد <code>check_expr</code></a> است؛ دلیلش این است که Rust یک زبان مبتنی بر عبارت است و اغلب lintی که می‌خواهیم رویش کار کنیم باید عبارت‌ها را بررسی کند.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>اگر به‌طور کامل نمی‌دانید عبارت‌ها (expressions) در Rust چیستند، نگاهی به مستندات رسمی دربارهٔ <a href="../../reference/expressions.html">عبارت‌ها</a> بیندازید</p>
+</blockquote>
+<p>از متدهای رایج دیگر می‌توان <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.LateLintPass.html#method.check_fn">متد <code>check_fn</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.LateLintPass.html#method.check_item">متد <code>check_item</code></a> را نام برد.</p>
+<h3 id="emitting-a-lint-1"><a class="header" href="#emitting-a-lint-1">صدور یک lint</a></h3>
+<p>درون متد صفتی که پیاده‌سازی می‌کنیم، می‌توانیم منطق lint را بنویسیم و lint را همراه با پیشنهادها صادر کنیم.</p>
+<p>بخش <a href="https://doc.rust-lang.org/nightly/nightly-rustc/clippy_utils/diagnostics/index.html">diagnostics</a> در Clippy تعداد قابل‌توجهی تابع تشخیصی برای صدور lintها فراهم می‌کند. مستندات را ببینید و تابعی را انتخاب کنید که بهترین تطابق را با نیازهای lint شما دارد. برخی از تابع‌های رایجی که در مخزن Clippy با آن‌ها روبه‌رو می‌شوید عبارت‌اند از:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/beta/nightly-rustc/clippy_utils/diagnostics/fn.span_lint.html"><code>span_lint</code></a>: یک lint را بدون ارائهٔ هیچ اطلاعات دیگری صادر می‌کند</li>
+<li><a href="https://doc.rust-lang.org/beta/nightly-rustc/clippy_utils/diagnostics/fn.span_lint_and_note.html"><code>span_lint_and_note</code></a>: یک lint را صادر می‌کند و یک یادداشت (note) اضافه می‌کند</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/clippy_utils/diagnostics/fn.span_lint_and_help.html"><code>span_lint_and_help</code></a>: یک lint را صادر می‌کند و یک پیام راهنما ارائه می‌دهد</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/clippy_utils/diagnostics/fn.span_lint_and_sugg.html"><code>span_lint_and_sugg</code></a>: یک lint را صادر می‌کند و پیشنهادی برای اصلاح کد ارائه می‌دهد</li>
+<li><a href="https://doc.rust-lang.org/beta/nightly-rustc/clippy_utils/diagnostics/fn.span_lint_and_then.html"><code>span_lint_and_then</code></a>: مانند <code>span_lint</code> است، اما امکان سفارشی‌سازی گستردهٔ خروجی را فراهم می‌کند.</li>
+</ul>
+<pre><code class="language-rust">impl&lt;'tcx&gt; LateLintPass&lt;'tcx&gt; for LintName {
+    fn check_expr(&amp;mut self, cx: &amp;LateContext&lt;'tcx&gt;, expr: &amp;'tcx Expr&lt;'_&gt;)  {
+        // Imagine that `some_lint_expr_logic` checks for requirements for emitting the lint
+        if some_lint_expr_logic(expr) {
+            span_lint_and_help(
+                cx, // &lt; The context
+                LINT_NAME, // &lt; The name of the lint in ALL CAPS
+                expr.span, // &lt; The span to lint
+                "message on why the lint is emitted",
+                None, // &lt; An optional help span (to highlight something in the lint)
+                "message that provides a helpful suggestion",
+            );
+        }
+    }
+}</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>توجه: پیام باید واقعیت‌محور باشد و از حروف بزرگ و علائم نگارشی پرهیز کند. اگر چند جمله لازم است، پیام‌ها احتمالاً باید به یک پیام خطا و یک پیام راهنما / یادداشت / پیشنهاد تقسیم شوند.</p>
+</blockquote>
+<h2 id="suggestions-automatic-fixes"><a class="header" href="#suggestions-automatic-fixes">پیشنهادها: اصلاح‌های خودکار</a></h2>
+<p>برخی lintها می‌دانند برای اصلاح کد چه چیزی را باید تغییر داد. برای مثال، lint با نام <a href="https://rust-lang.github.io/rust-clippy/main/index.html#range_plus_one"><code>range_plus_one</code></a> دربارهٔ بازه‌هایی هشدار می‌دهد که کاربر به جای استفاده از <a href="https://doc.rust-lang.org/std/ops/struct.RangeInclusive.html">بازهٔ شامل</a> (<code>x..=y</code>)، عبارت <code>x..y + 1</code> را نوشته است. اصلاح این کد تغییر عبارت <code>x..y + 1</code> به <code>x..=y</code> است. <strong>اینجاست که پیشنهادها وارد می‌شوند</strong>.</p>
+<p>پیشنهاد، تغییری است که lint برای رفع مشکلی که روی آن lint می‌کند ارائه می‌دهد. خروجی چیزی شبیه این است (از مثال پیشین):</p>
+<pre><code class="language-text">error: an inclusive range would be more readable
+  --&gt; tests/ui/range_plus_minus_one.rs:37:14
+   |
+LL |     for _ in 1..1 + 1 {}
+   |              ^^^^^^^^ help: use: `1..=1`
+</code></pre>
+<h3 id="applicability"><a class="header" href="#applicability">قابلیت اعمال</a></h3>
+<p><strong>همهٔ پیشنهادها همیشه درست نیستند</strong>؛ برخی به نظارت انسان نیاز دارند و به همین دلیل <a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_errors/enum.Applicability.html">Applicability</a> را داریم.</p>
+<p>Applicability میزان اطمینان به درستی پیشنهاد را نشان می‌دهد؛ برخی همیشه درست‌اند (<code>Applicability::MachineApplicable</code>)، اما برای پیشنهادی که ممکن است نادرست باشد از <code>Applicability::MaybeIncorrect</code> و موارد دیگر استفاده می‌کنیم.</p>
+<h3 id="example"><a class="header" href="#example">مثال</a></h3>
+<p>همان lint یعنی <code>LINT_NAME</code> که یک پیشنهاد صادر می‌کند چیزی شبیه این خواهد بود:</p>
+<pre><code class="language-rust">impl&lt;'tcx&gt; LateLintPass&lt;'tcx&gt; for LintName {
+    fn check_expr(&amp;mut self, cx: &amp;LateContext&lt;'tcx&gt;, expr: &amp;'tcx Expr&lt;'_&gt;)  {
+        // Imagine that `some_lint_expr_logic` checks for requirements for emitting the lint
+        if some_lint_expr_logic(expr) {
+            span_lint_and_then( // &lt; Note this change
+                cx,
+                LINT_NAME,
+                expr.span,
+                "message on why the lint is emitted",
+                |diag| {
+                    // v Build and emit the suggestion
+                    let mut app = Applicability::MachineApplicable;
+                    let expr_snippet = snippet_with_applicability(cx, expr.span, "_", &amp;mut app);
+                    let sugg = format!("foo + {expr_snippet} * bar");
+                    diag.span_suggestion(expr.span, "use", sugg, app);
+                }
+            );
+        }
+    }
+}</code></pre>
+<p>پیشنهادها معمولاً از ماکروی <a href="https://doc.rust-lang.org/std/macro.format.html"><code>format!</code></a> برای درج مقادیر قدیمی در مقادیر جدید استفاده می‌کنند. برای اطلاعات دربارهٔ دریافت تکه‌کدها، <a href="emitting_lints.html#snippets">Snippets</a> را ببینید.</p>
+<h2 id="how-to-choose-between-notes-help-messages-and-suggestions"><a class="header" href="#how-to-choose-between-notes-help-messages-and-suggestions">چگونه بین یادداشت‌ها، پیام‌های راهنما و پیشنهادها انتخاب کنیم</a></h2>
+<p>یادداشت‌ها جدا از پیام اصلی lint نمایش داده می‌شوند و اطلاعات مفیدی را که کاربر برای درک دلیل فعال شدن lint نیاز دارد ارائه می‌دهند. وقتی به یک span متصل شوند بیشترین کمک را می‌کنند.</p>
+<p>مثال‌ها:</p>
+<h3 id="notes"><a class="header" href="#notes">یادداشت‌ها</a></h3>
+<pre><code class="language-text">error: calls to `std::mem::forget` with a reference instead of an owned value. Forgetting a reference does nothing.
+  --&gt; tests/ui/drop_forget_ref.rs:10:5
+   |
+10 |     forget(&amp;SomeStruct);
+   |     ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `-D clippy::forget-ref` implied by `-D warnings`
+note: argument has type &amp;SomeStruct
+  --&gt; tests/ui/drop_forget_ref.rs:10:12
+   |
+10 |     forget(&amp;SomeStruct);
+   |            ^^^^^^^^^^^
+</code></pre>
+<h3 id="help-messages"><a class="header" href="#help-messages">پیام‌های راهنما</a></h3>
+<p>پیام‌های راهنما به‌طور مشخص برای کمک به کاربر هستند. در موقعیتی به کار می‌روند که نمی‌توانید پیشنهاد مشخصی ارائه دهید که ماشین بتواند آن را اعمال کند. این پیام‌ها نیز می‌توانند به یک span متصل شوند.</p>
+<p>مثال:</p>
+<pre><code class="language-text">error: constant division of 0.0 with 0.0 will always result in NaN
+  --&gt; tests/ui/zero_div_zero.rs:6:25
+   |
+6  |     let other_f64_nan = 0.0f64 / 0.0;
+   |                         ^^^^^^^^^^^^
+   |
+   = help: consider using `f64::NAN` if you would like a constant representing NaN
+</code></pre>
+<h3 id="suggestions"><a class="header" href="#suggestions">پیشنهادها</a></h3>
+<p>پیشنهادها از همه مفیدترند؛ آن‌ها تغییراتی در کد منبع برای رفع خطا هستند. جادوی پیشنهادها این است که ابزارهایی مانند <code>rustfix</code> می‌توانند آن‌ها را شناسایی کنند و کد شما را به‌طور خودکار اصلاح کنند.</p>
+<p>مثال:</p>
+<pre><code class="language-text">error: This `.fold` can be more succinctly expressed as `.any`
+--&gt; tests/ui/methods.rs:390:13
+    |
+390 |     let _ = (0..3).fold(false, |acc, x| acc || x &gt; 2);
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try: `.any(|x| x &gt; 2)`
+    |
+</code></pre>
+<h2 id="snippets"><a class="header" href="#snippets">Snippets</a></h2>
+<p>Snippetها تکه‌هایی از کد منبع (به‌صورت رشته) هستند که معمولاً با استفاده از تابع‌های مختلف <code>snippet_*</code> از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/clippy_utils/source/index.html"><code>clippy_utils::source</code></a> استخراج می‌شوند.</p>
+<p>اگر از snippetها <em>نه</em> برای ساخت یک پیشنهاد استفاده می‌کنید، معمولاً استفاده از <a href="https://doc.rust-lang.org/beta/nightly-rustc/clippy_utils/source/fn.snippet.html"><code>snippet</code></a> کافی است؛ این تابع span آیتم و همچنین یک رشتهٔ جایگزین (fallback) را می‌پذیرد (به <a href="emitting_lints.html#fallback-string">Fallback string</a> نگاه کنید).</p>
+<p>برای مثال، اگر می‌خواهید بدانید یک آیتم چه شکلی است (و span آن آیتم را می‌دانید)، می‌توانید از <code>snippet(cx, span, "_")</code> استفاده کنید.</p>
+<p>اگر snippet را برای یک پیشنهاد به کار می‌برید، توصیه می‌شود به جای آن از <a href="https://doc.rust-lang.org/beta/nightly-rustc/clippy_utils/source/fn.snippet_with_applicability.html"><code>snippet_with_applicability</code></a> استفاده کنید. این کار باعث می‌شود Clippy در صورتی که نتوانست snippet را «به‌طور تمیز» استخراج کند، <a href="emitting_lints.html#applicability">applicability</a> پیشنهاد را کاهش دهد؛ برای اطلاعات بیشتر مستندات این تابع را ببینید.</p>
+<p>اغلب لازم است برای ساخت یک پیشنهاد چند snippet ایجاد شود که در این صورت الگوی زیر را خواهید داشت:</p>
+<pre><code class="language-rust">// inside `span_lint_and_then`
+
+// 1. Create initial applicability.
+let mut app = Applicability::MachineApplicable;
+
+// 2. Use it to create all the snippets
+let foo_snippet = snippet_with_applicability(cx, foo.span, "_", &amp;mut app);
+let bar_snippet = snippet_with_applicability(cx, bar.span, "_", &amp;mut app);
+let sugg = format!("{foo_snippet} + {bar_snippet}"); // or whatever
+
+// 3. Use it to emit the final suggestion
+diag.span_suggestion(span, msg, sugg, app);</code></pre>
+<h3 id="fallback-string"><a class="header" href="#fallback-string">رشتهٔ جایگزین (fallback)</a></h3>
+<p>این رشته‌ای است که وقتی کد منبعی که span به آن اشاره می‌کند در دسترس نیست، برای snippet استفاده می‌شود. این اتفاق بیشتر فقط وقتی رخ می‌دهد که proc-macroها spanها را نادرست مدیریت کنند – <a href="macro_expansions.html#the-is_from_proc_macro-function">بخش مربوط به proc-macroها</a> را ببینید.</p>
+<p>در بیشتر موارد، snippetهای یک پیشنهاد از (span) یک عبارت واحد می‌آیند و بنابراین <code>"_"</code> یک رشتهٔ جایگزین مناسب است. اگر به جای آن متوجه شدید که پیشنهاد درج چند دستور یا یک بلوک را می‌دهید – یعنی در اصل هر چیزی «بزرگ» – استفاده از <code>".."</code> را در نظر بگیرید.</p>
+<h2 id="final-run-ui-tests-to-emit-the-lint"><a class="header" href="#final-run-ui-tests-to-emit-the-lint">گام پایانی: اجرای آزمون‌های UI برای صدور lint</a></h2>
+<p>اکنون، اگر <a href="writing_tests.html">آزمون UI</a> خود را اجرا کنیم، باید ببینیم Clippy خروجی‌ای تولید می‌کند که شامل پیام lintی است که طراحی کرده‌ایم.</p>
+<p>گام بعدی پیاده‌سازی درست منطق است که جزئیاتی است که در فصل‌های بعدی به آن می‌پردازیم.</p><nav class="page-nav"><a href="lint_passes.html">→ Lint Passes</a><a href="type_checking.html">بررسی نوع ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../clippy/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

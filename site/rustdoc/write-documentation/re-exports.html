@@ -1,0 +1,131 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>Re-exportها — کتاب rustdoc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="write-documentation/re-exports"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustdoc.html" style="color:inherit;text-decoration:none">کتاب rustdoc</a><small class="en-title" dir="ltr">The rustdoc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="re-exports"><a class="header" href="#re-exports">بازصادرها (Re-exports)</a></h1>
+<p>بیایید با توضیح این‌که بازصادر (re-export) چیست شروع کنیم. برای این کار از مثالی استفاده می‌کنیم که در آن کتابخانه‌ای (با نام <code>lib</code>) می‌نویسیم که نوع‌هایش میان چند زیرماژول پخش شده‌اند:</p>
+<pre><code class="language-rust">pub mod sub_module1 {
+    pub struct Foo;
+}
+pub mod sub_module2 {
+    pub struct AnotherFoo;
+}</code></pre>
+<p>کاربران می‌توانند آن‌ها را این‌گونه import کنند:</p>
+<pre><code class="language-rust ignore (inline)">use lib::sub_module1::Foo;
+use lib::sub_module2::AnotherFoo;</code></pre>
+<p>اما اگر بخواهید نوع‌ها مستقیماً در ریشهٔ crate در دسترس باشند، یا نخواهیم ماژول‌ها برای کاربران قابل مشاهده باشند، چه؟ اینجاست که بازصادرها وارد می‌شوند:</p>
+<pre><code class="language-rust ignore (inline)">// `sub_module1` and `sub_module2` are not visible outside.
+mod sub_module1 {
+    pub struct Foo;
+}
+mod sub_module2 {
+    pub struct AnotherFoo;
+}
+// We re-export both types:
+pub use crate::sub_module1::Foo;
+pub use crate::sub_module2::AnotherFoo;</code></pre>
+<p>و اکنون کاربران می‌توانند این کار را بکنند:</p>
+<pre><code class="language-rust ignore (inline)">use lib::{Foo, AnotherFoo};</code></pre>
+<p>و چون هر دو <code>sub_module1</code> و <code>sub_module2</code> خصوصی هستند، کاربران نمی‌توانند آن‌ها را import کنند.</p>
+<p>نکتهٔ جالب این است که مستندات تولیدشده برای این crate هر دو <code>Foo</code> و <code>AnotherFoo</code> را مستقیماً در ریشهٔ crate نشان می‌دهد، یعنی آن‌ها درون‌خط (inline) شده‌اند. چند قاعده وجود دارد که تعیین می‌کند آیا یک آیتم بازصادرشده درون‌خط می‌شود یا نه.</p>
+<h2 id="inlining-rules"><a class="header" href="#inlining-rules">قواعد درون‌خط شدن</a></h2>
+<p>اگر یک آیتم عمومی از یک ماژول خصوصی آمده باشد، درون‌خط می‌شود:</p>
+<pre><code class="language-rust ignore (inline)">mod private_module {
+    pub struct Public;
+}
+pub mod public_mod {
+    // `Public` will inlined here since `private_module` is private.
+    pub use super::private_module::Public;
+}
+// `Public` will not be inlined here since `public_mod` is public.
+pub use self::public_mod::Public;</code></pre>
+<p>همچنین، اگر آیتمی <code>#[doc(hidden)]</code> را از هر یک از اجدادش به ارث ببرد، درون‌خط می‌شود:</p>
+<pre><code class="language-rust ignore (inline)">#[doc(hidden)]
+pub mod public_mod {
+    pub struct Public;
+}
+// `Public` be inlined since its parent (`public_mod`) has `#[doc(hidden)]`.
+pub use self::public_mod::Public;</code></pre>
+<p>اگر آیتمی <code>#[doc(hidden)]</code> داشته باشد، درون‌خط نمی‌شود (و در مستندات تولیدشده نیز قابل مشاهده نیست):</p>
+<pre><code class="language-rust ignore (inline)">// This struct won't be visible.
+#[doc(hidden)]
+pub struct Hidden;
+
+// This re-export won't be visible.
+pub use self::Hidden as InlinedHidden;</code></pre>
+<p>با این حال، اگر باز هم می‌خواهید خود بازصادر قابل مشاهده باشد، می‌توانید attribute <code>#[doc(inline)]</code> را روی آن بگذارید:</p>
+<pre><code class="language-rust ignore (inline)">// This struct won't be visible.
+#[doc(hidden)]
+pub struct Hidden;
+
+#[doc(inline)]
+pub use self::Hidden as InlinedHidden;</code></pre>
+<p>در این حالت، در مستندات تولیدشده <code>pub use self::Hidden as InlinedHidden;</code> را خواهید داشت اما هیچ پیوندی به آیتم <code>Hidden</code> وجود نخواهد داشت.</p>
+<p>پس به <code>#[doc(hidden)]</code> برمی‌گردیم: اگر چند بازصادر دارید و برخی از آن‌ها <code>#[doc(hidden)]</code> دارند، فقط همین‌ها در مستندات نمایش داده نمی‌شوند:</p>
+<pre><code class="language-rust ignore (inline)">mod private_mod {
+    /// First
+    pub struct InPrivate;
+}
+
+/// Second
+#[doc(hidden)]
+pub use self::private_mod::InPrivate as Hidden;
+/// Third
+pub use self::Hidden as Visible;</code></pre>
+<p>در این حالت، <code>InPrivate</code> با نام <code>Visible</code> درون‌خط می‌شود. با این حال، مستندات آن <code>First Third</code> خواهد بود و نه <code>First Second Third</code>، زیرا بازصادری که <code>Second</code> مستندات آن است، <code>#[doc(hidden)]</code> دارد و در نتیجه همهٔ attributeهای آن نادیده گرفته می‌شوند.</p>
+<h2 id="inlining-with-docinline"><a class="header" href="#inlining-with-docinline">درون‌خط کردن با <code>#[doc(inline)]</code></a></h2>
+<p>اگر می‌خواهید یک آیتم را مجبور به درون‌خط شدن کنید، می‌توانید از attribute <code>#[doc(inline)]</code> استفاده کنید:</p>
+<pre><code class="language-rust ignore (inline)">pub mod public_mod {
+    pub struct Public;
+}
+#[doc(inline)]
+pub use self::public_mod::Public;</code></pre>
+<p>با این کد، حتی با این‌که <code>public_mod::Public</code> عمومی است و در مستندات حضور دارد، نوع <code>Public</code> هم در ریشهٔ crate و هم در ماژول <code>public_mod</code> حضور خواهد داشت.</p>
+<h2 id="preventing-inlining-with-docno_inline"><a class="header" href="#preventing-inlining-with-docno_inline">جلوگیری از درون‌خط شدن با <code>#[doc(no_inline)]</code></a></h2>
+<p>در نقطهٔ مقابل attribute <code>#[doc(inline)]</code>، اگر می‌خواهید از درون‌خط شدن یک آیتم جلوگیری کنید، می‌توانید از <code>#[doc(no_inline)]</code> استفاده کنید:</p>
+<pre><code class="language-rust ignore (inline)">mod private_mod {
+    pub struct Public;
+}
+#[doc(no_inline)]
+pub use self::private_mod::Public;</code></pre>
+<p>در مستندات تولیدشده، یک بازصادر را در ریشهٔ crate خواهید دید و نه خود نوع را مستقیماً.</p>
+<h2 id="attributes"><a class="header" href="#attributes">Attributeها</a></h2>
+<p>وقتی یک آیتم درون‌خط می‌شود، توضیحات مستنداتی و بیشتر attributeهای آن نیز همراه با آن درون‌خط می‌شوند:</p>
+<pre><code class="language-rust ignore (inline)">mod private_mod {
+    /// First
+    #[cfg(a)]
+    pub struct InPrivate;
+    /// Second
+    #[cfg(b)]
+    pub use self::InPrivate as Second;
+}
+
+/// Third
+#[doc(inline)]
+#[cfg(c)]
+pub use self::private_mod::Second as Visible;</code></pre>
+<p>در این حالت، <code>Visible</code> مستنداتی برابر <code>First Second Third</code> خواهد داشت و همچنین <code>cfg</code> آن این‌ها خواهد بود: <code>#[cfg(a)]</code>، <code>#[cfg(b)]</code> و <code>#[cfg(c)]</code>.</p>
+<p><a href="./linking-to-items-by-name.html">پیوندهای درون‌مستندی</a> نسبت به جایی که توضیح مستنداتی تعریف شده است حل می‌شوند.</p>
+<p>با این حال، چند attribute وجود دارند که درون‌خط نمی‌شوند:</p>
+<ul>
+<li><code>#[doc(alias="")]</code></li>
+<li><code>#[doc(inline)]</code></li>
+<li><code>#[doc(no_inline)]</code></li>
+<li><code>#[doc(hidden)]</code> (چون خود بازصادر و attributeهای آن نادیده گرفته می‌شوند).</li>
+</ul>
+<p>همهٔ attributeهای دیگر هنگام درون‌خط شدن به ارث برده می‌شوند، تا مستندات با رفتاری مطابقت داشته باشد که آیتم درون‌خط‌شده مستقیماً در جایی که نمایش داده می‌شود تعریف شده بود.</p>
+<p>این قواعد در صورتی هم اعمال می‌شوند که آیتم با یک بازصادر glob درون‌خط شود:</p>
+<pre><code class="language-rust ignore (inline)">mod private_mod {
+    /// First
+    #[cfg(a)]
+    pub struct InPrivate;
+}
+
+#[cfg(c)]
+pub use self::private_mod::*;</code></pre>
+<p>در غیر این صورت، attributeهای نمایش‌داده‌شده از آیتم بازصادرشده خواهند بود و attributeهای روی خود بازصادر نادیده گرفته می‌شوند:</p>
+<pre><code class="language-rust ignore (inline)">mod private_mod {
+    /// First
+    #[cfg(a)]
+    pub struct InPrivate;
+}
+
+#[cfg(c)]
+pub use self::private_mod::InPrivate;</code></pre>
+<p>در حالت بالا، <code>cfg(c)</code> در مستندات نمایش داده نمی‌شود.</p><nav class="page-nav"><a href="the-doc-attribute.html">→ The `#[doc]` attribute</a><a href="linking-to-items-by-name.html">پیوند دادن به آیتم‌ها با نام ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustdoc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

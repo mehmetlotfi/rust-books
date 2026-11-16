@@ -1,0 +1,38 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>سینتکس رزروشده — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2024/reserved-syntax"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="reserved-syntax"><a class="header" href="#reserved-syntax">نحو رزروشده</a></h1>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<ul>
+<li>رشته‌های محافظت‌شدهٔ بدون پیشوند به شکل <code>#"foo"#</code> برای استفادهٔ آینده رزرو شده‌اند.</li>
+<li>دو یا چند نویسهٔ <code>#</code> برای استفادهٔ آینده رزرو شده‌اند.</li>
+</ul>
+<h2 id="details"><a class="header" href="#details">جزئیات</a></h2>
+<p><a href="https://rust-lang.github.io/rfcs/3593-unprefixed-guarded-strings.html">RFC 3593</a> در ویرایش 2024 نحوی را برای لیترال‌های رشتهٔ محافظت‌شده‌ای که پیشوند ندارند رزرو کرد تا جا برای تغییرات احتمالی آینده زبان باز بماند. ویرایش 2021 نحو رشته‌های محافظت‌شده با پیشوند، مانند <code>ident##"foo"##</code> را <a href="../rust-2021/reserved-syntax.html">رزرو کرده بود</a>. ویرایش 2024 این را گسترش می‌دهد تا رشته‌های بدون پیشوند <code>ident</code> را نیز رزرو کند.</p>
+<p>دو نحو رزروشده وجود دارد:</p>
+<ul>
+<li>یک یا چند نویسهٔ <code>#</code> که بلافاصله بعد از آن‌ها یک <a href="../../reference/tokens.html#string-literals">لیترال رشته</a> بیاید.</li>
+<li>دو یا چند نویسهٔ <code>#</code> پشت سر هم (بدون فاصلهٔ خالی بین آن‌ها).</li>
+</ul>
+<p>این رزرو به‌دلیل تعامل با توکن‌سازی (tokenization) و ماکروها در مرز یک ویرایش انجام می‌شود. برای مثال، این ماکرو را در نظر بگیرید:</p>
+<pre><code class="language-rust">macro_rules! demo {
+    ( $a:tt ) =&gt; { println!("one token") };
+    ( $a:tt $b:tt $c:tt ) =&gt; { println!("three tokens") };
+}
+
+demo!("foo");
+demo!(r#"foo"#);
+demo!(#"foo"#);
+demo!(###)</code></pre>
+<p>پیش از ویرایش 2024، این کد خروجی زیر را تولید می‌کند:</p>
+<pre><code class="language-text">one token
+one token
+three tokens
+three tokens
+</code></pre>
+<p>از ویرایش 2024 به بعد، خط <code>#"foo"#</code> و خط <code>###</code> اکنون خطای کامپایل تولید می‌کنند، چون این شکل‌ها اکنون رزرو شده‌اند.</p>
+<h2 id="migration"><a class="header" href="#migration">مهاجرت</a></h2>
+<p>lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html#rust-2024-guarded-string-incompatible-syntax"><code>rust_2024_guarded_string_incompatible_syntax</code></a> هر توکنی را که با نحو رزروشده مطابقت داشته باشد شناسایی می‌کند و تغییری پیشنهاد می‌دهد که در جاهای لازم فاصله درج کند تا اطمینان حاصل شود توکن‌ها همچنان جداگانه تجزیه می‌شوند.</p>
+<p>این lint بخشی از گروه lint با نام <code>rust-2024-compatibility</code> است که در مهاجرت خودکار ویرایش گنجانده شده است. برای مهاجرت کد خود به سازگاری با ویرایش Rust 2024، این دستور را اجرا کنید:</p>
+<pre><code class="language-sh">cargo fix --edition
+</code></pre>
+<p>همچنین می‌توانید lint را به‌صورت دستی فعال کنید تا فراخوانی‌های ماکرویی را که ممکن است لازم باشد توکن‌های آن‌ها به‌روزرسانی شوند پیدا کنید:</p>
+<pre><code class="language-rust">// Add this to the root of your crate to do a manual migration.
+#![warn(rust_2024_guarded_string_incompatible_syntax)]</code></pre><nav class="page-nav"><a href="gen-keyword.html">→ کلیدواژهٔ gen</a><a href="standard-library.html">کتابخانهٔ استاندارد ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

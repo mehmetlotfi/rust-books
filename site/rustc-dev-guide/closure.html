@@ -1,0 +1,153 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>استنتاج capture در Closure — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="closure"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="closure-capture-inference"><a class="header" href="#closure-capture-inference">استنتاج capture در Closure</a></h1>
+<p>این بخش توضیح می‌دهد rustc چگونه closureها را مدیریت می‌کند.
+closureها در Rust عملاً به structهایی «تبدیل (desugar)» می‌شوند که مقادیری را که از قاب پشتهٔ (stack frame) سازندهٔ خود استفاده می‌کنند (یا
+ارجاع‌هایی به آن مقادیر) در خود نگه می‌دارند.
+rustc وظیفه دارد بفهمد یک closure از کدام مقادیر و چگونه استفاده می‌کند، تا بتواند تصمیم بگیرد
+یک متغیر مفروض را با ارجاع مشترک، ارجاع تغییرپذیر یا با move capture کند.
+rustc همچنین باید تشخیص دهد یک closure قادر به پیاده‌سازی کدام‌یک از صفت‌های closure (<a href="https://doc.rust-lang.org/std/ops/trait.Fn.html"><code>Fn</code></a>،
+<a href="https://doc.rust-lang.org/std/ops/trait.FnMut.html"><code>FnMut</code></a> یا <a href="https://doc.rust-lang.org/std/ops/trait.FnOnce.html"><code>FnOnce</code></a>) است.</p>
+<p>با چند مثال شروع می‌کنیم:</p>
+<h3 id="example-1"><a class="header" href="#example-1">مثال ۱</a></h3>
+<p>برای شروع، ببینیم closure در مثال زیر چگونه desugar می‌شود:</p>
+<pre><code class="language-rust">fn closure(f: impl Fn()) {
+    f();
+}
+
+fn main() {
+    let x: i32 = 10;
+    closure(|| println!("Hi {}", x));  // The closure just reads x.
+    println!("Value of x after return {}", x);
+}</code></pre>
+<p>فرض کنیم موارد بالا محتوای فایلی به نام <code>immut.rs</code> است.
+اگر <code>immut.rs</code> را با دستور زیر کامپایل کنیم،
+پرچم <a href="./mir/passes.html"><code>-Z dump-mir=all</code></a> باعث می‌شود
+<code>rustc</code>، <a href="./mir/index.html">MIR</a> را تولید کند و در دایرکتوری‌ای به نام <code>mir_dump</code> بریزد.</p>
+<pre><code class="language-console">&gt; rustc +stage1 immut.rs -Z dump-mir=all
+</code></pre>
+<p>پس از اجرای این دستور، یک دایرکتوری تازه‌ساخته به نام <code>mir_dump</code> در
+دایرکتوری کاری فعلی خود می‌بینیم که چند فایل دارد.
+اگر به فایل <code>rustc.main.-------.mir_map.0.mir</code> نگاه کنیم، از جمله چیزهای دیگر
+این خط را هم در آن می‌یابیم:</p>
+<pre><code class="language-rust ignore">_4 = &amp;_1;
+_3 = [closure@immut.rs:7:13: 7:36] { x: move _4 };</code></pre>
+<p>توجه کنید که در مثال‌های MIR این فصل، <code>_1</code> همان <code>x</code> است.</p>
+<p>در اینجا، در خط اول <code>_4 = &amp;_1;</code>،
+<code>mir_dump</code> به ما می‌گوید <code>x</code> به‌صورت ارجاع تغییرناپذیر قرض گرفته شده است.
+این همان چیزی است که امید داشتیم، چون closure ما فقط <code>x</code> را می‌خواند.</p>
+<h3 id="example-2"><a class="header" href="#example-2">مثال ۲</a></h3>
+<p>این هم مثالی دیگر:</p>
+<pre><code class="language-rust">fn closure(mut f: impl FnMut()) {
+    f();
+}
+
+fn main() {
+    let mut x: i32 = 10;
+    closure(|| {
+        x += 10;  // The closure mutates the value of x
+        println!("Hi {}", x)
+    });
+    println!("Value of x after return {}", x);
+}</code></pre>
+<pre><code class="language-rust ignore">_4 = &amp;mut _1;
+_3 = [closure@mut.rs:7:13: 10:6] { x: move _4 };</code></pre>
+<p>این بار، در خط <code>_4 = &amp;mut _1;</code> می‌بینیم که قرض به قرض تغییرپذیر تبدیل شده است.
+منطقی است!
+closure مقدار <code>x</code> را ۱۰ واحد افزایش می‌دهد.</p>
+<h3 id="example-3"><a class="header" href="#example-3">مثال ۳</a></h3>
+<p>یک مثال دیگر:</p>
+<pre><code class="language-rust">fn closure(f: impl FnOnce()) {
+    f();
+}
+
+fn main() {
+    let x = vec![21];
+    closure(|| {
+        drop(x);  // Makes x unusable after the fact.
+    });
+    // println!("Value of x after return {:?}", x);
+}</code></pre>
+<pre><code class="language-rust ignore">_6 = [closure@move.rs:7:13: 9:6] { x: move _1 }; // bb16[3]: scope 1 at move.rs:7:13: 9:6</code></pre>
+<p>در اینجا <code>x</code> مستقیماً به درون closure منتقل (move) می‌شود
+و دسترسی به آن پس از closure مجاز نخواهد بود.</p>
+<h2 id="inferences-in-the-compiler"><a class="header" href="#inferences-in-the-compiler">استنتاج‌ها در کامپایلر</a></h2>
+<p>حالا وارد کد rustc شویم و ببینیم همهٔ این استنتاج‌ها چگونه توسط کامپایلر انجام می‌شوند.</p>
+<p>با تعریف اصطلاحی شروع می‌کنیم که در ادامهٔ بحث بسیار به کار خواهیم برد -
+<em>upvar</em>.
+یک <strong>upvar</strong> متغیری است که محلی تابعی است که closure در آن تعریف شده است.
+پس در مثال‌های بالا، <strong>x</strong> یک upvar برای closure خواهد بود.
+گاهی به آن‌ها <em>متغیرهای آزاد</em> هم گفته می‌شود،
+یعنی به بافت closure مقید نیستند.
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_passes/upvars/index.html"><code>compiler/rustc_passes/src/upvars.rs</code></a> برای این منظور queryای به نام <em>upvars_mentioned</em>
+تعریف می‌کند.</p>
+<p>جز فراخوانی تنبل (lazy)،
+چیز دیگری که closure را از یک تابع عادی متمایز می‌کند این است که می‌تواند از upvarها استفاده کند.
+این upvarها را از بافت پیرامون خود قرض می‌گیرد؛ بنابراین کامپایلر باید نوع قرض upvar را تعیین کند.
+کامپایلر با تخصیص نوع قرض تغییرناپذیر شروع می‌کند و بر اساس نحوهٔ استفاده، در صورت لزوم محدودیت را کاهش می‌دهد
+(یعنی از <strong>تغییرناپذیر</strong> به <strong>تغییرپذیر</strong> و سپس به <strong>move</strong> تغییر می‌دهد).
+در مثال ۱ بالا،
+closure فقط از متغیر برای چاپ استفاده می‌کند و آن را به هیچ شکلی تغییر نمی‌دهد و بنابراین
+در <code>mir_dump</code>، نوع قرض upvar به نام <code>x</code> را تغییرناپذیر می‌یابیم.
+اما در مثال ۲، closure مقدار <code>x</code> را تغییر می‌دهد و آن را به‌اندازه‌ای افزایش می‌دهد.
+به‌دلیل این تغییر، کامپایلر که
+با تخصیص <code>x</code> به‌صورت نوع ارجاع تغییرناپذیر شروع کرده بود باید آن را به ارجاع تغییرپذیر تعدیل کند.
+به همین ترتیب در مثال سوم، closure بردار را drop می‌کند و بنابراین این ایجاب می‌کند متغیر
+<code>x</code> به درون closure منتقل (move) شود.
+بسته به نوع قرض، closure باید صفت مناسب را پیاده‌سازی کند:
+صفت <code>Fn</code> برای قرض تغییرناپذیر، <code>FnMut</code> برای قرض تغییرپذیر
+و <code>FnOnce</code> برای معناشناسی move.</p>
+<p>بیشتر کد مرتبط با closure در فایل
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_typeck/upvar/index.html"><code>compiler/rustc_hir_typeck/src/upvar.rs</code></a> است و ساختارهای داده در فایل
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/index.html"><code>compiler/rustc_middle/src/ty/mod.rs</code></a> اعلام شده‌اند.</p>
+<p>پیش از اینکه جلوتر برویم،
+بیایید دربارهٔ نحوهٔ بررسی جریان کنترل در کد پایهٔ rustc بحث کنیم.
+به‌طور ویژه برای closureها،
+متغیر محیطی <code>RUSTC_LOG</code> را مانند زیر تنظیم کنید و خروجی را در یک فایل جمع کنید:</p>
+<pre><code class="language-console">&gt; RUSTC_LOG=rustc_hir_typeck::upvar rustc +stage1 -Z dump-mir=all \
+    &lt;.rs file to compile&gt; 2&gt; &lt;file where the output will be dumped&gt;
+</code></pre>
+<p>این دستور از کامپایلر stage1 استفاده می‌کند و لاگ‌گیری <code>debug!</code> را برای ماژول <code>rustc_hir_typeck::upvar</code> فعال می‌کند.</p>
+<p>گزینهٔ دیگر این است که کد را با lldb یا gdb گام‌به‌گام اجرا کنید.</p>
+<ol>
+<li><code>rust-lldb build/host/stage1/bin/rustc test.rs</code></li>
+<li>در lldb:
+<ol>
+<li><code>b upvar.rs:134</code>  // تنظیم breakpoint روی یک خط مشخص در فایل upvar.rs</li>
+<li><code>r</code>  // اجرای برنامه تا رسیدن به breakpoint</li>
+</ol>
+</li>
+</ol>
+<p>با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_typeck/upvar/index.html"><code>upvar.rs</code></a> شروع می‌کنیم.
+این فایل چیزی به نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_typeck/expr_use_visitor/struct.ExprUseVisitor.html"><code>euv::ExprUseVisitor</code></a> دارد که روی منبع closure پیمایش می‌کند و
+برای هر upvarی که قرض گرفته، تغییر داده یا move شود یک callback فراخوانی می‌کند.</p>
+<pre><code class="language-rust">fn main() {
+    let mut x = vec![21];
+    let _cl = || {
+        let y = x[0];  // 1.
+        x[0] += 1;  // 2.
+    };
+}</code></pre>
+<p>در مثال بالا، بازدیدکنندهٔ ما دو بار فراخوانی می‌شود، برای خط‌های علامت‌گذاری‌شده با ۱ و ۲،
+یک بار برای قرض مشترک و بار دیگر برای قرض تغییرپذیر.
+همچنین به ما می‌گوید چه چیزی قرض گرفته شد.</p>
+<p>callbackها با پیاده‌سازی صفت <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_typeck/expr_use_visitor/trait.Delegate.html"><code>Delegate</code></a> تعریف می‌شوند.
+نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_typeck/upvar/struct.InferBorrowKind.html"><code>InferBorrowKind</code></a>، <code>Delegate</code> را پیاده‌سازی می‌کند و نگاشتی نگه می‌دارد که
+برای هر upvar ثبت می‌کند چه حالت captureای لازم بوده است.
+حالت‌های capture می‌توانند <code>ByValue</code> (move شده) یا <code>ByRef</code> (قرض گرفته‌شده) باشند.
+برای قرض‌های <code>ByRef</code>، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/enum.BorrowKind.html"><code>BorrowKind</code></a>های ممکن <code>ImmBorrow</code>،
+<code>UniqueImmBorrow</code> و <code>MutBorrow</code> هستند، همان‌طور که در
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/index.html"><code>compiler/rustc_middle/src/ty/mod.rs</code></a> تعریف شده‌اند.</p>
+<p><code>Delegate</code> چند متد مختلف (callbackهای مختلف) تعریف می‌کند:
+<strong>consume</strong> برای <em>move</em> یک متغیر، <strong>borrow</strong> برای <em>قرض</em> از نوعی (مشترک یا تغییرپذیر)،
+و <strong>mutate</strong> وقتی <em>انتساب</em> چیزی را می‌بینیم.</p>
+<p>همهٔ این callbackها یک آرگومان مشترک به نام <em>cmt</em> دارند که مخفف Category،
+Mutability و Type است و در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_typeck/expr_use_visitor/index.html"><code>compiler/rustc_hir_typeck/src/expr_use_visitor.rs</code></a> تعریف شده است.
+به نقل از توضیحات کد، «<code>cmt</code> یک دسته‌بندی کامل از یک مقدار است که نشان می‌دهد از کجا
+منشأ گرفته و چگونه قرار گرفته است، و همچنین تغییرپذیری حافظه‌ای که
+مقدار در آن ذخیره شده است». بر اساس callback (consume، borrow و غیره)،
+<code>adjust_upvar_borrow_kind_for_&lt;something&gt;</code> مرتبط را فراخوانی می‌کنیم و <code>cmt</code> را به آن می‌دهیم.
+پس از تعدیل نوع قرض، آن را در جدول ذخیره می‌کنیم،
+که اساساً می‌گوید برای هر closure چه قرض‌هایی انجام شده است.</p>
+<pre><code class="language-rust ignore">self.tables
+    .borrow_mut()
+    .upvar_capture_map
+    .extend(delegate.adjust_upvar_captures);</code></pre><nav class="page-nav"><a href="borrow-check/debugging.html">→ اشکال‌زدایی بررسی‌کنندهٔ قرض</a><a href="coroutine-closures.html">Closureهای async/«coroutine-closures» ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

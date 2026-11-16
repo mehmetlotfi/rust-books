@@ -1,0 +1,330 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>اشکال‌زدایی کامپایلر — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="compiler-debugging"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="debugging-the-compiler"><a class="header" href="#debugging-the-compiler">اشکال‌زدایی کامپایلر</a></h1>
+<p>این فصل چند نکته برای اشکال‌زدایی کامپایلر دارد.
+این نکات برای مفید‌بودن مستقل از اینکه روی چه چیزی کار می‌کنید نوشته شده‌اند.
+برخی فصل‌های دیگر
+نصیحت‌هایی دربارهٔ بخش‌های مشخصی از کامپایلر دارند (مثلاً <a href="./incrcomp-debugging.html">فصل اشکال‌زدایی و تست کوئری‌ها</a> یا <a href="./backend/debugging.html">فصل اشکال‌زدایی LLVM</a>).</p>
+<h2 id="configuring-the-compiler"><a class="header" href="#configuring-the-compiler">پیکربندی کامپایلر</a></h2>
+<p>به‌طور پیش‌فرض، rustc بدون بیشتر اطلاعات اشکال‌زدایی ساخته می‌شود.
+برای فعال‌کردن اطلاعات اشکال‌زدایی،
+در <code>bootstrap.toml</code> مقدار <code>rust.debug = true</code> را تنظیم کنید.</p>
+<p>تنظیم <code>rust.debug = true</code> گزینه‌های اشکال‌زدایی متعددی را فعال می‌کند (مثل <code>debug-assertions</code>،
+<code>debug-logging</code> و غیره) که در صورت تمایل می‌توان جداگانه تنظیمشان کرد، اما بسیاری از افراد
+فقط <code>rust.debug = true</code> را تنظیم می‌کنند.</p>
+<p>اگر می‌خواهید از GDB برای اشکال‌زدایی rustc استفاده کنید، لطفاً <code>bootstrap.toml</code> را با این گزینه‌ها تنظیم کنید:</p>
+<pre><code class="language-toml">rust.debug = true
+rust.debuginfo-level = 2
+</code></pre>
+<blockquote>
+<p>نکته:
+این فضای دیسک زیادی مصرف می‌کند
+(بیش از <!-- date-check Aug 2022 --> ۳۵ گیگابایت)،
+و زمان کامپایل بسیار بیشتری لازم دارد.
+با <code>debuginfo-level = 1</code> (پیش‌فرض وقتی <code>debug = true</code> است)،
+می‌توانید مسیر اجرا را دنبال کنید،
+اما اطلاعات نمادها برای اشکال‌زدایی را از دست می‌دهید.</p>
+</blockquote>
+<p>پیکربندی پیش‌فرض <code>symbol-mangling-version</code> نسخهٔ v0 را فعال می‌کند.
+این دست‌کم GDB نسخهٔ v10.2 را لازم دارد،
+در غیر این صورت باید symbol-mangling-version جدید را در <code>bootstrap.toml</code> غیرفعال کنید.</p>
+<pre><code class="language-toml">rust.new-symbol-mangling = false
+</code></pre>
+<blockquote>
+<p>برای اطلاعات بیشتر کامنت‌های <code>bootstrap.example.toml</code> را ببینید.</p>
+</blockquote>
+<p>پس از تغییر هر گزینهٔ پیکربندی باید کامپایلر را دوباره بسازید.</p>
+<h2 id="suppressing-the-ice-file"><a class="header" href="#suppressing-the-ice-file">سرکوب فایل ICE</a></h2>
+<p>به‌طور پیش‌فرض، اگر rustc با خطای داخلی کامپایلر (ICE) روبه‌رو شود، محتوای ICE را در یک
+فایل ICE درون پوشهٔ کاری فعلی با نام <code>rustc-ice-&lt;timestamp&gt;-&lt;pid&gt;.txt</code> dump می‌کند.
+اگر این مطلوب نیست، می‌توانید با <code>RUSTC_ICE=0</code> از ساخت فایل ICE جلوگیری کنید.</p>
+<h2 id="getting-a-backtrace"><a class="header" href="#getting-a-backtrace">گرفتن backtrace</a></h2>
+<p>وقتی ICE دارید (panic در کامپایلر)،
+می‌توانید <code>RUST_BACKTRACE=1</code> را تنظیم کنید تا مثل برنامه‌های عادی Rust ردیابی پشتهٔ <code>panic!</code> را بگیرید.
+به یاد دارم backtraceها روی MinGW <strong>کار نمی‌کنند</strong>، متأسفم.
+اگر مشکل دارید یا backtraceها پر از <code>unknown</code> هستند،
+شاید بخواهید راهی برای استفاده از لینوکس، Mac یا MSVC در ویندوز بیابید.</p>
+<p>در پیکربندی پیش‌فرض (بدون تنظیم <code>debug</code> روی <code>true</code>)، شمارهٔ خطوط فعال نیست،
+پس backtrace این‌طور به نظر می‌رسد:</p>
+<pre><code class="language-text">stack backtrace:
+   0: std::sys::imp::backtrace::tracing::imp::unwind_backtrace
+   1: std::sys_common::backtrace::_print
+   2: std::panicking::default_hook::{{closure}}
+   3: std::panicking::default_hook
+   4: std::panicking::rust_panic_with_hook
+   5: std::panicking::begin_panic
+   (~~~~ LINES REMOVED BY ME FOR BREVITY ~~~~)
+  32: rustc_typeck::check_crate
+  33: &lt;std::thread::local::LocalKey&lt;T&gt;&gt;::with
+  34: &lt;std::thread::local::LocalKey&lt;T&gt;&gt;::with
+  35: rustc::ty::context::TyCtxt::create_and_enter
+  36: rustc_driver::driver::compile_input
+  37: rustc_driver::compiler_entrypoint
+</code></pre>
+<p>اگر <code>debug = true</code> را تنظیم کنید، برای ردیابی پشته شمارهٔ خطوط را می‌گیرید.
+آن‌گاه backtrace این‌طور به نظر می‌رسد:</p>
+<pre><code class="language-text">stack backtrace:
+   (~~~~ LINES REMOVED BY ME FOR BREVITY ~~~~)
+             at /home/user/rust/compiler/rustc_typeck/src/check/cast.rs:110
+   7: rustc_typeck::check::cast::CastCheck::check
+             at /home/user/rust/compiler/rustc_typeck/src/check/cast.rs:572
+             at /home/user/rust/compiler/rustc_typeck/src/check/cast.rs:460
+             at /home/user/rust/compiler/rustc_typeck/src/check/cast.rs:370
+   (~~~~ LINES REMOVED BY ME FOR BREVITY ~~~~)
+  33: rustc_driver::driver::compile_input
+             at /home/user/rust/compiler/rustc_driver/src/driver.rs:1010
+             at /home/user/rust/compiler/rustc_driver/src/driver.rs:212
+  34: rustc_driver::compiler_entrypoint
+             at /home/user/rust/compiler/rustc_driver/src/lib.rs:253
+</code></pre>
+<h2 id="-z-flags"><a class="header" href="#-z-flags"><code>-Z</code> flags</a></h2>
+<p>کامپایلر مجموعه‌ای پرچم <code>-Z *</code> دارد.
+این‌ها پرچم‌های ناپایدارند که فقط روی nightly فعال‌اند.
+بسیاری از آن‌ها برای اشکال‌زدایی مفیدند.
+برای گرفتن فهرست کامل پرچم‌های <code>-Z</code> از <code>-Z help</code> استفاده کنید.</p>
+<p>یک پرچم مفید <code>-Z verbose-internals</code> است،
+که معمولاً چاپ اطلاعات بیشتری را فعال می‌کند که می‌تواند برای اشکال‌زدایی مفید باشد.</p>
+<p>درست در ادامه توضیحات مفصلی دربارهٔ چند مورد منتخب می‌یابید.</p>
+<h3 id="getting-a-backtrace-for-errors"><a class="header" href="#getting-a-backtrace-for-errors">گرفتن backtrace برای خطاها</a></h3>
+<p>اگر می‌خواهید backtrace را تا نقطه‌ای که کامپایلر پیام خطا صادر می‌کند بگیرید،
+می‌توانید <code>-Z treat-err-as-bug=n</code> را بدهید که کامپایلر را وادار می‌کند در خطای <code>n</code>ام panic کند.
+اگر <code>=n</code> را حذف کنید،
+کامپایلر برای <code>n</code> مقدار <code>1</code> را فرض می‌کند و در نتیجه در اولین خطایی که ببیند panic می‌کند.</p>
+<p>برای مثال:</p>
+<pre><code class="language-bash">$ cat error.rs
+</code></pre>
+<pre><code class="language-rust">fn main() {
+    1 + ();
+}</code></pre>
+<pre><code>$ rustc +stage1 error.rs
+error[E0277]: cannot add `()` to `{integer}`
+ --&gt; error.rs:2:7
+  |
+2 |       1 + ();
+  |         ^ no implementation for `{integer} + ()`
+  |
+  = help: the trait `Add&lt;()&gt;` is not implemented for `{integer}`
+
+error: aborting due to previous error
+</code></pre>
+<p>حالا خطای بالا از کجا می‌آید؟</p>
+<pre><code>$ RUST_BACKTRACE=1 rustc +stage1 error.rs -Z treat-err-as-bug
+error[E0277]: the trait bound `{integer}: std::ops::Add&lt;()&gt;` is not satisfied
+ --&gt; error.rs:2:7
+  |
+2 |     1 + ();
+  |       ^ no implementation for `{integer} + ()`
+  |
+  = help: the trait `std::ops::Add&lt;()&gt;` is not implemented for `{integer}`
+
+error: internal compiler error: unexpected panic
+
+note: the compiler unexpectedly panicked. this is a bug.
+
+note: we would appreciate a bug report: https://github.com/rust-lang/rust/blob/HEAD/CONTRIBUTING.md#bug-reports
+
+note: rustc 1.24.0-dev running on x86_64-unknown-linux-gnu
+
+note: run with `RUST_BACKTRACE=1` for a backtrace
+
+thread 'rustc' panicked at 'encountered error with `-Z treat_err_as_bug',
+/home/user/rust/compiler/rustc_errors/src/lib.rs:411:12
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose
+backtrace.
+stack backtrace:
+  (~~~ IRRELEVANT PART OF BACKTRACE REMOVED BY ME ~~~)
+   7: rustc::traits::error_reporting::&lt;impl rustc::infer::InferCtxt&lt;'a, 'tcx&gt;&gt;
+             ::report_selection_error
+             at /home/user/rust/compiler/rustc_middle/src/traits/error_reporting.rs:823
+   8: rustc::traits::error_reporting::&lt;impl rustc::infer::InferCtxt&lt;'a, 'tcx&gt;&gt;
+             ::report_fulfillment_errors
+             at /home/user/rust/compiler/rustc_middle/src/traits/error_reporting.rs:160
+             at /home/user/rust/compiler/rustc_middle/src/traits/error_reporting.rs:112
+   9: rustc_typeck::check::FnCtxt::select_obligations_where_possible
+             at /home/user/rust/compiler/rustc_typeck/src/check/mod.rs:2192
+  (~~~ IRRELEVANT PART OF BACKTRACE REMOVED BY ME ~~~)
+  36: rustc_driver::compiler_entrypoint
+             at /home/user/rust/compiler/rustc_driver/src/lib.rs:253
+</code></pre>
+<p>عالی، حالا برای خطا backtrace دارم!</p>
+<h3 id="debugging-delayed-bugs"><a class="header" href="#debugging-delayed-bugs">Debugging delayed bugs</a></h3>
+<p>گزینهٔ <code>-Z eagerly-emit-delayed-bugs</code> اشکال‌زدایی باگ‌های به‌تأخیرافتاده (delayed bugs) را آسان می‌کند.
+آن‌ها را به خطاهای عادی تبدیل می‌کند، یعنی قابل‌مشاهده‌شان می‌کند. این را می‌توان همراه
+با <code>-Z treat-err-as-bug</code> به‌کار برد تا در یک delayed bug مشخص متوقف شد و backtrace گرفت.</p>
+<h3 id="getting-the-error-creation-location"><a class="header" href="#getting-the-error-creation-location">گرفتن محل ایجاد خطا</a></h3>
+<p><code>-Z track-diagnostics</code> می‌تواند به یافتن محل صدور خطاها کمک کند.
+برای این از <code>#[track_caller]</code> استفاده می‌کند و محل را کنار خطا چاپ می‌کند:</p>
+<pre><code>$ RUST_BACKTRACE=1 rustc +stage1 error.rs -Z track-diagnostics
+error[E0277]: cannot add `()` to `{integer}`
+ --&gt; src\error.rs:2:7
+  |
+2 |     1 + ();
+  |       ^ no implementation for `{integer} + ()`
+-Ztrack-diagnostics: created at compiler/rustc_trait_selection/src/traits/error_reporting/mod.rs:638:39
+  |
+  = help: the trait `Add&lt;()&gt;` is not implemented for `{integer}`
+  = help: the following other types implement trait `Add&lt;Rhs&gt;`:
+            &lt;&amp;'a f32 as Add&lt;f32&gt;&gt;
+            &lt;&amp;'a f64 as Add&lt;f64&gt;&gt;
+            &lt;&amp;'a i128 as Add&lt;i128&gt;&gt;
+            &lt;&amp;'a i16 as Add&lt;i16&gt;&gt;
+            &lt;&amp;'a i32 as Add&lt;i32&gt;&gt;
+            &lt;&amp;'a i64 as Add&lt;i64&gt;&gt;
+            &lt;&amp;'a i8 as Add&lt;i8&gt;&gt;
+            &lt;&amp;'a isize as Add&lt;isize&gt;&gt;
+          and 48 others
+
+For more information about this error, try `rustc --explain E0277`.
+</code></pre>
+<p>این شبیه اما متفاوت با <code>-Z treat-err-as-bug</code> است:</p>
+<ul>
+<li>محل همهٔ خطاهای صادرشده را چاپ می‌کند</li>
+<li>نیازی به کامپایلر ساخته‌شده با نمادهای اشکال‌زدایی ندارد</li>
+<li>لازم نیست یک ردیابی پشتهٔ بزرگ را بخوانید.</li>
+</ul>
+<h2 id="getting-logging-output"><a class="header" href="#getting-logging-output">Getting logging output</a></h2>
+<p>کامپایلر برای لاگ‌کردن از crate با نام <a href="https://docs.rs/tracing"><code>tracing</code></a> استفاده می‌کند.</p>
+<p>برای جزئیات <a href="./tracing.html">فصل tracing</a> را ببینید.</p>
+<h2 id="narrowing-bisecting-regressions"><a class="header" href="#narrowing-bisecting-regressions">Narrowing (bisecting) regressions</a></h2>
+<p>ابزار <a href="https://github.com/rust-lang/cargo-bisect-rustc">cargo-bisect-rustc</a> راهی سریع و آسان برای
+یافتن اینکه دقیقاً کدام PR باعث تغییر رفتار <code>rustc</code> شده است.
+به‌طور خودکار آرتیفکت‌های PR مربوط به <code>rustc</code> را دانلود و با پروژه‌ای که ارائه می‌دهید تست می‌کند
+تا رگرسیون را بیابد.
+سپس می‌توانید PR را ببینید تا زمینهٔ بیشتری دربارهٔ اینکه <em>چرا</em> تغییر کرده به دست آورید.
+برای نحوهٔ استفاده <a href="https://rust-lang.github.io/cargo-bisect-rustc/tutorial.html">این آموزش</a> را ببینید.</p>
+<h2 id="downloading-artifacts-from-rusts-ci"><a class="header" href="#downloading-artifacts-from-rusts-ci">دانلود آرتیفکت‌ها از CI مربوط به Rust</a></h2>
+<p>ابزار <a href="https://github.com/kennytm/rustup-toolchain-install-master">rustup-toolchain-install-master</a> از kennytm می‌تواند برای
+دانلود آرتیفکت‌های تولیدشده توسط CI مربوط به Rust برای یک SHA1 مشخص به‌کار رود — این
+اساساً با land شدن موفق یک PR متناظر است — و سپس آن‌ها را
+برای استفادهٔ محلی شما راه‌اندازی می‌کند.
+این برای آرتیفکت‌های تولیدشده توسط <code>@bors try</code> هم کار می‌کند.
+وقتی می‌خواهید ساخت حاصل از یک PR را بدون ساخت خودتان بررسی کنید مفید است.</p>
+<h2 id="rustc_-test-attributes"><a class="header" href="#rustc_-test-attributes"><code>#[rustc_*]</code> TEST attributes</a></h2>
+<p>کامپایلر تعداد زیادی attribute داخلی (دائماً ناپایدار) تعریف می‌کند که برخی از آن‌ها برای
+اشکال‌زدایی با dump‌کردن اطلاعات داخلی اضافی کامپایلر مفیدند.
+این‌ها پیشوند <code>rustc_</code> دارند و
+پشت قابلیت داخلی <code>rustc_attrs</code> قرار گرفته‌اند (که مثلاً با <code>#![feature(rustc_attrs)]</code> فعال می‌شود).</p>
+<p>برای فهرست کامل و به‌روز <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_feature/src/builtin_attrs.rs"><code>builtin_attrs</code></a> را ببینید.
+به‌طور مشخص‌تر، آن‌هایی که با <code>TEST</code> علامت‌گذاری شده‌اند.
+در ادامه چند مورد قابل‌توجه آمده است:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Attribute</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>rustc_dump_def_parents</code></td><td>زنجیرهٔ والدهای <code>DefId</code> برخی تعریف‌ها را dump می‌کند.</td></tr>
+<tr><td><code>rustc_dump_def_path</code></td><td><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.TyCtxt.html#method.def_path_str"><code>def_path_str</code></a> یک آیتم را dump می‌کند.</td></tr>
+<tr><td><code>rustc_dump_generics</code></td><td>generics یک آیتم را dump می‌کند.</td></tr>
+<tr><td><code>rustc_dump_hidden_type_of_opaques</code></td><td><a href="./opaque-types-impl-trait-inference.html">نوع پنهان هر نوع opaque</a> را در crate dump می‌کند.</td></tr>
+<tr><td><code>rustc_dump_inferred_outlives</code></td><td>implied boundهای یک آیتم را dump می‌کند. دقیق‌تر، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.TyCtxt.html#method.inferred_outlives_of"><code>inferred_outlives_of</code></a> یک آیتم.</td></tr>
+<tr><td><code>rustc_dump_item_bounds</code></td><td><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.TyCtxt.html#method.item_bounds"><code>item_bounds</code></a> یک آیتم را dump می‌کند.</td></tr>
+<tr><td><code>rustc_dump_layout</code></td><td>این بخش را ببینید.</td></tr>
+<tr><td><code>rustc_dump_object_lifetime_defaults</code></td><td><a href="../reference/lifetime-elision.html#default-trait-object-lifetimes">پیش‌فرض‌های طول عمر trait object</a> یک آیتم را dump می‌کند.</td></tr>
+<tr><td><code>rustc_dump_clauses</code></td><td><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.TyCtxt.html#method.clauses_of"><code>clauses_of</code></a> یک آیتم را dump می‌کند.</td></tr>
+<tr><td><code>rustc_dump_symbol_name</code></td><td><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.TyCtxt.html#method.symbol_name"><code>symbol_name</code></a> یک آیتم را هم به‌شکل mangled و هم demangled dump می‌کند.</td></tr>
+<tr><td><code>rustc_dump_variances</code></td><td><a href="./variance.html">واریانس‌های</a> یک آیتم را dump می‌کند.</td></tr>
+<tr><td><code>rustc_dump_vtable</code></td><td>چیدمان vtable یک impl، یا یک type alias از نوع dyn را dump می‌کند.</td></tr>
+<tr><td><code>rustc_regions</code></td><td>نیازمندی‌های ناحیهٔ closure در NLL را dump می‌کند.</td></tr>
+</tbody>
+</table>
+</div>
+<p>درست در ادامه توضیحات مفصلی دربارهٔ چند مورد منتخب می‌یابید.</p>
+<h3 id="formatting-graphviz-output-dot-files"><a class="header" href="#formatting-graphviz-output-dot-files">قالب‌بندی خروجی Graphviz (فایل‌های .dot)</a></h3>
+<p>برخی گزینه‌های کامپایلر برای اشکال‌زدایی قابلیت‌های مشخص، گراف graphviz تولید می‌کنند —
+مثلاً attribute با نام <code>#[rustc_mir(borrowck_graphviz_postflow="suffix.dot")]</code>
+روی یک تابع، گراف‌های مختلف جریان داده borrow-checker را همراه با
+<code>-Zdump-mir-dataflow</code> dump می‌کند.</p>
+<p>همهٔ این‌ها فایل‌های <code>.dot</code> تولید می‌کنند. برای مشاهدهٔ این فایل‌ها، graphviz را نصب کنید (مثلاً
+<code>apt-get install graphviz</code>) و سپس دستورهای زیر را اجرا کنید:</p>
+<pre><code class="language-bash">$ dot -T pdf maybe_init_suffix.dot &gt; maybe_init_suffix.pdf
+$ firefox maybe_init_suffix.pdf # Or your favorite pdf viewer
+</code></pre>
+<p>Graphviz همچنین یک برنامهٔ پیش‌پردازش به نام
+<a href="https://graphviz.org/docs/cli/unflatten/"><code>unflatten</code></a> دارد
+که گاهی کمک می‌کند خروجی‌ها کمتر عجیب پخش‌شده به نظر برسند.
+یک فایل dot را می‌خواند و فایل dot دیگری خروجی می‌دهد، پس می‌توانید در pipe از آن استفاده کنید،
+مثلاً:</p>
+<pre><code>$ unflatten mir_dump/*.foo.-------.nll.0.regioncx.all.dot | dot -Tpdf  -o foo-outlives.pdf
+</code></pre>
+<p>این به‌ویژه برای گراف‌های پیچیدهٔ region outlives از
+<a href="borrow-check/debugging.html">borrow checker</a> مفید است.</p>
+<p><a href="https://dreampuf.github.io/GraphvizOnline">یک ویرایشگر و نمایشگر آنلاین Graphviz
+هم در دسترس است</a>.</p>
+<h2 id="narrowing-bisecting-regressions-1"><a class="header" href="#narrowing-bisecting-regressions-1">Narrowing (Bisecting) Regressions</a></h2>
+<p>attribute داخلی <code>#[rustc_dump_layout(...)]</code> را می‌توان برای dump‌کردن
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_public/abi/struct.Layout.html"><code>Layout</code></a> نوعی که به آن متصل شده به‌کار برد.
+برای مثال:</p>
+<pre><code class="language-rust">#![feature(rustc_attrs)]
+
+#[rustc_dump_layout(debug)]
+type T&lt;'a&gt; = &amp;'a u32;</code></pre>
+<p>خروجی زیر را صادر می‌کند:</p>
+<pre><code class="language-text">error: layout_of(&amp;u32) = Layout {
+           size: Size(8 bytes),
+           align: AbiAlign {
+               abi: Align(8 bytes),
+           },
+           backend_repr: Scalar(
+               Initialized {
+                   value: Pointer(
+                       AddressSpace(
+                           0,
+                       ),
+                   ),
+                   valid_range: 1..=18446744073709551615,
+               },
+           ),
+           fields: Primitive,
+           largest_niche: Some(
+               Niche {
+                   offset: Size(0 bytes),
+                   value: Pointer(
+                       AddressSpace(
+                           0,
+                       ),
+                   ),
+                   valid_range: 1..=18446744073709551615,
+               },
+           ),
+           uninhabited: false,
+           variants: Single {
+               index: 0,
+           },
+           max_repr_align: None,
+           unadjusted_abi_align: Align(8 bytes),
+           randomization_seed: 281492156579847,
+       }
+ --&gt; src/lib.rs:4:1
+  |
+4 | type T&lt;'a&gt; = &amp;'a u32;
+  | ^^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to previous error
+</code></pre>
+<h2 id="debugging-borrowcheck"><a class="header" href="#debugging-borrowcheck">Debugging borrowcheck</a></h2>
+<p>اشکال‌زدایی borrow checker <a href="borrow-check/debugging.html">فصل جداگانهٔ خودش</a> را دارد.</p>
+<h2 id="configuring-codelldb-for-debugging-rustc"><a class="header" href="#configuring-codelldb-for-debugging-rustc">پیکربندی CodeLLDB برای اشکال‌زدایی <code>rustc</code></a></h2>
+<p>اگر از VSCode استفاده می‌کنید و <code>bootstrap.toml</code> را برای درخواست سطح اشکال‌زدایی 1 یا 2
+برای بخش‌هایی از کد که به آن‌ها علاقه‌مندید ویرایش کرده‌اید،
+باید بتوانید با افزونهٔ <a href="https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb">CodeLLDB</a> در VSCode آن را اشکال‌زدایی کنید.</p>
+<p>در ادامه نمونه‌ای از فایل <code>launch.json</code> آمده که برای اجرای کامپایلر stage 1 مستقیماً
+از پوشه‌ای که در آن ساخته شده به‌کار می‌رود (لازم نیست «نصب» شده باشد):</p>
+<pre><code class="language-javascript">// .vscode/launch.json
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "type": "lldb",
+        "request": "launch",
+        "name": "Launch",
+        "args": [],  // array of string command-line arguments to pass to compiler
+        "program": "${workspaceFolder}/build/host/stage1/bin/rustc",
+        "windows": {  // applicable if using windows
+            "program": "${workspaceFolder}/build/host/stage1/bin/rustc.exe"
+        },
+        "cwd": "${workspaceFolder}",  // current working directory at program start
+        "stopOnEntry": false,
+        "sourceLanguages": ["rust"]
+      }
+    ]
+  }
+</code></pre><nav class="page-nav"><a href="tests/misc.html">→ اطلاعات متفرقه</a><a href="tracing.html">استفاده از ابزار ردیابی/لاگ‌گیری ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

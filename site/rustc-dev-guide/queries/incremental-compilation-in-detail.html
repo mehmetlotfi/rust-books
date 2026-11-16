@@ -1,0 +1,468 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>کامپایل افزایشی به تفصیل — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="queries/incremental-compilation-in-detail"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="incremental-compilation-in-detail"><a class="header" href="#incremental-compilation-in-detail">کامپایل افزایشی با جزئیات</a></h1>
+<p>طرح کامپایل افزایشی در اصل افزونه‌ای شگفت‌آور
+ساده بر سامانهٔ کلی کوئری است.
+بر این واقعیت تکیه دارد که:</p>
+<ol>
+<li>کوئری‌ها توابع خالص هستند — با ورودی‌های یکسان، کوئری همیشه
+نتیجهٔ یکسانی می‌دهد، و</li>
+<li>مدل کوئری کامپایل را در گرافی بدون دور ساختار می‌دهد که وابستگی‌های بین محاسبات جداگانه را صریح می‌کند.</li>
+</ol>
+<p>این فصل توضیح می‌دهد چگونه می‌توانیم از این ویژگی‌ها برای افزایشی‌کردن امور استفاده کنیم و سپس دربارهٔ مسائل پیاده‌سازی بحث می‌کند.</p>
+<h2 id="a-basic-algorithm-for-incremental-query-evaluation"><a class="header" href="#a-basic-algorithm-for-incremental-query-evaluation">الگوریتم پایه برای ارزیابی افزایشی کوئری</a></h2>
+<p>همان‌طور که در <a href="./query-evaluation-model-in-detail.html">مقدمهٔ مدل ارزیابی کوئری</a> توضیح داده شد، فراخوانی‌های کوئری
+گراف جهت‌دار بدون دور می‌سازند.
+دوباره مثال فصل قبل:</p>
+<pre><code class="language-ignore">  list_of_all_hir_items &lt;----------------------------- type_check_crate()
+                                                               |
+                                                               |
+  Hir(foo) &lt;--- type_of(foo) &lt;--- type_check_item(foo) &lt;-------+
+                                      |                        |
+                    +-----------------+                        |
+                    |                                          |
+                    v                                          |
+  Hir(bar) &lt;--- type_of(bar) &lt;--- type_check_item(bar) &lt;-------+
+</code></pre>
+<p>چون هر دسترسی از یک کوئری به کوئری دیگر باید از زمینهٔ کوئری بگذرد، می‌توانیم این دسترسی‌ها را ثبت کنیم و به این ترتیب این گراف وابستگی را در حافظه بسازیم.
+با فعال‌بودن ردیابی وابستگی، وقتی کامپایل تمام می‌شود،
+می‌دانیم کدام کوئری‌ها فراخوانی شدند (گره‌های گراف) و برای هر
+فراخوانی، کدام کوئری‌ها یا ورودی‌های دیگر در محاسبهٔ نتیجهٔ آن کوئری دخیل بوده‌اند (یال‌های گراف).</p>
+<p>اکنون فرض کنید کد منبع برنامه را تغییر دهیم طوری که
+HIR مربوط به <code>bar</code> با قبل فرق کند.
+هدف ما این است که فقط کوئری‌هایی را که واقعاً از این تغییر متأثر شده‌اند دوباره محاسبه کنیم
+و نتایج cache‌شدهٔ همهٔ کوئری‌های دیگر را دوباره استفاده کنیم.
+با گراف وابستگی دقیقاً می‌توانیم این کار را بکنیم.
+برای یک فراخوانی مشخص کوئری، گراف دقیقاً به ما می‌گوید
+چه داده‌ای در محاسبهٔ نتایج آن دخیل بوده، فقط باید
+یال‌ها را دنبال کنیم تا به چیزی که تغییر کرده برسیم.
+اگر به چیزی که تغییر کرده برنخوریم، می‌دانیم کوئری همچنان همان نتیجه‌ای را می‌دهد که
+از قبل در cache داریم.</p>
+<p>فراخوانی <code>type_of(foo)</code> از بالا را مثال بزنیم، می‌توانیم با دنبال‌کردن یال‌ها به ورودی‌هایش بررسی کنیم
+آیا نتیجهٔ cache‌شده هنوز معتبر است.
+تنها یال به <code>Hir(foo)</code> می‌رسد، ورودی‌ای که از تغییر متأثر نشده است.
+پس می‌دانیم نتیجهٔ cache‌شده برای <code>type_of(foo)</code> هنوز معتبر است.</p>
+<p>داستان برای <code>type_check_item(foo)</code> کمی فرق دارد: دوباره یال‌ها را پیمایش می‌کنیم
+و از قبل می‌دانیم <code>type_of(foo)</code> مشکلی ندارد.
+سپس به <code>type_of(bar)</code> می‌رسیم که هنوز بررسی‌اش نکرده‌ایم، پس یال‌های
+<code>type_of(bar)</code> را پیمایش می‌کنیم و به <code>Hir(bar)</code> می‌رسیم که <em>تغییر کرده است</em>.
+در نتیجه نتیجهٔ <code>type_of(bar)</code> ممکن است با آنچه در cache داریم متفاوت باشد و، به‌صورت تعدّی، نتیجهٔ <code>type_check_item(foo)</code> هم ممکن است تغییر کرده باشد.
+پس <code>type_check_item(foo)</code> را دوباره اجرا می‌کنیم، که به نوبهٔ خود
+<code>type_of(bar)</code> را دوباره اجرا می‌کند، که نتیجهٔ به‌روز می‌دهد
+چون نسخهٔ به‌روز <code>Hir(bar)</code> را می‌خواند.
+همچنین <code>type_check_item(bar)</code> را دوباره اجرا می‌کنیم چون نتیجهٔ <code>type_of(bar)</code> ممکن است تغییر کرده باشد.</p>
+<h2 id="the-problem-with-the-basic-algorithm-false-positives"><a class="header" href="#the-problem-with-the-basic-algorithm-false-positives">مشکل الگوریتم پایه: مثبت‌های کاذب</a></h2>
+<p>اگر پاراگراف قبلی را با دقت خوانده باشید، می‌بینید می‌گوید
+<code>type_of(bar)</code> <em>ممکن است</em> تغییر کرده باشد چون یکی از ورودی‌هایش تغییر کرده است.
+این احتمال هم هست که <em>با وجود</em> تغییر ورودی همچنان دقیقاً همان
+نتیجه را بدهد.
+مثالی با کوئری ساده‌ای که فقط علامت (sign) یک عدد صحیح را محاسبه می‌کند در نظر بگیرید:</p>
+<pre><code class="language-ignore">  IntValue(x) &lt;---- sign_of(x) &lt;--- some_other_query(x)
+</code></pre>
+<p>فرض کنید <code>IntValue(x)</code> ابتدا <code>1000</code> است و سپس روی <code>2000</code> تنظیم می‌شود.
+هرچند <code>IntValue(x)</code> در دو حالت متفاوت است، <code>sign_of(x)</code> در هر دو حالت
+نتیجهٔ <code>+</code> می‌دهد.</p>
+<p>اگر الگوریتم پایه را دنبال کنیم، با این حال، <code>some_other_query(x)</code> باید
+(بی‌دلیل) دوباره ارزیابی شود چون به‌صورت تعدّی به ورودی تغییریافته وابسته است.
+تشخیص تغییر در این مورد «مثبت کاذب» می‌دهد چون باید
+محتاطانه فرض کند <code>some_other_query(x)</code> ممکن است از آن ورودی تغییریافته متأثر شده باشد.</p>
+<p>متأسفانه معلوم می‌شود کوئری‌های واقعی در کامپایلر پر از مثال‌هایی مثل این‌اند و تغییرات کوچک در ورودی اغلب بالقوه
+بخش‌های بسیار بزرگی از فایل‌های دودویی خروجی را تحت‌تأثیر قرار می‌دهند.
+در نتیجه، مجبور شدیم سامانهٔ تشخیص تغییر را هوشمندتر و دقیق‌تر کنیم.</p>
+<h2 id="improving-accuracy-the-red-green-algorithm"><a class="header" href="#improving-accuracy-the-red-green-algorithm">بهبود دقت: الگوریتم red-green</a></h2>
+<p>مشکل «مثبت‌های کاذب» را می‌توان با در هم‌آمیختن تشخیص تغییر
+و ارزیابی مجدد کوئری حل کرد.
+به‌جای پیمایش گراف تا ورودی‌ها هنگام تلاش برای فهمیدن اینکه آیا نتیجهٔ cache‌شده هنوز معتبر است،
+می‌توانیم بررسی کنیم آیا نتیجه <em>واقعاً</em> تغییر کرده است، پس از اینکه مجبور به ارزیابی مجدد آن شدیم.</p>
+<p>این الگوریتم را red-green می‌نامیم چون به گره‌ها
+در گراف وابستگی رنگ سبز داده می‌شود اگر توانستیم ثابت کنیم
+نتیجهٔ cache‌شدهٔ آن هنوز معتبر است و رنگ قرمز اگر نتیجه
+پس از ارزیابی مجدد متفاوت از آب درآمده باشد.</p>
+<p>جان ردیابی تغییر red-green در الگوریتم try-mark-green پیاده‌سازی شده است،
+که، حدس زدید، سعی می‌کند گره داده‌شده را سبز علامت بزند:</p>
+<pre><code class="language-rust ignore">fn try_mark_green(tcx, current_node) -&gt; bool {
+
+    // Fetch the inputs to `current_node`, i.e. get the nodes that the direct
+    // edges from `node` lead to.
+    let dependencies = tcx.dep_graph.get_dependencies_of(current_node);
+
+    // Now check all the inputs for changes
+    for dependency in dependencies {
+
+        match tcx.dep_graph.get_node_color(dependency) {
+            Green =&gt; {
+                // This input has already been checked before and it has not
+                // changed; so we can go on to check the next one
+            }
+            Red =&gt; {
+                // We found an input that has changed. We cannot mark
+                // `current_node` as green without re-running the
+                // corresponding query.
+                return false
+            }
+            Unknown =&gt; {
+                // This is the first time we look at this node. Let's try
+                // to mark it green by calling try_mark_green() recursively.
+                if try_mark_green(tcx, dependency) {
+                    // We successfully marked the input as green, on to the
+                    // next.
+                } else {
+                    // We could *not* mark the input as green. This means we
+                    // don't know if its value has changed. In order to find
+                    // out, we re-run the corresponding query now!
+                    tcx.run_query_for(dependency);
+
+                    // Fetch and check the node color again. Running the query
+                    // has forced it to either red (if it yielded a different
+                    // result than we have in the cache) or green (if it
+                    // yielded the same result).
+                    match tcx.dep_graph.get_node_color(dependency) {
+                        Red =&gt; {
+                            // The input turned out to be red, so we cannot
+                            // mark `current_node` as green.
+                            return false
+                        }
+                        Green =&gt; {
+                            // Re-running the query paid off! The result is the
+                            // same as before, so this particular input does
+                            // not invalidate `current_node`.
+                        }
+                        Unknown =&gt; {
+                            // There is no way a node has no color after
+                            // re-running the query.
+                            panic!("unreachable")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // If we have gotten through the entire loop, it means that all inputs
+    // have turned out to be green. If all inputs are unchanged, it means
+    // that the query result corresponding to `current_node` cannot have
+    // changed either.
+    tcx.dep_graph.mark_green(current_node);
+
+    true
+}</code></pre>
+<blockquote>
+<p>نکته:
+پیاده‌سازی واقعی را می‌توان در
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/src/rustc_middle/dep_graph/graph.rs.html"><code>compiler/rustc_middle/src/dep_graph/graph.rs</code></a> یافت</p>
+</blockquote>
+<p>با استفاده از علامت‌گذاری red-green می‌توانیم از اثر تجمعی ویرانگر
+داشتن مثبت کاذب در تشخیص تغییر پرهیز کنیم.
+هر وقت کوئری‌ای در حالت افزایشی اجرا می‌شود، ابتدا بررسی می‌کنیم آیا از قبل سبز است.
+اگر نه، <code>try_mark_green()</code> را روی آن اجرا می‌کنیم.
+اگر پس از آن هم سبز نبود، آن‌گاه واقعاً
+provider کوئری را فراخوانی می‌کنیم تا نتیجه را دوباره محاسبه کند.
+محاسبهٔ مجدد کوئری
+ممکن است خودش شامل فراخوانی بازگشتی کوئری‌های بیشتر باشد، که می‌تواند یعنی دوباره
+به الگوریتم <code>try_mark_green()</code> برای وابستگی‌ها به‌صورت بازگشتی برمی‌گردیم.</p>
+<h2 id="the-real-world-how-persistence-makes-everything-complicated"><a class="header" href="#the-real-world-how-persistence-makes-everything-complicated">دنیای واقعی: چگونه پایایی (persistence) همه‌چیز را پیچیده می‌کند</a></h2>
+<p>بخش‌های بالا الگوریتم زیربنایی کامپایل افزایشی را توصیف کردند، اما چون فرایند کامپایلر پس از پایان خارج می‌شود و
+زمینهٔ کوئری را با cache نتایجش به فراموشی می‌برد، باید
+داده‌ها را روی دیسک ماندگار کنیم تا جلسهٔ کامپایل بعدی بتواند از آن‌ها استفاده کند.
+این مجموعه‌ای کاملاً تازه از چالش‌های پیاده‌سازی به همراه دارد:</p>
+<ul>
+<li>cache نتایج کوئری روی دیسک ذخیره می‌شود، پس برای مقایسهٔ تغییر به‌آسانی در دسترس نیست.</li>
+<li>جلسهٔ کامپایل بعدی با نسخهٔ جدیدی از کد شروع می‌شود
+که تغییرات دلخواه روی آن اعمال شده است.
+انواع شناسه‌ها و اندیس‌هایی که از شمارندهٔ سراسری و ترتیبی
+تولید می‌شوند (مثلاً <code>NodeId</code>، <code>DefId</code> و غیره)
+ممکن است جابه‌جا شده باشند، که نتایج ماندگار روی دیسک را فوراً
+غیرقابل‌استفاده می‌کند چون همان شناسه‌ها و اندیس‌های عددی ممکن است در جلسهٔ کامپایل جدید
+به چیزهای کاملاً تازه اشاره کنند.</li>
+<li>ماندگارکردن روی دیسک هزینه دارد، پس نباید هر تکهٔ کوچک
+اطلاعات واقعاً بین جلسه‌های کامپایل cache شود.
+داده‌های ساده با اندازهٔ ثابت بر چیزهای پیچیده‌ای که باید
+از گام پرهزینهٔ (de-)serialization بگذرند ترجیح دارند.</li>
+</ul>
+<p>بخش‌های زیر توضیح می‌دهند کامپایلر این مشکلات را چگونه حل می‌کند.</p>
+<h3 id="a-question-of-stability-bridging-the-gap-between-compilation-sessions"><a class="header" href="#a-question-of-stability-bridging-the-gap-between-compilation-sessions">پرسش پایداری: پل‌زدن شکاف بین جلسه‌های کامپایل</a></h3>
+<p>همان‌طور که پیش‌تر گفته شد، شناسه‌های مختلف (مثل <code>DefId</code>) توسط کامپایلر به شکلی تولید می‌شوند که به محتوای کد منبع در حال کامپایل بستگی دارد.
+تخصیص شناسه معمولاً قطعی است.
+یعنی اگر دقیقاً همان کد دو بار کامپایل شود،
+همان چیزها شناسهٔ یکسان می‌گیرند.
+اما اگر چیزی
+تغییر کند، مثلاً تابعی در میانهٔ فایل اضافه شود، هیچ تضمینی نیست که چیزی همان شناسهٔ قبلی را داشته باشد.</p>
+<p>در نتیجه نمی‌توانیم داده‌ها را در cache روی دیسک همان‌طور که در حافظه نمایش داده می‌شوند نمایش دهیم.
+برای مثال، اگر فقط تکه‌ای از اطلاعات نوع مثل <code>TyKind::FnDef(DefId, GenericArgsRef&lt;'tcx&gt;)</code> را ذخیره کنیم (همان‌طور که
+در حافظه می‌کنیم) و سپس <code>DefId</code> داخل آن در جلسهٔ کامپایل جدید به تابع دیگری اشاره کند، به مشکل می‌خوریم.</p>
+<p>راه‌حل این مشکل یافتن شکل‌های «پایدار» برای شناسه‌هاست که بین جلسه‌های کامپایل
+معتبر می‌مانند.
+برای مهم‌ترین مورد، یعنی <code>DefId</code>ها،
+این‌ها <code>DefPath</code> نامیده می‌شوند.
+هر <code>DefId</code> یک <code>DefPath</code> متناظر دارد، اما به‌جای شناسهٔ عددی، <code>DefPath</code> بر اساس
+مسیر آیتم شناسایی‌شده است، مثلاً <code>std::collections::HashMap</code>. مزیت چنین شناسه‌ای این است که تغییرات نامرتبط روی آن اثر نمی‌گذارد.
+برای مثال، می‌توان تابع جدیدی به <code>std::collections</code> افزود اما
+<code>std::collections::HashMap</code> همچنان همان <code>std::collections::HashMap</code> است.
+<code>DefPath</code> نسبت به تغییرات منبع «پایدار» است در حالی که <code>DefId</code> نیست.</p>
+<p><code>DefPathHash</code> هم هست که فقط مقدار هش ۱۲۸ بیتی <code>DefPath</code> است.
+این دو اطلاعات یکسانی دارند و ما بیشتر از
+<code>DefPathHash</code> استفاده می‌کنیم چون کار با آن ساده‌تر است، هم <code>Copy</code> است و هم مستقل.</p>
+<p>این اصل شناسه‌های پایدار برای مقاوم‌کردن داده‌های cache روی دیسک در برابر تغییرات کد منبع به‌کار می‌رود.
+به‌جای ذخیرهٔ <code>DefId</code>، <code>DefPathHash</code> را ذخیره می‌کنیم و وقتی چیزی را از cache deserialize می‌کنیم،
+<code>DefPathHash</code> را به <code>DefId</code> متناظر در جلسهٔ کامپایل <em>فعلی</em> نگاشت می‌کنیم
+(که فقط یک جست‌وجوی ساده در hash table است).</p>
+<p><code>HirId</code>، که برای شناسایی اجزای HIR‌ای که <code>DefId</code> خودشان را ندارند به‌کار می‌رود، شناسهٔ پایدار دیگری است.
+از نظر مفهومی جفتی از یک <code>DefPath</code>
+و یک <code>LocalId</code> است، که <code>LocalId</code> چیزی (مثلاً <code>hir::Expr</code>) را
+به‌صورت محلی درون «مالک» آن (مثلاً <code>hir::Item</code>) شناسایی می‌کند. اگر مالک جابه‌جا شود،
+<code>LocalId</code>های درون آن همچنان یکسان می‌مانند.</p>
+<h3 id="checking-query-results-for-changes-stablehash-and-fingerprints"><a class="header" href="#checking-query-results-for-changes-stablehash-and-fingerprints">بررسی تغییر نتایج کوئری: <code>StableHash</code> و <code>Fingerprint</code>ها</a></h3>
+<p>برای انجام علامت‌گذاری red-green اغلب باید بررسی کنیم آیا نتیجهٔ یک
+کوئری نسبت به نتیجه‌ای که در جلسهٔ کامپایل قبلی داشت تغییر کرده است.
+با این حال دو مشکل عملکردی هست:</p>
+<ul>
+<li>می‌خواهیم از بارگذاری نتیجهٔ قبلی از دیسک فقط برای مقایسه پرهیز کنیم.
+نتیجهٔ جدید را از قبل محاسبه کرده‌ایم و از آن استفاده می‌کنیم.
+همچنین بارگذاری نتیجه از دیسک interner‌ها را با داده‌ای «آلوده» می‌کند که
+بعید است هرگز استفاده شود.</li>
+<li>نمی‌خواهیم تک‌تک نتایج را در cache روی دیسک ذخیره کنیم.
+برای مثال، اتلاف تلاش است چیزهایی را روی دیسک ماندگار کنیم که
+از قبل در crateهای بالادستی موجودند.</li>
+</ul>
+<p>کامپایلر با استفاده از آنچه <code>Fingerprint</code> نامیده می‌شود از این مشکلات پرهیز می‌کند.
+هر بار که نتیجهٔ جدید کوئری محاسبه می‌شود، موتور کوئری مقدار هش ۱۲۸ بیتی
+نتیجه را محاسبه می‌کند.
+این مقدار هش را «<code>Fingerprint</code> نتیجهٔ کوئری» می‌نامیم.
+هش‌کردن «به شکل پایدار» انجام می‌شود (و باید بشود).
+یعنی هر وقت چیزی هش می‌شود که ممکن است بین جلسه‌های کامپایل تغییر کند
+(مثلاً <code>DefId</code>)، به‌جای آن معادل پایدارش
+(مثلاً <code>DefPath</code> متناظر) را هش می‌کنیم. زیرساخت <code>StableHash</code> برای همین است.
+به این ترتیب <code>Fingerprint</code>های محاسبه‌شده در دو جلسهٔ کامپایل متفاوت همچنان قابل‌مقایسه‌اند.</p>
+<p>گام بعد ذخیرهٔ این fingerprintها در کنار گراف وابستگی است.
+این ارزان است چون fingerprintها فقط بایت‌هایی هستند که باید کپی شوند.
+بارگذاری کل مجموعهٔ fingerprintها همراه با گراف وابستگی هم ارزان است.</p>
+<p>حالا وقتی علامت‌گذاری red-green به نقطه‌ای می‌رسد که باید بررسی کند
+آیا نتیجه تغییر کرده، می‌تواند fingerprint قبلی (که از قبل بارگذاری شده) را
+با fingerprint نتیجهٔ جدید مقایسه کند.</p>
+<p>این رویکرد نسبتاً خوب کار می‌کند اما بی‌نقص نیست:</p>
+<ul>
+<li>
+<p>احتمال کمی برای برخورد هش (hash collision) هست.
+یعنی دو نتیجهٔ متفاوت می‌توانند fingerprint یکسان داشته باشند و سامانه به‌اشتباه
+فرض کند نتیجه تغییر نکرده، که به یک به‌روزرسانی ازدست‌رفته می‌انجامد.</p>
+<p>این خطر را با استفاده از تابع هش باکیفیت و مقدار هش ۱۲۸ بیتی کاهش می‌دهیم.
+به لطف این اقدامات خطر عملی برخورد هش ناچیز است.</p>
+</li>
+<li>
+<p>محاسبهٔ fingerprint بسیار پرهزینه است.
+دلیل اصلی این است که کامپایل افزایشی می‌تواند کندتر از کامپایل غیرافزایشی باشد.
+مجبوریم از تابع هش خوب و در نتیجه پرهزینه استفاده کنیم، و هنگام هش‌کردن باید چیزها را به
+معادل پایدارشان نگاشت کنیم.</p>
+</li>
+</ul>
+<h3 id="a-tale-of-two-depgraphs-the-old-and-the-new"><a class="header" href="#a-tale-of-two-depgraphs-the-old-and-the-new">داستان دو <code>DepGraph</code>: قدیمی و جدید</a></h3>
+<p>توضیح اولیهٔ ردیابی وابستگی چند جزئیات را سرسری می‌گذراند
+که هنگام تلاش واقعی برای پیاده‌سازی به‌سرعت سردرگم‌کننده می‌شوند.
+به‌ویژه به‌آسانی می‌توان نادیده گرفت که در واقع با <em>دو</em>
+گراف وابستگی سروکار داریم: گرافی که در جلسهٔ کامپایل قبلی ساختیم و
+گرافی که برای جلسهٔ کامپایل فعلی می‌سازیم.</p>
+<p>وقتی جلسهٔ کامپایل شروع می‌شود، کامپایلر گراف وابستگی قبلی را به‌عنوان داده‌ای تغییرناپذیر در حافظه بارگذاری می‌کند.
+سپس وقتی کوئری فراخوانی می‌شود،
+ابتدا سعی می‌کند گرهٔ متناظر را در گراف سبز علامت بزند.
+این واقعاً یعنی سعی می‌کنیم گره‌ای را در dep-graph <em>قبلی</em>
+سبز علامت بزنیم که با کلید کوئری در جلسهٔ <em>فعلی</em> متناظر است.
+چگونه این نگاشت بین کلید کوئری فعلی و <code>DepNode</code> قبلی را انجام می‌دهیم؟
+پاسخ دوباره <code>Fingerprint</code>هاست: گره‌های گراف وابستگی با
+fingerprint کلید کوئری شناسایی می‌شوند.
+چون fingerprintها بین جلسه‌های کامپایل پایدارند، محاسبهٔ یکی در جلسهٔ فعلی به ما اجازه می‌دهد گره‌ای
+را در گراف وابستگی از جلسهٔ قبلی بیابیم.
+اگر گره‌ای با fingerprint داده‌شده نیابیم، یعنی کلید کوئری به چیزی اشاره دارد که
+در جلسهٔ قبلی هنوز وجود نداشت.</p>
+<p>پس با یافتن dep-node در گراف وابستگی قبلی، می‌توانیم
+وابستگی‌هایش (یعنی dep-nodeهای دیگر در گراف قبلی) را جست‌وجو کنیم و با
+بقیهٔ الگوریتم try-mark-green ادامه دهیم.
+اتفاق جالب بعدی وقتی رخ می‌دهد که گره را با موفقیت سبز علامت زدیم.
+در آن نقطه گره
+و یال‌های آن به وابستگی‌هایش را از گراف قدیمی به گراف جدید کپی می‌کنیم.
+باید این کار را بکنیم چون dep-graph جدید نمی‌تواند
+گره و یال‌ها را از ردیابی معمول وابستگی به دست آورد.
+سامانهٔ ردیابی فقط هنگام اجرای واقعی کوئری می‌تواند یال‌ها را ثبت کند — اما اجرای کوئری،
+هرچند نتیجه از قبل cache شده، دقیقاً همان چیزی است که می‌خواهیم از آن پرهیز کنیم.</p>
+<p>وقتی جلسهٔ کامپایل تمام شد، همهٔ بخش‌های تغییرنکرده
+از گراف قدیمی به گراف جدید کپی شده‌اند، در حالی که بخش‌های تغییریافته
+توسط سامانهٔ ردیابی به گراف جدید افزوده شده‌اند.
+در این نقطه گراف جدید همراه با cache نتایج کوئری روی دیسک serialize می‌شود و می‌تواند
+در جلسهٔ کامپایل بعدی نقش dep-graph قبلی را بازی کند.</p>
+<h3 id="didnt-you-forget-something-cache-promotion"><a class="header" href="#didnt-you-forget-something-cache-promotion">چیزی را فراموش نکردید؟: ارتقای cache (cache promotion)</a></h3>
+<p>سامانهٔ توصیف‌شده تا اینجا ویژگی کمی ظریف دارد: اگر همهٔ ورودی‌های یک
+dep-node سبز باشند، خود dep-node را می‌توان بدون
+محاسبه یا بارگذاری نتیجهٔ کوئری متناظر سبز علامت زد.
+اعمال تعدّی این ویژگی اغلب به وضعیتی می‌رسد که برخی نتایج میانی
+هرگز واقعاً از دیسک بارگذاری نمی‌شوند، مثل مثال زیر:</p>
+<pre><code class="language-ignore">   input(A) &lt;-- intermediate_query(B) &lt;-- leaf_query(C)
+</code></pre>
+<p>کامپایلر ممکن است برای تولید برخی آرتیفکت‌های خروجی به مقدار <code>leaf_query(C)</code> نیاز داشته باشد.
+اگر بتواند <code>leaf_query(C)</code> را سبز علامت بزند، نتیجه را از cache روی دیسک بارگذاری می‌کند.
+اما نتیجهٔ <code>intermediate_query(B)</code> هرگز بارگذاری نمی‌شود.
+در نتیجه، وقتی کامپایلر cache نتایج <em>جدید</em> را با نوشتن همهٔ نتایج کوئری در حافظه روی دیسک ماندگار می‌کند، <code>intermediate_query(B)</code>
+در حافظه نخواهد بود و در نتیجه در cache نتایج جدید گم می‌شود.</p>
+<p>اگر بعداً جلسهٔ کامپایل دیگری واقعاً به نتیجهٔ <code>intermediate_query(B)</code> نیاز داشته باشد،
+باید دوباره محاسبه شود، با اینکه درست پیش از آن نتیجهٔ کاملاً معتبری برایش در cache داشتیم.</p>
+<p>برای جلوگیری از این، کامپایلر کاری به نام
+«cache promotion» انجام می‌دهد: پیش از صدور cache نتایج جدید، همهٔ dep-nodeهای سبز را پیمایش می‌کند و
+مطمئن می‌شود نتیجهٔ کوئری آن‌ها در حافظه بارگذاری شده است.
+به این ترتیب cache نتایج بی‌دلیل دوباره کوچک نمی‌شود.</p>
+<h1 id="incremental-compilation-and-the-compiler-backend"><a class="header" href="#incremental-compilation-and-the-compiler-backend">کامپایل افزایشی و backend کامپایلر</a></h1>
+<p>backend کامپایلر، بخشی که LLVM را درگیر می‌کند، از سامانهٔ کوئری استفاده می‌کند اما
+خودش بر حسب کوئری پیاده‌سازی نشده است.
+در نتیجه به‌طور خودکار در ردیابی وابستگی شرکت نمی‌کند.
+اما یکپارچگی دستی با سامانهٔ ردیابی نسبتاً سرراست است.
+کامپایلر فقط ردیابی می‌کند هنگام تولید نسخهٔ LLVM اولیهٔ هر واحد تولید کد (CGU) چه کوئری‌هایی فراخوانی می‌شوند، که به یک dep-node برای هر CGU می‌انجامد.
+در جلسه‌های کامپایل بعدی سعی می‌کند dep-node مربوط به یک CGU را سبز علامت بزند.
+اگر موفق شود، می‌داند فایل‌های شیء و bitcode متناظر روی دیسک هنوز معتبرند.
+اگر موفق نشود، کل CGU باید دوباره کامپایل شود.</p>
+<p>این همان رویکردی است که برای کوئری‌های معمولی به‌کار می‌رود.
+تفاوت‌های اصلی:</p>
+<ul>
+<li>
+<p>اینکه نمی‌توانیم به‌آسانی fingerprint برای ماژول‌های LLVM محاسبه کنیم (چون
+آن‌ها اشیای مات C++ هستند)،</p>
+</li>
+<li>
+<p>اینکه منطق برخورد با مقادیر cache‌شده با کوئری‌های معمولی کاملاً متفاوت است چون اینجا
+فایل‌های bitcode و شیء به‌جای مقادیر serialize‌شدهٔ Rust در فایل مشترک cache نتایج داریم، و</p>
+</li>
+<li>
+<p>اینکه عملیات پیرامون LLVM از نظر زمان محاسبه و
+مصرف حافظه آن‌قدر پرهزینه‌اند که باید کنترل دقیقی بر اینکه چه چیزی چه وقت اجرا می‌شود و چه چیزی تا کی در حافظه می‌ماند داشته باشیم.</p>
+</li>
+</ul>
+<p>سامانهٔ کوئری احتمالاً می‌تواند با سازوکارهای همه‌منظوره برای برخورد با همهٔ موارد بالا گسترش یابد اما تاکنون این به نظر دردسری بیش از صرفه‌جویی می‌آمد.</p>
+<h2 id="query-modifiers"><a class="header" href="#query-modifiers">Query modifiers</a></h2>
+<blockquote>
+<p>FIXME: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/query/modifiers/index.html"><code>rustc_middle::query::modifiers</code></a> را به خانهٔ مستندات modifierهای کوئری تبدیل کنید،
+و همهٔ مستندات modifier مفید دیگر را پس از بررسی اینکه هنوز دقیق‌اند به آنجا مهاجرت دهید.</p>
+</blockquote>
+<p>سامانهٔ کوئری اجازه می‌دهد <a href="../query.html">modifierها</a> روی کوئری‌ها اعمال شوند.
+این modifierها بر جنبه‌های مشخصی از نحوهٔ برخورد سامانه با کوئری
+در رابطه با کامپایل افزایشی اثر می‌گذارند:</p>
+<ul>
+<li>
+<p><code>eval_always</code> - کوئری‌ای با attribute با نام <code>eval_always</code> در کامپایل افزایشی
+بی‌قیدوشرط دوباره اجرا می‌شود.
+یعنی
+سامانه حتی سعی نمی‌کند dep-node کوئری را سبز علامت بزند.
+این attribute دو کاربرد دارد:</p>
+<ul>
+<li>
+<p>کوئری‌های <code>eval_always</code> می‌توانند ورودی‌ها را بخوانند (از فایل‌ها، حالت سراسری و غیره).
+همچنین می‌توانند اثرات جانبی مثل نوشتن در فایل‌ها و تغییر حالت سراسری ایجاد کنند.</p>
+</li>
+<li>
+<p>برخی کوئری‌ها به احتمال زیاد دوباره ارزیابی می‌شوند چون نتیجه‌شان
+به کل کد منبع بستگی دارد.
+در این حالت <code>eval_always</code> می‌تواند به‌عنوان بهینه‌سازی به‌کار رود
+چون سامانه می‌تواند از ابتدا ثبت وابستگی‌ها را رد کند.</p>
+</li>
+</ul>
+</li>
+<li>
+<p><code>no_force</code> - هرگز dep-nodeهای این کوئری را «force» نکن، حتی اگر نوع کلید
+کوئری قابل‌بازیابی باشد.</p>
+</li>
+<li>
+<p><code>no_hash</code> - اعمال <code>no_hash</code> روی یک کوئری به سامانه می‌گوید
+fingerprint نتیجهٔ کوئری را محاسبه نکند.
+این دو پیامد دارد:</p>
+<ul>
+<li>
+<p>محاسبه‌نکردن fingerprint می‌تواند زمان قابل‌توجهی صرفه‌جویی کند چون
+fingerprint‌گرفتن پرهزینه است، به‌ویژه برای مقادیر بزرگ و پیچیده.</p>
+</li>
+<li>
+<p>بدون fingerprint، سامانه باید بی‌قیدوشرط فرض کند
+نتیجهٔ کوئری تغییر کرده است.
+در نتیجه هر چیزی که به کوئری <code>no_hash</code> وابسته باشد همیشه دوباره اجرا می‌شود.</p>
+</li>
+</ul>
+<p>استفاده از <code>no_hash</code> برای کوئری در دو شرایط می‌تواند منطقی باشد:</p>
+<ul>
+<li>
+<p>اگر نتیجهٔ کوئری به احتمال زیاد با تغییر هر یک از ورودی‌هایش تغییر می‌کند، مثلاً تابعی مثل <code>|a, b, c| -&gt; (a * b * c)</code>. در
+چنین مواردی محاسبهٔ مجدد کوئری، اگر یکی از
+ورودی‌ها قرمز باشد، همیشه گره قرمز می‌دهد، پس می‌توانیم از زحمت پرهیز کنیم و فوراً به قرمز پیش‌فرض برویم.
+مثال نقض تابعی مثل <code>|a| -&gt; (a == 42)</code> است که
+نتیجه‌اش برای بیشتر تغییرات <code>a</code> تغییر نمی‌کند.</p>
+</li>
+<li>
+<p>اگر نتیجهٔ کوئری مجموعهٔ بزرگ یکپارچه‌ای باشد (مثلاً <code>index_hir</code>)
+و «کوئری‌های تصویرگر (projection)» از آن مجموعه بخوانند
+(مثلاً <code>hir_owner</code>). در چنین موردی مجموعهٔ بزرگ احتمالاً شرط
+بالا را برآورده می‌کند (هر ورودی تغییریافته یعنی محاسبهٔ مجدد کل مجموعه)
+و نتایج کوئری‌های تصویرگر به هر حال هش می‌شوند.
+اگر کوئری مجموعه را هم هش کنیم، یعنی عملاً همان داده را دو بار هش می‌کنیم:
+یک بار هنگام هش‌کردن مجموعه و بار دیگر هنگام هش‌کردن همهٔ
+نتایج کوئری‌های تصویرگر.
+<code>no_hash</code> اجازه می‌دهد از آن افزونگی پرهیز کنیم
+و کوئری‌های تصویرگر مثل یک «دیوار آتش» عمل می‌کنند و وابسته‌هایشان را
+از گرهٔ همیشه‌قرمز <code>no_hash</code> محافظت می‌کنند.</p>
+</li>
+</ul>
+</li>
+<li>
+<p><code>cache_on_disk</code> - مقادیر بازگشتی کوئری روی دیسک cache می‌شوند و
+اگر dep node متناظر سبز باشد جلسه‌های بعدی می‌توانند آن‌ها را بارگذاری کنند.
+اگر modifier با نام <code>separate_provide_extern</code> هم وجود داشته باشد، مقادیر فقط برای کلیدهای «محلی»
+روی دیسک cache می‌شوند، چون مقادیر crateهای خارجی باید
+از فرادادهٔ crate قابل‌بارگذاری باشند.</p>
+</li>
+<li>
+<p><code>feedable</code> - کوئری در واقع تابع نیست، بلکه نوع arena خودش است.
+این کار برای اعلان یک arena، «تغذیه» (feed) اطلاعاتی
+که باید در نقطه‌ای دیرتر از کامپایل ذخیره شود (مثلاً وقتی واقعاً
+شیء <code>Crate</code> در دسترس داریم)، و سپس بازیابی آن مثل هر crate دیگر انجام می‌شود.
+بنابراین تعریف تابع برای این کوئری‌ها وجود ندارد.</p>
+</li>
+</ul>
+<h2 id="the-projection-query-pattern"><a class="header" href="#the-projection-query-pattern">الگوی کوئری تصویرگر (projection)</a></h2>
+<p>جالب است بدانیم <code>eval_always</code> و <code>no_hash</code> را می‌توان با هم در
+الگوی به‌اصطلاح «کوئری تصویرگر» به‌کار برد.
+اغلب پیش می‌آید که
+کوئری‌ای به کل ورودی کامپایلر وابسته باشد (مثلاً HIR نمایه‌شده)
+و کوئری دیگری مقادیر جداگانه را از این مقدار یکپارچه تصویر (project) کند
+(مثلاً آیتم HIR با <code>DefId</code> مشخص). این کوئری‌های تصویرگر اجازه می‌دهند
+«دیوار آتش» ردیابی تغییر بسازیم چون حتی اگر نتیجهٔ
+کوئری یکپارچه تغییر کند (که بسیار محتمل است)، تصویرهای کوچک
+همچنان بیشتر می‌توانند سبز علامت بخورند.</p>
+<pre><code class="language-ignore">  +------------+
+  |            |           +---------------+           +--------+
+  |            | &lt;---------| projection(x) | &lt;---------| foo(a) |
+  |            |           +---------------+           +--------+
+  |            |
+  | monolithic |           +---------------+           +--------+
+  |   query    | &lt;---------| projection(y) | &lt;---------| bar(b) |
+  |            |           +---------------+           +--------+
+  |            |
+  |            |           +---------------+           +--------+
+  |            | &lt;---------| projection(z) | &lt;---------| baz(c) |
+  |            |           +---------------+           +--------+
+  +------------+
+</code></pre>
+<p>فرض کنید نتیجهٔ <code>monolithic_query</code> طوری تغییر کند که نتیجهٔ
+<code>projection(x)</code> هم تغییر کرده باشد، یعنی dep-nodeهای هر دو
+قرمز علامت می‌خورند.
+در نتیجه <code>foo(a)</code> باید دوباره اجرا شود؛ اما <code>bar(b)</code> و <code>baz(c)</code> را می‌توان سبز علامت زد.
+اما اگر <code>foo</code>، <code>bar</code> و <code>baz</code>
+مستقیماً به <code>monolithic_query</code> وابسته بودند، همهٔ آن‌ها باید دوباره ارزیابی می‌شدند.</p>
+<p>این الگو حتی بدون <code>eval_always</code> و <code>no_hash</code> هم کار می‌کند اما آن دو
+modifier می‌توانند برای پرهیز از سربار غیرضروری به‌کار روند.
+اگر کوئری یکپارچه
+با هر تغییر جزئی در ورودی کامپایلر احتمالاً تغییر می‌کند، منطقی است
+آن را <code>eval_always</code> علامت بزنیم و هزینهٔ ردیابی وابستگی‌اش را حذف کنیم.
+و همیشه منطقی است کوئری یکپارچه را <code>no_hash</code> علامت بزنیم
+چون تصویرها را داریم که تا حد ممکن سبز نگه داشتن چیزها را تضمین می‌کنند.</p>
+<h1 id="shortcomings-of-the-current-system"><a class="header" href="#shortcomings-of-the-current-system">کاستی‌های سامانهٔ فعلی</a></h1>
+<p>چیزهای زیادی هست که هنوز می‌توان بهبودشان داد.</p>
+<h2 id="incrementality-of-on-disk-data-structures"><a class="header" href="#incrementality-of-on-disk-data-structures">افزایشی‌بودن ساختارهای داده روی دیسک</a></h2>
+<p>سامانهٔ فعلی نمی‌تواند cacheهای روی دیسک و گراف وابستگی را در جا به‌روز کند.
+به‌جای آن مجبور است هر فایل را در هر جلسهٔ کامپایل کاملاً بازنویسی کند.
+سربار این کار چند درصد از کل زمان کامپایل است.</p>
+<h2 id="unnecessary-data-dependencies"><a class="header" href="#unnecessary-data-dependencies">Unnecessary data dependencies</a></h2>
+<p>ساختارهای داده‌ای که به‌عنوان نتایج کوئری به‌کار می‌روند می‌توانند طوری بازتجزیه شوند که
+یال‌هایی را از گراف وابستگی حذف کنند.
+به‌ویژه اطلاعات «span» بسیار ناپایدار است،
+پس گنجاندن آن در نتیجهٔ کوئری احتمال اینکه نتیجه دوباره‌قابل‌استفاده نباشد را بالا می‌برد.
+برای اطلاعات بیشتر <a href="https://github.com/rust-lang/rust/issues/47389">https://github.com/rust-lang/rust/issues/47389</a> را ببینید.</p><nav class="page-nav"><a href="incremental-compilation.html">→ کامپایل افزایشی</a><a href="../incrcomp-debugging.html">اشکال‌زدایی و آزمودن ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

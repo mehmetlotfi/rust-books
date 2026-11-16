@@ -1,0 +1,218 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>به‌روزرسانی LLVM — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="backend/updating-llvm"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="updating-llvm"><a class="header" href="#updating-llvm">به‌روزرسانی LLVM</a></h1>
+<p>Rust از ساخت در برابر چند نسخهٔ LLVM پشتیبانی می‌کند:</p>
+<ul>
+<li>Tip-of-tree شاخهٔ توسعهٔ فعلی LLVM معمولاً ظرف چند روز پشتیبانی می‌شود.
+PRهای مربوط به چنین رفع‌هایی با <code>llvm-main</code> برچسب‌گذاری می‌شوند.</li>
+<li>آخرین نسخهٔ اصلی (major) منتشرشده همیشه پشتیبانی می‌شود.</li>
+<li>یک یا دو نسخهٔ اصلی پیشین معمولاً به این معنا پشتیبانی می‌شوند که انتظار می‌رود
+با موفقیت ساخته شوند و بیشتر آزمون‌ها را بگذرانند.
+با این حال، رفع‌های مربوط به کامپایل نادرست (miscompilation) اغلب
+به نسخه‌های قدیمی‌تر LLVM backport نمی‌شوند، بنابراین استفاده از rustc با نسخه‌های قدیمی‌تر LLVM
+خطر باگ‌های سلامت (soundness) را افزایش می‌دهد.
+به‌شدت توصیه می‌کنیم از آخرین نسخهٔ LLVM استفاده کنید.</li>
+</ul>
+<p>به‌طور پیش‌فرض Rust از فورک خودش در <a href="https://github.com/rust-lang/llvm-project">مخزن rust-lang/llvm-project</a> استفاده می‌کند.
+این فورک بر پایهٔ شاخهٔ <code>release/$N.x</code> پروژهٔ بالادستی (upstream) است، که
+<code>$N</code> یا آخرین نسخهٔ اصلی منتشرشده است، یا نسخهٔ اصلی فعلی
+در مرحلهٔ release candidate.
+فورک هرگز بر پایهٔ شاخهٔ توسعهٔ <code>main</code> نیست.</p>
+<p>فورک LLVM ما فقط این‌ها را می‌پذیرد:</p>
+<ul>
+<li>backportهای تغییراتی که پیش‌تر در upstream وارد شده‌اند.</li>
+<li>راه‌حل‌های موقت برای مشکلات ساخت که محیط CI ما را تحت تأثیر قرار می‌دهند.</li>
+</ul>
+<p>به‌استثنای یک وصلهٔ مشمول استثنا برای فعال‌سازی SGX، وصله‌های کارکردی را که
+ابتدا به upstream ارسال نشده باشند نمی‌پذیریم.</p>
+<p>سه نوع به‌روزرسانی LLVM وجود دارد که روال‌های متفاوتی دارند:</p>
+<ul>
+<li>backport در حالی که نسخهٔ اصلی فعلی LLVM پشتیبانی می‌شود.</li>
+<li>backport در حالی که نسخهٔ اصلی فعلی LLVM دیگر پشتیبانی نمی‌شود (یا
+تغییر واجد شرایط backport در upstream نیست).</li>
+<li>به‌روزرسانی به یک نسخهٔ اصلی جدید LLVM.</li>
+</ul>
+<h2 id="backports-upstream-supported"><a class="header" href="#backports-upstream-supported">Backportها (upstream پشتیبانی‌شده)</a></h2>
+<p>تا زمانی که نسخهٔ اصلی فعلی LLVM در upstream پشتیبانی می‌شود، رفع‌ها باید
+ابتدا در upstream backport شوند و سپس شاخهٔ release دوباره در فورک Rust ادغام شود.</p>
+<ol>
+<li>مطمئن شوید رفع باگ در LLVM بالادستی (upstream) وجود دارد.</li>
+<li>اگر این کار هنوز انجام نشده، درخواست backport به شاخهٔ release بالادستی بدهید.
+اگر دسترسی commit به LLVM دارید، <a href="https://llvm.org/docs/GitHub.html#backporting-fixes-to-the-release-branches">فرایند backport</a> را دنبال کنید.
+در غیر این صورت، یک issue برای درخواست backport باز کنید.
+پس از تأیید و ادغام backport ادامه دهید.</li>
+<li>شاخه‌ای را که rustc در حال حاضر از آن استفاده می‌کند شناسایی کنید.
+زیرماژول <code>src/llvm-project</code> همیشه به یک شاخه از
+<a href="https://github.com/rust-lang/llvm-project">مخزن rust-lang/llvm-project</a> سنجاق شده است.</li>
+<li>مخزن rust-lang/llvm-project را فورک کنید.</li>
+<li>شاخهٔ مناسب را checkout کنید (معمولاً با نامی مانند <code>rustc/a.b-yyyy-mm-dd</code>).</li>
+<li>با
+<code>git remote add upstream https://github.com/llvm/llvm-project.git</code> یک remote برای مخزن بالادستی اضافه کنید و
+با <code>git fetch upstream</code> آن را دریافت کنید.</li>
+<li>شاخهٔ <code>upstream/release/$N.x</code> را ادغام (merge) کنید.</li>
+<li>این شاخه را به فورک خود push کنید.</li>
+<li>یک Pull Request به rust-lang/llvm-project روی همان شاخهٔ قبلی بفرستید.
+حتماً در توضیح PR به مسئلهٔ Rust و/یا LLVM که در حال رفع آن هستید ارجاع دهید.</li>
+<li>منتظر بمانید PR ادغام شود.</li>
+<li>یک PR به rust-lang/rust بفرستید که زیرماژول <code>src/llvm-project</code> را با رفع باگ شما به‌روز کند.
+این کار معمولاً به‌صورت محلی با <code>git submodule update --remote src/llvm-project</code> انجام می‌شود.</li>
+<li>منتظر بمانید PR ادغام شود.</li>
+</ol>
+<p>یک PR نمونه: <a href="https://github.com/rust-lang/rust/pull/59089">#59089</a></p>
+<h2 id="backports-upstream-not-supported"><a class="header" href="#backports-upstream-not-supported">Backportها (upstream پشتیبانی‌نشده)</a></h2>
+<p>نسخه‌های LLVM بالادستی فقط دو تا سه ماه پس از انتشار GA پشتیبانی می‌شوند.
+وقتی backportهای upstream دیگر پذیرفته نمی‌شوند، تغییرات باید
+مستقیماً به فورک ما cherry-pick شوند.</p>
+<ol>
+<li>مطمئن شوید رفع باگ در LLVM بالادستی (upstream) وجود دارد.</li>
+<li>شاخه‌ای را که rustc در حال حاضر از آن استفاده می‌کند شناسایی کنید.
+زیرماژول <code>src/llvm-project</code> همیشه به یک شاخه از
+<a href="https://github.com/rust-lang/llvm-project">مخزن rust-lang/llvm-project</a> سنجاق شده است.</li>
+<li>مخزن rust-lang/llvm-project را فورک کنید.</li>
+<li>شاخهٔ مناسب را checkout کنید (معمولاً با نامی مانند <code>rustc/a.b-yyyy-mm-dd</code>).</li>
+<li>با
+<code>git remote add upstream https://github.com/llvm/llvm-project.git</code> یک remote برای مخزن بالادستی اضافه کنید و
+با <code>git fetch upstream</code> آن را دریافت کنید.</li>
+<li>commit(های) مربوطه را با <code>git cherry-pick -x</code> cherry-pick کنید.</li>
+<li>این شاخه را به فورک خود push کنید.</li>
+<li>یک Pull Request به rust-lang/llvm-project روی همان شاخهٔ قبلی بفرستید.
+حتماً در توضیح PR به مسئلهٔ Rust و/یا LLVM که در حال رفع آن هستید ارجاع دهید.</li>
+<li>منتظر بمانید PR ادغام شود.</li>
+<li>یک PR به rust-lang/rust بفرستید که زیرماژول <code>src/llvm-project</code> را با رفع باگ شما به‌روز کند.
+این کار معمولاً به‌صورت محلی با <code>git submodule update --remote src/llvm-project</code> انجام می‌شود.</li>
+<li>منتظر بمانید PR ادغام شود.</li>
+</ol>
+<p>یک PR نمونه: <a href="https://github.com/rust-lang/rust/pull/59089">#59089</a></p>
+<h2 id="new-llvm-release-updates"><a class="header" href="#new-llvm-release-updates">به‌روزرسانی به نسخهٔ جدید LLVM</a></h2>
+<p>برخلاف رفع باگ‌ها،
+به‌روزرسانی به یک نسخهٔ جدید LLVM معمولاً کار بسیار بیشتری لازم دارد.
+اینجا جایی است که نمی‌توانیم به‌طور معقول commitها را به عقب cherry-pick کنیم،
+پس باید به‌روزرسانی کامل انجام دهیم.
+کارهای زیادی برای انجام وجود دارد،
+پس هر کدام را با جزئیات مرور می‌کنیم.</p>
+<ol>
+<li>
+<p>LLVM اعلام می‌کند آخرین نسخهٔ انتشارش شاخه‌بندی (branch) شده است.
+این در <a href="https://github.com/llvm/llvm-project">مخزن llvm/llvm-project</a> به‌صورت یک شاخه ظاهر می‌شود
+که معمولاً <code>release/$N.x</code> نام دارد،
+و <code>$N</code> نسخهٔ LLVM در حال انتشار است.</p>
+</li>
+<li>
+<p>در <a href="https://github.com/rust-lang/llvm-project">مخزن rust-lang/llvm-project</a>
+یک شاخهٔ جدید از این شاخهٔ <code>release/$N.x</code> بسازید
+و نامش را <code>rustc/a.b-yyyy-mm-dd</code> بگذارید،
+که <code>a.b</code> شمارهٔ نسخهٔ فعلی LLVM درون درخت (in-tree) در زمان ساخت شاخه است
+و بخش باقی‌مانده تاریخ جاری است.</p>
+</li>
+<li>
+<p>وصله‌های ویژهٔ Rust را روی مخزن llvm-project اعمال کنید.
+همهٔ قابلیت‌ها و رفع باگ‌ها در upstream هستند،
+اما اغلب چند وصلهٔ عجیب مرتبط با ساخت وجود دارد که ارسال‌شان به upstream معنا ندارد.
+این وصله‌ها معمولاً آخرین وصله‌های
+شاخهٔ rust-lang/llvm-project هستند که rustc در حال حاضر از آن استفاده می‌کند.</p>
+</li>
+<li>
+<p>LLVM جدید را در مخزن <code>rust</code> بسازید.
+برای این کار،
+باید مخزن <code>src/llvm-project</code> را به شاخهٔ خود
+و ریویژنی که ساخته‌اید به‌روز کنید.
+معمولاً به‌روزرسانی <code>.gitmodules</code> با نام شاخهٔ جدید
+زیرماژول LLVM هم ایدهٔ خوبی است.
+مطمئن شوید تغییرات
+<code>src/llvm-project</code> را commit کرده‌اید تا به‌روزرسانی‌های زیرماژول برگردانده نشوند.
+چند دستوری که باید اجرا کنید:</p>
+<ul>
+<li><code>./x build src/llvm-project</code> - آزمودن اینکه LLVM همچنان ساخته می‌شود</li>
+<li><code>./x build</code> - ساخت بقیهٔ rustc</li>
+</ul>
+<p>احتمالاً باید <a href="https://github.com/rust-lang/rust/tree/HEAD/compiler/rustc_llvm/llvm-wrapper"><code>llvm-wrapper/*.cpp</code></a> را
+برای کامپایل با bindingهای به‌روز LLVM به‌روز کنید.
+توجه کنید که باید از <code>#ifdef</code> و مانند آن استفاده کنید تا مطمئن شوید
+bindingها همچنان روی نسخه‌های قدیمی‌تر LLVM کامپایل می‌شوند.</p>
+<p>توجه کنید که <code>profile = "compiler"</code> و پیش‌فرض‌های دیگری که <code>./x setup</code> تنظیم می‌کند
+LLVM را به‌جای ساخت از روی سورس، از CI دانلود می‌کنند.
+باید این را موقتاً غیرفعال کنید تا مطمئن شوید تغییرات شما استفاده می‌شوند.
+این کار با داشتن تنظیم زیر در <code>bootstrap.toml</code> انجام می‌شود:</p>
+<pre><code class="language-toml">llvm.download-ci-llvm = false
+</code></pre>
+</li>
+<li>
+<p>رگرسیون‌ها را روی پلتفرم‌های دیگر بیازمایید.
+LLVM اغلب دست‌کم یک باگ
+برای معماری‌های غیر tier-1 دارد، پس خوب است پیش از
+فرستادن این به bors کمی بیشتر آزمایش کنید!
+اگر منابع کمی دارید، می‌توانید PR را همان‌طور که هست
+اکنون به bors بفرستید و به‌هرحال آزمایش می‌شود.</p>
+<p>در حالت ایده‌آل، LLVM را بسازید و روی چند پلتفرم آزمایش کنید:</p>
+<ul>
+<li>Linux</li>
+<li>macOS</li>
+<li>Windows</li>
+</ul>
+<p>پس از آن، چند کانتینر docker را که CI هم اجرا می‌کند اجرا کنید:</p>
+<ul>
+<li><code>./src/ci/docker/run.sh wasm32</code></li>
+<li><code>./src/ci/docker/run.sh arm-android</code></li>
+<li><code>./src/ci/docker/run.sh dist-various-1</code></li>
+<li><code>./src/ci/docker/run.sh dist-various-2</code></li>
+<li><code>./src/ci/docker/run.sh armhf-gnu</code></li>
+</ul>
+</li>
+<li>
+<p>یک PR برای <code>rust-lang/rust</code> آماده کنید.
+با نگهدارندگان
+<code>rust-lang/llvm-project</code> کار کنید تا commit شما در شاخه‌ای از آن مخزن قرار گیرد،
+و سپس می‌توانید یک PR به <code>rust-lang/rust</code> بفرستید.
+دست‌کم
+<code>src/llvm-project</code> را تغییر می‌دهید و احتمالاً <a href="https://github.com/rust-lang/rust/tree/HEAD/compiler/rustc_llvm/llvm-wrapper"><code>llvm-wrapper</code></a> را هم تغییر خواهید داد.</p>
+<!-- date-check: March 2026 -->
+<blockquote>
+<p>برای نمونه‌های پیشین، این‌ها چند به‌روزرسانی قبلی LLVM هستند:</p>
+<ul>
+<li><a href="https://github.com/rust-lang/rust/pull/115959">LLVM 17</a></li>
+<li><a href="https://github.com/rust-lang/rust/pull/120055">LLVM 18</a></li>
+<li><a href="https://github.com/rust-lang/rust/pull/127513">LLVM 19</a></li>
+<li><a href="https://github.com/rust-lang/rust/pull/135763">LLVM 20</a></li>
+<li><a href="https://github.com/rust-lang/rust/pull/143684">LLVM 21</a></li>
+<li><a href="https://github.com/rust-lang/rust/pull/150722">LLVM 22</a></li>
+</ul>
+</blockquote>
+<p>توجه کنید که گاهی ساده‌ترین کار این است که سازگاری <a href="https://github.com/rust-lang/rust/tree/HEAD/compiler/rustc_llvm/llvm-wrapper"><code>llvm-wrapper</code></a> را به‌صورت یک PR
+پیش از به‌روزرسانی واقعی <code>src/llvm-project</code> وارد کنید.
+به این ترتیب،
+در حالی که مشغول رفع مشکلات LLVM هستید،
+دیگرانی که می‌خواهند LLVM جدید را امتحان کنند می‌توانند از کاری که برای
+به‌روزرسانی bindingهای C++ انجام داده‌اید بهره ببرند.</p>
+</li>
+<li>
+<p>طی چند ماه آینده،
+LLVM پیوسته commitهایی را به شاخهٔ <code>release/a.b</code> خود push می‌کند.
+اغلب می‌خواهیم آن رفع باگ‌ها را هم داشته باشیم.
+فرایند ادغام برای این کار استفاده از خود <code>git merge</code> برای ادغام
+شاخهٔ <code>release/a.b</code> مربوط به LLVM با شاخهٔ ساخته‌شده در گام ۲ است.
+این کار معمولاً در صورت لزوم چندین بار انجام می‌شود، در حالی که شاخهٔ release در LLVM در حال پخته شدن است.</p>
+</li>
+<li>
+<p>سپس LLVM انتشار نسخهٔ <code>a.b</code> را اعلام می‌کند.</p>
+</li>
+<li>
+<p>پس از انتشار رسمی LLVM،
+دوباره فرایند ساخت یک شاخهٔ جدید روی مخزن rust-lang/llvm-project را دنبال می‌کنیم،
+این بار با تاریخی جدید.
+فقط آن‌گاه PR مربوط به به‌روزرسانی Rust برای استفاده از آن نسخه ادغام می‌شود.</p>
+<p>تاریخچهٔ commitهای <code>rust-lang/llvm-project</code>
+با انجام یک <code>git rebase</code> بسیار تمیزتر به نظر می‌رسد،
+چون فقط چند commit ویژهٔ Rust روی شاخهٔ release استاندارد LLVM انباشته شده‌اند.</p>
+</li>
+</ol>
+<h3 id="caveats-and-gotchas"><a class="header" href="#caveats-and-gotchas">هشدارها و نکات پرتله</a></h3>
+<p>در حالت ایده‌آل دستورالعمل‌های بالا نسبتاً روان‌اند، اما این چند هشدار را
+هنگام پیمودنشان به یاد داشته باشید:</p>
+<ul>
+<li>یافتن باگ‌های LLVM سخت است، در درخواست کمک تردید نکنید!
+دوپاره‌سازی (bisection) قطعاً در اینجا دوست شماست
+(بله، ساخت LLVM بی‌نهایت طول می‌کشد، با این حال bisection همچنان دوست شماست).
+توجه کنید که می‌توانید از <a href="https://forge.rust-lang.org/infra/docs/dev-desktop.html">Dev Desktops</a> استفاده کنید،
+که ابتکاری برای فراهم کردن دسترسی از راه دور مشارکت‌کنندگان به سخت‌افزار قدرتمند است.</li>
+<li>اگر پرسش‌های عمومی دارید، <a href="https://rust-lang.zulipchat.com/#narrow/stream/187780-t-compiler.2Fwg-llvm">wg-llvm</a> می‌تواند کمکتان کند.</li>
+<li>ساخت شاخه‌ها در GitHub یک عمل دارای امتیاز ویژه است، پس به احتمال زیاد به کسی
+با دسترسی نوشتن نیاز دارید تا شاخه‌ها را برایتان بسازد.</li>
+</ul><nav class="page-nav"><a href="codegen.html">→ تولید کد</a><a href="debugging.html">اشکال‌زدایی LLVM ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

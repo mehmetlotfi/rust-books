@@ -1,0 +1,250 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>ساختار کنترل جریان match — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch06-02-match"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><!-- Old headings. Do not remove or links may break. -->
+<p><a id="the-match-control-flow-operator"></a></p>
+<h2 id="the-match-control-flow-construct"><a class="header" href="#the-match-control-flow-construct">سازه جریان کنترلی <code>match</code></a></h2>
+<p>زبان Rust دارای یک سازه جریان کنترلی بسیار قدرتمند به نام <code>match</code> است که به شما اجازه می‌دهد تا یک مقدار را با یک سری الگوها مقایسه کنید و سپس بر اساس الگویی که مطابقت دارد، کد مربوطه را اجرا کنید. الگوها می‌توانند شامل مقادیر ثابت، نام متغیرها، wildcardها و چیزهای دیگر باشند. <a href="ch19-00-patterns.html">فصل 19</a><!-- ignore --> انواع مختلف الگوها و عملکرد آن‌ها را پوشش می‌دهد. قدرت <code>match</code> از بیان‌پذیری الگوها و این واقعیت ناشی می‌شود که کامپایلر تأیید می‌کند که همه حالت‌های ممکن مدیریت شده‌اند.</p>
+<p>می‌توانید یک عبارت <code>match</code> را مانند یک دستگاه مرتب‌کننده سکه تصور کنید: سکه‌ها در یک مسیر با سوراخ‌هایی با اندازه‌های مختلف قرار می‌گیرند و هر سکه از اولین سوراخی که در آن جا می‌شود عبور می‌کند. به همین ترتیب، مقادیر از هر الگو در یک <code>match</code> عبور می‌کنند و در اولین الگویی که مقدار “جا می‌شود”، مقدار به بلوک کد مرتبط می‌افتد و برای اجرا استفاده می‌شود.</p>
+<p>حالا که صحبت از سکه‌ها شد، بیایید آن‌ها را به‌عنوان مثالی برای <code>match</code> به کار ببریم! می‌توانیم تابعی بنویسیم که یک سکهٔ ناشناختهٔ ایالات متحده را بگیرد و مشابه دستگاه شمارندهٔ سکه، تشخیص دهد کدام سکه است و ارزش آن را بر حسب سنت برگرداند، همان‌طور که در فهرست ۶-۳ نشان داده شده است.</p>
+<figure class="listing" id="listing-6-3">
+<pre><code class="language-rust">enum Coin {
+    Penny,
+    Nickel,
+    Dime,
+    Quarter,
+}
+
+fn value_in_cents(coin: Coin) -&gt; u8 {
+    match coin {
+        Coin::Penny =&gt; 1,
+        Coin::Nickel =&gt; 5,
+        Coin::Dime =&gt; 10,
+        Coin::Quarter =&gt; 25,
+    }
+}
+<span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+<figcaption><a href="#listing-6-3">لیست ۶-۳</a>: یک enum و یک عبارت &lt;code&gt;&lt;/x-listing&gt;match&lt;/code&gt; که حالت‌های enum را به عنوان الگوهای خود دارد</figcaption>
+</figure>
+<p>بیایید <code>match</code> را در تابع <code>value_in_cents</code> بررسی کنیم. ابتدا کلیدواژهٔ <code>match</code> را می‌نویسیم و پس از آن یک عبارت، که در اینجا مقدار <code>coin</code> است. این بسیار شبیه عبارت شرطی‌ای است که با <code>if</code> به کار می‌رود، اما تفاوت بزرگی وجود دارد: در <code>if</code> شرط باید به یک مقدار بولی ارزیابی شود، ولی اینجا می‌تواند از هر نوعی باشد. نوع <code>coin</code> در این مثال همان enum به نام <code>Coin</code> است که در خط اول تعریف کردیم.</p>
+<p>بازوهای <code>match</code> دو قسمت دارند: یک الگو و مقداری کد. اولین بازو در اینجا دارای الگویی است که مقدار <code>Coin::Penny</code> است و سپس اپراتور <code>=&gt;</code> که الگو و کد اجرایی را از هم جدا می‌کند. کد در اینجا فقط مقدار <code>1</code> است. هر بازو با یک کاما از بازوی بعدی جدا می‌شود.</p>
+<p>هنگامی که عبارت <code>match</code> اجرا می‌شود، مقدار حاصل را با الگوی هر بازو به ترتیب مقایسه می‌کند. اگر الگویی با مقدار مطابقت داشته باشد، کدی که با آن الگو مرتبط است اجرا می‌شود. اگر آن الگو با مقدار مطابقت نداشته باشد، اجرا به بازوی بعدی ادامه می‌یابد، همانطور که در یک دستگاه مرتب‌کننده سکه‌ها عمل می‌کند. ما می‌توانیم به هر تعداد بازو که نیاز داریم داشته باشیم: در فهرست 6-3، <code>match</code> ما چهار بازو دارد.</p>
+<p>کد مرتبط با هر بازو یک عبارت است و مقدار حاصل از عبارت در بازوی منطبق شده، مقداری است که برای کل عبارت <code>match</code> بازگردانده می‌شود.</p>
+<p>معمولاً اگر کد بازوی <code>match</code> کوتاه باشد، از آکولاد استفاده نمی‌کنیم، همانطور که در فهرست 6-3 که هر بازو فقط یک مقدار را برمی‌گرداند. اگر بخواهید چندین خط کد را در یک بازو اجرا کنید، باید از آکولاد استفاده کنید، و در این صورت کاما پس از بازو اختیاری است. به عنوان مثال، کد زیر هر بار که متد با یک <code>Coin::Penny</code> فراخوانی می‌شود، “Lucky penny!” را چاپ می‌کند، اما همچنان آخرین مقدار بلوک یعنی <code>1</code> را بازمی‌گرداند:</p>
+<pre><code class="language-rust"><span class="boring">enum Coin {
+</span><span class="boring">    Penny,
+</span><span class="boring">    Nickel,
+</span><span class="boring">    Dime,
+</span><span class="boring">    Quarter,
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn value_in_cents(coin: Coin) -&gt; u8 {
+    match coin {
+        Coin::Penny =&gt; {
+            println!("Lucky penny!");
+            1
+        }
+        Coin::Nickel =&gt; 5,
+        Coin::Dime =&gt; 10,
+        Coin::Quarter =&gt; 25,
+    }
+}
+<span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+<h3 id="patterns-that-bind-to-values"><a class="header" href="#patterns-that-bind-to-values">الگوهایی که به مقادیر متصل می‌شوند</a></h3>
+<p>یکی دیگر از ویژگی‌های مفید بازوهای match این است که می‌توانند به بخش‌هایی از مقادیری که با الگو تطابق دارند متصل (bind) شوند. به این ترتیب می‌توانیم مقادیر را از درون حالت‌های enum بیرون بکشیم.</p>
+<p>به‌عنوان مثال، بیایید یکی از حالت‌های enum خود را طوری تغییر دهیم که داده‌ای درون خود نگه دارد. از سال ۱۹۹۹ تا ۲۰۰۸، ایالات متحده سکه‌های ربع‌دلاری را با طرح‌های متفاوت برای هر یک از ۵۰ ایالت در یک روی سکه ضرب کرد. هیچ سکهٔ دیگری طرح ایالتی نداشت، پس فقط ربع‌دلاری‌ها این مقدار اضافی را دارند. می‌توانیم این اطلاعات را با تغییر حالت <code>Quarter</code> به <code>enum</code> خود اضافه کنیم تا یک مقدار <code>UsState</code> درون آن ذخیره شود، همان‌طور که در فهرست ۶-۴ انجام داده‌ایم.</p>
+<figure class="listing" id="listing-6-4">
+<pre><code class="language-rust">#[derive(Debug)] // so we can inspect the state in a minute
+enum UsState {
+    Alabama,
+    Alaska,
+    // --snip--
+}
+
+enum Coin {
+    Penny,
+    Nickel,
+    Dime,
+    Quarter(UsState),
+}
+<span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+<figcaption><a href="#listing-6-4">لیست ۶-۴</a>: یک enum به نام &lt;code&gt;&lt;/x-listing&gt;Coin&lt;/code&gt; که حالت &lt;code&gt;Quarter&lt;/code&gt; آن همچنین یک مقدار &lt;code&gt;UsState&lt;/code&gt; را نگه می‌دارد</figcaption>
+</figure>
+<p>بیایید تصور کنیم که یک دوست ما سعی دارد تمام 50 ربع ایالتی را جمع‌آوری کند. در حالی که ما پول‌های خود را بر اساس نوع سکه مرتب می‌کنیم، همچنین نام ایالتی که با هر ربع مرتبط است را اعلام می‌کنیم تا اگر این یکی از آن‌هایی باشد که دوست ما ندارد، بتوانند آن را به مجموعه خود اضافه کنند.</p>
+<p>در عبارت <code>match</code> برای این کد، یک متغیر به نام <code>state</code> به الگو اضافه می‌کنیم که مقادیری از حالت <code>Coin::Quarter</code> را تطبیق می‌دهد. وقتی که یک مقدار <code>Coin::Quarter</code> منطبق می‌شود، متغیر <code>state</code> به مقدار ایالت آن ربع متصل خواهد شد. سپس می‌توانیم از <code>state</code> در کد بازوی آن استفاده کنیم، به این صورت:</p>
+<pre><code class="language-rust"><span class="boring">#[derive(Debug)]
+</span><span class="boring">enum UsState {
+</span><span class="boring">    Alabama,
+</span><span class="boring">    Alaska,
+</span><span class="boring">    // --snip--
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">enum Coin {
+</span><span class="boring">    Penny,
+</span><span class="boring">    Nickel,
+</span><span class="boring">    Dime,
+</span><span class="boring">    Quarter(UsState),
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn value_in_cents(coin: Coin) -&gt; u8 {
+    match coin {
+        Coin::Penny =&gt; 1,
+        Coin::Nickel =&gt; 5,
+        Coin::Dime =&gt; 10,
+        Coin::Quarter(state) =&gt; {
+            println!("State quarter from {state:?}!");
+            25
+        }
+    }
+}
+<span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    value_in_cents(Coin::Quarter(UsState::Alaska));
+</span><span class="boring">}</span></code></pre>
+<p>اگر ما <code>value_in_cents(Coin::Quarter(UsState::Alaska))</code> را فراخوانی کنیم، مقدار <code>coin</code> برابر با <code>Coin::Quarter(UsState::Alaska)</code> خواهد بود. هنگامی که آن مقدار را با هر بازوی <code>match</code> مقایسه می‌کنیم، هیچ‌کدام از آن‌ها مطابقت ندارند تا اینکه به <code>Coin::Quarter(state)</code> برسیم. در این نقطه، اتصال برای <code>state</code> مقدار <code>UsState::Alaska</code> خواهد بود. سپس می‌توانیم از آن اتصال در عبارت <code>println!</code> استفاده کنیم و به این ترتیب مقدار داخلی ایالت را از حالت <code>Quarter</code> enum <code>Coin</code> استخراج کنیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="matching-with-optiont"></a></p>
+<h3 id="the-optiont-match-pattern"><a class="header" href="#the-optiont-match-pattern">الگوی <code>match</code> با <code>Option&lt;T&gt;</code></a></h3>
+<p>در بخش قبلی، ما می‌خواستیم مقدار داخلی <code>T</code> را از حالت <code>Some</code> استخراج کنیم زمانی که از <code>Option&lt;T&gt;</code> استفاده می‌کردیم؛ همچنین می‌توانیم با استفاده از <code>match</code> حالت‌های <code>Option&lt;T&gt;</code> را مدیریت کنیم، همانطور که با enum <code>Coin</code> انجام دادیم! به جای مقایسه سکه‌ها، حالت‌های <code>Option&lt;T&gt;</code> را مقایسه می‌کنیم، اما روش کار عبارت <code>match</code> همان باقی می‌ماند.</p>
+<p>بیایید فرض کنیم که می‌خواهیم تابعی بنویسیم که یک <code>Option&lt;i32&gt;</code> بگیرد و اگر یک مقدار درون آن باشد، مقدار 1 را به آن اضافه کند. اگر هیچ مقداری درون آن نباشد، تابع باید مقدار <code>None</code> را بازگرداند و هیچ عملیاتی را انجام ندهد.</p>
+<p>نوشتن این تابع با استفاده از <code>match</code> بسیار آسان است و به این صورت خواهد بود:</p>
+<figure class="listing" id="listing-6-5">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    fn plus_one(x: Option&lt;i32&gt;) -&gt; Option&lt;i32&gt; {
+        match x {
+            None =&gt; None,
+            Some(i) =&gt; Some(i + 1),
+        }
+    }
+
+    let five = Some(5);
+    let six = plus_one(five);
+    let none = plus_one(None);
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-6-5">لیست ۶-۵</a>: تابعی که عبارت &lt;code&gt;&lt;/x-listing&gt;match&lt;/code&gt; را روی یک &lt;code&gt;Option&lt;i32&gt;&lt;/code&gt; به کار می‌برد</figcaption>
+</figure>
+<p>اجازه دهید اولین اجرای <code>plus_one</code> را با جزئیات بیشتری بررسی کنیم. وقتی که <code>plus_one(five)</code> را فراخوانی می‌کنیم، متغیر <code>x</code> در بدنه <code>plus_one</code> مقدار <code>Some(5)</code> خواهد داشت. سپس آن را با هر بازوی <code>match</code> مقایسه می‌کنیم:</p>
+<pre><code class="language-rust ignore"><span class="boring">fn main() {
+</span><span class="boring">    fn plus_one(x: Option&lt;i32&gt;) -&gt; Option&lt;i32&gt; {
+</span><span class="boring">        match x {
+</span>            None =&gt; None,
+<span class="boring">            Some(i) =&gt; Some(i + 1),
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    let five = Some(5);
+</span><span class="boring">    let six = plus_one(five);
+</span><span class="boring">    let none = plus_one(None);
+</span><span class="boring">}</span></code></pre>
+<p>مقدار <code>Some(5)</code> با الگوی <code>None</code> مطابقت ندارد، بنابراین به بازوی بعدی می‌رویم:</p>
+<pre><code class="language-rust ignore"><span class="boring">fn main() {
+</span><span class="boring">    fn plus_one(x: Option&lt;i32&gt;) -&gt; Option&lt;i32&gt; {
+</span><span class="boring">        match x {
+</span><span class="boring">            None =&gt; None,
+</span>            Some(i) =&gt; Some(i + 1),
+<span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    let five = Some(5);
+</span><span class="boring">    let six = plus_one(five);
+</span><span class="boring">    let none = plus_one(None);
+</span><span class="boring">}</span></code></pre>
+<p>آیا <code>Some(5)</code> با <code>Some(i)</code> مطابقت دارد؟ بله! ما همان حالت را داریم. مقدار <code>i</code> به مقدار داخل <code>Some</code> متصل می‌شود، بنابراین <code>i</code> مقدار <code>5</code> می‌گیرد. سپس کد موجود در بازوی <code>match</code> اجرا می‌شود، بنابراین مقدار 1 به مقدار <code>i</code> اضافه می‌کنیم و یک مقدار جدید <code>Some</code> با مقدار کل <code>6</code> ایجاد می‌کنیم.</p>
+<p>حالا اجازه دهید اجرای دوم <code>plus_one</code> را در فهرست 6-5 در نظر بگیریم، جایی که مقدار <code>x</code> برابر با <code>None</code> است. ما وارد <code>match</code> می‌شویم و آن را با اولین بازو مقایسه می‌کنیم:</p>
+<pre><code class="language-rust ignore"><span class="boring">fn main() {
+</span><span class="boring">    fn plus_one(x: Option&lt;i32&gt;) -&gt; Option&lt;i32&gt; {
+</span><span class="boring">        match x {
+</span>            None =&gt; None,
+<span class="boring">            Some(i) =&gt; Some(i + 1),
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    let five = Some(5);
+</span><span class="boring">    let six = plus_one(five);
+</span><span class="boring">    let none = plus_one(None);
+</span><span class="boring">}</span></code></pre>
+<p>این بار مطابقت دارد! هیچ مقداری برای اضافه کردن وجود ندارد، بنابراین برنامه متوقف می‌شود و مقدار <code>None</code> در سمت راست <code>=&gt;</code> را بازمی‌گرداند. از آنجا که اولین بازو مطابقت داشت، بازوهای دیگر بررسی نمی‌شوند.</p>
+<p>ترکیب <code>match</code> و enumها در بسیاری از موقعیت‌ها مفید است. این الگو را در کد Rust زیاد خواهید دید: <code>match</code> روی یک enum، اتصال یک متغیر به داده داخل، و سپس اجرای کد بر اساس آن. ممکن است در ابتدا کمی سخت باشد، اما وقتی به آن عادت کنید، آرزو خواهید کرد که در همه زبان‌ها وجود داشته باشد. این سازه همواره یکی از ویژگی‌های مورد علاقه کاربران است.</p>
+<h3 id="matches-are-exhaustive"><a class="header" href="#matches-are-exhaustive">تطابق‌ها Exhaustive هستند</a></h3>
+<p>یکی دیگر از جنبه‌های عبارت <code>match</code> این است که الگوهای بازوها باید تمام حالت‌های ممکن را پوشش دهند. به این نسخه از تابع <code>plus_one</code> که یک باگ دارد و کامپایل نمی‌شود توجه کنید:</p>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">fn main() {
+</span>    fn plus_one(x: Option&lt;i32&gt;) -&gt; Option&lt;i32&gt; {
+        match x {
+            Some(i) =&gt; Some(i + 1),
+        }
+    }
+<span class="boring">
+</span><span class="boring">    let five = Some(5);
+</span><span class="boring">    let six = plus_one(five);
+</span><span class="boring">    let none = plus_one(None);
+</span><span class="boring">}</span></code></pre>
+<p>ما حالت <code>None</code> را مدیریت نکرده‌ایم، بنابراین این کد باعث بروز یک باگ خواهد شد. خوشبختانه، این یک باگ است که Rust می‌تواند آن را تشخیص دهد. اگر تلاش کنیم این کد را کامپایل کنیم، این خطا را دریافت خواهیم کرد:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling enums v0.1.0 (file:///projects/enums)
+error[E0004]: non-exhaustive patterns: `None` not covered
+ --&gt; src/main.rs:3:15
+  |
+3 |         match x {
+  |               ^ pattern `None` not covered
+  |
+note: `Option&lt;i32&gt;` defined here
+ --&gt; /rustc/88d9e12ae178fab0fb5cc050a94da85685d449ea/library/core/src/option.rs:598:0
+ ::: /rustc/88d9e12ae178fab0fb5cc050a94da85685d449ea/library/core/src/option.rs:602:4
+  |
+  = note: not covered
+  = note: the matched value is of type `Option&lt;i32&gt;`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+  |
+4 ~             Some(i) =&gt; Some(i + 1),
+5 ~             None =&gt; todo!(),
+  |
+
+For more information about this error, try `rustc --explain E0004`.
+error: could not compile `enums` (bin "enums") due to 1 previous error
+</code></pre>
+<p>Rust می‌داند که ما هر حالت ممکن را پوشش نداده‌ایم و حتی می‌داند که کدام الگو را فراموش کرده‌ایم! تطابق‌ها در Rust <em>exhaustive</em> هستند: ما باید هر حالت ممکن را مدیریت کنیم تا کد معتبر باشد. به ویژه در مورد <code>Option&lt;T&gt;</code>، وقتی که Rust از فراموش کردن مدیریت صریح حالت <code>None</code> جلوگیری می‌کند، از فرض نادرست وجود مقدار زمانی که ممکن است null باشد محافظت می‌کند و به این ترتیب اشتباه میلیارد دلاری که قبلاً بحث شد را غیرممکن می‌سازد.</p>
+<h3 id="catch-all-patterns-and-the-_-placeholder"><a class="header" href="#catch-all-patterns-and-the-_-placeholder">الگوهای همه‌گیر و جای‌نگهدار <code>_</code></a></h3>
+<p>با استفاده از Enumها، می‌توانیم اقدامات ویژه‌ای برای چند مقدار خاص انجام دهیم، اما برای تمام مقادیر دیگر یک عمل پیش‌فرض داشته باشیم. تصور کنید که در حال پیاده‌سازی یک بازی هستید که اگر بازیکن عدد 3 روی تاس بیاورد، حرکت نمی‌کند اما یک کلاه زیبا جدید می‌گیرد. اگر عدد 7 بیاورد، بازیکن یک کلاه زیبا از دست می‌دهد. برای تمام مقادیر دیگر، بازیکن به اندازه عدد روی تخته بازی حرکت می‌کند. در اینجا یک عبارت <code>match</code> آورده شده است که این منطق را پیاده‌سازی می‌کند. نتیجه‌ی پرتاب تاس به جای مقدار تصادفی، به صورت هاردکد شده قرار داده شده است، و تمام منطق دیگر با توابعی بدون بدنه نشان داده شده‌اند زیرا پیاده‌سازی آن‌ها خارج از محدوده این مثال است:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let dice_roll = 9;
+    match dice_roll {
+        3 =&gt; add_fancy_hat(),
+        7 =&gt; remove_fancy_hat(),
+        other =&gt; move_player(other),
+    }
+
+    fn add_fancy_hat() {}
+    fn remove_fancy_hat() {}
+    fn move_player(num_spaces: u8) {}
+<span class="boring">}</span></code></pre>
+<p>برای دو بازوی اول، الگوها مقادیر ثابت <code>3</code> و <code>7</code> هستند. برای بازوی آخر که تمام مقادیر ممکن دیگر را پوشش می‌دهد، الگو یک متغیر است که ما آن را <code>other</code> نامیده‌ایم. کدی که برای بازوی <code>other</code> اجرا می‌شود، متغیر را با استفاده از تابع <code>move_player</code> می‌فرستد.</p>
+<p>این کد کامپایل می‌شود، با اینکه همهٔ مقادیر ممکن یک <code>u8</code> را فهرست نکرده‌ایم، چون آخرین الگو با همهٔ مقادیری که به‌طور مشخص فهرست نشده‌اند تطابق پیدا می‌کند. این الگوی فراگیر (catch-all) شرط جامع‌بودن (exhaustive) <code>match</code> را برآورده می‌کند. توجه کنید که باید بازوی فراگیر را در آخر قرار دهیم، چون الگوها به ترتیب ارزیابی می‌شوند. اگر بازوی فراگیر را زودتر قرار دهیم، بازوهای دیگر هرگز اجرا نمی‌شوند؛ به همین دلیل Rust اگر بعد از یک بازوی فراگیر بازوهای دیگری اضافه کنیم به ما هشدار می‌دهد!</p>
+<p>Rust همچنین یک الگو به نام <code>_</code> دارد که می‌توانیم از آن استفاده کنیم وقتی که می‌خواهیم یک catch-all داشته باشیم اما نمی‌خواهیم مقدار در الگوی catch-all را <em>استفاده کنیم</em>. این به Rust می‌گوید که ما قصد نداریم مقدار را استفاده کنیم، بنابراین Rust درباره یک متغیر استفاده نشده به ما هشدار نمی‌دهد.</p>
+<p>بیایید قوانین بازی را تغییر دهیم: حالا اگر بازیکن هر چیزی به غیر از 3 یا 7 بیاورد، باید دوباره تاس بیندازد. دیگر نیازی به استفاده از مقدار catch-all نیست، بنابراین می‌توانیم کد خود را به‌جای متغیری به نام <code>other</code> از <code>_</code> استفاده کنیم:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let dice_roll = 9;
+    match dice_roll {
+        3 =&gt; add_fancy_hat(),
+        7 =&gt; remove_fancy_hat(),
+        _ =&gt; reroll(),
+    }
+
+    fn add_fancy_hat() {}
+    fn remove_fancy_hat() {}
+    fn reroll() {}
+<span class="boring">}</span></code></pre>
+<p>این مثال نیز نیاز تطابق exhaustive را برآورده می‌کند زیرا ما صریحاً تمام مقادیر دیگر را در بازوی آخر نادیده گرفته‌ایم و چیزی را فراموش نکرده‌ایم.</p>
+<p>در نهایت، قوانین بازی را یک بار دیگر تغییر می‌دهیم، بنابراین اگر بازیکن هر چیزی غیر از 3 یا 7 بیاورد، هیچ کار دیگری در نوبت او انجام نمی‌شود. می‌توانیم این موضوع را با استفاده از مقدار واحد (نوع <code>tuple</code> خالی که قبلاً در بخش <a href="ch03-02-data-types.html#the-tuple-type">“نوع Tuple”</a><!-- ignore --> ذکر شد) به عنوان کدی که با بازوی <code>_</code> همراه است بیان کنیم:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let dice_roll = 9;
+    match dice_roll {
+        3 =&gt; add_fancy_hat(),
+        7 =&gt; remove_fancy_hat(),
+        _ =&gt; (),
+    }
+
+    fn add_fancy_hat() {}
+    fn remove_fancy_hat() {}
+<span class="boring">}</span></code></pre>
+<p>اینجا، ما به Rust صریحاً می‌گوییم که قصد نداریم هیچ مقدار دیگری را که با هیچ الگویی در بازوهای قبلی مطابقت ندارد استفاده کنیم و نمی‌خواهیم در این حالت کدی اجرا کنیم.</p>
+<p>درباره الگوها و تطبیق آن‌ها مطالب بیشتری در <a href="ch19-00-patterns.html">فصل 19</a> پوشش خواهیم داد. فعلاً به سینتکس <code>if let</code> می‌پردازیم که می‌تواند در مواقعی که عبارت <code>match</code> کمی طولانی به نظر می‌رسد، مفید باشد.</p><nav class="page-nav"><a href="ch06-01-defining-an-enum.html">→ تعریف یک شمارش</a><a href="ch06-03-if-let.html">کنترل جریان مختصر با if let و let...else ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

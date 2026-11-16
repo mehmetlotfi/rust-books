@@ -1,0 +1,81 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>بررسی Drop — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="borrow-check/drop-check"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="drop-check"><a class="header" href="#drop-check">Drop Check</a></h1>
+<p>ما معمولاً الزام می‌کنیم که نوع متغیرهای محلی هر زمان که متغیر استفاده می‌شود well-formed باشد. این شامل اثبات where-boundهای متغیر محلی است و همچنین الزام می‌کند که تمام regionهای مورداستفاده‌ی آن زنده (live) باشند.</p>
+<p>تنها استثنا زمانی است که مقادیر هنگام خروج از حوزه (scope) به‌صورت ضمنی drop می‌شوند. در این حالت لزوماً لازم نیست مقدار زنده باشد:</p>
+<pre><code class="language-rust">fn main() {
+    let x = vec![];
+    {
+        let y = String::from("I am temporary");
+        x.push(&amp;y);
+    }
+    // `x` goes out of scope here, after the reference to `y`
+    // is invalidated. This means that while dropping `x` its type
+    // is not well-formed as it contain regions which are not live.
+}</code></pre>
+<p>این کار فقط زمانی سالم (sound) است که drop کردن مقدار تلاش نکند به regionی مرده دسترسی پیدا کند. ما این را با الزام به اینکه نوع مقدار drop-live باشد بررسی می‌کنیم. الزامات مربوط به آن در <code>fn dropck_outlives</code> محاسبه می‌شوند.</p>
+<p>ادامه‌ی این بخش از تعریف نوع زیر استفاده می‌کند که پارامتر region خود را ملزم می‌کند زنده باشد:</p>
+<pre><code class="language-rust">struct PrintOnDrop&lt;'a&gt;(&amp;'a str);
+impl&lt;'a&gt; Drop for PrintOnDrop&lt;'_&gt; {
+    fn drop(&amp;mut self) {
+        println!("{}", self.0);
+    }
+}</code></pre>
+<h2 id="how-values-are-dropped"><a class="header" href="#how-values-are-dropped">مقادیر چگونه drop می‌شوند</a></h2>
+<p>در اصل، مقداری از نوع <code>T</code> با اجرای «drop glue» آن drop می‌شود. Drop glue توسط کامپایلر تولید می‌شود و ابتدا <code>&lt;T as Drop&gt;::drop</code> را فراخوانی می‌کند و سپس به‌صورت بازگشتی drop glue هر مقدار تحت مالکیت را فراخوانی می‌کند.</p>
+<ul>
+<li>اگر <code>T</code> یک <code>Drop</code> impl صریح داشته باشد، <code>&lt;T as Drop&gt;::drop</code> را فراخوانی کن.</li>
+<li>صرف‌نظر از اینکه <code>T</code> پیاده‌سازی <code>Drop</code> دارد یا نه، به تمام مقادیری که <code>T</code> <em>مالک</em> آن‌هاست بازگشت کن:
+<ul>
+<li>ارجاع‌ها، اشاره‌گرهای خام، اشاره‌گرهای تابع، function itemها، شیء صفت‌ها<sup class="footnote-reference" id="fr-traitobj-1"><a href="#footnote-traitobj">1</a></sup> و مقادیر اسکالر مالک چیزی نیستند.</li>
+<li>تاپل‌ها، sliceها و آرایه‌ها عناصر خود را تحت مالکیت می‌دانند. برای آرایه‌هایی با طول صفر، هیچ مقداری از نوع عنصر در مالکیت نیست.</li>
+<li>تمام فیلدهای (از همه‌ی variantها) ADTها تحت مالکیت در نظر گرفته می‌شوند. برای شمارش‌ها (enum) همه‌ی variantها را در نظر می‌گیریم. استثنا در اینجا <code>ManuallyDrop&lt;U&gt;</code> است که مالک <code>U</code> محسوب نمی‌شود. <code>PhantomData&lt;U&gt;</code> نیز مالک چیزی نیست. closureها و generatorها مالک upvarهای capture‌شده‌ی خود هستند.</li>
+</ul>
+</li>
+</ul>
+<p>اینکه یک نوع drop glue دارد یا نه توسط <a href="https://github.com/rust-lang/rust/blob/320b412f9c55bf480d26276ff0ab480e4ecb29c0/compiler/rustc_middle/src/ty/util.rs#L1086-L1108"><code>fn Ty::needs_drop</code></a> برگردانده می‌شود.</p>
+<h3 id="partially-dropping-a-local"><a class="header" href="#partially-dropping-a-local">drop جزئی یک متغیر محلی</a></h3>
+<p>برای نوع‌هایی که خودشان <code>Drop</code> را پیاده‌سازی نمی‌کنند، می‌توانیم پیش از drop کردن بقیه، بخش‌هایی از مقدار را نیز به‌صورت جزئی move کنیم. در این حالت فقط drop glue مقادیری که هنوز move نشده‌اند فراخوانی می‌شود، برای مثال:</p>
+<pre><code class="language-rust">fn main() {
+    let mut x = (PrintOnDrop("third"), PrintOnDrop("first"));
+    drop(x.1);
+    println!("second")
+}</code></pre>
+<p>در طول ساخت MIR فرض می‌کنیم که یک متغیر محلی هر زمان که از حوزه خارج می‌شود ممکن است drop شود، <em>به شرط آنکه نوع آن به drop نیاز داشته باشد</em>. محاسبه‌ی drop glue دقیق برای یک متغیر <strong>پس از</strong> borrowck و در pass به نام <code>ElaborateDrops</code> انجام می‌شود. این یعنی حتی اگر بخشی از متغیر محلی قبلاً drop شده باشد، dropck همچنان لازم می‌داند که این مقدار زنده باشد. این حتی زمانی که متغیر محلی را کاملاً move کرده باشیم نیز صادق است.</p>
+<pre><code class="language-rust">fn main() {
+    let mut x;
+    {
+        let temp = String::from("I am temporary");
+        x = PrintOnDrop(&amp;temp);
+        drop(x);
+    }
+} //~ ERROR `temp` does not live long enough.</code></pre>
+<p>باید بتوان مقداری drop elaboration را پیش از borrowck انجام داد تا این مثال کامپایل شود. یک feature ناپایدار برای جابه‌جا کردن drop elaboration پیش از const checking وجود دارد: <a href="https://github.com/rust-lang/rust/issues/73255">#73255</a>. چنین feature gate‌ای برای انجام مقداری drop elaboration پیش از borrowck وجود ندارد، هرچند یک <a href="https://github.com/rust-lang/compiler-team/issues/558">MCP مرتبط</a> هست.</p>
+<h3 id="dropck_outlives"><a class="header" href="#dropck_outlives"><code>dropck_outlives</code></a></h3>
+<p>دو محاسبه‌ی «liveness» متمایز انجام می‌دهیم:</p>
+<ul>
+<li>مقدار <code>v</code> در مکان <code>L</code> <em>use-live</em> است اگر ممکن باشد بعداً «استفاده» شود؛ «استفاده» در اینجا اساساً هر چیزی است که <em>drop</em> نباشد</li>
+<li>مقدار <code>v</code> در مکان <code>L</code> <em>drop-live</em> است اگر ممکن باشد بعداً drop شود</li>
+</ul>
+<p>وقتی چیزی <em>use-live</em> است، کل نوع آن باید در <code>L</code> معتبر باشد. وقتی <em>drop-live</em> است، تمام regionهایی که dropck لازم می‌داند باید در <code>L</code> معتبر باشند. مقادیری که در MIR drop می‌شوند <em>place</em> هستند.</p>
+<p>قیدهایی که <code>dropck_outlives</code> برای یک نوع محاسبه می‌کند، از نزدیک با drop glue تولیدشده برای آن نوع مطابقت دارد. برخلاف drop glue، <code>dropck_outlives</code> به نوع مقادیر تحت مالکیت اهمیت می‌دهد، نه خود مقادیر. برای مقداری از نوع <code>T</code></p>
+<ul>
+<li>اگر <code>T</code> یک <code>Drop</code> صریح داشته باشد، لازم است همه‌ی آرگومان‌های جنریک زنده باشند، مگر آنکه با <code>#[may_dangle]</code> علامت‌گذاری شده باشند که در آن صورت کاملاً نادیده گرفته می‌شوند</li>
+<li>صرف‌نظر از اینکه <code>T</code> یک <code>Drop</code> صریح دارد یا نه، به تمام نوع‌هایی که <code>T</code> <em>مالک</em> آن‌هاست بازگشت کن
+<ul>
+<li>ارجاع‌ها، اشاره‌گرهای خام، اشاره‌گرهای تابع، function itemها، شیء صفت‌ها<sup class="footnote-reference" id="fr-traitobj-2"><a href="#footnote-traitobj">1</a></sup> و مقادیر اسکالر مالک چیزی نیستند.</li>
+<li>تاپل‌ها، sliceها و آرایه‌ها نوع عنصر خود را تحت مالکیت می‌دانند. <strong>برای آرایه‌ها فعلاً بررسی نمی‌کنیم که طولشان صفر باشد یا نه</strong>.</li>
+<li>تمام فیلدهای (از همه‌ی variantها) ADTها تحت مالکیت در نظر گرفته می‌شوند. استثنا در اینجا <code>ManuallyDrop&lt;U&gt;</code> است که مالک <code>U</code> محسوب نمی‌شود. <strong>ما <code>PhantomData&lt;U&gt;</code> را مالک <code>U</code> در نظر می‌گیریم</strong>.</li>
+<li>closureها و generatorها مالک upvarهای capture‌شده‌ی خود هستند.</li>
+</ul>
+</li>
+</ul>
+<p>بخش‌هایی که پررنگ شده‌اند، حالت‌هایی هستند که <code>dropck_outlives</code> نوع‌هایی را تحت مالکیت می‌داند که <code>Ty::needs_drop</code> نادیده‌شان می‌گیرد. ما فقط زمانی به <code>dropck_outlives</code> تکیه می‌کنیم که <code>Ty::needs_drop</code> برای متغیر محلی حاوی آن <code>true</code> برگردانده باشد. این یعنی الزامات liveness می‌توانند بسته به اینکه یک نوع درون متغیر محلی بزرگ‌تری قرار دارد یا نه تغییر کنند. <strong>این ناسازگار است و باید اصلاح شود: یک مثال <a href="https://play.rust-lang.org/?version=stable&amp;mode=debug&amp;edition=2021&amp;gist=8b5f5f005a03971b22edb1c20c5e6cbe">برای آرایه‌ها</a> و <a href="https://play.rust-lang.org/?version=stable&amp;mode=debug&amp;edition=2021&amp;gist=44c6e2b1fae826329fd54c347603b6c8">برای <code>PhantomData</code></a>.</strong><sup class="footnote-reference" id="fr-core-1"><a href="#footnote-core">2</a></sup></p>
+<p>یک راه ممکن برای رفع این ناسازگاری‌ها این است که ساخت MIR بدبینانه‌تر عمل کند، احتمالاً با ضعیف‌تر کردن <code>Ty::needs_drop</code>، یا به‌طور جایگزین با دقیق‌تر کردن <code>dropck_outlives</code> به‌گونه‌ای که لازم باشد regionهای کمتری زنده باشند.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-traitobj">
+<p>می‌توانید تصور کنید شیء صفت‌ها یک پیاده‌سازی <code>Drop</code> درونی دارند که مستقیماً از <code>drop_in_place</code> ارائه‌شده توسط vtable استفاده می‌کند. این پیاده‌سازی <code>Drop</code> ایجاب می‌کند همه‌ی پارامترهای جنریک آن زنده باشند. <a href="#fr-traitobj-1">↩</a> <a href="#fr-traitobj-2">↩2</a></p>
+</li>
+<li id="footnote-core">
+<p>این فرض اصلی <a href="https://github.com/rust-lang/rust/issues/110288">#110288</a> و <a href="https://github.com/rust-lang/rfcs/pull/3417">RFC 3417</a> است. <a href="#fr-core-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="type-check.html">→ بررسی‌کنندهٔ نوع MIR</a><a href="region-inference.html">استنتاج ناحیه ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

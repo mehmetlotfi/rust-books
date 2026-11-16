@@ -1,0 +1,275 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>مالکیت چیست؟ — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch04-01-what-is-ownership"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="what-is-ownership"><a class="header" href="#what-is-ownership">مالکیت چیست؟</a></h2>
+<p><em>مالکیت</em> (ownership) مجموعه‌ای از قواعد است که نحوه مدیریت حافظه در یک برنامه Rust را تعیین می‌کند. همه برنامه‌ها باید شیوه استفاده خود از حافظه رایانه را در زمان اجرا مدیریت کنند. برخی زبان‌ها زباله‌روب (garbage collector) دارند که به‌طور منظم و در حین اجرای برنامه به دنبال حافظه‌ای می‌گردد که دیگر استفاده نمی‌شود؛ در زبان‌های دیگر، برنامه‌نویس باید حافظه را صراحتاً تخصیص دهد و آزاد کند. Rust رویکرد سومی دارد: حافظه از طریق سیستمی از مالکیت و با مجموعه‌ای از قواعد که کامپایلر آن‌ها را بررسی می‌کند مدیریت می‌شود. اگر هر یک از این قواعد نقض شود، برنامه کامپایل نخواهد شد. هیچ‌یک از ویژگی‌های مالکیت، برنامه شما را در زمان اجرا کند نمی‌کند.</p>
+<p>از آنجا که مالکیت برای بسیاری از برنامه‌نویسان مفهومی تازه است، عادت کردن به آن کمی زمان می‌برد. خبر خوب این است که هر چه با Rust و قواعد سیستم مالکیت باتجربه‌تر شوید، نوشتن طبیعی کدی که ایمن و کارآمد باشد برایتان آسان‌تر می‌شود. ادامه دهید!</p>
+<p>وقتی مالکیت را بفهمید، پایه‌ای محکم برای درک ویژگی‌هایی خواهید داشت که Rust را منحصربه‌فرد می‌کنند. در این فصل، مالکیت را با کار روی چند مثال می‌آموزید که روی یک ساختار داده بسیار رایج متمرکز هستند: رشته‌ها (strings).</p>
+<section class="note" aria-role="note">
+<h3 id="the-stack-and-the-heap"><a class="header" href="#the-stack-and-the-heap">پشته و heap</a></h3>
+<p>بسیاری از زبان‌های برنامه‌نویسی از شما نمی‌خواهند که زیاد به پشته (stack) و heap فکر کنید. اما در یک زبان برنامه‌نویسی سیستمی مانند Rust، اینکه یک مقدار روی پشته باشد یا روی heap، بر رفتار زبان و دلیل تصمیم‌هایی که باید بگیرید تأثیر می‌گذارد. بخش‌هایی از مالکیت در ادامه این فصل در ارتباط با پشته و heap توضیح داده می‌شوند، بنابراین در اینجا توضیح مختصری برای آمادگی ارائه می‌شود.</p>
+<p>هم پشته و هم heap بخش‌هایی از حافظه هستند که کد شما می‌تواند در زمان اجرا از آن‌ها استفاده کند، اما ساختار آن‌ها متفاوت است. پشته مقادیر را به همان ترتیبی که دریافت می‌کند ذخیره می‌کند و به ترتیب معکوس آن‌ها را حذف می‌کند. به این ویژگی <em>آخرین ورودی، اولین خروجی (LIFO)</em> گفته می‌شود. یک دسته بشقاب را تصور کنید: وقتی بشقاب بیشتری اضافه می‌کنید، آن را روی دسته می‌گذارید و وقتی به یک بشقاب نیاز دارید، یکی را از بالا برمی‌دارید. اضافه کردن یا برداشتن بشقاب از وسط یا پایین دسته به این خوبی کار نمی‌کند! اضافه کردن داده <em>push کردن روی پشته</em> و برداشتن داده <em>pop کردن از پشته</em> نامیده می‌شود. همه داده‌هایی که روی پشته ذخیره می‌شوند باید اندازه‌ای مشخص و ثابت داشته باشند. داده‌هایی که اندازه‌شان در زمان کامپایل نامعلوم است یا ممکن است تغییر کند، باید به‌جای آن روی heap ذخیره شوند.</p>
+<p>heap کم‌سازمان‌تر است: وقتی داده‌ای را روی heap قرار می‌دهید، مقدار مشخصی فضا درخواست می‌کنید. تخصیص‌دهنده حافظه (memory allocator) یک جای خالی در heap پیدا می‌کند که به اندازه کافی بزرگ باشد، آن را «در حال استفاده» علامت می‌زند و یک <em>اشاره‌گر</em> (pointer) که آدرس آن مکان است برمی‌گرداند. این فرایند <em>تخصیص روی heap</em> نامیده می‌شود و گاهی به‌اختصار فقط <em>تخصیص</em> (allocating) خوانده می‌شود (push کردن مقادیر روی پشته تخصیص محسوب نمی‌شود). از آنجا که اشاره‌گر به heap اندازه‌ای مشخص و ثابت دارد، می‌توانید اشاره‌گر را روی پشته ذخیره کنید، اما وقتی داده واقعی را می‌خواهید، باید اشاره‌گر را دنبال کنید. رستورانی را تصور کنید که در آن نشسته‌اید. وقتی وارد می‌شوید، تعداد افراد گروهتان را اعلام می‌کنید و میزبان یک میز خالی که جای همه را داشته باشد پیدا می‌کند و شما را به آنجا می‌برد. اگر یکی از اعضای گروه دیر برسد، می‌تواند بپرسد شما کجا نشانده شده‌اید تا شما را پیدا کند.</p>
+<p>push کردن روی پشته سریع‌تر از تخصیص روی heap است، زیرا تخصیص‌دهنده هرگز لازم نیست دنبال جایی برای ذخیره داده جدید بگردد؛ آن مکان همیشه بالای پشته است. در مقایسه، تخصیص فضا روی heap کار بیشتری لازم دارد، چون تخصیص‌دهنده ابتدا باید فضایی به اندازه کافی بزرگ برای نگهداری داده پیدا کند و سپس حسابداری لازم برای تخصیص بعدی را انجام دهد.</p>
+<p>دسترسی به داده در heap عموماً کندتر از دسترسی به داده روی پشته است، زیرا برای رسیدن به آن باید یک اشاره‌گر را دنبال کنید. پردازنده‌های امروزی هر چه کمتر در حافظه جهش کنند سریع‌ترند. با ادامه همان تشبیه، پیشخدمتی را در نظر بگیرید که از میزهای زیادی سفارش می‌گیرد. کارآمدترین روش این است که همه سفارش‌های یک میز را بگیرید و بعد سراغ میز بعدی بروید. گرفتن سفارش از میز A، سپس از میز B، دوباره از A و باز هم از B فرایندی بسیار کندتر خواهد بود. به همین ترتیب، پردازنده معمولاً اگر روی داده‌ای کار کند که نزدیک داده‌های دیگر است (مانند پشته) کارش را بهتر انجام می‌دهد تا وقتی داده دورتر است (مانند heap).</p>
+<p>وقتی کد شما یک تابع را فراخوانی می‌کند، مقادیری که به تابع ارسال می‌شوند (از جمله، احتمالاً اشاره‌گرهایی به داده‌های روی heap) و متغیرهای محلی تابع روی پشته push می‌شوند. وقتی تابع تمام شود، آن مقادیر از پشته pop می‌شوند.</p>
+<p>پیگیری اینکه کدام بخش‌های کد از کدام داده‌های روی heap استفاده می‌کنند، به حداقل رساندن داده‌های تکراری روی heap، و پاک‌سازی داده‌های بلااستفاده روی heap تا فضا تمام نشود، همگی مسائلی هستند که مالکیت به آن‌ها می‌پردازد. وقتی مالکیت را بفهمید، دیگر لازم نیست زیاد به پشته و heap فکر کنید. اما دانستن اینکه هدف اصلی مالکیت مدیریت داده‌های heap است می‌تواند توضیح دهد چرا مالکیت به این شکل کار می‌کند.</p>
+</section>
+<h3 id="ownership-rules"><a class="header" href="#ownership-rules">قواعد مالکیت</a></h3>
+<p>ابتدا نگاهی به قواعد مالکیت می‌اندازیم. این قواعد را در ذهن داشته باشید تا مثال‌هایی را که آن‌ها را نشان می‌دهند مرور کنیم:</p>
+<ul>
+<li>هر مقدار در Rust یک <em>مالک</em> (owner) دارد.</li>
+<li>در هر لحظه فقط یک مالک می‌تواند وجود داشته باشد.</li>
+<li>وقتی مالک از دامنه (scope) خارج شود، مقدار drop خواهد شد.</li>
+</ul>
+<h3 id="variable-scope"><a class="header" href="#variable-scope">دامنه متغیر</a></h3>
+<p>اکنون که از نحو پایه Rust گذشته‌ایم، دیگر همه کد <code>fn main() {</code> را در مثال‌ها نمی‌آوریم؛ پس اگر همراه ما پیش می‌روید، مطمئن شوید مثال‌های بعدی را به‌صورت دستی داخل یک تابع <code>main</code> قرار می‌دهید. در نتیجه، مثال‌های ما کمی مختصرتر خواهند بود و به ما اجازه می‌دهند به جای کد تکراری، روی جزئیات اصلی تمرکز کنیم.</p>
+<p>به‌عنوان اولین مثال از مالکیت، به دامنه برخی متغیرها نگاه می‌کنیم. <em>دامنه</em> (scope) محدوده‌ای در برنامه است که یک آیتم در آن معتبر است. متغیر زیر را در نظر بگیرید:</p>
+<pre><code class="language-rust">let s = "hello";</code></pre>
+<p>متغیر <code>s</code> به یک لیترال رشته‌ای اشاره می‌کند، که مقدار رشته در متن برنامه ما به‌صورت ثابت نوشته شده است. این متغیر از نقطه‌ای که اعلان می‌شود تا پایان دامنه فعلی معتبر است. لیست ۴-۱ برنامه‌ای را نشان می‌دهد که با کامنت‌هایی مشخص شده که متغیر <code>s</code> کجا معتبر است.</p>
+<figure class="listing" id="listing-4-1">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    {                      // s is not valid here, since it's not yet declared
+        let s = "hello";   // s is valid from this point forward
+
+        // do stuff with s
+    }                      // this scope is now over, and s is no longer valid
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-4-1">لیست ۴-۱</a>: یک متغیر و دامنه‌ای که در آن معتبر است</figcaption>
+</figure>
+<p>به عبارت دیگر، در اینجا دو نقطه زمانی مهم وجود دارد:</p>
+<ul>
+<li>وقتی <code>s</code> <em>وارد</em> دامنه می‌شود، معتبر است.</li>
+<li>تا زمانی که از دامنه <em>خارج</em> شود معتبر باقی می‌ماند.</li>
+</ul>
+<p>در این مرحله، رابطه بین دامنه‌ها و زمان معتبر بودن متغیرها شبیه زبان‌های برنامه‌نویسی دیگر است. اکنون با معرفی نوع <code>String</code> بر پایه این درک بنا می‌کنیم.</p>
+<h3 id="the-string-type"><a class="header" href="#the-string-type">نوع <code>String</code></a></h3>
+<p>برای نشان دادن قواعد مالکیت، به نوع داده‌ای پیچیده‌تر از مواردی که در بخش <a href="ch03-02-data-types.html#data-types">«انواع داده»</a><!-- ignore --> فصل ۳ بررسی کردیم نیاز داریم. انواعی که قبلاً بررسی شدند اندازه‌ای مشخص دارند، می‌توانند روی پشته ذخیره شوند و وقتی دامنه‌شان تمام شد از پشته pop شوند، و اگر بخش دیگری از کد لازم داشته باشد در دامنه‌ای متفاوت از همان مقدار استفاده کند، می‌توان آن‌ها را سریع و به‌سادگی کپی کرد تا نمونه‌ای جدید و مستقل ساخته شود. اما ما می‌خواهیم داده‌ای را بررسی کنیم که روی heap ذخیره می‌شود و ببینیم Rust چگونه می‌داند چه زمانی آن داده را پاک کند، و نوع <code>String</code> مثال بسیار خوبی است.</p>
+<p>ما روی بخش‌هایی از <code>String</code> تمرکز می‌کنیم که به مالکیت مربوط می‌شوند. این جنبه‌ها برای انواع داده پیچیده دیگر نیز صادق است، چه کتابخانه استاندارد آن‌ها را ارائه کرده باشد و چه خودتان آن‌ها را ساخته باشید. جنبه‌های غیرمرتبط با مالکیت <code>String</code> را در <a href="ch08-02-strings.html">فصل ۸</a><!-- ignore --> بحث خواهیم کرد.</p>
+<p>ما لیترال‌های رشته‌ای را قبلاً دیده‌ایم، که در آن‌ها مقدار رشته به‌صورت ثابت در برنامه نوشته شده است. لیترال‌های رشته‌ای مناسب‌اند، اما برای هر موقعیتی که ممکن است بخواهیم از متن استفاده کنیم مناسب نیستند. یک دلیل این است که تغییرناپذیرند (immutable). دلیل دیگر این است که هر مقدار رشته‌ای را نمی‌توان هنگام نوشتن کد دانست: برای مثال، اگر بخواهیم ورودی کاربر را بگیریم و ذخیره کنیم چه؟ Rust برای همین موقعیت‌ها نوع <code>String</code> را دارد. این نوع داده‌ای را مدیریت می‌کند که روی heap تخصیص یافته است و به همین دلیل می‌تواند مقدار متنی را ذخیره کند که در زمان کامپایل برای ما نامعلوم است. می‌توانید با استفاده از تابع <code>from</code>، یک <code>String</code> را از یک لیترال رشته‌ای بسازید، به این صورت:</p>
+<pre><code class="language-rust">let s = String::from("hello");</code></pre>
+<p>عملگر دو نقطه مضاعف <code>::</code> به ما اجازه می‌دهد این تابع <code>from</code> خاص را زیر فضای نام نوع <code>String</code> قرار دهیم، به‌جای اینکه از نامی مثل <code>string_from</code> استفاده کنیم. درباره این نحو بیشتر در بخش <a href="ch05-03-method-syntax.html#methods">«متدها»</a><!-- ignore --> فصل ۵ صحبت خواهیم کرد، و هنگام بحث درباره فضای نام با ماژول‌ها در <a href="ch07-03-paths-for-referring-to-an-item-in-the-module-tree.html">«مسیرها برای ارجاع به یک آیتم در درخت ماژول»</a><!-- ignore --> در فصل ۷.</p>
+<p>این نوع رشته <em>می‌تواند</em> تغییر کند:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let mut s = String::from("hello");
+
+    s.push_str(", world!"); // push_str() appends a literal to a String
+
+    println!("{s}"); // this will print `hello, world!`
+<span class="boring">}</span></code></pre>
+<p>پس تفاوت در اینجا چیست؟ چرا <code>String</code> می‌تواند تغییر کند اما لیترال‌ها نمی‌توانند؟ تفاوت در این است که این دو نوع چگونه با حافظه سروکار دارند.</p>
+<h3 id="memory-and-allocation"><a class="header" href="#memory-and-allocation">حافظه و تخصیص</a></h3>
+<p>در مورد لیترال رشته‌ای، ما محتوا را در زمان کامپایل می‌دانیم، بنابراین متن مستقیماً در فایل اجرایی نهایی قرار داده می‌شود. به همین دلیل لیترال‌های رشته‌ای سریع و کارآمدند. اما این ویژگی‌ها فقط از تغییرناپذیری لیترال رشته‌ای ناشی می‌شوند. متأسفانه نمی‌توانیم برای هر قطعه متنی که اندازه‌اش در زمان کامپایل نامعلوم است و ممکن است در زمان اجرای برنامه تغییر کند، یک تکه حافظه در باینری قرار دهیم.</p>
+<p>با نوع <code>String</code>، برای پشتیبانی از یک قطعه متن تغییرپذیر و قابل رشد، باید مقداری حافظه روی heap تخصیص دهیم که در زمان کامپایل نامعلوم است، تا محتوا را نگه دارد. این یعنی:</p>
+<ul>
+<li>حافظه باید در زمان اجرا از تخصیص‌دهنده حافظه درخواست شود.</li>
+<li>به راهی نیاز داریم که وقتی کارمان با <code>String</code> تمام شد، این حافظه را به تخصیص‌دهنده برگردانیم.</li>
+</ul>
+<p>بخش اول را خودمان انجام می‌دهیم: وقتی <code>String::from</code> را فراخوانی می‌کنیم، پیاده‌سازی آن حافظه مورد نیازش را درخواست می‌کند. این تقریباً در همه زبان‌های برنامه‌نویسی رایج است.</p>
+<p>اما بخش دوم متفاوت است. در زبان‌هایی که <em>زباله‌روب (GC)</em> دارند، GC حافظه‌ای را که دیگر استفاده نمی‌شود پیگیری و پاک می‌کند و ما لازم نیست به آن فکر کنیم. در بیشتر زبان‌های بدون GC، مسئولیت ما است که تشخیص دهیم چه زمانی حافظه دیگر استفاده نمی‌شود و کدی را برای آزاد کردن صریح آن فراخوانی کنیم، درست همان‌طور که برای درخواست آن عمل کردیم. انجام درست این کار از قدیم مسئله‌ای دشوار در برنامه‌نویسی بوده است. اگر فراموش کنیم، حافظه هدر می‌رود. اگر خیلی زود انجام دهیم، متغیری نامعتبر خواهیم داشت. اگر دو بار انجام دهیم، آن هم یک باگ است. باید دقیقاً یک <code>allocate</code> را با دقیقاً یک <code>free</code> جفت کنیم.</p>
+<p>Rust مسیر متفاوتی در پیش می‌گیرد: حافظه به‌محض اینکه متغیری که مالک آن است از دامنه خارج شود، به‌طور خودکار بازگردانده می‌شود. این نسخه‌ای از مثال دامنه در لیست ۴-۱ است که به جای لیترال رشته‌ای از <code>String</code> استفاده می‌کند:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    {
+        let s = String::from("hello"); // s is valid from this point forward
+
+        // do stuff with s
+    }                                  // this scope is now over, and s is no
+                                       // longer valid
+<span class="boring">}</span></code></pre>
+<p>نقطه‌ای طبیعی وجود دارد که می‌توانیم حافظه مورد نیاز <code>String</code> را به تخصیص‌دهنده برگردانیم: وقتی <code>s</code> از دامنه خارج می‌شود. وقتی یک متغیر از دامنه خارج می‌شود، Rust یک تابع خاص را برای ما فراخوانی می‌کند. این تابع <code>drop</code> نام دارد، و جایی است که نویسنده <code>String</code> می‌تواند کد بازگرداندن حافظه را قرار دهد. Rust در آکولاد بسته، <code>drop</code> را به‌طور خودکار فراخوانی می‌کند.</p>
+<blockquote>
+<p>نکته: در ++C، این الگوی آزادسازی منابع در پایان طول عمر یک آیتم گاهی <em>Resource Acquisition Is Initialization (RAII)</em> نامیده می‌شود. اگر از الگوهای RAII استفاده کرده باشید، تابع <code>drop</code> در Rust برایتان آشنا خواهد بود.</p>
+</blockquote>
+<p>این الگو تأثیر عمیقی بر شیوه نوشتن کد Rust دارد. ممکن است اکنون ساده به نظر برسد، اما رفتار کد در موقعیت‌های پیچیده‌تر، وقتی بخواهیم چند متغیر از داده‌ای که روی heap تخصیص داده‌ایم استفاده کنند، می‌تواند غیرمنتظره باشد. اکنون برخی از آن موقعیت‌ها را بررسی می‌کنیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="ways-variables-and-data-interact-move"></a></p>
+<h4 id="variables-and-data-interacting-with-move"><a class="header" href="#variables-and-data-interacting-with-move">تعامل متغیرها و داده‌ها با move</a></h4>
+<p>در Rust چند متغیر می‌توانند به شیوه‌های مختلف با یک داده تعامل داشته باشند. لیست ۴-۲ مثالی با یک عدد صحیح نشان می‌دهد.</p>
+<figure class="listing" id="listing-4-2">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let x = 5;
+    let y = x;
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-4-2">لیست ۴-۲</a>: انتساب مقدار صحیح متغیر &lt;code&gt;&lt;/x-listing&gt;x&lt;/code&gt; به &lt;code&gt;y&lt;/code&gt;</figcaption>
+</figure>
+<p>احتمالاً می‌توانیم حدس بزنیم این کد چه می‌کند: «مقدار <code>5</code> را به <code>x</code> متصل کن؛ سپس از مقدار <code>x</code> یک کپی بگیر و آن را به <code>y</code> متصل کن.» اکنون دو متغیر <code>x</code> و <code>y</code> داریم و هر دو برابر <code>5</code> هستند. این دقیقاً همان چیزی است که اتفاق می‌افتد، چون اعداد صحیح مقادیر ساده‌ای با اندازه مشخص و ثابت‌اند و این دو مقدار <code>5</code> روی پشته push می‌شوند.</p>
+<p>اکنون نسخه <code>String</code> را ببینیم:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let s1 = String::from("hello");
+    let s2 = s1;
+<span class="boring">}</span></code></pre>
+<p>این بسیار شبیه به نظر می‌رسد، بنابراین ممکن است فرض کنیم روش کار آن هم یکسان است: یعنی خط دوم از مقدار <code>s1</code> یک کپی می‌گیرد و آن را به <code>s2</code> متصل می‌کند. اما اتفاقی که می‌افتد دقیقاً این نیست.</p>
+<p>به شکل ۴-۱ نگاه کنید تا ببینید در پشت صحنه چه بر سر <code>String</code> می‌آید. یک <code>String</code> از سه بخش تشکیل شده است که در سمت چپ نشان داده شده‌اند: یک اشاره‌گر به حافظه‌ای که محتوای رشته را نگه می‌دارد، یک طول، و یک ظرفیت. این گروه از داده‌ها روی پشته ذخیره می‌شود. در سمت راست، حافظه روی heap است که محتوا را نگه می‌دارد.</p>
+<img alt="دو جدول: جدول اول نمایش s1 روی پشته را شامل می‌شود، متشکل از طول (۵)، ظرفیت (۵)، و یک اشاره‌گر به اولین مقدار در جدول دوم. جدول دوم نمایش داده رشته روی heap را بایت به بایت شامل می‌شود." src="img/trpl04-01.svg" class="center" style="width: 50%;">
+<p><span class="caption">شکل ۴-۱: نمایش در حافظه یک <code>String</code> که مقدار <code>"hello"</code> را نگه می‌دارد و به <code>s1</code> متصل است</span></p>
+<p>طول یعنی محتوای <code>String</code> در حال حاضر چند بایت حافظه استفاده می‌کند. ظرفیت مجموع حافظه‌ای است، بر حسب بایت، که <code>String</code> از تخصیص‌دهنده دریافت کرده است. تفاوت بین طول و ظرفیت مهم است، اما نه در این زمینه، پس فعلاً می‌توان ظرفیت را نادیده گرفت.</p>
+<p>وقتی <code>s1</code> را به <code>s2</code> نسبت می‌دهیم، داده <code>String</code> کپی می‌شود، یعنی اشاره‌گر، طول و ظرفیتی را که روی پشته هستند کپی می‌کنیم. داده روی heap را که اشاره‌گر به آن ارجاع می‌دهد کپی نمی‌کنیم. به عبارت دیگر، نمایش داده در حافظه مانند شکل ۴-۲ است.</p>
+<img alt="سه جدول: جدول‌های s1 و s2 که به‌ترتیب آن رشته‌ها را روی پشته نشان می‌دهند، و هر دو به همان داده رشته روی heap اشاره می‌کنند." src="img/trpl04-02.svg" class="center" style="width: 50%;">
+<p><span class="caption">شکل ۴-۲: نمایش در حافظه متغیر <code>s2</code> که کپی اشاره‌گر، طول و ظرفیت <code>s1</code> را دارد</span></p>
+<p>این نمایش <em>شبیه</em> شکل ۴-۳ نیست، که اگر Rust داده heap را هم کپی می‌کرد حافظه چنین شکلی می‌داشت. اگر Rust چنین می‌کرد، عملیات <code>s2 = s1</code> می‌توانست از نظر کارایی زمان اجرا بسیار پرهزینه باشد، در صورتی که داده روی heap بزرگ بود.</p>
+<img alt="چهار جدول: دو جدول که داده پشته s1 و s2 را نشان می‌دهند، و هر کدام به نسخه خودش از داده رشته روی heap اشاره می‌کند." src="img/trpl04-03.svg" class="center" style="width: 50%;">
+<p><span class="caption">شکل ۴-۳: امکان دیگری برای کاری که <code>s2 = s1</code> ممکن بود انجام دهد، اگر Rust داده heap را هم کپی می‌کرد</span></p>
+<p>پیش‌تر گفتیم وقتی یک متغیر از دامنه خارج می‌شود، Rust به‌طور خودکار تابع <code>drop</code> را فراخوانی می‌کند و حافظه heap آن متغیر را پاک می‌کند. اما شکل ۴-۲ نشان می‌دهد هر دو اشاره‌گر داده به یک مکان اشاره می‌کنند. این یک مشکل است: وقتی <code>s2</code> و <code>s1</code> از دامنه خارج شوند، هر دو سعی می‌کنند همان حافظه را آزاد کنند. این به خطای <em>double free</em> معروف است و یکی از باگ‌های ایمنی حافظه است که پیش‌تر ذکر کردیم. آزاد کردن حافظه دو بار می‌تواند به خرابی حافظه منجر شود، که به‌طور بالقوه می‌تواند به آسیب‌پذیری‌های امنیتی بینجامد.</p>
+<p>برای تضمین ایمنی حافظه، پس از خط <code>let s2 = s1;</code>، Rust <code>s1</code> را دیگر معتبر نمی‌داند. بنابراین Rust لازم نیست وقتی <code>s1</code> از دامنه خارج می‌شود چیزی را آزاد کند. ببینید وقتی پس از ساخته شدن <code>s2</code> سعی می‌کنید از <code>s1</code> استفاده کنید چه می‌شود؛ کار نخواهد کرد:</p>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">fn main() {
+</span>    let s1 = String::from("hello");
+    let s2 = s1;
+
+    println!("{s1}, world!");
+<span class="boring">}</span></code></pre>
+<p>خطایی مانند زیر دریافت می‌کنید، چون Rust از استفاده از ارجاع نامعتبر جلوگیری می‌کند:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling ownership v0.1.0 (file:///projects/ownership)
+error[E0382]: borrow of moved value: `s1`
+ --&gt; src/main.rs:5:16
+  |
+2 |     let s1 = String::from("hello");
+  |         -- move occurs because `s1` has type `String`, which does not implement the `Copy` trait
+3 |     let s2 = s1;
+  |              -- value moved here
+4 |
+5 |     println!("{s1}, world!");
+  |                ^^ value borrowed here after move
+  |
+help: consider cloning the value if the performance cost is acceptable
+  |
+3 |     let s2 = s1.clone();
+  |                ++++++++
+
+For more information about this error, try `rustc --explain E0382`.
+error: could not compile `ownership` (bin "ownership") due to 1 previous error
+</code></pre>
+<p>اگر هنگام کار با زبان‌های دیگر اصطلاحات <em>کپی سطحی</em> (shallow copy) و <em>کپی عمیق</em> (deep copy) را شنیده‌اید، مفهوم کپی کردن اشاره‌گر، طول و ظرفیت بدون کپی کردن داده احتمالاً شبیه ساختن یک کپی سطحی به نظر می‌رسد. اما چون Rust متغیر اول را هم نامعتبر می‌کند، به‌جای کپی سطحی به آن <em>move</em> (انتقال) گفته می‌شود. در این مثال می‌گوییم <code>s1</code> به <code>s2</code> <em>move</em> شد. پس آنچه واقعاً اتفاق می‌افتد در شکل ۴-۴ نشان داده شده است.</p>
+<img alt="سه جدول: جدول‌های s1 و s2 که به‌ترتیب آن رشته‌ها را روی پشته نشان می‌دهند، و هر دو به همان داده رشته روی heap اشاره می‌کنند. جدول s1 خاکستری شده است چون s1 دیگر معتبر نیست؛ فقط s2 را می‌توان برای دسترسی به داده heap استفاده کرد." src="img/trpl04-04.svg" class="center" style="width: 50%;">
+<p><span class="caption">شکل ۴-۴: نمایش در حافظه پس از نامعتبر شدن <code>s1</code></span></p>
+<p>این مشکل ما را حل می‌کند! چون فقط <code>s2</code> معتبر است، وقتی از دامنه خارج شود خودش به‌تنهایی حافظه را آزاد می‌کند و کار تمام است.</p>
+<p>علاوه بر این، یک انتخاب طراحی در این رفتار نهفته است: Rust هرگز به‌طور خودکار کپی «عمیق» از داده‌های شما نمی‌سازد. بنابراین، هر کپی <em>خودکاری</em> را می‌توان از نظر کارایی زمان اجرا ارزان فرض کرد.</p>
+<h4 id="scope-and-assignment"><a class="header" href="#scope-and-assignment">دامنه و انتساب</a></h4>
+<p>عکس این موضوع در رابطه بین دامنه، مالکیت و آزاد شدن حافظه از طریق تابع <code>drop</code> نیز صادق است. وقتی یک مقدار کاملاً جدید را به متغیری موجود نسبت می‌دهید، Rust <code>drop</code> را فراخوانی می‌کند و حافظه مقدار اصلی را بلافاصله آزاد می‌کند. برای مثال این کد را در نظر بگیرید:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let mut s = String::from("hello");
+    s = String::from("ahoy");
+
+    println!("{s}, world!");
+<span class="boring">}</span></code></pre>
+<p>ابتدا متغیر <code>s</code> را اعلان می‌کنیم و آن را به یک <code>String</code> با مقدار <code>"hello"</code> متصل می‌کنیم. سپس بلافاصله یک <code>String</code> جدید با مقدار <code>"ahoy"</code> می‌سازیم و آن را به <code>s</code> نسبت می‌دهیم. در این نقطه، هیچ چیزی به مقدار اصلی روی heap اشاره نمی‌کند. شکل ۴-۵ داده‌های پشته و heap را در این وضعیت نشان می‌دهد:</p>
+<img alt="یک جدول که مقدار رشته را روی پشته نشان می‌دهد و به قطعه دوم داده رشته (ahoy) روی heap اشاره می‌کند، در حالی که داده رشته اصلی (hello) خاکستری شده است چون دیگر قابل دسترسی نیست." src="img/trpl04-05.svg" class="center" style="width: 50%;">
+<p><span class="caption">شکل ۴-۵: نمایش در حافظه پس از اینکه مقدار اولیه به‌طور کامل جایگزین شده است</span></p>
+<p>بنابراین رشته اصلی بلافاصله از دامنه خارج می‌شود. Rust تابع <code>drop</code> را روی آن اجرا می‌کند و حافظه‌اش فوراً آزاد می‌شود. وقتی در پایان مقدار را چاپ کنیم، <code>"ahoy, world!"</code> خواهد بود.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="ways-variables-and-data-interact-clone"></a></p>
+<h4 id="variables-and-data-interacting-with-clone"><a class="header" href="#variables-and-data-interacting-with-clone">تعامل متغیرها و داده‌ها با clone</a></h4>
+<p>اگر <em>بخواهیم</em> داده heap مربوط به <code>String</code> را به‌طور عمیق کپی کنیم، نه فقط داده پشته را، می‌توانیم از متدی رایج به نام <code>clone</code> استفاده کنیم. نحو متدها را در فصل ۵ بحث خواهیم کرد، اما چون متدها ویژگی رایج بسیاری از زبان‌های برنامه‌نویسی هستند، احتمالاً قبلاً آن‌ها را دیده‌اید.</p>
+<p>این هم مثالی از متد <code>clone</code> در عمل:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let s1 = String::from("hello");
+    let s2 = s1.clone();
+
+    println!("s1 = {s1}, s2 = {s2}");
+<span class="boring">}</span></code></pre>
+<p>این به‌خوبی کار می‌کند و رفتار نشان داده‌شده در شکل ۴-۳ را صراحتاً ایجاد می‌کند، یعنی جایی که داده heap <em>کپی می‌شود</em>.</p>
+<p>وقتی فراخوانی <code>clone</code> را می‌بینید، می‌دانید که کدی دلخواه در حال اجرا است و آن کد ممکن است پرهزینه باشد. این یک نشانه بصری است که اتفاقی متفاوت در جریان است.</p>
+<h4 id="stack-only-data-copy"><a class="header" href="#stack-only-data-copy">داده‌های فقط-پشته: Copy</a></h4>
+<p>نکته ظریف دیگری هم هست که هنوز درباره‌اش صحبت نکرده‌ایم. این کد که با اعداد صحیح نوشته شده است — بخشی از آن در لیست ۴-۲ نشان داده شد — کار می‌کند و معتبر است:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let x = 5;
+    let y = x;
+
+    println!("x = {x}, y = {y}");
+<span class="boring">}</span></code></pre>
+<p>اما این کد با آنچه همین الان یاد گرفتیم در تناقض به نظر می‌رسد: ما فراخوانی <code>clone</code> نداریم، اما <code>x</code> همچنان معتبر است و به <code>y</code> move نشده است.</p>
+<p>دلیلش این است که انواعی مانند اعداد صحیح که اندازه‌شان در زمان کامپایل مشخص است، به‌طور کامل روی پشته ذخیره می‌شوند، بنابراین ساختن کپی مقادیر واقعی سریع است. یعنی دلیلی وجود ندارد که بخواهیم مانع معتبر ماندن <code>x</code> پس از ساختن متغیر <code>y</code> شویم. به عبارت دیگر، اینجا تفاوتی بین کپی عمیق و سطحی نیست، پس فراخوانی <code>clone</code> کاری متفاوت از کپی سطحی معمول انجام نمی‌داد و می‌توانیم آن را حذف کنیم.</p>
+<p>Rust یک حاشیه‌نویسی (annotation) ویژه به نام صفت <code>Copy</code> دارد که می‌توانیم آن را روی انواعی که روی پشته ذخیره می‌شوند، مانند اعداد صحیح، قرار دهیم (درباره صفت‌ها در <a href="ch10-02-traits.html">فصل ۱۰</a><!-- ignore --> بیشتر صحبت خواهیم کرد). اگر یک نوع صفت <code>Copy</code> را پیاده‌سازی کند، متغیرهایی که از آن استفاده می‌کنند move نمی‌شوند، بلکه به‌سادگی کپی می‌شوند و پس از انتساب به متغیر دیگر همچنان معتبر می‌مانند.</p>
+<p>Rust اجازه نمی‌دهد نوعی را با <code>Copy</code> حاشیه‌نویسی کنیم اگر آن نوع، یا هر یک از بخش‌هایش، صفت <code>Drop</code> را پیاده‌سازی کرده باشد. اگر نوع به اتفاقی خاص در زمان خروج مقدار از دامنه نیاز داشته باشد و ما حاشیه‌نویسی <code>Copy</code> را به آن نوع اضافه کنیم، خطای زمان کامپایل می‌گیریم. برای آموختن اینکه چگونه حاشیه‌نویسی <code>Copy</code> را به نوع خود اضافه کنید تا صفت را پیاده‌سازی کند، به <a href="appendix-03-derivable-traits.html">«صفت‌های قابل اشتقاق»</a><!-- ignore --> در پیوست ج مراجعه کنید.</p>
+<p>پس چه انواعی صفت <code>Copy</code> را پیاده‌سازی می‌کنند؟ می‌توانید برای اطمینان مستندات نوع مورد نظر را بررسی کنید، اما به‌عنوان یک قاعده کلی، هر گروهی از مقادیر اسکالر ساده می‌تواند <code>Copy</code> را پیاده‌سازی کند، و هیچ چیزی که به تخصیص نیاز دارد یا نوعی منبع است نمی‌تواند <code>Copy</code> را پیاده‌سازی کند. این‌ها برخی از انواعی هستند که <code>Copy</code> را پیاده‌سازی می‌کنند:</p>
+<ul>
+<li>همه انواع عدد صحیح، مانند <code>u32</code>.</li>
+<li>نوع بولی، <code>bool</code>، با مقادیر <code>true</code> و <code>false</code>.</li>
+<li>همه انواع ممیز شناور، مانند <code>f64</code>.</li>
+<li>نوع کاراکتر، <code>char</code>.</li>
+<li>تاپل‌ها (tuple)، اگر فقط انواعی را شامل شوند که آن‌ها هم <code>Copy</code> را پیاده‌سازی می‌کنند. برای مثال، <code>(i32, i32)</code> صفت <code>Copy</code> را پیاده‌سازی می‌کند، اما <code>(i32, String)</code> نه.</li>
+</ul>
+<h3 id="ownership-and-functions"><a class="header" href="#ownership-and-functions">مالکیت و توابع</a></h3>
+<p>سازوکار ارسال یک مقدار به تابع شبیه انتساب یک مقدار به متغیر است. ارسال یک متغیر به تابع، درست مانند انتساب، آن را move یا کپی می‌کند. لیست ۴-۳ مثالی دارد با حاشیه‌نویسی‌هایی که نشان می‌دهند متغیرها کجا وارد و خارج از دامنه می‌شوند.</p>
+<figure class="listing" id="listing-4-3">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let s = String::from("hello");  // s comes into scope
+
+    takes_ownership(s);             // s's value moves into the function...
+                                    // ... and so is no longer valid here
+
+    let x = 5;                      // x comes into scope
+
+    makes_copy(x);                  // Because i32 implements the Copy trait,
+                                    // x does NOT move into the function,
+                                    // so it's okay to use x afterward.
+
+} // Here, x goes out of scope, then s. However, because s's value was moved,
+  // nothing special happens.
+
+fn takes_ownership(some_string: String) { // some_string comes into scope
+    println!("{some_string}");
+} // Here, some_string goes out of scope and `drop` is called. The backing
+  // memory is freed.
+
+fn makes_copy(some_integer: i32) { // some_integer comes into scope
+    println!("{some_integer}");
+} // Here, some_integer goes out of scope. Nothing special happens.</code></pre>
+<figcaption><a href="#listing-4-3">لیست ۴-۳</a>: توابعی با مالکیت و دامنه‌های حاشیه‌نویسی‌شده</figcaption>
+</figure>
+<p>اگر بعد از فراخوانی <code>takes_ownership</code> سعی کنیم از <code>s</code> استفاده کنیم، Rust یک خطای زمان کامپایل صادر می‌کند. این بررسی‌های ایستا ما را از اشتباه محافظت می‌کنند. سعی کنید به <code>main</code> کدی اضافه کنید که از <code>s</code> و <code>x</code> استفاده کند تا ببینید کجا می‌توانید از آن‌ها استفاده کنید و کجا قواعد مالکیت مانع شما می‌شوند.</p>
+<h3 id="return-values-and-scope"><a class="header" href="#return-values-and-scope">مقادیر بازگشتی و دامنه</a></h3>
+<p>برگرداندن مقادیر نیز می‌تواند مالکیت را منتقل کند. لیست ۴-۴ مثالی از تابعی را نشان می‌دهد که مقداری را برمی‌گرداند، با حاشیه‌نویسی‌هایی مشابه لیست ۴-۳.</p>
+<figure class="listing" id="listing-4-4">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let s1 = gives_ownership();        // gives_ownership moves its return
+                                       // value into s1
+
+    let s2 = String::from("hello");    // s2 comes into scope
+
+    let s3 = takes_and_gives_back(s2); // s2 is moved into
+                                       // takes_and_gives_back, which also
+                                       // moves its return value into s3
+} // Here, s3 goes out of scope and is dropped. s2 was moved, so nothing
+  // happens. s1 goes out of scope and is dropped.
+
+fn gives_ownership() -&gt; String {       // gives_ownership will move its
+                                       // return value into the function
+                                       // that calls it
+
+    let some_string = String::from("yours"); // some_string comes into scope
+
+    some_string                        // some_string is returned and
+                                       // moves out to the calling
+                                       // function
+}
+
+// This function takes a String and returns a String.
+fn takes_and_gives_back(a_string: String) -&gt; String {
+    // a_string comes into
+    // scope
+
+    a_string  // a_string is returned and moves out to the calling function
+}</code></pre>
+<figcaption><a href="#listing-4-4">لیست ۴-۴</a>: انتقال مالکیت مقادیر بازگشتی</figcaption>
+</figure>
+<p>مالکیت یک متغیر هر بار از الگوی یکسانی پیروی می‌کند: انتساب یک مقدار به متغیر دیگر آن را move می‌کند. وقتی متغیری که شامل داده روی heap است از دامنه خارج می‌شود، مقدار توسط <code>drop</code> پاک می‌شود، مگر اینکه مالکیت داده به متغیر دیگری منتقل شده باشد.</p>
+<p>اگرچه این کار می‌کند، گرفتن مالکیت و سپس بازگرداندن آن در هر تابع کمی خسته‌کننده است. اگر بخواهیم تابعی از مقداری استفاده کند اما مالکیت آن را نگیرد چه؟ کاملاً آزاردهنده است که هر چیزی را که ارسال می‌کنیم اگر بخواهیم دوباره از آن استفاده کنیم باید پس بگیریم، علاوه بر هر داده‌ای که از بدنه تابع حاصل می‌شود و ممکن است بخواهیم برگردانیم.</p>
+<p>Rust به ما اجازه می‌دهد با استفاده از تاپل چند مقدار را برگردانیم، همان‌طور که در لیست ۴-۵ نشان داده شده است.</p>
+<figure class="listing" id="listing-4-5">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let s1 = String::from("hello");
+
+    let (s2, len) = calculate_length(s1);
+
+    println!("The length of '{s2}' is {len}.");
+}
+
+fn calculate_length(s: String) -&gt; (String, usize) {
+    let length = s.len(); // len() returns the length of a String
+
+    (s, length)
+}</code></pre>
+<figcaption><a href="#listing-4-5">لیست ۴-۵</a>: بازگرداندن مالکیت پارامترها</figcaption>
+</figure>
+<p>اما این تشریفات بیش از حد و کار زیادی است برای مفهومی که باید رایج باشد. خوشبختانه برای ما، Rust قابلیتی برای استفاده از یک مقدار بدون انتقال مالکیت دارد: ارجاع‌ها (references).</p><nav class="page-nav"><a href="ch04-00-understanding-ownership.html">→ درک مالکیت</a><a href="ch04-02-references-and-borrowing.html">ارجاع‌ها و قرض‌گیری ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

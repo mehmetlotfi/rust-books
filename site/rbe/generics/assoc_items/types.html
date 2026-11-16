@@ -1,0 +1,70 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>نوع‌های وابسته — Rust با مثال</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="generics/assoc_items/types"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../../rbe/index.html" style="color:inherit;text-decoration:none">Rust با مثال</a><small class="en-title" dir="ltr">Rust By Example</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="associated-types"><a class="header" href="#associated-types">نوع‌های وابسته</a></h1>
+<p>«نوع‌های وابسته» با انتقال نوع‌های درونی به خود صفت به‌عنوان نوع‌های <em>خروجی</em>، خوانایی کلی کد را بهتر می‌کنند. نگارش تعریف <code>trait</code> چنین است:</p>
+<pre><code class="language-rust">// `A` and `B` are defined in the trait via the `type` keyword.
+// (Note: `type` in this context is different from `type` when used for
+// aliases).
+trait Contains {
+    type A;
+    type B;
+
+    // Updated syntax to refer to these new types generically.
+    fn contains(&amp;self, _: &amp;Self::A, _: &amp;Self::B) -&gt; bool;
+}</code></pre>
+<p>توجه کنید که توابعی که از <code>Contains</code> که یک <code>trait</code> است استفاده می‌کنند، دیگر اصلاً لازم نیست <code>A</code> یا <code>B</code> را بیان کنند:</p>
+<pre><code class="language-rust ignore">// Without using associated types
+fn difference&lt;A, B, C&gt;(container: &amp;C) -&gt; i32 where
+    C: Contains&lt;A, B&gt; { ... }
+
+// Using associated types
+fn difference&lt;C: Contains&gt;(container: &amp;C) -&gt; i32 { ... }</code></pre>
+<p>مثال بخش قبل را با نوع‌های وابسته بازنویسی کنیم:</p>
+<pre><code class="language-rust editable">struct Container(i32, i32);
+
+// A trait which checks if 2 items are stored inside of container.
+// Also retrieves first or last value.
+trait Contains {
+    // Define generic types here which methods will be able to utilize.
+    type A;
+    type B;
+
+    fn contains(&amp;self, _: &amp;Self::A, _: &amp;Self::B) -&gt; bool;
+    fn first(&amp;self) -&gt; i32;
+    fn last(&amp;self) -&gt; i32;
+}
+
+impl Contains for Container {
+    // Specify what types `A` and `B` are. If the `input` type
+    // is `Container(i32, i32)`, the `output` types are determined
+    // as `i32` and `i32`.
+    type A = i32;
+    type B = i32;
+
+    // `&amp;Self::A` and `&amp;Self::B` are also valid here.
+    fn contains(&amp;self, number_1: &amp;i32, number_2: &amp;i32) -&gt; bool {
+        (&amp;self.0 == number_1) &amp;&amp; (&amp;self.1 == number_2)
+    }
+    // Grab the first number.
+    fn first(&amp;self) -&gt; i32 { self.0 }
+
+    // Grab the last number.
+    fn last(&amp;self) -&gt; i32 { self.1 }
+}
+
+fn difference&lt;C: Contains&gt;(container: &amp;C) -&gt; i32 {
+    container.last() - container.first()
+}
+
+fn main() {
+    let number_1 = 3;
+    let number_2 = 10;
+
+    let container = Container(number_1, number_2);
+
+    println!("Does container contain {} and {}: {}",
+        &amp;number_1, &amp;number_2,
+        container.contains(&amp;number_1, &amp;number_2));
+    println!("First number: {}", container.first());
+    println!("Last number: {}", container.last());
+
+    println!("The difference is: {}", difference(&amp;container));
+}</code></pre><nav class="page-nav"><a href="../../../rbe/generics/assoc_items/the_problem.html">→ مسئله</a><a href="../../../rbe/generics/phantom.html">پارامترهای نوع شبح‌وار ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../rbe/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

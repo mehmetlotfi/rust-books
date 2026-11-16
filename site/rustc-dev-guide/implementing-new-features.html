@@ -1,0 +1,135 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>پیاده‌سازی قابلیت‌های جدید زبان — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="implementing-new-features"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="implementing-new-language-features"><a class="header" href="#implementing-new-language-features">پیاده‌سازی ویژگی‌های جدید زبان</a></h1>
+<p>وقتی می‌خواهید یک ویژگی جدید و مهم را در کامپایلر پیاده‌سازی کنید، باید این فرایند را طی کنید تا مطمئن شوید همه چیز بدون مشکل پیش می‌رود.</p>
+<p><strong>توجه: این بخش برای ویژگی‌های <em>زبان</em> است، نه ویژگی‌های <em>کتابخانه</em>، که از <a href="./stability.html">فرایندی متفاوت</a> استفاده می‌کنند.</strong></p>
+<p>همچنین <a href="https://lang-team.rust-lang.org/how_to/propose.html">رویه‌های تیم طراحی زبان Rust</a> را برای پیشنهاد تغییرات در زبان ببینید.</p>
+<h2 id="new-features"><a class="header" href="#new-features">ویژگی‌های جدید</a></h2>
+<p>Rust تضمین‌های قوی سازگاری رو‌به‌عقب دارد. بنابراین ویژگی‌های جدید را نمی‌توان مستقیماً در Rust پایدار (stable) پیاده‌سازی کرد. در عوض، ما سه کانال انتشار داریم: stable، beta و nightly. برای جزئیات بیشتر درباره مدل انتشار قطاری Rust به <a href="../book/appendix-07-nightly-rust.html">کتاب Rust</a> مراجعه کنید.</p>
+<ul>
+<li><strong>Stable</strong>: این آخرین نسخه پایدار برای استفاده عمومی است.</li>
+<li><strong>Beta</strong>: این نسخه بعدی است (ظرف ۶ هفته پایدار خواهد شد).</li>
+<li><strong>Nightly</strong>: شاخه <code>main</code> مخزن را دنبال می‌کند. این تنها کانالی است که در آن استفاده از ویژگی‌های ناپایدار در نظر گرفته شده است، و این کار از طریق feature gateهای اختیاری (opt-in) انجام می‌شود.</li>
+</ul>
+<h3 id="breaking-changes"><a class="header" href="#breaking-changes">تغییرات ناسازگار</a></h3>
+<p>تغییرات ناسازگار (breaking changes) در راهنمای توسعه یک <a href="bug-fix-procedure.html">بخش اختصاصی</a> دارند.</p>
+<h3 id="major-changes"><a class="header" href="#major-changes">تغییرات عمده</a></h3>
+<p><a href="https://forge.rust-lang.org/compiler/proposals-and-stabilization.html#what-proposalapproval-do-i-need">“چه تأییدی برای پیشنهاد خود لازم دارم؟”</a> را ببینید. برای تعریف اصطلاحات آنجا، به <a href="https://forge.rust-lang.org/compiler/proposals-and-stabilization.html#proposals">“پیشنهادها”</a> مراجعه کنید.</p>
+<p><strong>اگر مطمئن نیستید، <a href="https://rust-lang.zulipchat.com/#narrow/stream/131828-t-compiler">در Zulip</a> بپرسید. حیف است که زمان زیادی صرف یک PR شود که در نهایت ادغام (merge) نشود!</strong></p>
+<h2 id="the-rfcbot-fcp-process"><a class="header" href="#the-rfcbot-fcp-process">فرایند FCP با @rfcbot</a></h2>
+<p>وقتی تغییر کوچک، بدون مناقشه و ناسازگاری است، و بر زبان پایدار به هیچ شکلی که کاربر بتواند مشاهده کند اثر نمی‌گذارد یا ویژگی ناپایدار جدیدی اضافه نمی‌کند، می‌توان آن را فقط با نوشتن یک PR و گرفتن r+ از کسی که آن بخش کد را می‌شناسد انجام داد. اما در غیر این صورت، باید کارهای بیشتری انجام شود. حتی برای کارهای درونی کامپایلر، فشار دادن یک تغییر بحث‌برانگیز بدون اجماع بقیه تیم ایده بدی است (هم از نظر «سیستم توزیع‌شده» تا مطمئن شوید چیزی را که از آن خبر ندارید خراب نمی‌کنید، و هم از نظر اجتماعی تا از درگیری‌های PR جلوگیری شود).</p>
+<p>برای تغییراتی که به اجماع یک تیم نیاز دارند، از فرایند پیشنهاد دوره نظر نهایی (final comment period یا FCP) استفاده می‌کنیم. اگر عضو تیم مربوطه نیستید (و بنابراین مجوزهای @rfcbot را ندارید)، از کسی که عضو است بخواهید یکی را آغاز کند؛ مگر آنکه خودش نگرانی‌ای داشته باشد، باید این کار را انجام دهد.</p>
+<p>فرایند FCP فقط زمانی لازم است که به اجماع نیاز داشته باشید – اگر هیچ فرایندی برای تغییر شما اجماع را الزامی نمی‌کند و فکر نمی‌کنید کسی با آن مشکل داشته باشد، تکیه بر یک r+ به‌تنهایی مشکلی ندارد. برای مثال، افزودن یا تغییر پرچم‌های خط فرمان ناپایدار یا attributeها در فضای نام رزرو‌شده داخلی کامپایلر یعنی <code>rustc_</code> برای توسعه کامپایلر یا استفاده کتابخانه استاندارد بدون FCP مجاز است، به شرطی که انتظار نداشته باشید در اکوسیستم nightly به‌طور گسترده استفاده شوند. برخی تیم‌ها فرایندهای سبک‌تری دارند که در سناریوهایی مانند این استفاده می‌کنند؛ برای مثال، تیم کامپایلر ثبت یک پیشنهاد تغییر عمده (<a href="https://forge.rust-lang.org/compiler/proposals-and-stabilization.html#how-do-i-submit-an-mcp">MCP</a>) را به‌عنوان راهی سبک برای جلب حمایت و بازخورد بدون نیاز به اجماع کامل توصیه می‌کند.</p>
+<p>لازم نیست پیاده‌سازی برای دریافت r+ کاملاً آماده باشد تا FCP را پیشنهاد دهید، اما معمولاً ایده خوبی است که دست‌کم یک اثبات مفهوم (proof of concept) داشته باشید تا مردم ببینند درباره چه چیزی صحبت می‌کنید.</p>
+<p>وقتی یک FCP پیشنهاد می‌شود، همه اعضای تیم باید آن را امضا کنند. پس از آنکه همگی این کار را کردند، یک «دوره نظر نهایی» ۱۰ روزه (و به همین دلیل این نام) وجود دارد که در آن همه می‌توانند نظر بدهند، و اگر هیچ نگرانی مطرح نشود، PR/issue تأیید FCP را دریافت می‌کند.</p>
+<h2 id="the-logistics-of-writing-features"><a class="header" href="#the-logistics-of-writing-features">جنبه‌های اجرایی نوشتن ویژگی‌ها</a></h2>
+<p>چند مرحله «اجرایی» وجود دارد که ممکن است برای پیاده‌سازی یک ویژگی به‌صورتی که درست کار کند لازم باشد از آن‌ها عبور کنید.</p>
+<h3 id="warning-cycles"><a class="header" href="#warning-cycles">چرخه‌های هشدار</a></h3>
+<p>در برخی موارد، یک ویژگی یا رفع اشکال ممکن است در برخی موارد مرزی برخی برنامه‌های موجود را خراب کند. در آن صورت، باید یک اجرای crater برای ارزیابی تأثیر انجام دهید و احتمالاً یک lint سازگاری آینده (future-compatibility) اضافه کنید، مشابه آنچه برای <a href="diagnostics.html#edition-gated-lints">lintهای وابسته به edition</a> استفاده می‌شود.</p>
+<h3 id="stability"><a class="header" href="#stability">پایداری</a></h3>
+<p>ما <a href="https://github.com/rust-lang/rfcs/blob/master/text/1122-language-semver.md">برای پایداری Rust ارزش قائلیم</a>. کدی که روی stable کار می‌کند و اجرا می‌شود باید (تقریباً همیشه) خراب نشود. به همین دلیل، نمی‌خواهیم یک ویژگی را فقط با اجماع تیم و بازبینی کد به دنیا عرضه کنیم - می‌خواهیم تجربه واقعی از استفاده از آن ویژگی روی nightly کسب کنیم، و ممکن است بخواهیم بر اساس آن تجربه ویژگی را تغییر دهیم.</p>
+<p>برای اینکه این امکان وجود داشته باشد، باید مطمئن شویم کاربران به‌طور ناخواسته به آن ویژگی جدید وابسته نمی‌شوند - در غیر این صورت، به‌ویژه اگر آزمایش زمان‌بر باشد یا به تأخیر بیفتد و ویژگی سوار قطارهای انتشار به stable شود، در عمل پایدار می‌شود و دیگر نخواهیم توانست بدون خراب کردن کد مردم در آن تغییری ایجاد کنیم.</p>
+<p>روشی که برای این کار به کار می‌بریم این است که اطمینان می‌یابیم همه ویژگی‌های جدید پشت feature gate قرار دارند - بدون فعال کردن یک feature gate (<code>#[feature(foo)]</code>) قابل استفاده نیستند، و این کار در کامپایلر stable/beta ممکن نیست. برای جزئیات فنی بخش <a href="#stability-in-code">پایداری در کد</a> را ببینید.</p>
+<p>در نهایت، پس از آنکه تجربه کافی از استفاده از ویژگی کسب کردیم، تغییرات لازم را انجام دادیم، و راضی بودیم، آن را با فرایند stabilization که <a href="./stabilization-guide.html">اینجا</a> توضیح داده شده به دنیا عرضه می‌کنیم. تا آن زمان، ویژگی ثابت و تغییرناپذیر نیست: هر بخش از ویژگی می‌تواند تغییر کند، یا ویژگی ممکن است کاملاً بازنویسی یا حذف شود. ویژگی‌ها صرفاً با ناپایدار و بدون تغییر ماندن برای مدت طولانی «مصونیت» به دست نمی‌آورند.</p>
+<h3 id="tracking-issues"><a class="header" href="#tracking-issues">issueهای ردیابی</a></h3>
+<p>برای پیگیری وضعیت یک ویژگی ناپایدار، تجربه‌ای که هنگام استفاده از آن روی nightly کسب می‌کنیم، و نگرانی‌هایی که مانع stabilization آن می‌شوند، هر feature-gate به یک issue ردیابی (tracking issue) نیاز دارد. هنگام ایجاد issueها و PRهای مرتبط با ویژگی، به این issue ردیابی ارجاع دهید، و وقتی به‌روزرسانی‌هایی درباره پیشرفت ویژگی وجود دارد، آن‌ها را در issue ردیابی منتشر کنید.</p>
+<p>برای ویژگی‌هایی که بخشی از یک RFC پذیرفته‌شده یا آزمایش زبان (lang experiment) تأییدشده هستند، از issue ردیابی همان استفاده کنید.</p>
+<p>برای ویژگی‌های دیگر، یک issue ردیابی برای آن ویژگی ایجاد کنید. عنوان issue باید «Tracking issue for YOUR FEATURE» باشد. از <a href="https://github.com/rust-lang/rust/issues/new?template=tracking_issue.md">قالب «Tracking Issue»</a> استفاده کنید.</p>
+<h3 id="lang-experiments"><a class="header" href="#lang-experiments">آزمایش‌های زبان</a></h3>
+<p>برای ورود به کامپایلر، ویژگی‌هایی که اثرات قابل‌مشاهده برای کاربر بر زبان دارند (حتی ناپایدار) باید یا بخشی از یک RFC پذیرفته‌شده یا یک <a href="https://lang-team.rust-lang.org/how_to/experiment.html">آزمایش زبان</a> تأییدشده باشند.</p>
+<p>برای پیشنهاد یک آزمایش زبان جدید، یک issue در <code>rust-lang/rust</code> باز کنید که انگیزه و راه‌حل مورد نظر را توضیح دهد. اگر پذیرفته شود، این issue به issue ردیابی آزمایش تبدیل می‌شود، بنابراین از <a href="https://github.com/rust-lang/rust/issues/new?template=tracking_issue.md">قالب</a> issue ردیابی استفاده کنید و در عین حال این جزئیات دیگر را نیز بگنجانید. issue را برای تیم lang نامزد کنید و <code>@rust-lang/lang</code> و <code>@rust-lang/lang-advisors</code> را CC کنید. وقتی آزمایش تأیید شد، issue ردیابی با <code>B-experimental</code> برچسب‌گذاری می‌شود.</p>
+<p>پرچم‌های ویژگی مرتبط با یک آزمایش زبان باید به‌عنوان <code>incomplete</code> علامت‌گذاری شوند تا زمانی که یک RFC برای آن ویژگی پذیرفته شود.</p>
+<h2 id="stability-in-code"><a class="header" href="#stability-in-code">پایداری در کد</a></h2>
+<p>برای پیاده‌سازی یک ویژگی ناپایدار جدید باید گام‌های زیر را دنبال کرد:</p>
+<ol>
+<li>
+<p><a href="#tracking-issues">issue ردیابی</a> را باز کنید یا شناسایی کنید. برای ویژگی‌هایی که بخشی از یک RFC پذیرفته‌شده یا آزمایش زبان تأییدشده هستند، از issue ردیابی همان استفاده کنید.</p>
+<p>issue ردیابی را با برچسب <code>C-tracking-issue</code> و برچسب مربوط <code>F-feature_name</code> علامت بزنید (در صورت نیاز آن برچسب را اضافه کنید).</p>
+</li>
+<li>
+<p>برای feature gate یک نام انتخاب کنید (برای RFCها از نام موجود در RFC استفاده کنید).</p>
+</li>
+<li>
+<p>نام ویژگی را در بلوک <code>Symbols {...}</code> در <code>rustc_span/src/symbol.rs</code> اضافه کنید.</p>
+<p>توجه کنید که این بلوک باید به ترتیب الفبایی باشد.</p>
+</li>
+<li>
+<p>یک اعلان feature gate را به <code>rustc_feature/src/unstable.rs</code> در بلوک <code>declare_features</code> ناپایدار اضافه کنید.</p>
+<pre><code class="language-rust ignore">/// description of feature
+(unstable, $feature_name, "CURRENT_RUSTC_VERSION", Some($tracking_issue_number))</code></pre>
+<p>اگر هنوز issue ردیابی باز نکرده‌اید (مثلاً چون می‌خواهید ابتدا بازخورد بگیرید که آیا ویژگی احتمالاً پذیرفته می‌شود)، می‌توانید موقتاً از <code>None</code> استفاده کنید - اما مطمئن شوید پیش از ادغام PR آن را به‌روز می‌کنید!</p>
+<p>برای مثال:</p>
+<pre><code class="language-rust ignore">/// Allows defining identifiers beyond ASCII.
+(unstable, non_ascii_idents, "CURRENT_RUSTC_VERSION", Some(55467)),</code></pre>
+<p>ویژگی‌ها را می‌توان ناقص (incomplete) علامت زد، و با تنظیم نوع آن‌ها به <code>incomplete</code>، <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#incomplete-features">lint <code>incomplete_features</code></a> که به‌طور پیش‌فرض هشدار می‌دهد فعال می‌شود:</p>
+<pre><code class="language-rust ignore">/// Allows deref patterns.
+(incomplete, deref_patterns, "CURRENT_RUSTC_VERSION", Some(87121)),</code></pre>
+<p>پرچم‌های ویژگی مرتبط با یک آزمایش زبان باید به‌عنوان <code>incomplete</code> علامت‌گذاری شوند تا زمانی که یک RFC برای آن ویژگی پذیرفته شود.</p>
+<p>برای اجتناب از <a href="https://bors.tech/essay/2017/02/02/pitch/">تداخل‌های ادغام معنایی</a>، به‌جای <code>1.70</code> یا شماره نسخه صریح دیگر از <code>CURRENT_RUSTC_VERSION</code> استفاده کنید.</p>
+</li>
+<li>
+<p>از استفاده از ویژگی جدید جلوگیری کنید مگر آنکه feature gate تنظیم شده باشد. می‌توانید آن را در بیشتر جاهای کامپایلر با عبارت <code>tcx.features().$feature_name()</code> بررسی کنید.</p>
+<p>اگر feature gate تنظیم نشده باشد، باید یا رفتار پیش از ویژگی را حفظ کنید یا یک خطا ایجاد کنید، بسته به آنکه چه چیزی منطقی است. خطاها معمولاً باید از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_session/errors/fn.feature_err.html"><code>rustc_session::errors::feature_err</code></a> استفاده کنند. برای نمونه‌ای از افزودن خطا، <a href="https://github.com/rust-lang/rust/pull/81015">#81015</a> را ببینید.</p>
+<p>برای ویژگی‌هایی که نحو جدید معرفی می‌کنند، باید به‌جای آن از gating پیش از گسترش استفاده شود. هنگام تجزیه (parsing)، وقتی نحو جدید تجزیه می‌شود، نماد (symbol) باید از طریق <code>self.psess.gated_spans.gate(sym::my_feature, span)</code> به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_session/parse/struct.GatedSpans.html"><code>GatedSpans</code></a> مربوط به crate فعلی افزوده شود.</p>
+<p>پس از افزوده شدن به gated spans، span باید در تابع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast_passes/feature_gate/fn.check_crate.html"><code>rustc_ast_passes::feature_gate::check_crate</code></a> بررسی شود، که در واقع ویژگی‌ها را رد می‌کند. اینکه دقیقاً چگونه gate می‌شود به نوع دقیق ویژگی بستگی دارد، اما به احتمال زیاد از ماکروی <code>gate_all!()</code> استفاده خواهد کرد.</p>
+</li>
+<li>
+<p>یک آزمون اضافه کنید تا اطمینان یابید ویژگی بدون feature gate قابل استفاده نیست، با ایجاد <code>tests/ui/feature-gates/feature-gate-$feature_name.rs</code>. می‌توانید فایل <code>.stderr</code> متناظر را با اجرای <code>./x test tests/ui/feature-gates/ --bless</code> تولید کنید.</p>
+</li>
+<li>
+<p>یک بخش به کتاب ناپایدار (unstable book) اضافه کنید، در <code>src/doc/unstable-book/src/language-features/$feature_name.md</code>.</p>
+</li>
+<li>
+<p>برای ویژگی جدید آزمون‌های زیادی بنویسید، ترجیحاً در <code>tests/ui/$feature_name/</code>. PRهای بدون آزمون پذیرفته نخواهند شد!</p>
+</li>
+<li>
+<p>PR خود را بازبینی کنید و ادغام کنید. اکنون با موفقیت یک ویژگی را در Rust پیاده‌سازی کرده‌اید!</p>
+</li>
+</ol>
+<h2 id="adding-unstable-compiler-flags"><a class="header" href="#adding-unstable-compiler-flags">افزودن پرچم‌های ناپایدار کامپایلر</a></h2>
+<p>برای آزمایش‌های داخلی کامپایلر، تشخیص‌ها (diagnostics)، ابزارهای کمک‌اشکال‌زدایی و کنترل‌های موقت پیاده‌سازی، یک پرچم <code>-Z</code> می‌تواند مناسب‌تر از feature gate زبان باشد. با این حال برای ویژگی‌های زبانِ روبه‌کاربر، به‌ویژه وقتی crateها باید از کد منبع opt-in کنند، همچنان feature gate ارجح است.</p>
+<p>پیش از افزودن پرچم جدید، <a href="https://forge.rust-lang.org/compiler/proposals-and-stabilization.html?highlight=unstable%20flag#compiler-flags">راهنمای تیم کامپایلر برای پرچم‌های کامپایلر</a> را بررسی کنید. برخی پرچم‌ها، به‌ویژه آن‌هایی که برای جریان‌های کاری مستقیم کاربران nightly یا استفاده گسترده‌تر در اکوسیستم در نظر گرفته شده‌اند، ممکن است علاوه بر r+ روی PR پیاده‌سازی به تأیید بیشتری نیاز داشته باشند.</p>
+<p>هنگام افزودن یک پرچم <code>-Z</code> جدید:</p>
+<ol>
+<li>
+<p>گزینه را به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_session/options/struct.UnstableOptions.html"><code>UnstableOptions</code></a> در <code>compiler/rustc_session/src/options.rs</code> اضافه کنید. نام گزینه در struct به‌صورت snake_case نوشته می‌شود و در خط فرمان به‌صورت kebab-case ارائه می‌شود. تجزیه‌گر، مقدار پیش‌فرض و نشانگر ردیابی وابستگی را با دقت انتخاب کنید. برای پرچم‌هایی که فقط بر تشخیص‌ها یا خروجی اشکال‌زدایی اثر می‌گذارند از <code>[UNTRACKED]</code> و وقتی تغییر پرچم می‌تواند نتایج کامپایل را تغییر دهد از <code>[TRACKED]</code> استفاده کنید.</p>
+</li>
+<li>
+<p>آزمون‌های گزینه‌ها را در <code>compiler/rustc_interface/src/tests.rs</code> به‌روز کنید. <code>options.rs</code> همچنین نزدیک فهرست <code>UnstableOptions</code> یک چک‌لیست کوتاه برای فایل‌هایی دارد که باید همگام بمانند.</p>
+</li>
+<li>
+<p>گزینه را از طریق <code>sess.opts.unstable_opts.$flag_name</code> یا <code>tcx.sess.opts.unstable_opts.$flag_name</code> استفاده کنید. اگر bootstrap یا rustdoc نیاز دارد پرچم را به‌صورت داخلی ارسال کند، آن را در همان تغییر از طریق کد ساخت دستور مربوطه عبور دهید.</p>
+</li>
+<li>
+<p>آزمون‌های متمرکزی برای رفتاری که پرچم کنترل می‌کند اضافه کنید. برای مثال، آزمون‌های UI می‌توانند از <code>//@ compile-flags: -Zyour-flag</code> استفاده کنند، در حالی که رفتار rustdoc معمولاً در <code>tests/rustdoc</code> قرار می‌گیرد.</p>
+</li>
+<li>
+<p>اگر پرچم برای کاربران rustc یا rustdoc نسخه nightly در نظر گرفته شده است، آن را در کتاب ناپایدار زیر <code>src/doc/unstable-book/src/compiler-flags</code> مستند کنید.</p>
+</li>
+</ol>
+<p>پیش از باز کردن PR، <code>./x test tidy</code> و مجموعه آزمون محدودی را که پرچم جدید را اجرا می‌کند اجرا کنید.</p>
+<h2 id="call-for-testing"><a class="header" href="#call-for-testing">فراخوان آزمایش</a></h2>
+<p>پس از تکمیل پیاده‌سازی، ویژگی برای کاربران nightly در دسترس خواهد بود اما هنوز بخشی از Rust پایدار نیست. این زمان خوبی برای نوشتن یک پست وبلاگ در <a href="https://github.com/rust-lang/blog.rust-lang.org/">وبلاگ اصلی Rust</a> و صدور یک «فراخوان آزمایش» (call for testing) است.</p>
+<p>برخی از پست‌های وبلاگ پیشین از این دست عبارت‌اند از:</p>
+<ol>
+<li><a href="https://blog.rust-lang.org/2021/08/03/GATs-stabilization-push/">تلاش برای پایدارسازی GATها</a></li>
+<li><a href="https://blog.rust-lang.org/2024/09/05/impl-trait-capture-rules.html">تغییرات <code>impl Trait</code> در Rust 2024</a></li>
+<li><a href="https://blog.rust-lang.org/inside-rust/2024/08/09/async-closures-call-for-testing/">Async Closures MVP: فراخوان برای تست!</a></li>
+</ol>
+<p>به‌طور جایگزین، <a href="https://github.com/rust-lang/this-week-in-rust"><em>This Week in Rust</em></a> یک <a href="https://this-week-in-rust.org/blog/2025/01/22/this-week-in-rust-583/#calls-for-testing">بخش</a> برای این منظور دارد. یک نمونه از استفاده از آن:</p>
+<ul>
+<li><a href="https://github.com/rust-lang/rust/issues/131204#issuecomment-2569314526">فراخوان تست برای literalهای بولی به‌عنوان گزاره‌های cfg</a></li>
+</ul>
+<p>انتخاب هر گزینه ممکن است به اهمیت تغییر زبان بستگی داشته باشد، هرچند توجه کنید که بخش <a href="https://github.com/rust-lang/this-week-in-rust"><em>This Week in Rust</em></a> ممکن است کمتر از یک پست اختصاصی در وبلاگ اصلی Rust دیده شود.</p>
+<h2 id="polishing"><a class="header" href="#polishing">صیقل‌دادن</a></h2>
+<p>ارائه تجربه‌ای صیقل‌خورده به کاربران چیزی بیش از پیاده‌سازی ویژگی در rustc است. باید به همه ابزارها و منابعی که ارائه می‌کنیم فکر کنیم. این کار شامل موارد زیر است:</p>
+<ul>
+<li>مستندسازی قابلیت زبان در <a href="https://github.com/rust-lang/reference">مرجع Rust</a>.</li>
+<li>گسترش <a href="https://github.com/rust-lang/rustfmt"><code>rustfmt</code></a> برای قالب‌بندی هر نحو جدید (در صورت کاربرد).</li>
+<li>گسترش <a href="https://github.com/rust-lang/rust-analyzer"><code>rust-analyzer</code></a> (در صورت کاربرد). میزان این کار می‌تواند به ماهیت ویژگی زبان بستگی داشته باشد، چون برخی ویژگی‌ها نیازی ندارند منتظر پشتیبانی <em>کامل</em> بمانند.
+<ul>
+<li>وقتی یک ویژگی زبان صرفاً با وجود داشتن پیش از پیاده‌سازی پشتیبانی در <a href="https://github.com/rust-lang/rust-analyzer"><code>rust-analyzer</code></a> تجربه کاربر را تضعیف می‌کند، این ممکن است تیم lang را به طرح یک نگرانی مانع‌شونده وادارد.</li>
+<li>نمونه‌های چنین حالتی ممکن است شامل نحو جدیدی باشد که <a href="https://github.com/rust-lang/rust-analyzer"><code>rust-analyzer</code></a> نمی‌تواند آن را تجزیه کند یا تغییرات استنتاج نوع که آن را نمی‌فهمد و منجر به تشخیص‌های نادرست می‌شوند.</li>
+</ul>
+</li>
+</ul>
+<h2 id="stabilization"><a class="header" href="#stabilization">Stabilization</a></h2>
+<p>آخرین گام در چرخه عمر یک ویژگی <a href="./stabilization-guide.html">stabilization</a> است، که زمانی است که ویژگی برای همه کاربران Rust در دسترس می‌شود. در این نقطه، تغییرات ناسازگار با نسخه‌های قبل عموماً دیگر مجاز نیستند (برای جزئیات، <a href="https://rust-lang.github.io/rfcs/1122-language-semver.html">سیاست‌های تعریف‌شده semver</a> تیم lang را ببینید). برای یادگیری بیشتر درباره stabilization، <a href="./stabilization-guide.html">راهنمای stabilization</a> را ببینید.</p><nav class="page-nav"><a href="walkthroughs/test.html">→ گام‌به‌گام: افزودن یک آزمون جدید</a><a href="stability-guarantees.html">تضمین‌های پایداری ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

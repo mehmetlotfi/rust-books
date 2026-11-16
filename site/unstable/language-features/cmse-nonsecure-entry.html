@@ -1,0 +1,55 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>cmse-nonsecure-entry — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/cmse-nonsecure-entry"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="cmse_nonsecure_entry"><a class="header" href="#cmse_nonsecure_entry"><code>cmse_nonsecure_entry</code></a></h1>
+<p>issue ردیابی این قابلیت: <a href="https://github.com/rust-lang/rust/issues/75835">#75835</a></p>
+<hr>
+<p><a href="https://developer.arm.com/documentation/100690/latest/">قابلیت TrustZone-M</a> برای هدف‌هایی با نیمرخ معماری Armv8-M (که در نام هدفشان <code>thumbv8m</code> وجود دارد) در دسترس است. LLVM، کامپایلر Rust و لینکر از قابلیت TrustZone-M <a href="https://developer.arm.com/documentation/ecm0359818/latest/">پشتیبانی</a> می‌کنند.</p>
+<p>یکی از چیزهایی که با این قابلیت ناپایدار ارائه می‌شود ABI به نام “cmse-nonsecure-entry” است. این ABI یک تابع Secure را به‌عنوان تابع ورودی (entry) علامت‌گذاری می‌کند (برای جزئیات به <a href="https://developer.arm.com/documentation/ecm0359818/latest/">بخش 5.4</a> نگاه کنید). با این ABI، کامپایلر کارهای زیر را انجام می‌دهد:</p>
+<ul>
+<li>یک نماد (symbol) ویژه روی تابع اضافه می‌کند که از پیشوند <code>__acle_se_</code> و نام استاندارد تابع تشکیل می‌شود</li>
+<li>تعداد پارامترها را محدود می‌کند تا از استفاده از پشته‌ی Non-Secure اجتناب شود</li>
+<li>پیش از بازگشت از تابع، ثبات‌هایی (registers) را که ممکن است اطلاعات Secure داشته باشند پاک می‌کند</li>
+<li>برای بازگشت از دستور <code>BXNS</code> استفاده می‌کند</li>
+</ul>
+<p>از آنجا که برای پاس‌دادن پارامترها نمی‌توان از پشته استفاده کرد، در موارد زیر خطاهای کامپایل رخ می‌دهد:</p>
+<ul>
+<li>اندازه‌ی کل همه‌ی پارامترها بیش از حد بزرگ باشد (برای مثال، بیش از چهار عدد صحیح 32 بیتی)</li>
+</ul>
+<p>نماد ویژه‌ی <code>__acle_se_</code> توسط لینکر برای تولید یک secure gateway veneer به کار می‌رود.</p>
+<!-- NOTE(ignore) this example is specific to thumbv8m targets -->
+<pre><code class="language-rust ignore">#![no_std]
+#![feature(cmse_nonsecure_entry)]
+
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn entry_function(input: u32) -&gt; u32 {
+    input + 6
+}</code></pre>
+<pre><code class="language-text">$ rustc --emit obj --crate-type lib --target thumbv8m.main-none-eabi function.rs
+$ arm-none-eabi-objdump -D function.o
+
+00000000 &lt;entry_function&gt;:
+   0:   b580            push    {r7, lr}
+   2:   466f            mov     r7, sp
+   4:   b082            sub     sp, #8
+   6:   9001            str     r0, [sp, #4]
+   8:   1d81            adds    r1, r0, #6
+   a:   460a            mov     r2, r1
+   c:   4281            cmp     r1, r0
+   e:   9200            str     r2, [sp, #0]
+  10:   d30b            bcc.n   2a &lt;entry_function+0x2a&gt;
+  12:   e7ff            b.n     14 &lt;entry_function+0x14&gt;
+  14:   9800            ldr     r0, [sp, #0]
+  16:   b002            add     sp, #8
+  18:   e8bd 4080       ldmia.w sp!, {r7, lr}
+  1c:   4671            mov     r1, lr
+  1e:   4672            mov     r2, lr
+  20:   4673            mov     r3, lr
+  22:   46f4            mov     ip, lr
+  24:   f38e 8800       msr     CPSR_f, lr
+  28:   4774            bxns    lr
+  2a:   f240 0000       movw    r0, #0
+  2e:   f2c0 0000       movt    r0, #0
+  32:   f240 0200       movw    r2, #0
+  36:   f2c0 0200       movt    r2, #0
+  3a:   211c            movs    r1, #28
+  3c:   f7ff fffe       bl      0 &lt;_ZN4core9panicking5panic17h5c028258ca2fb3f5E&gt;
+  40:   defe            udf     #254    ; 0xfe
+</code></pre><nav class="page-nav"><a href="../../unstable/language-features/closure-track-caller.html">→ closure-track-caller</a><a href="../../unstable/language-features/compiler-builtins.html">compiler-builtins ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

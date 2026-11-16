@@ -1,0 +1,97 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>test — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="library-features/test"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="test"><a class="header" href="#test"><code>test</code></a></h1>
+<p>مسئلهٔ پیگیری (tracking issue) این ویژگی: ندارد.</p>
+<hr>
+<p>بخش‌های داخلی crate با نام <code>test</code> ناپایدارند و پشت feature با نام <code>test</code> قرار دارند. پرکاربردترین بخش crate با نام <code>test</code>، آزمون‌های بنچمارک (benchmark) است که می‌توانند کارایی کد شما را بسنجند. بیایید <code>src/lib.rs</code> خود را این‌گونه بنویسیم (کامنت‌ها حذف شده‌اند):</p>
+<pre><code class="language-rust no_run">#![feature(test)]
+
+extern crate test;
+
+pub fn add_two(a: i32) -&gt; i32 {
+    a + 2
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test::Bencher;
+
+    #[test]
+    fn it_works() {
+        assert_eq!(4, add_two(2));
+    }
+
+    #[bench]
+    fn bench_add_two(b: &amp;mut Bencher) {
+        b.iter(|| add_two(2));
+    }
+}</code></pre>
+<p>به feature gate با نام <code>test</code> توجه کنید که این ویژگی ناپایدار را فعال می‌کند.</p>
+<p>ما crate با نام <code>test</code> را که پشتیبانی از بنچمارک در آن است، import کرده‌ایم. همچنین تابع جدیدی داریم که attribute با نام <code>bench</code> دارد. برخلاف آزمون‌های معمولی که آرگومانی نمی‌گیرند، آزمون‌های بنچمارک یک <code>&amp;mut Bencher</code> می‌گیرند. این <code>Bencher</code> متدی به نام <code>iter</code> فراهم می‌کند که یک closure می‌گیرد. این closure شامل کدی است که می‌خواهیم بنچمارک کنیم.</p>
+<p>می‌توانیم آزمون‌های بنچمارک را با <code>cargo bench</code> اجرا کنیم:</p>
+<pre><code class="language-bash">$ cargo bench
+   Compiling adder v0.0.1 (file:///home/steve/tmp/adder)
+     Running target/release/adder-91b3e234d4ed382a
+
+running 2 tests
+test tests::it_works ... ignored
+test tests::bench_add_two ... bench:         1 ns/iter (+/- 0)
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 1 measured
+</code></pre>
+<p>آزمون غیربنچمارک ما نادیده گرفته شد. ممکن است متوجه شده باشید که <code>cargo bench</code> کمی بیشتر از <code>cargo test</code> طول می‌کشد. دلیلش این است که Rust بنچمارک ما را چندین بار اجرا می‌کند و سپس میانگین می‌گیرد. چون در این مثال کار بسیار کمی انجام می‌دهیم، نتیجه <code>1 ns/iter (+/- 0)</code> است، اما اگر واریانسی وجود داشت، همین‌جا نشان داده می‌شد.</p>
+<p>توصیه‌هایی برای نوشتن بنچمارک:</p>
+<ul>
+<li>کد آماده‌سازی را بیرون از حلقهٔ <code>iter</code> ببرید؛ فقط بخشی را که می‌خواهید اندازه بگیرید داخل آن بگذارید</li>
+<li>کاری کنید که کد در هر تکرار «همان کار» را انجام دهد؛ حالت را انباشته یا تغییر ندهید</li>
+<li>تابع بیرونی را هم idempotent کنید؛ احتمالاً اجراکنندهٔ بنچمارک آن را بارها اجرا می‌کند</li>
+<li>حلقهٔ <code>iter</code> درونی را کوتاه و سریع نگه دارید تا اجرای بنچمارک‌ها سریع باشد و کالیبره‌کننده بتواند طول اجرا را با دقت ریز تنظیم کند</li>
+<li>کدی که در حلقهٔ <code>iter</code> است باید کار ساده‌ای انجام دهد تا یافتن بهبودهای کارایی (یا پسرفت‌ها) آسان‌تر شود</li>
+</ul>
+<h2 id="gotcha-optimizations"><a class="header" href="#gotcha-optimizations">نکتهٔ مهم: بهینه‌سازی‌ها</a></h2>
+<p>نوشتن بنچمارک یک بخش پیچیدهٔ دیگر هم دارد: بنچمارک‌هایی که با بهینه‌سازی فعال کامپایل می‌شوند، ممکن است توسط بهینه‌ساز چنان تغییر کنند که دیگر آنچه انتظار دارید را اندازه نگیرند. برای مثال، کامپایلر ممکن است تشخیص دهد که یک محاسبه هیچ اثر خارجی ندارد و آن را به‌کلی حذف کند.</p>
+<pre><code class="language-rust no_run">#![feature(test)]
+
+extern crate test;
+use test::Bencher;
+
+#[bench]
+fn bench_xor_1000_ints(b: &amp;mut Bencher) {
+    b.iter(|| {
+        (0..1000).fold(0, |old, new| old ^ new);
+    });
+}</code></pre>
+<p>نتایج زیر را می‌دهد</p>
+<pre><code class="language-text">running 1 test
+test bench_xor_1000_ints ... bench:         0 ns/iter (+/- 0)
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 1 measured
+</code></pre>
+<p>اجراکنندهٔ بنچمارک دو راه برای جلوگیری از این مشکل ارائه می‌دهد. راه اول این است که closure‌ای که <code>iter</code> دریافت می‌کند می‌تواند مقداری دلخواه برگرداند؛ این کار بهینه‌ساز را مجبور می‌کند نتیجه را «استفاده‌شده» بداند و تضمین می‌کند که نمی‌تواند محاسبه را به‌کلی حذف کند. در مثال بالا می‌توان این کار را با تغییر فراخوانی <code>b.iter</code> انجام داد:</p>
+<pre><code class="language-rust"><span class="boring">struct X;
+</span><span class="boring">impl X { fn iter&lt;T, F&gt;(&amp;self, _: F) where F: FnMut() -&gt; T {} } let b = X;
+</span>b.iter(|| {
+    // Note lack of `;` (could also use an explicit `return`).
+    (0..1000).fold(0, |old, new| old ^ new)
+});</code></pre>
+<p>راه دوم فراخوانی تابع جنریک <code>test::black_box</code> است که برای بهینه‌ساز یک «جعبهٔ سیاه» مبهم است و بنابراین آن را مجبور می‌کند هر آرگومانی را استفاده‌شده بداند.</p>
+<pre><code class="language-rust">#![feature(test)]
+
+extern crate test;
+
+<span class="boring">fn main() {
+</span><span class="boring">struct X;
+</span><span class="boring">impl X { fn iter&lt;T, F&gt;(&amp;self, _: F) where F: FnMut() -&gt; T {} } let b = X;
+</span>b.iter(|| {
+    let n = test::black_box(1000);
+
+    (0..n).fold(0, |a, b| a ^ b)
+})
+<span class="boring">}</span></code></pre>
+<p>هیچ‌کدام از این دو، مقدار را نمی‌خوانند یا تغییر نمی‌دهند و برای مقادیر کوچک بسیار ارزان‌اند. مقادیر بزرگ‌تر را می‌توان به‌صورت غیرمستقیم پاس داد تا سربار کاهش یابد (مثلاً <code>black_box(&amp;huge_struct)</code>).</p>
+<p>با اعمال هر یک از تغییرهای بالا، نتایج بنچمارک به این صورت می‌شود</p>
+<pre><code class="language-text">running 1 test
+test bench_xor_1000_ints ... bench:       131 ns/iter (+/- 3)
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 1 measured
+</code></pre>
+<p>با این حال، حتی با استفاده از هر یک از روش‌های بالا، بهینه‌ساز همچنان می‌تواند یک testcase را به شکلی نامطلوب تغییر دهد.</p><nav class="page-nav"><a href="../../unstable/library-features/str-internals.html">→ str-internals</a><a href="../../unstable/library-features/thread-local-internals.html">thread-local-internals ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

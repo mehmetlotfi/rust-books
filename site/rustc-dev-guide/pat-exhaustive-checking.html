@@ -1,0 +1,103 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>بررسی الگو و جامعیت — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="pat-exhaustive-checking"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="pattern-and-exhaustiveness-checking"><a class="header" href="#pattern-and-exhaustiveness-checking">بررسی الگو و جامعیت (exhaustiveness)</a></h1>
+<p>در Rust، تطبیق الگو و bindingها چند ویژگی بسیار مفید دارند. کامپایلر بررسی می‌کند که bindingها هنگام ساخته شدن رد‌ناپذیر (irrefutable) باشند و شاخه‌های match جامع (exhaustive) باشند.</p>
+<h2 id="pattern-usefulness"><a class="header" href="#pattern-usefulness">کارآمدی الگو (usefulness)</a></h2>
+<p>پرسش اصلی که بررسی usefulness به آن پاسخ می‌دهد این است: «در این عبارت match، آیا آن شاخه زائد است؟». دقیق‌تر بگوییم، این مسئله به محاسبه‌ی این برمی‌گردد که با داشتنِ فهرستی از الگوهایی که قبلاً دیده‌ایم، آیا یک الگوی جدید ممکن است با مقدار جدیدی تطبیق پیدا کند یا نه.</p>
+<p>برای مثال، در عبارت match زیر، به‌ترتیب می‌پرسیم آیا هر الگو ممکن است با چیزی تطبیق پیدا کند که الگوهای بالاترش آن را تطبیق نداده‌اند. در اینجا می‌بینیم الگوی چهارم نسبت به الگوی اول زائد است؛ آن شاخه یک هشدار «unreachable» دریافت می‌کند. الگوی سوم ممکن است مفید باشد یا نباشد، بسته به این‌که <code>Foo</code> علاوه بر <code>Bar</code> شمارنده‌های (variant) دیگری دارد یا نه. در نهایت، می‌توانیم بپرسیم آیا کل match جامع است، به این صورت که بپرسیم آیا الگوی wildcard (یعنی <code>_</code>) نسبت به فهرست همه‌ی الگوهای آن match مفید است. در اینجا می‌بینیم <code>_</code> مفید است (حالت <code>(false, None)</code> را می‌گیرد)؛ بنابراین این عبارت خطای «non-exhaustive match» دریافت می‌کند.</p>
+<pre><code class="language-rust">// x: (bool, Option&lt;Foo&gt;)
+match x {
+    (true, _) =&gt; {} // 1
+    (false, Some(Foo::Bar)) =&gt; {} // 2
+    (false, Some(_)) =&gt; {} // 3
+    (true, None) =&gt; {} // 4
+}</code></pre>
+<p>بنابراین usefulness برای دو هدف استفاده می‌شود: تشخیص کد غیرقابل دسترس (که برای کاربر مفید است)، و اطمینان از جامع بودن matchها (که برای صحت (soundness) مهم است، چون یک عبارت match می‌تواند مقدار برگرداند).</p>
+<h2 id="where-it-happens"><a class="header" href="#where-it-happens">کجا رخ می‌دهد</a></h2>
+<p>این بررسی در هر جایی که بتوانید الگو بنویسید انجام می‌شود: عبارت‌های <code>match</code>، <code>if let</code>، <code>let else</code>، <code>let</code> ساده و آرگومان‌های تابع.</p>
+<pre><code class="language-rust">// `match`
+// Usefulness can detect unreachable branches and forbid non-exhaustive matches.
+match foo() {
+    Ok(x) =&gt; x,
+    Err(_) =&gt; panic!(),
+}
+
+// `if let`
+// Usefulness can detect unreachable branches.
+if let Some(x) = foo() {
+    // ...
+}
+
+// `while let`
+// Usefulness can detect infinite loops and dead loops.
+while let Some(x) = it.next() {
+    // ...
+}
+
+// Destructuring `let`
+// Usefulness can forbid non-exhaustive patterns.
+let Foo::Bar(x, y) = foo();
+
+// Destructuring function arguments
+// Usefulness can forbid non-exhaustive patterns.
+fn foo(Foo { x, y }: Foo) {
+    // ...
+}</code></pre>
+<h2 id="the-algorithm"><a class="header" href="#the-algorithm">الگوریتم</a></h2>
+<p>بررسی جامعیت پیش از ساخت MIR در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_build/thir/pattern/check_match/index.html"><code>check_match</code></a> اجرا می‌شود. این بررسی در crate با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_pattern_analysis/index.html"><code>rustc_pattern_analysis</code></a> پیاده‌سازی شده است، و هسته‌ی الگوریتم در ماژول <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_pattern_analysis/usefulness/index.html"><code>usefulness</code></a> قرار دارد. آن فایل شرح مفصلی از الگوریتم دارد.</p>
+<h2 id="important-concepts"><a class="header" href="#important-concepts">مفاهیم مهم</a></h2>
+<h3 id="constructors-and-fields"><a class="header" href="#constructors-and-fields">سازنده‌ها و فیلدها</a></h3>
+<p>در مقدار <code>Pair(Some(0), true)</code>، <code>Pair</code> سازنده‌ی (constructor) مقدار نامیده می‌شود و <code>Some(0)</code> و <code>true</code> فیلدهای آن هستند. هر مقدار قابل تطبیقی را می‌توان به این شکل تجزیه کرد. نمونه‌هایی از سازنده‌ها عبارت‌اند از: <code>Some</code>، <code>None</code>، <code>(,)</code> (سازنده‌ی تاپل دوتایی)، <code>Foo {..}</code> (سازنده‌ی ساختار <code>Foo</code>)، و <code>2</code> (سازنده‌ی عدد <code>2</code>).</p>
+<p>هر سازنده تعداد ثابتی فیلد می‌گیرد؛ این تعداد arity نامیده می‌شود. <code>Pair</code> و <code>(,)</code> دارای arity برابر ۲ هستند، <code>Some</code> دارای arity برابر ۱ است، <code>None</code> و <code>42</code> دارای arity برابر ۰ هستند. هر نوع مجموعه‌ی مشخصی از سازنده‌ها دارد. برخی نوع‌ها سازنده‌های بسیار زیادی دارند (مانند <code>u64</code>) یا حتی بی‌نهایت سازنده (مانند <code>&amp;str</code> و <code>&amp;[T]</code>).</p>
+<p>الگوها هم مشابه‌اند: <code>Pair(Some(_), _)</code> سازنده‌ی <code>Pair</code> و دو فیلد دارد. تفاوت در این است که چند سازنده‌ی اضافی مخصوص الگو داریم، یعنی: wildcard یعنی <code>_</code>، bindingهای متغیر، بازه‌های صحیح مانند <code>0..=10</code>، و slice‌های با طول متغیر مانند <code>[_, .., _]</code>. الگوهای or را جداگانه بررسی می‌کنیم.</p>
+<p>حال برای بررسی این‌که آیا مقدار <code>v</code> با الگوی <code>p</code> تطبیق دارد، بررسی می‌کنیم که آیا سازنده‌ی <code>v</code> با سازنده‌ی <code>p</code> تطبیق دارد، سپس در صورت لزوم فیلدهای آن‌ها را به‌صورت بازگشتی مقایسه می‌کنیم. چند مثال نمونه:</p>
+<ul>
+<li><code>matches!(v, _) := true</code></li>
+<li><code>matches!((v0,  v1), (p0,  p1)) := matches!(v0, p0) &amp;&amp; matches!(v1, p1)</code></li>
+<li><code>matches!(Foo { a: v0, b: v1 }, Foo { a: p0, b: p1 }) := matches!(v0, p0) &amp;&amp; matches!(v1, p1)</code></li>
+<li><code>matches!(Ok(v0), Ok(p0)) := matches!(v0, p0)</code></li>
+<li><code>matches!(Ok(v0), Err(p0)) := false</code> (شمارنده‌های ناسازگار)</li>
+<li><code>matches!(v, 1..=100) := matches!(v, 1) || ... || matches!(v, 100)</code></li>
+<li><code>matches!([v0], [p0, .., p1]) := false</code> (طول‌های ناسازگار)</li>
+<li><code>matches!([v0, v1, v2], [p0, .., p1]) := matches!(v0, p0) &amp;&amp; matches!(v2, p1)</code></li>
+</ul>
+<p>این مفهوم در تحلیل الگو کاملاً محوری است. ماژول <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_pattern_analysis/constructor/index.html"><code>constructor</code></a> توابعی برای استخراج، فهرست‌کردن و دستکاری سازنده‌ها فراهم می‌کند. این مفهوم آن‌قدر مفید است که گونه‌هایی از آن را در بخش‌های دیگر کامپایلر هم می‌توان یافت، مانند پایین‌آوری (lowering) عبارت match به MIR و برخی lintهای clippy.</p>
+<h3 id="constructor-grouping-and-splitting"><a class="header" href="#constructor-grouping-and-splitting">گروه‌بندی و تقسیم سازنده‌ها</a></h3>
+<p>سازنده‌های مخصوص الگو (<code>_</code>، بازه‌ها و sliceهای با طول متغیر) هر کدام نماینده‌ی مجموعه‌ای از سازنده‌های معمولی هستند؛ مثلاً <code>_: Option&lt;T&gt;</code> نماینده‌ی مجموعه‌ی {<code>None</code>, <code>Some</code>} است و <code>[_, .., _]</code> نماینده‌ی مجموعه‌ی بی‌نهایت {<code>[,]</code>, <code>[,,]</code>, <code>[,,,]</code>, …} از سازنده‌های slice با arity &gt;= 2 است.</p>
+<p>برای مدیریت این سازنده‌ها، آن‌ها را تا حد امکان گروه‌بندی‌شده نگه می‌داریم. برای مثال:</p>
+<pre><code class="language-rust">match (0, false) {
+    (0 ..=100, true) =&gt; {}
+    (50..=150, false) =&gt; {}
+    (0 ..=200, _) =&gt; {}
+}</code></pre>
+<p>در این مثال، همه‌ی مقادیر <code>0</code>، <code>1</code>، .., <code>49</code> با شاخه‌های یکسانی تطبیق پیدا می‌کنند و بنابراین می‌توان آن‌ها را به‌صورت یک گروه در نظر گرفت. در واقع، در این match، تنها بازه‌هایی که باید در نظر بگیریم این‌ها هستند: <code>0..50</code>، <code>50..=100</code>، <code>101..=150</code>، <code>151..=200</code> و <code>201..</code>. به‌طور مشابه:</p>
+<pre><code class="language-rust">enum Direction { North, South, East, West }
+<span class="boring">let wind = (Direction::North, 0u8);
+</span>match wind {
+    (Direction::North, 50..) =&gt; {}
+    (_, _) =&gt; {}
+}</code></pre>
+<p>در اینجا می‌توانیم همه‌ی سازنده‌های غیر از <code>North</code> را یک گروه در نظر بگیریم و فقط دو حالت برای مدیریت باقی بماند: <code>North</code> و بقیه‌ی موارد.</p>
+<p>این کار «تقسیم سازنده‌ها» (constructor splitting) نامیده می‌شود و برای اجرای بررسی جامعیت در زمانی معقول حیاتی است.</p>
+<h3 id="usefulness-vs-reachability-in-the-presence-of-empty-types"><a class="header" href="#usefulness-vs-reachability-in-the-presence-of-empty-types">usefulness در برابر دسترسی‌پذیری (reachability) در حضور نوع‌های تهی</a></h3>
+<p>این احتمالاً ظریف‌ترین جنبه‌ی بررسی جامعیت است. برای دقت کامل، یک match روی یک مقدار عمل نمی‌کند؛ روی یک مکان (place) عمل می‌کند. در برخی شرایط unsafe ممکن است یک مکان داده‌ی معتبری برای نوع خود نداشته باشد. این موضوع پیامدهای ظریفی برای نوع‌های تهی دارد. مثال زیر را در نظر بگیرید:</p>
+<pre><code class="language-rust">enum Void {}
+let x: u8 = 0;
+let ptr: *const Void = &amp;x as *const u8 as *const Void;
+unsafe {
+    match *ptr {
+        _ =&gt; println!("Reachable!"),
+    }
+}</code></pre>
+<p>در این مثال، <code>ptr</code> یک اشاره‌گر معتبر است که به مکانی با داده‌ی نامعتبر اشاره می‌کند. الگوی <code>_</code> به محتوای مکان <code>*ptr</code> نگاه نمی‌کند، بنابراین این کد درست است و شاخه اجرا می‌شود. به عبارت دیگر، با وجود این‌که مکانی که بررسی می‌کنیم از نوع <code>Void</code> است، یک شاخه‌ی قابل دسترسی وجود دارد. اما اگر شاخه یک binding داشت:</p>
+<pre><code class="language-rust"><span class="boring">#[derive(Copy, Clone)]
+</span><span class="boring">enum Void {}
+</span><span class="boring">let x: u8 = 0;
+</span><span class="boring">let ptr: *const Void = &amp;x as *const u8 as *const Void;
+</span><span class="boring">unsafe {
+</span>match *ptr {
+    _a =&gt; println!("Unreachable!"),
+}
+<span class="boring">}</span></code></pre>
+<p>در اینجا binding مقداری از نوع <code>Void</code> را از مکان <code>*ptr</code> بارگذاری می‌کند. در این مثال، این کار باعث UB می‌شود، چون داده معتبر نیست. در حالت کلی، این کار معتبر بودن داده در <code>*ptr</code> را تأیید (assert) می‌کند. در هر صورت، این شاخه هرگز اجرا نخواهد شد.</p>
+<p>در نهایت، match تهی <code>match *ptr {}</code> را در نظر بگیریم. اگر آن را جامع بدانیم، آنگاه داشتن داده‌ی نامعتبر در <code>*ptr</code> نامعتبر است. به عبارت دیگر، match تهی از نظر معنایی با match به‌صورت <code>_a =&gt; ...</code> معادل است. به‌خاطر صریح بودن، حالت دارای شاخه را ترجیح می‌دهیم، از این رو به کاربر نمی‌گوییم شاخه‌ی <code>_a</code> را حذف کند. به عبارت دیگر، شاخه‌ی <code>_a</code> غیرقابل دسترسی است اما زائد نیست. به همین دلیل است که برای شاخه‌های زائد lint می‌دهیم نه برای شاخه‌های غیرقابل دسترسی، با این‌که پیام lint می‌گوید «unreachable».</p>
+<p>این ملاحظات فقط بر مکان‌های خاصی اثر می‌گذارند، یعنی مکان‌هایی که می‌توانند داده‌ی نامعتبر را بدون UB داشته باشند. این مکان‌ها عبارت‌اند از: dereference اشاره‌گر، dereference ارجاع و دسترسی به فیلد union. در طول بررسی جامعیت پیگیری می‌کنیم که آیا معلوم است یک مکان مشخص داده‌ی معتبر دارد یا نه.</p>
+<p>با همه‌ی این‌ها، پیاده‌سازی فعلی بررسی جامعیت از ملاحظات بالا پیروی نمی‌کند. در نسخه‌ی stable، نوع‌های تهی بیشتر اوقات غیرتهی در نظر گرفته می‌شوند. ویژگی <a href="https://github.com/rust-lang/rust/issues/51085"><code>exhaustive_patterns</code></a> در سوی دیگر خطا می‌کند: اجازه می‌دهد شاخه‌هایی حذف شوند که در شرایط unsafe ممکن است قابل دسترسی باشند. ویژگی آزمایشی <a href="https://github.com/rust-lang/rust/issues/118155"><code>never_patterns</code></a> هدفش رفع این مشکل و امکان‌دادن رفتار صحیح نوع‌های تهی در الگوهاست.</p><nav class="page-nav"><a href="effects.html">→ صفت‌های ثابت و بررسی شرط ثابت</a><a href="unsafety-checking.html">بررسی ایمنی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

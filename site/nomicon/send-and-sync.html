@@ -1,0 +1,146 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Send و Sync — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="send-and-sync"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="send-and-sync"><a class="header" href="#send-and-sync">Send و Sync</a></h1>
+<p>با این حال، همه‌چیز از تغییرپذیری ارثی (inherited mutability) پیروی نمی‌کند. بعضی نوع‌ها اجازه می‌دهند هنگام تغییر دادن یک مکان در حافظه، چندین نام مستعار (alias) برای آن داشته باشید. اگر این نوع‌ها برای مدیریت این دسترسی از همگام‌سازی استفاده نکنند، قطعاً برای کار با نخ‌ها ایمن نیستند. Rust این موضوع را از طریق صفت‌های <code>Send</code> و <code>Sync</code> بیان می‌کند.</p>
+<ul>
+<li>نوعی Send است که ارسال آن به نخ دیگر ایمن باشد.</li>
+<li>نوعی Sync است که اشتراک‌گذاری آن میان نخ‌ها ایمن باشد (T تنها و تنها وقتی Sync است که <code>&amp;T</code> از نوع Send باشد).</li>
+</ul>
+<p>Send و Sync برای داستان هم‌روندی (concurrency) در Rust بنیادین‌اند. به همین دلیل، ابزارهای ویژهٔ قابل‌توجهی وجود دارد تا آن‌ها درست کار کنند. پیش از هر چیز، آن‌ها <a href="safe-unsafe-meaning.html">صفت‌های ناایمن</a> هستند. یعنی پیاده‌سازی‌شان ناایمن است و کد ناایمن دیگر می‌تواند فرض کند که درست پیاده‌سازی شده‌اند. از آنجا که آن‌ها <em>صفت‌های نشانگر</em> هستند (آیتم وابسته‌ای مانند متد ندارند)، «درست پیاده‌سازی شدن» صرفاً به این معناست که ویژگی‌های ذاتی‌ای را داشته باشند که یک پیاده‌ساز باید داشته باشد. پیاده‌سازی نادرست Send یا Sync می‌تواند باعث رفتار تعریف‌نشده شود.</p>
+<p>Send و Sync همچنین صفت‌هایی هستند که به‌طور خودکار استنتاج می‌شوند. یعنی برخلاف هر صفت دیگری، اگر نوعی کاملاً از نوع‌های Send یا Sync تشکیل شده باشد، خودش هم Send یا Sync است. تقریباً همهٔ نوع‌های اولیه Send و Sync هستند و در نتیجه تقریباً همهٔ نوع‌هایی که با آن‌ها سروکار خواهید داشت Send و Sync‌اند.</p>
+<p>استثناهای عمده عبارت‌اند از:</p>
+<ul>
+<li>اشاره‌گرهای خام نه Send هستند و نه Sync (چون هیچ محافظ ایمنی‌ای ندارند).</li>
+<li><code>UnsafeCell</code> از نوع Sync نیست (و بنابراین <code>Cell</code> و <code>RefCell</code> هم نیستند).</li>
+<li><code>Rc</code> نه Send است و نه Sync (چون شمارندهٔ ارجاع مشترک و ناهمگام‌شده است).</li>
+</ul>
+<p><code>Rc</code> و <code>UnsafeCell</code> ذاتاً و بنیادین برای نخ‌ها ایمن نیستند: آن‌ها حالت تغییرپذیر مشترکِ همگام‌نشده را ممکن می‌کنند. اما اشاره‌گرهای خام، به‌طور دقیق‌تر، بیشتر به‌عنوان یک <em>lint</em> ناایمن برای نخ علامت‌گذاری شده‌اند. انجام هر کار مفیدی با یک اشاره‌گر خام مستلزم ارجاع‌زدایی (dereference) آن است که خودش ناایمن است. از این منظر می‌توان استدلال کرد که علامت‌گذاری آن‌ها به‌عنوان ایمن برای نخ «اشکالی نداشت».</p>
+<p>با این حال مهم است که آن‌ها برای نخ ایمن نباشند تا نوع‌هایی که آن‌ها را در بر می‌گیرند به‌طور خودکار ایمن برای نخ علامت‌گذاری نشوند. این نوع‌ها مالکیتِ غیرپیش‌پاافتادهٔ ردیابی‌نشده‌ای دارند و بعید است نویسندهٔ آن‌ها لزوماً به‌دقت به ایمنی نخ فکر کرده باشد. در مورد <code>Rc</code>، نمونهٔ خوبی داریم از نوعی که یک <code>*mut</code> دارد و قطعاً برای نخ ایمن نیست.</p>
+<p>نوع‌هایی که به‌طور خودکار استنتاج نمی‌شوند، در صورت تمایل می‌توانند آن‌ها را صرفاً پیاده‌سازی کنند:</p>
+<pre><code class="language-rust">struct MyBox(*mut u8);
+
+unsafe impl Send for MyBox {}
+unsafe impl Sync for MyBox {}</code></pre>
+<p>در حالت <em>فوق‌العاده نادر</em> که نوعی به‌اشتباه به‌طور خودکار Send یا Sync استنتاج شود، می‌توان پیاده‌سازی Send و Sync را لغو هم کرد:</p>
+<pre><code class="language-rust">#![feature(negative_impls)]
+
+// I have some magic semantics for some synchronization primitive!
+struct SpecialThreadToken(u8);
+
+impl !Send for SpecialThreadToken {}
+impl !Sync for SpecialThreadToken {}</code></pre>
+<p>توجه کنید که <em>به‌خودیِ خود</em> ممکن نیست Send و Sync به‌اشتباه استنتاج شوند. فقط نوع‌هایی که کد ناایمن دیگر به آن‌ها معنای ویژه‌ای می‌دهد می‌توانند با به‌اشتباه Send یا Sync بودن دردسر ایجاد کنند.</p>
+<p>بیشتر استفاده‌ها از اشاره‌گرهای خام باید پشت یک انتزاعِ کافی کپسوله شوند تا بتوان Send و Sync را استنتاج کرد. برای مثال، همهٔ مجموعه‌های استاندارد Rust (وقتی نوع‌های Send و Sync را در خود دارند) با وجود استفادهٔ فراگیرشان از اشاره‌گرهای خام برای مدیریت تخصیص‌ها و مالکیت پیچیده، Send و Sync هستند. به‌طور مشابه، بیشتر iterator‌های این مجموعه‌ها Send و Sync هستند، چون عمدتاً مثل یک <code>&amp;</code> یا <code>&amp;mut</code> به مجموعه رفتار می‌کنند.</p>
+<h2 id="example"><a class="header" href="#example">مثال</a></h2>
+<p><a href="https://doc.rust-lang.org/std/boxed/struct.Box.html"><code>Box</code></a> به دلایل <a href="https://manishearth.github.io/blog/2017/01/10/rust-tidbits-box-is-special/">گوناگون</a> توسط کامپایلر به‌صورت یک نوع ذاتیِ ویژهٔ خودش پیاده‌سازی شده است، اما می‌توانیم خودمان چیزی با رفتاری تقریباً مشابه پیاده‌سازی کنیم تا مثالی ببینیم از اینکه چه زمانی پیاده‌سازی Send و Sync درست (sound) است. اسمش را <code>Carton</code> می‌گذاریم.</p>
+<p>با نوشتن کدی شروع می‌کنیم که مقداری را که روی پشته تخصیص یافته بگیرد و آن را به هیپ منتقل کند.</p>
+<pre><code class="language-rust"><span class="boring">pub mod libc {
+</span><span class="boring">   pub use ::std::os::raw::{c_int, c_void};
+</span><span class="boring">   #[allow(non_camel_case_types)]
+</span><span class="boring">   pub type size_t = usize;
+</span><span class="boring">   unsafe extern "C" { pub fn posix_memalign(memptr: *mut *mut c_void, align: size_t, size: size_t) -&gt; c_int; }
+</span><span class="boring">}
+</span>use std::{
+    mem::{align_of, size_of},
+    ptr,
+    cmp::max,
+};
+
+struct Carton&lt;T&gt;(ptr::NonNull&lt;T&gt;);
+
+impl&lt;T&gt; Carton&lt;T&gt; {
+    pub fn new(value: T) -&gt; Self {
+        // Allocate enough memory on the heap to store one T.
+        assert_ne!(size_of::&lt;T&gt;(), 0, "Zero-sized types are out of the scope of this example");
+        let mut memptr: *mut T = ptr::null_mut();
+        unsafe {
+            let ret = libc::posix_memalign(
+                (&amp;mut memptr as *mut *mut T).cast(),
+                max(align_of::&lt;T&gt;(), size_of::&lt;usize&gt;()),
+                size_of::&lt;T&gt;()
+            );
+            assert_eq!(ret, 0, "Failed to allocate or invalid alignment");
+        };
+
+        // NonNull is just a wrapper that enforces that the pointer isn't null.
+        let ptr = {
+            // Safety: memptr is dereferenceable because we created it from a
+            // reference and have exclusive access.
+            ptr::NonNull::new(memptr)
+                .expect("Guaranteed non-null if posix_memalign returns 0")
+        };
+
+        // Move value from the stack to the location we allocated on the heap.
+        unsafe {
+            // Safety: If non-null, posix_memalign gives us a ptr that is valid
+            // for writes and properly aligned.
+            ptr.as_ptr().write(value);
+        }
+
+        Self(ptr)
+    }
+}</code></pre>
+<p>این چندان مفید نیست، چون وقتی کاربران ما مقداری به ما بدهند راهی برای دسترسی به آن ندارند. <a href="https://doc.rust-lang.org/std/boxed/struct.Box.html"><code>Box</code></a> صفت‌های <a href="https://doc.rust-lang.org/core/ops/trait.Deref.html"><code>Deref</code></a> و <a href="https://doc.rust-lang.org/core/ops/trait.DerefMut.html"><code>DerefMut</code></a> را پیاده‌سازی می‌کند تا بتوانید به مقدار درونی دسترسی پیدا کنید. بیایید همین کار را بکنیم.</p>
+<pre><code class="language-rust">use std::ops::{Deref, DerefMut};
+
+<span class="boring">struct Carton&lt;T&gt;(std::ptr::NonNull&lt;T&gt;);
+</span><span class="boring">
+</span>impl&lt;T&gt; Deref for Carton&lt;T&gt; {
+    type Target = T;
+
+    fn deref(&amp;self) -&gt; &amp;Self::Target {
+        unsafe {
+            // Safety: The pointer is aligned, initialized, and dereferenceable
+            //   by the logic in [`Self::new`]. We require readers to borrow the
+            //   Carton, and the lifetime of the return value is elided to the
+            //   lifetime of the input. This means the borrow checker will
+            //   enforce that no one can mutate the contents of the Carton until
+            //   the reference returned is dropped.
+            self.0.as_ref()
+        }
+    }
+}
+
+impl&lt;T&gt; DerefMut for Carton&lt;T&gt; {
+    fn deref_mut(&amp;mut self) -&gt; &amp;mut Self::Target {
+        unsafe {
+            // Safety: The pointer is aligned, initialized, and dereferenceable
+            //   by the logic in [`Self::new`]. We require writers to mutably
+            //   borrow the Carton, and the lifetime of the return value is
+            //   elided to the lifetime of the input. This means the borrow
+            //   checker will enforce that no one else can access the contents
+            //   of the Carton until the mutable reference returned is dropped.
+            self.0.as_mut()
+        }
+    }
+}</code></pre>
+<p>در نهایت، بیایید فکر کنیم که آیا <code>Carton</code> ما Send و Sync است یا نه. چیزی می‌تواند با ایمنی Send باشد مگر اینکه حالت تغییرپذیر را با چیز دیگری به اشتراک بگذارد بدون آنکه دسترسی انحصاری به آن را اِعمال کند. هر <code>Carton</code> یک اشاره‌گر یکتا دارد، پس مشکلی نداریم.</p>
+<pre><code class="language-rust"><span class="boring">struct Carton&lt;T&gt;(std::ptr::NonNull&lt;T&gt;);
+</span>// Safety: No one besides us has the raw pointer, so we can safely transfer the
+// Carton to another thread if T can be safely transferred.
+unsafe impl&lt;T&gt; Send for Carton&lt;T&gt; where T: Send {}</code></pre>
+<p>Sync چطور؟ برای اینکه <code>Carton</code> از نوع Sync باشد باید اِعمال کنیم که نتوان در چیزی که در یک <code>&amp;Carton</code> ذخیره شده نوشت، در حالی که همان چیز می‌تواند از <code>&amp;Carton</code> دیگری خوانده یا نوشته شود. از آنجا که برای نوشتن روی اشاره‌گر به یک <code>&amp;mut Carton</code> نیاز دارید و بررسی‌کنندهٔ قرض‌گیری (borrow checker) اِعمال می‌کند که ارجاع‌های تغییرپذیر باید انحصاری باشند، هیچ مشکل صحتی در Sync کردن <code>Carton</code> هم وجود ندارد.</p>
+<pre><code class="language-rust"><span class="boring">struct Carton&lt;T&gt;(std::ptr::NonNull&lt;T&gt;);
+</span>// Safety: Since there exists a public way to go from a `&amp;Carton&lt;T&gt;` to a `&amp;T`
+// in an unsynchronized fashion (such as `Deref`), then `Carton&lt;T&gt;` can't be
+// `Sync` if `T` isn't.
+// Conversely, `Carton` itself does not use any interior mutability whatsoever:
+// all the mutations are performed through an exclusive reference (`&amp;mut`). This
+// means it suffices that `T` be `Sync` for `Carton&lt;T&gt;` to be `Sync`:
+unsafe impl&lt;T&gt; Sync for Carton&lt;T&gt; where T: Sync  {}</code></pre>
+<p>وقتی ادعا می‌کنیم نوع ما Send و Sync است، معمولاً باید اِعمال کنیم که هر نوعِ درونی‌اش Send و Sync باشد. وقتی نوع‌های سفارشی‌ای می‌نویسیم که مثل نوع‌های کتابخانهٔ استاندارد رفتار می‌کنند، می‌توانیم ادعا کنیم همان الزامات را دارند. برای مثال، کد زیر ادعا می‌کند که Carton وقتی Send است که همان نوع Box هم Send باشد، که در این مورد معادل این است که بگوییم T، Send است.</p>
+<pre><code class="language-rust"><span class="boring">struct Carton&lt;T&gt;(std::ptr::NonNull&lt;T&gt;);
+</span>unsafe impl&lt;T&gt; Send for Carton&lt;T&gt; where Box&lt;T&gt;: Send {}</code></pre>
+<p>اکنون <code>Carton&lt;T&gt;</code> نشت حافظه دارد، چون هرگز حافظه‌ای را که تخصیص می‌دهد آزاد نمی‌کند. وقتی این را رفع کنیم، الزام تازه‌ای پیدا می‌کنیم که برای Send بودن باید برآورده شود: باید بدانیم <code>free</code> را می‌توان روی اشاره‌گری صدا زد که از تخصیصی در نخ دیگر به‌دست آمده است. می‌توانیم درستی این موضوع را در مستندات <a href="https://linux.die.net/man/3/free"><code>libc::free</code></a> بررسی کنیم.</p>
+<pre><code class="language-rust"><span class="boring">struct Carton&lt;T&gt;(std::ptr::NonNull&lt;T&gt;);
+</span><span class="boring">mod libc {
+</span><span class="boring">    pub use ::std::os::raw::c_void;
+</span><span class="boring">    unsafe extern "C" { pub fn free(p: *mut c_void); }
+</span><span class="boring">}
+</span>impl&lt;T&gt; Drop for Carton&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        unsafe {
+            libc::free(self.0.as_ptr().cast());
+        }
+    }
+}</code></pre>
+<p>نمونهٔ خوبی که در آن این اتفاق نمی‌افتد MutexGuard است: توجه کنید که <a href="https://doc.rust-lang.org/std/sync/struct.MutexGuard.html#impl-Send-for-MutexGuard%3C&#39;_,+T%3E">Send نیست</a>. پیاده‌سازی MutexGuard <a href="https://github.com/rust-lang/rust/issues/23465#issuecomment-82730326">از کتابخانه‌هایی استفاده می‌کند</a> که از شما می‌خواهند مطمئن شوید قفلی را که در نخی دیگر گرفته‌اید آزاد نمی‌کنید. اگر می‌توانستید یک MutexGuard را به نخ دیگری Send کنید، نابودگر (destructor) در نخی اجرا می‌شد که آن را به آنجا فرستاده‌اید و این الزام را نقض می‌کرد. MutexGuard همچنان می‌تواند Sync باشد، چون تنها چیزی که می‌توانید به نخ دیگری بفرستید یک <code>&amp;MutexGuard</code> است و رها کردن (drop) یک ارجاع هیچ کاری نمی‌کند.</p>
+<p>TODO: بهتر توضیح داده شود که چه چیزی می‌تواند Send یا Sync باشد یا نباشد. آیا کافی است فقط به data race‌ها استناد کنیم؟</p><nav class="page-nav"><a href="races.html">→ رقابت‌ها</a><a href="atomics.html">اتمیک‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

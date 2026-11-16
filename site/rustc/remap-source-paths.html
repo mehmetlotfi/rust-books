@@ -1,0 +1,54 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>نگاشت مجدد مسیرهای منبع — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="remap-source-paths"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="remap-source-paths"><a class="header" href="#remap-source-paths">بازنگاشت مسیرهای منبع</a></h1>
+<p><code>rustc</code> از بازنگاشت پیشوند مسیرهای منبع <strong>در حد تلاش ممکن</strong> در همهٔ خروجی‌های تولیدشده توسط کامپایلر پشتیبانی می‌کند، از جمله تشخیص‌های کامپایلر (diagnostics)، اطلاعات اشکال‌زدایی، بسط ماکروها و غیره.</p>
+<p>این قابلیت برای نرمال‌سازی محصولات ساخت مفید است، مثلاً با حذف دایرکتوری جاری از مسیرهایی که در فایل‌های شیء (object) نوشته می‌شوند.</p>
+<p>بازنگاشت از طریق پرچم <code>--remap-path-prefix</code> انجام می‌شود و با پرچم <code>--remap-path-scope</code> قابل سفارشی‌سازی است.</p>
+<h2 id="--remap-path-prefix"><a class="header" href="#--remap-path-prefix"><code>--remap-path-prefix</code></a></h2>
+<p>مقداری به شکل <code>FROM=TO</code> می‌گیرد که در آن یک پیشوند مسیر برابر با <code>FROM</code> به مقدار <code>TO</code> بازنویسی می‌شود. خود <code>FROM</code> می‌تواند شامل نماد <code>=</code> باشد، اما مقدار <code>TO</code> نمی‌تواند.</p>
+<p>جایگزینی صرفاً متنی است و جداکنندهٔ مسیر سیستم فعلی در نظر گرفته نمی‌شود.</p>
+<p>وقتی چند بازنگاشت داده شود و چند تای آن‌ها مطابقت داشته باشند، <strong>آخرین</strong> بازنگاشت منطبق اعمال می‌شود.</p>
+<h3 id="relative-paths"><a class="header" href="#relative-paths">مسیرهای نسبی</a></h3>
+<p>برخی سیستم‌های ساخت، مانند Cargo، ممکن است crateها را با مسیرهای نسبی کامپایل کنند (برای مثال <code>src/main.rs</code> به‌جای <code>/home/user/project/src/main.rs)</code>).</p>
+<p><code>rustc</code> در صورت امکان این مسیرهای نسبی را حفظ می‌کند. با این حال، برخی ورودی‌ها (مانند <code>#[path = "..."]</code>) و خروجی‌ها (مانند اطلاعات اشکال‌زدایی) ممکن است همچنان مسیرهای مطلق داشته باشند.</p>
+<p>برای اطمینان از یکپارچگی، توصیه می‌شود هم مسیرهای نسبی و هم مطلق بازنگاشت شوند.</p>
+<pre><code class="language-bash">rustc --remap-path-prefix "src/=/redacted/src" --remap-path-prefix "/home/user/project=/redacted"
+</code></pre>
+<h3 id="example"><a class="header" href="#example">مثال</a></h3>
+<pre><code class="language-bash">rustc --remap-path-prefix "/home/user/project=/redacted"
+</code></pre>
+<p>این مثال همهٔ رخدادهای <code>/home/user/project</code> را در مسیرهای تولیدشده با <code>/redacted</code> جایگزین می‌کند.</p>
+<h2 id="--remap-path-scope"><a class="header" href="#--remap-path-scope"><code>--remap-path-scope</code></a></h2>
+<p>مشخص می‌کند کدام حوزه‌های (scope) مسیرها باید توسط <code>--remap-path-prefix</code> بازنگاشت شوند.</p>
+<p>این پرچم فهرستی از مقادیر جداشده با ویرگول می‌پذیرد و می‌توان آن را چندین بار مشخص کرد؛ در این صورت حوزه‌ها با هم تجمیع می‌شوند.</p>
+<p>حوزه‌های معتبر عبارت‌اند از:</p>
+<ul>
+<li><code>macro</code> - بازنگاشت‌ها را روی بسط ماکروی <code>std::file!()</code> اعمال می‌کند. مسیرهای موجود در پیام‌های panic تعبیه‌شده از اینجا می‌آیند</li>
+<li><code>diagnostics</code> - بازنگاشت‌ها را روی تشخیص‌های چاپ‌شدهٔ کامپایلر اعمال می‌کند</li>
+<li><code>debuginfo</code> - بازنگاشت‌ها را روی اطلاعات اشکال‌زدایی اعمال می‌کند</li>
+<li><code>coverage</code> - بازنگاشت‌ها را روی اطلاعات پوشش (coverage) اعمال می‌کند</li>
+<li><code>object</code> - بازنگاشت‌ها را روی همهٔ مسیرهای موجود در فایل‌های اجرایی و کتابخانه‌های کامپایل‌شده اعمال می‌کند، اما در جای دیگری نه.
+<ul>
+<li>در حال حاضر مستعاری (alias) برای <code>macro,coverage,debuginfo</code> است.</li>
+<li>روی فراداده‌های تولیدشده توسط <code>rustc</code> اعمال نمی‌شود (برای جزئیات بیشتر در ادامه ببینید).</li>
+</ul>
+</li>
+<li><code>all</code> (پیش‌فرض) - مستعاری برای همهٔ موارد بالا (و حوزه‌های ناپایدار)، و همچنین معادل ارائهٔ تنها <code>--remap-path-prefix</code> بدون <code>--remap-path-scope</code>.</li>
+</ul>
+<p>حوزه‌های پذیرفته‌شده توسط <code>--remap-path-scope</code> کامل نیستند - ممکن است حوزه‌های جدیدی در نسخه‌های آینده برای پایدارسازی نهایی افزوده شوند. این بدان معناست که حوزهٔ <code>all</code> ممکن است در نسخه‌های مختلف به حوزه‌های متفاوتی اشاره کند.</p>
+<h3 id="metadata-impact"><a class="header" href="#metadata-impact">تأثیر بر فراداده</a></h3>
+<p>حوزه‌ها روی فراداده‌های تولیدشده توسط <code>rustc</code> اعمال نمی‌شوند، زیرا وجود مسیرهای محلی برای درستی کار لازم است.</p>
+<p>در نتیجه، هر artifactای که شامل فراداده‌های <code>rustc</code> باشد، مانند <code>.rmeta</code>، <code>.rlib</code>، dylib و proc-macro، مسیرهای محلی را حفظ می‌کند.</p>
+<p>تنها حوزهٔ <code>all</code> بازنگاشت مسیر را (در حد تلاش ممکن) روی فراداده‌های <code>rustc</code> اعمال می‌کند. اگر هدف شما ساخت‌های بازتولیدپذیر (از جمله فراداده) است از حوزهٔ <code>all</code> استفاده کنید (یا <code>--remap-path-scope</code> را کلاً حذف کنید).</p>
+<h3 id="example-1"><a class="header" href="#example-1">مثال</a></h3>
+<pre><code class="language-sh"># With `object` scope only the build outputs will be remapped, the diagnostics won't be remapped.
+rustc --remap-path-prefix=$(PWD)=/remapped --remap-path-scope=object main.rs
+</code></pre>
+<h2 id="caveats-and-limitations"><a class="header" href="#caveats-and-limitations">محدودیت‌ها و ملاحظات</a></h2>
+<h3 id="paths-generated-by-linkers"><a class="header" href="#paths-generated-by-linkers">مسیرهای تولیدشده توسط لینکرها</a></h3>
+<p>در برخی پلتفرم‌ها مانند <code>x86_64-pc-windows-msvc</code>، لینکر ممکن است مسیرهای مطلق میزبان و آرگومان‌های کامپایلر را مستقل از <code>rustc</code> در فایل‌های اطلاعات اشکال‌زدایی (مانند <code>.pdb</code>) جاسازی کند.</p>
+<p>علاوه بر این، در پلتفرم‌های Apple، لینکرها <a href="https://wiki.dwarfstd.org/Apple%27s_%22Lazy%22_DWARF_Scheme.md">مدخل‌های OSO</a> تولید می‌کنند که توسط کامپایلر بازنگاشت نمی‌شوند و باید به‌صورت دستی با <code>-oso_prefix</code> بازنگاشت شوند.</p>
+<p>گزینهٔ <code>--remap-path-prefix</code> روی این مسیرهای تولیدشده توسط لینکر تأثیری ندارد.</p>
+<h3 id="textual-replacement-only"><a class="header" href="#textual-replacement-only">فقط جایگزینی متنی</a></h3>
+<p>بازنگاشت به‌طور کامل متنی است و قراردادهای مختلف جداکنندهٔ مسیر در پلتفرم‌های گوناگون را در نظر نمی‌گیرد. هنگام تعیین پیشوندها باید دقت شود، به‌ویژه در Windows که هم <code>/</code> و هم <code>\</code> ممکن است در مسیرها ظاهر شوند.</p>
+<h3 id="external-tools"><a class="header" href="#external-tools">ابزارهای خارجی</a></h3>
+<p>مسیرهایی که توسط ابزارهای خارجی یا متغیرهای محیطی وارد می‌شوند ممکن است توسط <code>--remap-path-prefix</code> پوشش داده نشوند، مگر آنکه صراحتاً در نظر گرفته شده باشند.</p>
+<p>برای مثال، کد تولیدشده توسط اسکریپت ساخت Cargo ممکن است همچنان مسیرهای بازنگاشت‌نشده داشته باشد.</p><nav class="page-nav"><a href="check-cfg/cargo-specifics.html">→ ویژگی‌های مخصوص Cargo</a><a href="exploit-mitigations.html">کاهش‌دهنده‌های بهره‌برداری ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

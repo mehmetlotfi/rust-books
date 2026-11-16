@@ -1,0 +1,521 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>دستورالعمل‌های آزمون — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tests/directives"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="compiletest-directives"><a class="header" href="#compiletest-directives">Compiletest directives</a></h1>
+<!--
+FIXME(jieyouxu) completely revise this chapter.
+-->
+<p>directiveها کامنت‌های ویژه‌ای هستند که به compiletest می‌گویند یک تست را چگونه بسازد و تفسیر کند.
+آن‌ها ممکن است در <a href="compiletest.html#run-make-tests">تست‌های run-make</a> در <code>rmake.rs</code> هم بیایند.</p>
+<p>معمولاً پس از کامنت کوتاهی که هدف تست را توضیح می‌دهد قرار می‌گیرند.
+مجموعه‌های تست compiletest از <code>//@</code> برای اعلام اینکه یک کامنت directive است استفاده می‌کنند.
+برای مثال، این تست از دستور <code>//@ compile-flags</code> برای مشخص‌کردن
+پرچم سفارشی‌ای استفاده می‌کند که هنگام کامپایل تست به rustc داده می‌شود:</p>
+<pre><code class="language-rust ignore">// Test the behavior of `0 - 1` when overflow checks are disabled.
+
+//@ compile-flags: -C overflow-checks=off
+
+fn main() {
+    let x = 0 - 1;
+    ...
+}</code></pre>
+<p>directiveها می‌توانند مستقل باشند (مثل <code>//@ run-pass</code>) یا مقدار بگیرند (مثل <code>//@ compile-flags: -C overflow-checks=off</code>).</p>
+<p>directiveها به‌صورت یکی در هر خط نوشته می‌شوند: نمی‌توانید چند
+directive را در یک خط بنویسید.
+برای مثال، اگر <code>//@ only-x86 only-windows</code> بنویسید،
+<code>only-windows</code> به‌عنوان کامنت تفسیر می‌شود، نه directive جداگانه.</p>
+<h2 id="listing-of-compiletest-directives"><a class="header" href="#listing-of-compiletest-directives">فهرست directiveهای compiletest</a></h2>
+<p>در ادامه فهرست directiveهای compiletest آمده است.
+directiveها در صورت وجود به بخش‌هایی پیوند خورده‌اند که دستور را با جزئیات بیشتر شرح می‌دهند.
+ممکن است این فهرست جامع نباشد.
+معمولاً می‌توان directiveها را با مرور ساختار
+<code>TestProps</code> در <a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/compiletest/src/directives.rs"><code>directives.rs</code></a> از منبع compiletest یافت.</p>
+<h3 id="assembly"><a class="header" href="#assembly">Assembly</a></h3>
+<!-- date-check: Oct 2024 -->
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Directive</th><th>Explanation</th><th>Supported test suites</th><th>Possible values</th></tr>
+</thead>
+<tbody>
+<tr><td><code>assembly-output</code></td><td>نوع خروجی assembly برای بررسی</td><td><code>assembly</code></td><td><code>emit-asm</code>, <code>bpf-linker</code>, <code>ptx-linker</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="auxiliary-builds"><a class="header" href="#auxiliary-builds">Auxiliary builds</a></h3>
+<p><a href="compiletest.html#building-auxiliary-crates">ساخت crateهای کمکی</a> را ببینید</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Directive</th><th>Explanation</th><th>Supported test suites</th><th>Possible values</th></tr>
+</thead>
+<tbody>
+<tr><td><code>aux-bin</code></td><td>ساخت یک فایل دودویی کمکی که نسبت به پوشهٔ تست در <code>auxiliary/bin</code> در دسترس قرار می‌گیرد</td><td>All except <code>run-make</code>/<code>run-make-cargo</code></td><td>مسیر فایل کمکی <code>.rs</code></td></tr>
+<tr><td><code>aux-build</code></td><td>ساخت crate جداگانه از فایل منبع نام‌برده</td><td>All except <code>run-make</code>/<code>run-make-cargo</code></td><td>مسیر فایل کمکی <code>.rs</code></td></tr>
+<tr><td><code>aux-crate</code></td><td>مثل <code>aux-build</code> اما به‌عنوان extern prelude در دسترس قرار می‌دهد</td><td>All except <code>run-make</code>/<code>run-make-cargo</code></td><td><code>[&lt;extern_modifiers&gt;:]&lt;extern_prelude_name&gt;=&lt;path/to/aux/file.rs&gt;</code></td></tr>
+<tr><td><code>aux-codegen-backend</code></td><td>مشابه <code>aux-build</code> اما dylib کامپایل‌شده را هنگام ساخت فایل اصلی به <code>-Zcodegen-backend</code> می‌دهد</td><td><code>ui-fulldeps</code></td><td>مسیر فایل backend تولید کد</td></tr>
+<tr><td><code>proc-macro</code></td><td>مشابه <code>aux-build</code>، اما برای aux میزبان را اجبار می‌کند و از <code>-Cprefer-dynamic</code> استفاده نمی‌کند<sup class="footnote-reference" id="fr-pm-1"><a href="#footnote-pm">1</a></sup>.</td><td>All except <code>run-make</code>/<code>run-make-cargo</code></td><td>مسیر فایل کمکی proc-macro با پسوند <code>.rs</code></td></tr>
+<tr><td><code>build-aux-docs</code></td><td>مستندات فایل‌های کمکی را هم می‌سازد. توجه کنید این فقط با <code>aux-build</code> کار می‌کند، نه <code>aux-crate</code>.</td><td>All except <code>run-make</code>/<code>run-make-cargo</code></td><td>ندارد</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="controlling-outcome-expectations"><a class="header" href="#controlling-outcome-expectations">Controlling outcome expectations</a></h3>
+<p><a href="ui.html#controlling-passfail-expectations">کنترل انتظارات pass/fail</a> را ببینید.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Directive</th><th>Explanation</th><th>Supported test suites</th><th>Possible values</th></tr>
+</thead>
+<tbody>
+<tr><td><code>check-pass</code></td><td>ساخت (بدون codegen) باید موفق شود</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>check-fail</code></td><td>ساخت (بدون codegen) باید شکست بخورد</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>build-pass</code></td><td>ساخت باید موفق شود</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>build-fail</code></td><td>ساخت باید شکست بخورد</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>run-pass</code></td><td>برنامه باید با کد <code>0</code> خارج شود</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>run-fail</code></td><td>برنامه باید با کد <code>1..=127</code> خارج شود</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>run-crash</code></td><td>برنامه باید crash کند</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>run-fail-or-crash</code></td><td>برنامه باید <code>run-fail</code> یا <code>run-crash</code> باشد</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>no-pass-override</code></td><td>Ignore <code>--pass</code> flag</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>dont-check-failure-status</code></td><td>وضعیت دقیق شکست (مثلاً <code>1</code>) را بررسی نکن</td><td><code>ui</code>, <code>incremental</code></td><td>ندارد</td></tr>
+<tr><td><code>failure-status</code></td><td>هنگام شکست، کامپایلر باید با این کد وضعیت خارج شود. برای انتظار ICE از <code>//@ failure-status: 101</code> استفاده کنید.</td><td><code>ui</code>, <code>incremental</code></td><td>Any <code>u16</code></td></tr>
+<tr><td><code>should-fail</code></td><td>Compiletest self-test</td><td>All</td><td>ندارد</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="controlling-output-snapshots-and-normalizations"><a class="header" href="#controlling-output-snapshots-and-normalizations">کنترل snapshotهای خروجی و نرمال‌سازی‌ها</a></h3>
+<p>برای جزئیات بیشتر <a href="ui.html#normalization">نرمال‌سازی</a>، <a href="ui.html#output-comparison">مقایسهٔ خروجی</a> و <a href="ui.html#rustfix-tests">تست‌های Rustfix</a> را ببینید.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Directive</th><th>Explanation</th><th>Supported test suites</th><th>Possible values</th></tr>
+</thead>
+<tbody>
+<tr><td><code>check-run-results</code></td><td>snapshot خروجی <code>run-{pass,fail}</code> فایل دودویی تست اجراشده را بررسی کن</td><td><code>ui</code>, <code>crashes</code>, <code>incremental</code></td><td>ندارد</td></tr>
+<tr><td><code>error-pattern</code></td><td>بررسی کن خروجی شامل رشتهٔ مشخصی باشد</td><td><code>ui</code>, <code>crashes</code>, <code>incremental</code></td><td>String</td></tr>
+<tr><td><code>regex-error-pattern</code></td><td>بررسی کن خروجی شامل الگوی regex باشد</td><td><code>ui</code>, <code>crashes</code>, <code>incremental</code></td><td>Regex</td></tr>
+<tr><td><code>check-stdout</code></td><td><code>stdout</code> را با <code>error-pattern</code>های حاصل از اجرای فایل دودویی تست بررسی کن<sup class="footnote-reference" id="fr-check_stdout-1"><a href="#footnote-check_stdout">2</a></sup></td><td><code>ui</code>, <code>crashes</code>, <code>incremental</code></td><td>ندارد</td></tr>
+<tr><td><code>normalize-stderr-32bit</code></td><td>stderr واقعی را (برای پلتفرم‌های ۳۲ بیتی) پیش از مقایسه با snapshot با قاعدهٔ <code>"&lt;raw&gt;" -&gt; "&lt;normalized&gt;"</code> نرمال‌سازی کن</td><td><code>ui</code>, <code>incremental</code></td><td><code>"&lt;RAW&gt;" -&gt; "&lt;NORMALIZED&gt;"</code>، که <code>&lt;RAW&gt;</code>/<code>&lt;NORMALIZED&gt;</code> نحو capture و جایگزینی در regex است</td></tr>
+<tr><td><code>normalize-stderr-64bit</code></td><td>stderr واقعی را (برای پلتفرم‌های ۶۴ بیتی) پیش از مقایسه با snapshot با قاعدهٔ <code>"&lt;raw&gt;" -&gt; "&lt;normalized&gt;"</code> نرمال‌سازی کن</td><td><code>ui</code>, <code>incremental</code></td><td><code>"&lt;RAW&gt;" -&gt; "&lt;NORMALIZED&gt;"</code>، که <code>&lt;RAW&gt;</code>/<code>&lt;NORMALIZED&gt;</code> نحو capture و جایگزینی در regex است</td></tr>
+<tr><td><code>normalize-stderr</code></td><td>stderr واقعی را پیش از مقایسه با snapshot با قاعدهٔ <code>"&lt;raw&gt;" -&gt; "&lt;normalized&gt;"</code> نرمال‌سازی کن</td><td><code>ui</code>, <code>incremental</code></td><td><code>"&lt;RAW&gt;" -&gt; "&lt;NORMALIZED&gt;"</code>، که <code>&lt;RAW&gt;</code>/<code>&lt;NORMALIZED&gt;</code> نحو capture و جایگزینی در regex است</td></tr>
+<tr><td><code>normalize-stdout</code></td><td>stdout واقعی را پیش از مقایسه با snapshot با قاعدهٔ <code>"&lt;raw&gt;" -&gt; "&lt;normalized&gt;"</code> نرمال‌سازی کن</td><td><code>ui</code>, <code>incremental</code></td><td><code>"&lt;RAW&gt;" -&gt; "&lt;NORMALIZED&gt;"</code>، که <code>&lt;RAW&gt;</code>/<code>&lt;NORMALIZED&gt;</code> نحو capture و جایگزینی در regex است</td></tr>
+<tr><td><code>dont-check-compiler-stderr</code></td><td>stderr واقعی کامپایلر را با snapshot مربوط به stderr مقایسه نکن</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>dont-check-compiler-stdout</code></td><td>stdout واقعی کامپایلر را با snapshot مربوط به stdout مقایسه نکن</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>dont-require-annotations</code></td><td>لازم نیست annotationهای خط برای نوع پیام تشخیصی داده‌شده (<code>//~ KIND</code>) جامع باشند</td><td><code>ui</code>, <code>incremental</code></td><td><code>ERROR</code>, <code>WARN</code>, <code>NOTE</code>, <code>HELP</code>, <code>SUGGESTION</code></td></tr>
+<tr><td><code>run-rustfix</code></td><td>همهٔ پیشنهادها را با <code>rustfix</code> اعمال کن، از خروجی اصلاح‌شده snapshot بگیر و بررسی کن خروجی اصلاح‌شده ساخته می‌شود</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>rustfix-only-machine-applicable</code></td><td>مثل <code>run-rustfix</code> اما فقط پیشنهادهای machine-applicable</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>exec-env</code></td><td>متغیر محیطی برای تنظیم هنگام اجرای تست</td><td><code>ui</code>, <code>crashes</code></td><td><code>&lt;KEY&gt;=&lt;VALUE&gt;</code></td></tr>
+<tr><td><code>unset-exec-env</code></td><td>متغیر محیطی برای حذف هنگام اجرای تست</td><td><code>ui</code>, <code>crashes</code></td><td>هر نام متغیر محیطی</td></tr>
+<tr><td><code>stderr-per-bitwidth</code></td><td>برای هر پهنای بیت یک snapshot از stderr بساز</td><td><code>ui</code></td><td>ندارد</td></tr>
+<tr><td><code>forbid-output</code></td><td>بررسی کن خروجی کامپایل/اجرا شامل رشتهٔ مشخصی نباشد</td><td><code>ui</code>, <code>incremental</code></td><td>String</td></tr>
+<tr><td><code>run-flags</code></td><td>پرچم‌هایی که به فایل اجرایی تست داده می‌شوند</td><td><code>ui</code></td><td>Arbitrary flags</td></tr>
+<tr><td><code>known-bug</code></td><td>به‌دلیل باگ شناخته‌شده نیازی به annotation خطا نیست</td><td><code>ui</code>, <code>crashes</code>, <code>incremental</code></td><td>Issue number <code>#123456</code></td></tr>
+<tr><td><code>compare-output-by-lines</code></td><td>خروجی را خط به خط مقایسه کن، نه به‌صورت یک رشتهٔ واحد</td><td>All</td><td>ندارد</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="controlling-when-tests-are-run"><a class="header" href="#controlling-when-tests-are-run">کنترل اینکه تست‌ها چه وقت اجرا شوند</a></h3>
+<p>این directiveها برای نادیده‌گرفتن تست در برخی موقعیت‌ها به‌کار می‌روند،
+یعنی تست کامپایل یا اجرا نمی‌شود.</p>
+<ul>
+<li><code>ignore-X</code> که در آن <code>X</code> جزئیات هدف یا معیار دیگری است که بر اساس آن تست نادیده گرفته می‌شود (در ادامه ببینید)</li>
+<li><code>only-X</code> مثل <code>ignore-X</code> است، اما تست را <em>فقط</em> روی آن هدف یا مرحله اجرا می‌کند</li>
+<li><code>ignore-auxiliary</code> برای فایل‌هایی است که در یک یا چند فایل تست اصلی دیگر <em>شرکت می‌کنند</em>
+اما <code>compiletest</code> نباید سعی کند خود آن فایل را بسازد.
+لطفاً به تست اصلی‌ای که واقعاً از فایل کمکی استفاده می‌کند backlink بدهید.</li>
+<li><code>ignore-test</code> همیشه تست را نادیده می‌گیرد.
+از آن می‌توان برای غیرفعال‌کردن موقت تستی که فعلاً کار نمی‌کند استفاده کرد،
+اما می‌خواهید آن را درون درخت نگه دارید تا بعداً دوباره فعالش کنید.</li>
+</ul>
+<p>چند مثال برای <code>X</code> در <code>ignore-X</code> یا <code>only-X</code>:</p>
+<ul>
+<li>یک target triple کامل: <code>aarch64-apple-ios</code></li>
+<li>Architecture: <code>aarch64</code>, <code>arm</code>, <code>csky</code>, <code>mips</code>, <code>mips64</code>, <code>wasm32</code>, <code>x86_64</code>, <code>x86</code>,
+…</li>
+<li>OS: <code>android</code>, <code>emscripten</code>, <code>freebsd</code>, <code>ios</code>, <code>linux</code>, <code>macos</code>, <code>windows</code>, …</li>
+<li>محیط (کلمهٔ چهارم target triple): <code>gnu</code>، <code>msvc</code>، <code>musl</code></li>
+<li>Pointer width: <code>32bit</code>, <code>64bit</code></li>
+<li>Endianness: <code>endian-big</code></li>
+<li>Stage: <code>stage1</code>, <code>stage2</code></li>
+<li>Binary format: <code>elf</code></li>
+<li>Channel: <code>stable</code>, <code>beta</code></li>
+<li>هنگام cross compile: <code>cross-compile</code></li>
+<li>هنگام استفاده از <a href="running.html#running-tests-on-a-remote-machine">تست راه‌دور</a>: <code>remote</code></li>
+<li>هنگام تست دیباگرهای مشخص: <code>cdb</code>، <code>gdb</code>، <code>lldb</code></li>
+<li>هنگام تطبیق نسخه‌های مشخص دیباگر: <code>ignore-gdb-version</code></li>
+<li>هنگام فعال‌بودن <a href="compiletest.html#parallel-frontend">frontend موازی</a>: <code>ignore-parallel-frontend</code></li>
+<li><a href="ui.html#compare-modes">حالت‌های مقایسهٔ</a> مشخص: <code>compare-mode-polonius</code>، <code>compare-mode-next-solver</code>،
+<code>compare-mode-split-dwarf</code>، <code>compare-mode-split-dwarf-single</code></li>
+<li>دو حالت تست متفاوت که تست‌های coverage استفاده می‌کنند:
+<code>ignore-coverage-map</code> و <code>ignore-coverage-run</code></li>
+<li>When testing a dist toolchain: <code>dist</code>
+<ul>
+<li>این باید با <code>COMPILETEST_ENABLE_DIST_TESTS=1</code> فعال شود</li>
+</ul>
+</li>
+<li><code>rustc_abi</code> هدف: مثلاً <code>rustc_abi-x86_64-sse2</code></li>
+</ul>
+<p>directiveهای زیر تنظیمات ساخت rustc و تنظیمات هدف را بررسی می‌کنند:</p>
+<ul>
+<li><code>needs-asm-support</code> — اگر معماری <strong>میزبان</strong> پشتیبانی پایدار از <code>asm!</code> نداشته باشد نادیده می‌گیرد.
+برای تست‌هایی که با <code>--target</code> به هدف‌های صریح cross-compile می‌کنند،
+به‌جای آن از <code>needs-llvm-components</code> استفاده کنید تا backend مناسب در دسترس باشد.</li>
+<li><code>needs-asm-ret</code> - اگر هدف دستور <code>ret</code> را
+در نحو assembly خود نداشته باشد نادیده می‌گیرد.
+بیشتر معماری‌های هدف این دستور را دارند،
+که برای تست‌های inline-assembly قابل‌حمل راحت است، اما برخی معماری‌ها
+(مثل ARM ۳۲ بیتی) آن را ندارند.</li>
+<li><code>needs-profiler-runtime</code> — اگر runtime مربوط به profiler برای هدف فعال نشده باشد
+(<code>build.profiler = true</code> در <code>bootstrap.toml</code>) تست را نادیده می‌گیرد</li>
+<li><code>needs-sanitizer-support</code> — اگر پشتیبانی از sanitizer برای هدف فعال نشده باشد
+(<code>build.sanitizers = true</code> در <code>bootstrap.toml</code>) نادیده می‌گیرد</li>
+<li><code>needs-sanitizer-{address,hwaddress,leak,memory,thread}</code> — اگر
+sanitizer متناظر برای هدف فعال نشده باشد نادیده می‌گیرد (به‌ترتیب AddressSanitizer،
+AddressSanitizer با کمک سخت‌افزار، LeakSanitizer،
+MemorySanitizer یا ThreadSanitizer)</li>
+<li><code>needs-run-enabled</code> — اگر تستی باشد که اجرا می‌شود
+و اجرا غیرفعال شده باشد نادیده می‌گیرد.
+اجرای تست‌ها را می‌توان با پرچم <code>x test --run=never</code> یا هنگام اجرا روی fuchsia غیرفعال کرد.</li>
+<li><code>needs-unwind</code> — اگر هدف از unwinding پشتیبانی نکند نادیده می‌گیرد</li>
+<li><code>needs-rust-lld</code> — اگر پشتیبانی از rust lld فعال نشده باشد (<code>rust.lld = true</code> در <code>bootstrap.toml</code>) نادیده می‌گیرد</li>
+<li><code>needs-threads</code> — اگر هدف پشتیبانی از threading نداشته باشد نادیده می‌گیرد</li>
+<li><code>needs-subprocess</code> — اگر هدف پشتیبانی از زیرفرایند نداشته باشد نادیده می‌گیرد</li>
+<li><code>needs-symlink</code> — اگر هدف از symlink پشتیبانی نکند نادیده می‌گیرد.
+این می‌تواند در ویندوز رخ دهد اگر توسعه‌دهنده مجوز symlink ممتاز را فعال نکرده باشد.</li>
+<li><code>ignore-std-debug-assertions</code> — اگر std با debug assertions ساخته شده باشد نادیده می‌گیرد.</li>
+<li><code>needs-std-debug-assertions</code> — اگر std بدون debug assertions ساخته شده باشد نادیده می‌گیرد.</li>
+<li><code>ignore-std-remap-debuginfo</code> — اگر std با بازنگاشت منابعش ساخته شده باشد نادیده می‌گیرد.</li>
+<li><code>needs-std-remap-debugino</code> — اگر std بدون بازنگاشت منابعش ساخته شده باشد نادیده می‌گیرد.</li>
+<li><code>ignore-rustc-debug-assertions</code> — اگر rustc با debug assertions ساخته شده باشد نادیده می‌گیرد.</li>
+<li><code>needs-rustc-debug-assertions</code> — اگر rustc بدون debug assertions ساخته شده باشد نادیده می‌گیرد.</li>
+<li><code>needs-target-has-atomic</code> — اگر هدف از همهٔ پهناهای atomic مشخص‌شده پشتیبانی نکند نادیده می‌گیرد، مثلاً تستی با <code>//@ needs-target-has-atomic: 8, 16, ptr</code> فقط وقتی اجرا می‌شود که از فهرست جداشده با ویرگول پهناهای atomic پشتیبانی کند.</li>
+<li><code>needs-dynamic-linking</code> — اگر هدف از لینک پویا پشتیبانی نکند نادیده می‌گیرد
+(که مستقل از ناتوانی در ساخت نوع‌های crate با نام <code>dylib</code> و <code>cdylib</code> است)</li>
+<li><code>needs-crate-type</code> — اگر پلتفرم هدف از یک یا چند نوع
+crate در فهرست جداشده با ویرگول پشتیبانی نکند نادیده می‌گیرد.
+برای مثال،
+<code>//@ needs-crate-type: cdylib, proc-macro</code> باعث می‌شود تست روی
+هدف <code>wasm32-unknown-unknown</code> نادیده گرفته شود چون این هدف از نوع crate با نام
+<code>proc-macro</code> پشتیبانی نمی‌کند.</li>
+<li><code>needs-target-std</code> — ignores if target platform does not have std support.
+<ul>
+<li><a href="./compiletest.html#codegen-tests"><code>#![no_std]</code>/<code>#![no_core]</code> و <code>needs-target-std</code> ضمنی برای تست‌های codegen</a> را هم ببینید.</li>
+</ul>
+</li>
+<li><code>ignore-backends</code> — backendهای فهرست‌شده را که با نویسه‌های فاصله جدا شده‌اند نادیده می‌گیرد.
+لطفاً توجه کنید
+این directive را می‌توان با پرچم خط فرمان <code>--bypass-ignore-backends=[BACKEND]</code> بازنویسی کرد.</li>
+<li><code>needs-backends</code> — تست را فقط اگر backend تولید کد فعلی فهرست شده باشد اجرا می‌کند.</li>
+<li><code>needs-offload</code> — اگر backend ما در LLVM با پشتیبانی offload ساخته نشده باشد نادیده می‌گیرد.</li>
+<li><code>needs-enzyme</code> — اگر زیرماژول Enzyme ما ساخته نشده باشد نادیده می‌گیرد.</li>
+</ul>
+<p>directiveهای زیر پشتیبانی LLVM را بررسی می‌کنند:</p>
+<ul>
+<li><code>exact-llvm-major-version: 19</code> — اگر نسخهٔ major در llvm با نسخهٔ major مشخص‌شدهٔ llvm
+مطابقت نداشته باشد نادیده می‌گیرد.</li>
+<li><code>min-llvm-version: 13.0</code> — اگر نسخهٔ LLVM کمتر از مقدار داده‌شده باشد نادیده می‌شود</li>
+<li><code>min-system-llvm-version: 12.0</code> — اگر از LLVM سیستمی استفاده شود و نسخهٔ آن
+کمتر از مقدار داده‌شده باشد نادیده می‌شود</li>
+<li><code>max-llvm-major-version: 19</code> — اگر نسخهٔ major در LLVM بالاتر
+از نسخهٔ major داده‌شده باشد نادیده می‌شود</li>
+<li><code>ignore-llvm-version: 9.0</code> — یک نسخهٔ مشخص LLVM را نادیده می‌گیرد</li>
+<li><code>ignore-llvm-version: 7.0 - 9.9.9</code> — نسخه‌های LLVM در یک بازه (شامل دو سر) را نادیده می‌گیرد</li>
+<li><code>needs-llvm-components: powerpc</code> — اگر مؤلفهٔ مشخص LLVM ساخته نشده باشد نادیده می‌گیرد.
+نکته: اگر مؤلفه وجود نداشته باشد، تست در CI شکست می‌خورد (وقتی
+<code>COMPILETEST_REQUIRE_ALL_LLVM_COMPONENTS</code> تنظیم شده باشد).</li>
+<li><code>needs-forced-clang-based-tests</code> — test is ignored unless the environment
+variable <code>RUSTBUILD_FORCE_CLANG_BASED_TESTS</code> is set, which enables building clang alongside LLVM
+<ul>
+<li>این فقط در دو job از CI تنظیم شده است (<a href="https://github.com/rust-lang/rust/blob/32d94cc9be3f6e6c3fa1deaea9e0ab93c4980dba/src/ci/docker/host-x86_64/test-x86_64-gnu-debug/Dockerfile#L32"><code>test-x86_64-gnu-debug</code></a> و <a href="https://github.com/rust-lang/rust/blob/32d94cc9be3f6e6c3fa1deaea9e0ab93c4980dba/src/ci/docker/host-aarch64/test-aarch64-gnu-debug/Dockerfile#L32"><code>test-aarch64-gnu-debug</code></a>)،
+که فقط زیرمجموعه‌ای از تست‌های <code>run-make</code> را اجرا می‌کنند.
+تست‌های دیگر با این directive اصلاً اجرا نمی‌شوند، که معمولاً چیزی نیست که بخواهید.</li>
+</ul>
+</li>
+</ul>
+<p>برای directiveهای نادیده‌گرفتن دیباگرها <a href="compiletest.html#debuginfo-tests">تست‌های Debuginfo</a> را هم ببینید.</p>
+<h3 id="affecting-how-tests-are-built"><a class="header" href="#affecting-how-tests-are-built">اثرگذاری بر نحوهٔ ساخت تست‌ها</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Directive</th><th>Explanation</th><th>Supported test suites</th><th>Possible values</th></tr>
+</thead>
+<tbody>
+<tr><td><code>compile-flags</code></td><td>پرچم‌هایی که هنگام ساخت تست یا فایل aux به <code>rustc</code> داده می‌شوند</td><td>همه به‌جز <code>run-make</code>/<code>run-make-cargo</code></td><td>هر پرچم معتبر <code>rustc</code>، مثلاً <code>-Awarnings -Dfoo</code>. نمی‌تواند <code>-Cincremental</code> یا <code>--edition</code> باشد</td></tr>
+<tr><td><code>edition</code></td><td>edition مورد استفاده برای ساخت تست</td><td>همه به‌جز <code>run-make</code>/<code>run-make-cargo</code></td><td>هر مقدار معتبر <code>--edition</code></td></tr>
+<tr><td><code>rustc-env</code></td><td>متغیر محیطی برای تنظیم هنگام اجرای <code>rustc</code></td><td>همه به‌جز <code>run-make</code>/<code>run-make-cargo</code></td><td><code>&lt;KEY&gt;=&lt;VALUE&gt;</code></td></tr>
+<tr><td><code>unset-rustc-env</code></td><td>متغیر محیطی برای حذف هنگام اجرای <code>rustc</code></td><td>همه به‌جز <code>run-make</code>/<code>run-make-cargo</code></td><td>هر نام متغیر محیطی</td></tr>
+<tr><td><code>incremental</code></td><td>پشتیبانی درست از کامپایل افزایشی برای تست‌های خارج از مجموعهٔ تست افزایشی</td><td><code>ui</code>, <code>crashes</code></td><td>ندارد</td></tr>
+<tr><td><code>no-prefer-dynamic</code></td><td>از <code>-C prefer-dynamic</code> استفاده نکن و با پرچم از پیش تنظیم‌شدهٔ <code>--crate-type=dylib</code> به‌صورت dylib نساز</td><td><code>ui</code>, <code>crashes</code></td><td>ندارد</td></tr>
+</tbody>
+</table>
+</div>
+<div class="warning">
+<p>تست‌هایی (خارج از <code>run-make</code>/<code>run-make-cargo</code>) که می‌خواهند از تست‌های افزایشی خارج از مجموعهٔ تست
+افزایشی استفاده کنند نباید <code>-C incremental</code> را از طریق <code>compile-flags</code> بدهند، و
+باید به‌جای آن از directive با نام <code>//@ incremental</code> استفاده کنند.</p>
+<p>نوشتن تست به‌صورت یک تست افزایشی درست را در نظر بگیرید.</p>
+</div>
+
+<h4 id="the-edition-directive"><a class="header" href="#the-edition-directive">directive با نام edition</a></h4>
+<p>directive با نام <code>//@ edition</code> می‌تواند edition دقیق، بازه‌ای کران‌دار از editionها،
+یا بازهٔ نیمه‌باز با کران چپ از editionها را بگیرد.
+این بر اینکه <code>./x test</code> از کدام edition برای اجرای تست استفاده کند اثر می‌گذارد.</p>
+<p>برای مثال:</p>
+<ul>
+<li>تستی با directive با نام <code>//@ edition: 2018</code> فقط تحت edition 2018 اجرا می‌شود.</li>
+<li>تستی با directive با نام <code>//@ edition: 2015..2021</code> می‌تواند تحت editionهای 2015 و 2018 اجرا شود،
+پس کران بالا شامل نمی‌شود، درست مثل Rust
+(توجه کنید معادلی برای <code>..=</code> در Rust که کران بالا را شامل می‌شود وجود ندارد).
+اما CI تست را فقط با پایین‌ترین edition در بازه (در این مثال 2015) اجرا می‌کند.</li>
+<li>تستی با directive با نام <code>//@ edition: 2018..</code> تحت edition 2018 یا بالاتر اجرا می‌شود.
+اما CI تست را فقط با پایین‌ترین edition در بازه (در این مثال 2018) اجرا می‌کند.</li>
+</ul>
+<p>همچنین می‌توانید با دادن آرگومان <code>-- --edition=</code> <code>./x test</code> را مجبور به استفاده از edition مشخصی کنید.
+اما تست‌هایی با directive با نام <code>//@ edition</code> مقدار داده‌شده به آرگومان را محدود (clamp) می‌کنند.
+برای مثال اگر <code>./x test -- --edition=2015</code> را اجرا کنیم:</p>
+<ul>
+<li>تستی با <code>//@ edition: 2018</code> با edition 2018 اجرا می‌شود.</li>
+<li>تستی با <code>//@ edition: 2015..2021</code> با edition 2015 اجرا می‌شود.</li>
+<li>تستی با <code>//@ edition: 2018..</code> با edition 2018 اجرا می‌شود.</li>
+</ul>
+<h3 id="rustdoc"><a class="header" href="#rustdoc">Rustdoc</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Directive</th><th>Explanation</th><th>Supported test suites</th><th>Possible values</th></tr>
+</thead>
+<tbody>
+<tr><td><code>doc-flags</code></td><td>پرچم‌هایی که هنگام ساخت تست یا فایل aux به <code>rustdoc</code> داده می‌شوند</td><td><code>rustdoc</code>, <code>rustdoc-js</code>, <code>rustdoc-json</code></td><td>هر پرچم معتبر <code>rustdoc</code></td></tr>
+</tbody>
+</table>
+</div>
+<!--
+**FIXME(rustdoc)**: what does `check-test-line-numbers-match` do?
+Asked in
+<https://rust-lang.zulipchat.com/#narrow/stream/266220-t-rustdoc/topic/What.20is.20the.20.60check-test-line-numbers-match.60.20directive.3F>.
+-->
+<h4 id="test-suite-specific-directives"><a class="header" href="#test-suite-specific-directives">Test-suite-specific directives</a></h4>
+<p>مجموعه‌های تست <a href="../rustdoc-internals/rustdoc-html-test-suite.html"><code>rustdoc-html</code></a>، <a href="../rustdoc-internals/search.html#testing-the-search-engine"><code>rustdoc-js</code>/<code>rustdoc-js-std</code></a>
+و <a href="../rustdoc-internals/rustdoc-json-test-suite.html"><code>rustdoc-json</code></a> هر کدام مجموعهٔ اضافی از directiveها دارند که نحو پایه‌شان شبیه
+نحو directiveهای compiletest است اما در نهایت توسط
+ابزارهای جداگانه خوانده و بررسی می‌شوند.
+برای اطلاعات بیشتر فصل‌های مربوطه را که در بالا پیوند خورده‌اند بخوانید.</p>
+<h3 id="pretty-printing"><a class="header" href="#pretty-printing">Pretty printing</a></h3>
+<p>See <a href="compiletest.html#pretty-printer-tests">Pretty-printer</a>.</p>
+<h4 id="misc-directives"><a class="header" href="#misc-directives">Misc directives</a></h4>
+<ul>
+<li><code>no-auto-check-cfg</code> — check-cfg خودکار را غیرفعال می‌کند (فقط برای تست‌های <code>--check-cfg</code>)</li>
+<li><a href="compiletest.html#revisions"><code>revisions</code></a> — compile multiple times</li>
+<li><a href="compiletest.html#incremental-tests"><code>forbid-output</code></a> — بررسی می‌کند خروجی شامل رشتهٔ مشخصی نباشد</li>
+<li><a href="https://github.com/rust-lang/reference/blob/master/docs/authoring.md#test-rule-annotations"><code>reference</code></a> — annotationای که به یک قاعده در مرجع پیوند می‌دهد</li>
+<li><code>disable-gdb-pretty-printers</code> — pretty printerهای gdb را برای تست‌های debuginfo غیرفعال می‌کند</li>
+</ul>
+<h3 id="tool-specific-directives"><a class="header" href="#tool-specific-directives">Tool-specific directives</a></h3>
+<p>directiveهای زیر بر نحوهٔ فراخوانی برخی ابزارهای خط فرمان اثر می‌گذارند،
+در مجموعه‌های تستی که از آن ابزارها استفاده می‌کنند:</p>
+<ul>
+<li><code>skip-filecheck</code> avoids running LLVM’s <code>FileCheck</code> tool in tests that would normally run it to check output.
+<ul>
+<li>توسط تست‌های codegen، تست‌های assembly و تست‌های mir-opt استفاده می‌شود.</li>
+</ul>
+</li>
+<li><code>filecheck-flags</code> adds extra flags when running LLVM’s <code>FileCheck</code> tool.
+<ul>
+<li>توسط <a href="compiletest.html#codegen-tests">تست‌های codegen</a>،
+<a href="compiletest.html#assembly-tests">تست‌های assembly</a>،
+و <a href="compiletest.html#mir-opt-tests">تست‌های MIR-opt</a> استفاده می‌شود.</li>
+</ul>
+</li>
+<li><code>llvm-cov-flags</code> adds extra flags when running LLVM’s <code>llvm-cov</code> tool.
+<ul>
+<li>توسط <a href="compiletest.html#coverage-tests">تست‌های coverage</a> در حالت <code>coverage-run</code> استفاده می‌شود.</li>
+</ul>
+</li>
+</ul>
+<h3 id="tidy-specific-directives"><a class="header" href="#tidy-specific-directives">Tidy specific directives</a></h3>
+<p>directiveهای زیر نحوهٔ اعتبارسنجی تست‌ها توسط <a href="../conventions.html#formatting">اسکریپت tidy</a> را کنترل می‌کنند.</p>
+<ul>
+<li><code>ignore-tidy-target-specific-tests</code> بررسی لزوم مؤلفهٔ مناسب
+LLVM (از طریق directive با نام <code>needs-llvm-components</code>) را وقتی
+تست برای هدف مشخصی (از طریق پرچم <code>--target</code> در directive با نام <code>compile-flag</code>) کامپایل می‌شود غیرفعال می‌کند.</li>
+<li><a href="compiletest.html#ignoring-unused-revision-names"><code>unused-revision-names</code></a> -
+بررسی‌های tidy برای ذکر نام‌های ناشناختهٔ revision را سرکوب می‌کند.</li>
+</ul>
+<h2 id="substitutions"><a class="header" href="#substitutions">Substitutions</a></h2>
+<p>مقادیر directive از جایگزینی چند متغیر پشتیبانی می‌کنند که با
+مقدار متناظرشان جایگزین می‌شوند.
+برای مثال، اگر باید پرچم کامپایلر همراه با مسیر یک فایل مشخص بدهید،
+چیزی شبیه این می‌تواند کار کند:</p>
+<pre><code class="language-rust ignore">//@ compile-flags: --remap-path-prefix={{src-base}}=/the/src</code></pre>
+<p>که در آن نگهبان <code>{{src-base}}</code> با مسیر مناسب که در ادامه شرح داده شده جایگزین می‌شود:</p>
+<ul>
+<li><code>{{cwd}}</code>: The directory where compiletest is run from.
+This may not be the root of the checkout, so you should avoid using it where possible.
+<ul>
+<li>Examples: <code>/path/to/rust</code>, <code>/path/to/build/root</code></li>
+</ul>
+</li>
+<li><code>{{src-base}}</code>: The directory where the test is defined.
+This is equivalent to <code>$DIR</code> for <a href="ui.html#normalization">output normalization</a>.
+<ul>
+<li>Example: <code>/path/to/rust/tests/ui/error-codes</code></li>
+</ul>
+</li>
+<li><code>{{build-base}}</code>: The base directory where the test’s output goes.
+This is equivalent to <code>$TEST_BUILD_DIR</code> for <a href="ui.html#normalization">output normalization</a>.
+<ul>
+<li>Example: <code>/path/to/rust/build/x86_64-unknown-linux-gnu/test/ui</code></li>
+</ul>
+</li>
+<li><code>{{rust-src-base}}</code>: پوشهٔ sysroot که libstd/libcore/… در آن قرار دارند</li>
+<li><code>{{sysroot-base}}</code>: Path of the sysroot directory used to build the test.
+<ul>
+<li>عمدتاً برای تست‌های <code>ui-fulldeps</code> که کامپایلر را از طریق API اجرا می‌کنند.</li>
+</ul>
+</li>
+<li><code>{{target-linker}}</code>: Linker that would be passed to <code>-Clinker</code> for this test,
+or blank if no linker override is active.
+<ul>
+<li>عمدتاً برای تست‌های <code>ui-fulldeps</code> که کامپایلر را از طریق API اجرا می‌کنند.</li>
+</ul>
+</li>
+<li><code>{{target}}</code>: The target the test is compiling for
+<ul>
+<li>Example: <code>x86_64-unknown-linux-gnu</code></li>
+</ul>
+</li>
+</ul>
+<p>برای نمونه‌ای از تستی که از این جایگزینی استفاده می‌کند
+<a href="https://github.com/rust-lang/rust/blob/HEAD/tests/ui/argfile/commandline-argfile.rs"><code>tests/ui/argfile/commandline-argfile.rs</code></a>
+را ببینید.</p>
+<h2 id="adding-a-directive"><a class="header" href="#adding-a-directive">افزودن یک directive</a></h2>
+<p>اگر نیاز باشد ویژگی یا رفتار تستی را به‌صورت جداگانه برای هر تست تعریف کنید، directive جدیدی اضافه می‌کنید.
+یک ویژگی directive در زمان اجرا نقش
+مخزن پشتیبان directive را دارد (مقدار فعلی دستور را نگه می‌دارد).</p>
+<p>برای افزودن ویژگی directive جدید:</p>
+<ol>
+<li>اعلان <code>pub struct TestProps</code> را در
+<a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/compiletest/src/directives.rs"><code>src/tools/compiletest/src/directives.rs</code></a> بیابید و ویژگی عمومی جدید را به
+انتهای اعلان اضافه کنید.</li>
+<li>بلوک پیاده‌سازی <code>impl TestProps</code> را که بلافاصله پس از اعلان struct می‌آید بیابید و ویژگی جدید را با مقدار پیش‌فرضش مقداردهی اولیه کنید.</li>
+</ol>
+<h3 id="adding-a-new-directive-parser"><a class="header" href="#adding-a-new-directive-parser">افزودن parser جدید برای directive</a></h3>
+<p>وقتی <code>compiletest</code> به یک فایل تست می‌رسد، آن را خط به خط تجزیه می‌کند
+با فراخوانی هر parser که در بلوک پیاده‌سازی struct با نام <code>Config</code> تعریف شده،
+که آن هم در <a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/compiletest/src/directives.rs"><code>src/tools/compiletest/src/directives.rs</code></a> است (توجه کنید که بلوک اعلان struct با نام <code>Config</code> در <a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/compiletest/src/common.rs"><code>src/tools/compiletest/src/common.rs</code></a> قرار دارد).
+متد <code>load_from()</code> در <code>TestProps</code> سعی می‌کند خط فعلی متن را به هر parser بدهد،
+که آن هم معمولاً بررسی می‌کند آیا خط با directive کامنت‌شدهٔ (<code>//@</code>) مشخصی شروع می‌شود، مثل <code>//@ must-compile-successfully</code>
+یا <code>//@ failure-status</code>.
+فاصله پس از نشانگر کامنت اختیاری است.</p>
+<p>parserها مقدار پیش‌فرض ویژگی directive را صرفاً با مشخص‌شدن در فایل تست به‌عنوان directive
+یا با مشخص‌شدن مقدار پارامتر در فایل تست، بسته به directive، بازنویسی می‌کنند.</p>
+<p>parserهایی که در <code>impl Config</code> تعریف می‌شوند معمولاً <code>parse_&lt;directive-name&gt;</code> نام دارند
+(توجه کنید <code>&lt;directive-command&gt;</code> به شکل kebab-case به snake-case یعنی <code>&lt;directive_command&gt;</code> تبدیل می‌شود).
+<code>impl Config</code> چند parser «سطح پایین» هم تعریف می‌کند
+که تجزیهٔ الگوهای رایج را ساده می‌کنند، مثل حضور یا عدم حضور ساده
+(<code>parse_name_directive()</code>)، <code>directive:parameter(s)</code> (<code>parse_name_value_directive()</code>)،
+تجزیهٔ اختیاری فقط اگر attribute با نام <code>cfg</code> مشخصی تعریف شده باشد (<code>has_cfg_prefix()</code>) و بسیاری دیگر.
+parserهای سطح پایین
+نزدیک انتهای بلوک <code>impl Config</code> هستند؛ حتماً آن‌ها و parserهای مرتبطی را که بلافاصله بالاتر هستند ببینید تا نحوهٔ استفاده‌شان را بدانید و از
+نوشتن کد تجزیهٔ اضافی غیرضروری پرهیز کنید.</p>
+<p>به‌عنوان مثال عینی، پیاده‌سازی parser با نام <code>parse_failure_status()</code> این است،
+در <a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/compiletest/src/directives.rs"><code>src/tools/compiletest/src/directives.rs</code></a>:</p>
+<pre><code class="language-diff">@@ -232,6 +232,7 @@ pub struct TestProps {
+     // customized normalization rules
+     pub normalize_stdout: Vec&lt;(String, String)&gt;,
+     pub normalize_stderr: Vec&lt;(String, String)&gt;,
++    pub failure_status: i32,
+ }
+
+ impl TestProps {
+@@ -260,6 +261,7 @@ impl TestProps {
+             run_pass: false,
+             normalize_stdout: vec![],
+             normalize_stderr: vec![],
++            failure_status: 101,
+         }
+     }
+
+@@ -383,6 +385,10 @@ impl TestProps {
+             if let Some(rule) = config.parse_custom_normalization(ln, "normalize-stderr") {
+                 self.normalize_stderr.push(rule);
+             }
++
++            if let Some(code) = config.parse_failure_status(ln) {
++                self.failure_status = code;
++            }
+         });
+
+         for key in &amp;["RUST_TEST_NOCAPTURE", "RUST_TEST_THREADS"] {
+@@ -488,6 +494,13 @@ impl Config {
+         self.parse_name_directive(line, "pretty-compare-only")
+     }
+
++    fn parse_failure_status(&amp;self, line: &amp;str) -&gt; Option&lt;i32&gt; {
++        match self.parse_name_value_directive(line, "failure-status") {
++            Some(code) =&gt; code.trim().parse::&lt;i32&gt;().ok(),
++            _ =&gt; None,
++        }
++    }
+</code></pre>
+<h3 id="implementing-the-behavior-change"><a class="header" href="#implementing-the-behavior-change">پیاده‌سازی تغییر رفتار</a></h3>
+<p>وقتی تستی directive مشخصی را فراخوانی می‌کند،
+انتظار می‌رود رفتاری در نتیجه تغییر کند.
+اینکه کدام رفتار، بدیهی است به هدف directive بستگی دارد.
+در مورد <code>failure-status</code>، رفتاری که تغییر می‌کند این است
+که <code>compiletest</code> کد شکستی را که directive فراخوانی‌شده در تست تعریف کرده انتظار دارد،
+نه مقدار پیش‌فرض را.</p>
+<p>هرچند مخصوص <code>failure-status</code> است (چون هر directive برای فراخوانی تغییر رفتار پیاده‌سازی متفاوتی دارد)، شاید دیدن
+پیاده‌سازی تغییر رفتار یک مورد، صرفاً به‌عنوان مثال، مفید باشد.
+برای پیاده‌سازی <code>failure-status</code>، تابع <code>check_correct_failure_status()</code> که
+در بلوک پیاده‌سازی <code>TestCx</code> در <a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/compiletest/src/runtest.rs"><code>src/tools/compiletest/src/runtest.rs</code></a> قرار دارد،
+مطابق زیر تغییر داده شد:</p>
+<pre><code class="language-diff">@@ -295,11 +295,14 @@ impl&lt;'test&gt; TestCx&lt;'test&gt; {
+     }
+
+     fn check_correct_failure_status(&amp;self, proc_res: &amp;ProcRes) {
+-        // The value the Rust runtime returns on failure
+-        const RUST_ERR: i32 = 101;
+-        if proc_res.status.code() != Some(RUST_ERR) {
++        let expected_status = Some(self.props.failure_status);
++        let received_status = proc_res.status.code();
++
++        if expected_status != received_status {
+             self.fatal_proc_rec(
+-                &amp;format!("failure produced the wrong error: {}", proc_res.status),
++                &amp;format!("Error: expected failure status ({:?}) but received status {:?}.",
++                         expected_status,
++                         received_status),
+                 proc_res,
+             );
+         }
+@@ -320,7 +323,6 @@ impl&lt;'test&gt; TestCx&lt;'test&gt; {
+         );
+
+         let proc_res = self.exec_compiled_test();
+-
+         if !proc_res.status.success() {
+             self.fatal_proc_rec("test run failed!", &amp;proc_res);
+         }
+@@ -499,7 +501,6 @@ impl&lt;'test&gt; TestCx&lt;'test&gt; {
+                 expected,
+                 actual
+             );
+-            panic!();
+         }
+     }
+</code></pre>
+<p>به استفاده از <code>self.props.failure_status</code> برای دسترسی به ویژگی directive توجه کنید.
+در تست‌هایی که directive وضعیت شکست را مشخص نمی‌کنند،
+<code>self.props.failure_status</code> در زمان نگارش به مقدار پیش‌فرض 101 ارزیابی می‌شود.
+اما برای تستی که directive‌ای مثلاً
+<code>//@ failure-status: 1</code> را مشخص می‌کند، <code>self.props.failure_status</code> به 1 ارزیابی می‌شود،
+چون <code>parse_failure_status()</code> مقدار پیش‌فرض <code>TestProps</code> را برای همان تست بازنویسی کرده است.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-pm">
+<p>برای جزئیات لطفاً <a href="compiletest.html#auxiliary-proc-macro">بخش Auxiliary proc-macro</a> را در فصل compiletest ببینید. <a href="#fr-pm-1">↩</a></p>
+</li>
+<li id="footnote-check_stdout">
+<p>در حال حاضر <!-- date-check: Oct 2024 --> این یک عجیب‌گی دارد
+که stdout و stderr فایل دودویی تست به هم الصاق می‌شوند و سپس
+<code>error-pattern</code>ها روی این خروجی ترکیبی تطبیق داده می‌شوند، که ???
+دست‌کم می‌توان گفت کمی مشکوک است. <a href="#fr-check_stdout-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="ui.html">→ آزمون‌های UI</a><a href="minicore.html">Minicore ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,44 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>لیترال‌های رشتهٔ C — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2021/c-string-literals"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="c-string-literals"><a class="header" href="#c-string-literals">لیترال‌های رشتهٔ C</a></h1>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<ul>
+<li>لیترال‌هایی به شکل <code>c"foo"</code> یا <code>cr"foo"</code> یک رشته از نوع <a href="https://doc.rust-lang.org/core/ffi/struct.CStr.html"><code>&amp;core::ffi::CStr</code></a> را نمایش می‌دهند.</li>
+</ul>
+<h2 id="details"><a class="header" href="#details">جزئیات</a></h2>
+<p>از Rust 1.77 به بعد، رشته‌های C را می‌توان با سینتکس لیترال رشتهٔ C و با پیشوند <code>c</code> یا <code>cr</code> نوشت.</p>
+<p>پیش‌تر، تولید درست یک لیترال رشته که بتواند با APIهای C که با بایت NUL پایان می‌یابند هم‌کنش داشته باشد، چالش‌برانگیز بود. crate با نام <a href="https://crates.io/crates/cstr"><code>cstr</code></a> راه‌حل محبوبی بود، اما نیاز به کامپایل یک proc-macro داشت که هزینهٔ زیادی داشت. اکنون رشته‌های C را می‌توان مستقیماً با نمادگذاری سینتکس لیترال نوشت، که مقداری از نوع <a href="https://doc.rust-lang.org/core/ffi/struct.CStr.html"><code>&amp;core::ffi::CStr</code></a> تولید می‌کند که به‌طور خودکار با بایت NUL پایان می‌یابد.</p>
+<pre><code class="language-rust edition2021"><span class="boring">use core::ffi::CStr;
+</span>
+assert_eq!(c"hello", CStr::from_bytes_with_nul(b"hello\0").unwrap());
+assert_eq!(
+    c"byte escapes \xff work",
+    CStr::from_bytes_with_nul(b"byte escapes \xff work\0").unwrap()
+);
+assert_eq!(
+    c"unicode escapes \u{00E6} work",
+    CStr::from_bytes_with_nul(b"unicode escapes \xc3\xa6 work\0").unwrap()
+);
+assert_eq!(
+    c"unicode characters αβγ encoded as UTF-8",
+    CStr::from_bytes_with_nul(
+        b"unicode characters \xce\xb1\xce\xb2\xce\xb3 encoded as UTF-8\0"
+    )
+    .unwrap()
+);
+assert_eq!(
+    c"strings can continue \
+        on multiple lines",
+    CStr::from_bytes_with_nul(b"strings can continue on multiple lines\0").unwrap()
+);</code></pre>
+<p>رشته‌های C بایت NUL داخلی را مجاز نمی‌دانند (مثلاً با escape از نوع <code>\0</code>).</p>
+<p>مشابه رشته‌های معمولی، رشته‌های C نیز سینتکس «خام» (raw) را با پیشوند <code>cr</code> پشتیبانی می‌کنند. این رشته‌های C خام escapeهای بک‌اسلش را پردازش نمی‌کنند، که نوشتن رشته‌هایی را که شامل بک‌اسلش هستند آسان‌تر می‌کند. می‌توان با احاطه کردن نقل‌قول‌ها با نویسهٔ <code>#</code>، گیومهٔ دوتایی را در رشته گنجاند. می‌توان از چند نویسهٔ <code>#</code> برای پرهیز از ابهام با دنباله‌های داخلی <code>"#</code> استفاده کرد.</p>
+<pre><code class="language-rust edition2021">assert_eq!(cr"foo", c"foo");
+// Number signs can be used to embed interior double quotes.
+assert_eq!(cr#""foo""#, c"\"foo\"");
+// This requires two #.
+assert_eq!(cr##""foo"#"##, c"\"foo\"#");
+// Escapes are not processed.
+assert_eq!(cr"C:\foo", c"C:\\foo");</code></pre>
+<p>برای جزئیات بیشتر، <a href="../../reference/tokens.html#c-string-and-raw-c-string-literals">مرجع Rust</a> را ببینید.</p>
+<h2 id="migration"><a class="header" href="#migration">مهاجرت</a></h2>
+<p>مهاجرت فقط برای ماکروهایی لازم است که ممکن است دنباله‌ای از توکن‌ها را فرض کرده باشند که شبیه <code>c"…"</code> یا <code>cr"…"</code> است؛ پیش از ویرایش 2021 این‌ها به دو توکن جداگانه تقسیم می‌شدند، اما در 2021 به‌صورت یک توکن واحد ظاهر می‌شوند.</p>
+<p>به‌عنوان بخشی از <a href="reserved-syntax.html">رزرو سینتکس</a> برای ویرایش 2021، هر ورودی ماکرو که ممکن است با این مشکل روبه‌رو شود باید از طریق lint مهاجرت <code>rust_2021_prefixes_incompatible_syntax</code> هشدار صادر کند. برای جزئیات بیشتر به آن فصل مراجعه کنید.</p><nav class="page-nav"><a href="or-patterns-macro-rules.html">→ الگوهای or در macro-rules</a><a href="../rust-2024/index.html">Rust 2024 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

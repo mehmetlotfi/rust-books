@@ -1,0 +1,221 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>انتقال داده بین نخ‌ها با ارسال پیام — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch16-02-message-passing"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><!-- Old headings. Do not remove or links may break. -->
+<p><a id="using-message-passing-to-transfer-data-between-threads"></a></p>
+<h2 id="transfer-data-between-threads-with-message-passing"><a class="header" href="#transfer-data-between-threads-with-message-passing">استفاده از پیام‌رسانی برای انتقال داده بین نخ‌ها</a></h2>
+<p>یکی از رویکردهای محبوب و فزاینده برای اطمینان از همزمانی ایمن، <em>پیام‌رسانی</em> است، جایی که نخ‌ها یا بازیگران با ارسال پیام‌های حاوی داده به یکدیگر ارتباط برقرار می‌کنند. ایده این رویکرد در یک شعار از <a href="https://golang.org/doc/effective_go.html#concurrency">مستندات زبان Go</a> آمده است:<br> «با به اشتراک گذاشتن حافظه ارتباط برقرار نکنید؛ بلکه حافظه را با ارتباط برقرار کردن به اشتراک بگذارید.»</p>
+<p>برای دستیابی به هم‌زمانی مبتنی بر ارسال پیام، کتابخانه‌ی استاندارد Rust پیاده‌سازی‌ای از مفهوم channel را فراهم کرده است. یک <em>channel</em> مفهومی کلی در برنامه‌نویسی است که از طریق آن داده‌ها از یک thread به thread دیگر ارسال می‌شوند.</p>
+<p>می‌توانید یک کانال در برنامه‌نویسی را مانند یک کانال آبی جهت‌دار، مانند یک جریان یا رودخانه تصور کنید. اگر چیزی مانند یک اردک پلاستیکی را به داخل رودخانه بیندازید، آن اردک به پایین‌دست رودخانه سفر می‌کند و به انتهای آن می‌رسد.</p>
+<p>یک channel دو بخش دارد: یک فرستنده (transmitter) و یک گیرنده (receiver). بخش فرستنده مانند نقطه‌ی بالادستی رودخانه‌ای است که در آن اردک پلاستیکی را داخل آب می‌اندازید، و بخش گیرنده جایی‌ست که اردک پلاستیکی در پایین‌دست به آن‌جا می‌رسد. بخشی از کد شما با متدهایی بر روی فرستنده، داده‌هایی را که می‌خواهید ارسال کنید قرار می‌دهد، و بخش دیگر کد بررسی می‌کند که آیا پیامی در سمت گیرنده دریافت شده است یا نه. وقتی که یا فرستنده یا گیرنده (یا هر دو) از بین بروند (drop شوند)، گفته می‌شود که channel <em>بسته شده</em> است.</p>
+<p>در این‌جا، قصد داریم برنامه‌ای بسازیم که در آن یک thread وظیفه تولید مقادیر و ارسال آن‌ها از طریق یک channel را دارد، و thread دیگری این مقادیر را دریافت کرده و چاپ می‌کند. برای نمایش این قابلیت، مقادیر ساده‌ای را بین threadها ارسال خواهیم کرد. پس از آشنایی با این تکنیک، می‌توانید از channelها برای هر نوع ارتباط میان threadها استفاده کنید؛ مثلاً در یک سامانه‌ی چت یا سیستمی که در آن چند thread قسمت‌هایی از یک محاسبه را انجام می‌دهند و نتیجه‌ها را به یک thread مرکزی برای تجمیع ارسال می‌کنند.</p>
+<p>ابتدا، در لیستینگ 16-6، یک کانال ایجاد می‌کنیم اما هنوز کاری با آن انجام نمی‌دهیم. توجه داشته باشید که این کد هنوز کامپایل نمی‌شود زیرا Rust نمی‌تواند نوع مقادیری که می‌خواهیم از طریق کانال ارسال کنیم را تعیین کند.</p>
+<figure class="listing" id="listing-16-6">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">use std::sync::mpsc;
+
+fn main() {
+    let (tx, rx) = mpsc::channel();
+}</code></pre>
+<figcaption><a href="#listing-16-6">لیست ۱۶-۶</a>: Creating a channel and assigning the two halves to &lt;code&gt;&lt;/x-listing&gt;tx&lt;/code&gt; and &lt;code&gt;rx&lt;/code&gt;</figcaption>
+</figure>
+<p>ما یک کانال جدید با استفاده از تابع <code>mpsc::channel</code> ایجاد می‌کنیم؛ <code>mpsc</code> مخفف <em>تولیدکننده‌های چندگانه، مصرف‌کننده تک‌گانه</em> است. به طور خلاصه، نحوه پیاده‌سازی کانال‌ها توسط کتابخانه استاندارد Rust به این معناست که یک کانال می‌تواند چندین انتهای <em>ارسال‌کننده</em> داشته باشد که مقادیر تولید می‌کنند، اما فقط یک انتهای <em>گیرنده</em> که آن مقادیر را مصرف می‌کند. تصور کنید چندین جریان کوچک به یک رودخانه بزرگ می‌ریزند: هر چیزی که در هر یک از جریان‌ها ارسال شود، در نهایت به رودخانه بزرگ در انتها می‌رسد. فعلاً با یک تولیدکننده شروع می‌کنیم، اما وقتی این مثال کار کرد، چندین تولیدکننده اضافه خواهیم کرد.</p>
+<p>تابع <code>mpsc::channel</code> یک تاپل برمی‌گرداند که عنصر اول آن، بخش ارسال‌کننده یا همان فرستنده (transmitter)، و عنصر دوم آن، بخش دریافت‌کننده یا همان گیرنده (receiver) است. در بسیاری از حوزه‌ها، اختصارات <code>tx</code> و <code>rx</code> به ترتیب برای <em>transmitter</em> و <em>receiver</em> به کار می‌روند، بنابراین ما نیز نام متغیرها را به همین صورت انتخاب می‌کنیم تا نقش هر بخش را مشخص کنیم. در این‌جا از یک دستور <code>let</code> همراه با یک الگو استفاده کرده‌ایم که تاپل را <em>تجزیه</em> (destructure) می‌کند؛ در فصل ۱۹ درباره‌ی استفاده از الگوها در دستورات <code>let</code> و تجزیه بیشتر صحبت خواهیم کرد. در حال حاضر، تنها کافی‌ست بدانید که استفاده از <code>let</code> به این صورت، روشی مناسب برای استخراج اجزای تاپلی است که تابع <code>mpsc::channel</code> بازمی‌گرداند.</p>
+<p>بیایید انتهای ارسال‌کننده را به یک نخ ایجادشده منتقل کنیم و یک رشته ارسال کنیم تا نخ ایجادشده با نخ اصلی ارتباط برقرار کند، همان‌طور که در لیستینگ 16-7 نشان داده شده است. این شبیه به انداختن یک اردک پلاستیکی در رودخانه در بالادست یا ارسال یک پیام چت از یک نخ به نخ دیگر است.</p>
+<figure class="listing" id="listing-16-7">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::sync::mpsc;
+use std::thread;
+
+fn main() {
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let val = String::from("hi");
+        tx.send(val).unwrap();
+    });
+}</code></pre>
+<figcaption><a href="#listing-16-7">لیست ۱۶-۷</a>: Moving <code>tx</code> to a spawned thread and sending <code>"hi"</code></figcaption>
+</figure>
+<p>باز هم از <code>thread::spawn</code> برای ایجاد یک نخ جدید استفاده می‌کنیم و سپس با استفاده از <code>move</code>، مالکیت <code>tx</code> را به داخل closure منتقل می‌کنیم تا نخ ایجادشده مالک <code>tx</code> شود. نخ ایجادشده باید مالک فرستنده باشد تا بتواند از طریق کانال پیام ارسال کند.</p>
+<p>فرستنده دارای متدی به نام <code>send</code> است که مقداری را که می‌خواهیم ارسال کنیم دریافت می‌کند. متد <code>send</code> یک نوع <code>Result&lt;T, E&gt;</code> بازمی‌گرداند؛ بنابراین اگر گیرنده قبلاً حذف شده باشد و دیگر جایی برای ارسال مقدار وجود نداشته باشد، عملیات ارسال منجر به خطا خواهد شد. در این مثال، ما با فراخوانی <code>unwrap</code> در صورت بروز خطا باعث panick شدن برنامه می‌شویم. اما در یک برنامه واقعی، باید این خطا را به‌درستی مدیریت کنیم؛ برای مرور استراتژی‌های مدیریت خطا به فصل ۹ بازگردید.</p>
+<p>در لیستینگ 16-8، مقداری را از گیرنده در نخ اصلی دریافت می‌کنیم. این شبیه به گرفتن اردک پلاستیکی از آب در انتهای رودخانه یا دریافت یک پیام چت است.</p>
+<figure class="listing" id="listing-16-8">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::sync::mpsc;
+use std::thread;
+
+fn main() {
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let val = String::from("hi");
+        tx.send(val).unwrap();
+    });
+
+    let received = rx.recv().unwrap();
+    println!("Got: {received}");
+}</code></pre>
+<figcaption><a href="#listing-16-8">لیست ۱۶-۸</a>: Receiving the value <code>"hi"</code> in the main thread and printing it</figcaption>
+</figure>
+<p>گیرنده دو متد مفید دارد: <code>recv</code> و <code>try_recv</code>. ما از <code>recv</code>، که مخفف <em>receive</em> است، استفاده می‌کنیم. این متد اجرای نخ اصلی را مسدود کرده و منتظر می‌ماند تا مقداری از طریق کانال ارسال شود. هنگامی که مقداری ارسال شد، <code>recv</code> آن را در یک مقدار <code>Result&lt;T, E&gt;</code> بازمی‌گرداند. وقتی فرستنده بسته می‌شود، <code>recv</code> یک خطا برمی‌گرداند تا نشان دهد که هیچ مقدار دیگری نمی‌آید.</p>
+<p>متد <code>try_recv</code> مسدود نمی‌کند، بلکه بلافاصله یک مقدار <code>Result&lt;T, E&gt;</code> بازمی‌گرداند: یک مقدار <code>Ok</code> حاوی یک پیام اگر موجود باشد، و یک مقدار <code>Err</code> اگر این بار هیچ پیامی موجود نباشد. استفاده از <code>try_recv</code> زمانی مفید است که این نخ کار دیگری برای انجام دارد در حالی که منتظر پیام‌ها است: می‌توانیم یک حلقه بنویسیم که هر چند وقت یک بار <code>try_recv</code> را فراخوانی کند، یک پیام را اگر موجود باشد پردازش کند، و در غیر این صورت کار دیگری را برای مدتی انجام دهد تا دوباره بررسی کند.</p>
+<p>ما در این مثال برای سادگی از <code>recv</code> استفاده کرده‌ایم؛ نخ اصلی کار دیگری جز منتظر ماندن برای پیام‌ها ندارد، بنابراین مسدود کردن نخ اصلی مناسب است.</p>
+<p>وقتی کد موجود در لیستینگ 16-8 را اجرا کنیم، مقدار چاپ‌شده از نخ اصلی را خواهیم دید:</p>
+<!-- Not extracting output because changes to this output aren't significant;
+the changes are likely to be due to the threads running differently rather than
+changes in the compiler -->
+<pre><code class="language-text">Got: hi
+</code></pre>
+<p>عالی!</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="channels-and-ownership-transference"></a></p>
+<h3 id="transferring-ownership-through-channels"><a class="header" href="#transferring-ownership-through-channels">انتقال مالکیت از طریق کانال‌ها</a></h3>
+<p>قوانین مالکیت نقش حیاتی‌ای در ارسال پیام ایفا می‌کنند، چرا که به شما کمک می‌کنند تا کدی ایمن و هم‌زمان (concurrent) بنویسید. جلوگیری از بروز خطا در برنامه‌نویسی هم‌زمان یکی از مزایای تفکر بر مبنای مالکیت در سراسر برنامه‌های Rust است. بیایید یک آزمایش انجام دهیم تا ببینیم چگونه کانال‌ها و مالکیت با هم همکاری می‌کنند تا از بروز مشکل جلوگیری شود: در این آزمایش، سعی می‌کنیم از متغیر <code>val</code> در نخ ایجاد‌شده <em>بعد از</em> این‌که آن را از طریق کانال ارسال کرده‌ایم، استفاده کنیم. سعی کنید کدی که در فهرست 16-9 آمده را کامپایل کنید تا ببینید چرا این کد مجاز نیست.</p>
+<figure class="listing" id="listing-16-9">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">use std::sync::mpsc;
+use std::thread;
+
+fn main() {
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let val = String::from("hi");
+        tx.send(val).unwrap();
+        println!("val is {val}");
+    });
+
+    let received = rx.recv().unwrap();
+    println!("Got: {received}");
+}</code></pre>
+<figcaption><a href="#listing-16-9">لیست ۱۶-۹</a>: تلاش برای استفاده از &lt;code&gt;&lt;/x-listing&gt;val&lt;/code&gt; پس از ارسال آن از طریق کانال</figcaption>
+</figure>
+<p>در اینجا، ما سعی می‌کنیم <code>val</code> را پس از ارسال آن از طریق <code>tx.send</code> چاپ کنیم. اجازه دادن به این کار ایده بدی خواهد بود: هنگامی که مقدار به نخ دیگری ارسال شده است، آن نخ می‌تواند قبل از اینکه سعی کنیم دوباره از مقدار استفاده کنیم، آن را تغییر دهد یا حذف کند. به طور بالقوه، تغییرات نخ دیگر می‌تواند باعث خطاها یا نتایج غیرمنتظره به دلیل داده‌های ناسازگار یا غیرموجود شود. با این حال، Rust اگر سعی کنیم کد موجود در لیستینگ 16-9 را کامپایل کنیم، به ما خطا می‌دهد:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling message-passing v0.1.0 (file:///projects/message-passing)
+error[E0382]: borrow of moved value: `val`
+  --&gt; src/main.rs:10:27
+   |
+ 8 |         let val = String::from("hi");
+   |             --- move occurs because `val` has type `String`, which does not implement the `Copy` trait
+ 9 |         tx.send(val).unwrap();
+   |                 --- value moved here
+10 |         println!("val is {val}");
+   |                           ^^^ value borrowed here after move
+
+For more information about this error, try `rustc --explain E0382`.
+error: could not compile `message-passing` (bin "message-passing") due to 1 previous error
+</code></pre>
+<p>اشتباه ما در هم‌زمانی منجر به بروز یک خطای زمان کامپایل شده است. تابع <code>send</code> مالکیت پارامتر خود را می‌گیرد، و زمانی که مقدار منتقل می‌شود، دریافت‌کننده مالکیت آن را در اختیار می‌گیرد. این موضوع باعث می‌شود که به‌صورت تصادفی پس از ارسال، دوباره از آن مقدار استفاده نکنیم؛ سیستم مالکیت بررسی می‌کند که همه چیز در وضعیت درستی قرار دارد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="sending-multiple-values-and-seeing-the-receiver-waiting"></a></p>
+<h3 id="sending-multiple-values"><a class="header" href="#sending-multiple-values">ارسال مقادیر متعدد و مشاهده انتظار گیرنده</a></h3>
+<p>کدی که در لیستینگ 16-8 آمده بود کامپایل و اجرا شد، اما به‌صورت واضح به ما نشان نداد که دو نخ مجزا از طریق یک channel با یکدیگر در حال ارتباط هستند.</p>
+<p>در فهرست ۱۶-۱۰ تغییرهایی ایجاد کرده‌ایم که نشان می‌دهند کد فهرست ۱۶-۸ به‌صورت هم‌روند اجرا می‌شود: نخ ایجادشده اکنون چند پیام می‌فرستد و میان هر پیام یک ثانیه مکث می‌کند.</p>
+<figure class="listing" id="listing-16-10">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust noplayground">use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+
+fn main() {
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let vals = vec![
+            String::from("hi"),
+            String::from("from"),
+            String::from("the"),
+            String::from("thread"),
+        ];
+
+        for val in vals {
+            tx.send(val).unwrap();
+            thread::sleep(Duration::from_secs(1));
+        }
+    });
+
+    for received in rx {
+        println!("Got: {received}");
+    }
+}</code></pre>
+<figcaption><a href="#listing-16-10">لیست ۱۶-۱۰</a>: Sending multiple messages and pausing between each one</figcaption>
+</figure>
+<p>این بار، نخی که ایجاد شده (spawned thread) یک وکتور از رشته‌ها (<code>vector of strings</code>) دارد که می‌خواهیم آن‌ها را به نخ اصلی ارسال کنیم. روی این رشته‌ها پیمایش می‌کنیم، هر کدام را به‌صورت جداگانه ارسال می‌کنیم، و بین ارسال هر کدام، با فراخوانی تابع <code>thread::sleep</code> و دادن یک مقدار <code>Duration</code> برابر با یک ثانیه، مکث می‌کنیم.</p>
+<p>در نخ اصلی، دیگر تابع <code>recv</code> را به طور صریح فراخوانی نمی‌کنیم: در عوض، با <code>rx</code> به عنوان یک تکرارگر رفتار می‌کنیم. برای هر مقداری که دریافت می‌شود، آن را چاپ می‌کنیم. هنگامی که کانال بسته می‌شود، تکرار متوقف خواهد شد.</p>
+<p>هنگام اجرای کد موجود در لیست 16-10، باید خروجی زیر را مشاهده کنید با یک ثانیه توقف بین هر خط:</p>
+<!-- Not extracting output because changes to this output aren't significant;
+the changes are likely to be due to the threads running differently rather than
+changes in the compiler -->
+<pre><code class="language-text">Got: hi
+Got: from
+Got: the
+Got: thread
+</code></pre>
+<p>از آنجا که هیچ کدی در حلقه <code>for</code> نخ اصلی نداریم که مکث یا تأخیری ایجاد کند، می‌توانیم بگوییم که نخ اصلی منتظر دریافت مقادیر از نخ ایجادشده است.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="creating-multiple-producers-by-cloning-the-transmitter"></a></p>
+<h3 id="creating-multiple-producers"><a class="header" href="#creating-multiple-producers">ایجاد تولیدکننده‌های متعدد با کلون کردن فرستنده</a></h3>
+<p>پیش‌تر اشاره کردیم که <code>mpsc</code> مخفف <em>چند تولیدکننده، یک مصرف‌کننده</em> است. بیایید از <code>mpsc</code> استفاده کنیم و کد موجود در لیست 16-10 را گسترش دهیم تا چندین ترد ایجاد کنیم که همگی مقادیر را به یک دریافت‌کننده ارسال می‌کنند. برای این کار می‌توانیم فرستنده را clone کنیم، همان‌طور که در لیست 16-11 نشان داده شده است.</p>
+<figure class="listing" id="listing-16-11">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">use std::sync::mpsc;
+</span><span class="boring">use std::thread;
+</span><span class="boring">use std::time::Duration;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span>    // --snip--
+
+    let (tx, rx) = mpsc::channel();
+
+    let tx1 = tx.clone();
+    thread::spawn(move || {
+        let vals = vec![
+            String::from("hi"),
+            String::from("from"),
+            String::from("the"),
+            String::from("thread"),
+        ];
+
+        for val in vals {
+            tx1.send(val).unwrap();
+            thread::sleep(Duration::from_secs(1));
+        }
+    });
+
+    thread::spawn(move || {
+        let vals = vec![
+            String::from("more"),
+            String::from("messages"),
+            String::from("for"),
+            String::from("you"),
+        ];
+
+        for val in vals {
+            tx.send(val).unwrap();
+            thread::sleep(Duration::from_secs(1));
+        }
+    });
+
+    for received in rx {
+        println!("Got: {received}");
+    }
+
+    // --snip--
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-16-11">لیست ۱۶-۱۱</a>: ارسال چندین پیام از چندین تولیدکننده</figcaption>
+</figure>
+<p>این بار، قبل از اینکه نخ ایجادشده اول را ایجاد کنیم، روی فرستنده <code>clone</code> فراخوانی می‌کنیم. این کار به ما یک فرستنده جدید می‌دهد که می‌توانیم به نخ ایجادشده اول ارسال کنیم. فرستنده اصلی را به نخ ایجادشده دوم ارسال می‌کنیم. این کار به ما دو نخ می‌دهد که هر کدام پیام‌های مختلفی را به یک گیرنده ارسال می‌کنند.</p>
+<p>وقتی کد را اجرا می‌کنید، خروجی شما باید چیزی شبیه به این باشد:</p>
+<!-- Not extracting output because changes to this output aren't significant;
+the changes are likely to be due to the threads running differently rather than
+changes in the compiler -->
+<pre><code class="language-text">Got: hi
+Got: more
+Got: from
+Got: messages
+Got: for
+Got: the
+Got: thread
+Got: you
+</code></pre>
+<p>ممکن است مقادیر را به ترتیب دیگری ببینید، بسته به سیستم شما. این همان چیزی است که همزمانی را هم جالب و هم دشوار می‌کند. اگر با <code>thread::sleep</code> آزمایش کنید و مقادیر مختلفی را در نخ‌های مختلف به آن بدهید، هر اجرا غیرقطعی‌تر خواهد شد و هر بار خروجی متفاوتی ایجاد می‌کند.</p>
+<p>اکنون که دیدیم کانال‌ها چگونه کار می‌کنند، بیایید به یک روش دیگر همزمانی نگاهی بیندازیم.</p><nav class="page-nav"><a href="ch16-01-threads.html">→ استفاده از نخ‌ها برای اجرای همزمان کد</a><a href="ch16-03-shared-state.html">همروندی با حالت مشترک ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

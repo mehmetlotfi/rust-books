@@ -1,0 +1,134 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>*-linux-ohos — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="platform-support/openharmony"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="-unknown-linux-ohos"><a class="header" href="#-unknown-linux-ohos"><code>*-unknown-linux-ohos</code></a></h1>
+<p><strong>Tier: ۲ (همراه با ابزارهای میزبان)</strong></p>
+<ul>
+<li>aarch64-unknown-linux-ohos</li>
+<li>armv7-unknown-linux-ohos</li>
+<li>x86_64-unknown-linux-ohos</li>
+</ul>
+<p><strong>Tier: 3</strong></p>
+<ul>
+<li>loongarch64-unknown-linux-ohos</li>
+</ul>
+<p>هدف‌هایی برای سیستم‌عامل <a href="https://gitee.com/openharmony/docs/">OpenHarmony</a>.</p>
+<h2 id="target-maintainers"><a class="header" href="#target-maintainers">نگهدارندگان هدف</a></h2>
+<p><a href="https://github.com/Amanieu">@Amanieu</a> <a href="https://github.com/cceerczw">@cceerczw</a></p>
+<h2 id="requirements"><a class="header" href="#requirements">الزامات</a></h2>
+<p>همهٔ هدف‌های ohos در Tier 2 با ابزارهای میزبان (host tools)، همهٔ ابزارهای گسترش‌یافتهٔ Rust را پشتیبانی می‌کنند. (به‌جز <code>miri</code>؛ پشتیبانی از <code>miri</code> به‌زودی اضافه خواهد شد)</p>
+<h3 id="host-toolchain"><a class="header" href="#host-toolchain">زنجیرهٔ ابزار میزبان</a></h3>
+<p>این هدف‌ها به یک OpenHarmony SDK نسبتاً به‌روز روی میزبان نیاز دارند.</p>
+<p>این هدف‌ها از <code>cargo</code> پشتیبانی می‌کنند که به <a href="https://github.com/ohos-rs/ohos-openssl">ohos-openssl</a> نیاز دارد.</p>
+<p><code>miri</code> هنوز پشتیبانی نمی‌شود، زیرا وابستگی‌های آن (<code>libffi</code> و <code>tikv-jemalloc-sys</code>) از کامپایل برای هدف‌های OHOS پشتیبانی نمی‌کنند.</p>
+<h2 id="setup"><a class="header" href="#setup">راه‌اندازی</a></h2>
+<p>OpenHarmony SDK در حال حاضر کامپایل Rust را مستقیماً پشتیبانی نمی‌کند، بنابراین مقداری راه‌اندازی لازم است.</p>
+<p>ابتدا باید OpenHarmony SDK را از <a href="https://gitee.com/openharmony/docs/tree/master/en/release-notes">این صفحه</a> دریافت کنید. نسخه‌ای از OpenHarmony را که برای آن توسعه می‌دهید انتخاب کنید و «Public SDK package for the standard system» را دانلود کنید.</p>
+<p>اسکریپت‌های شل زیر را که Clang موجود در OpenHarmony SDK را بسته‌بندی (wrap) می‌کنند ایجاد کنید:</p>
+<p><code>aarch64-unknown-linux-ohos-clang.sh</code></p>
+<pre><code class="language-sh">#!/bin/sh
+exec /path/to/ohos-sdk/linux/native/llvm/bin/clang \
+  -target aarch64-linux-ohos \
+  --sysroot=/path/to/ohos-sdk/linux/native/sysroot \
+  -D__MUSL__ \
+  "$@"
+</code></pre>
+<p><code>aarch64-unknown-linux-ohos-clang++.sh</code></p>
+<pre><code class="language-sh">#!/bin/sh
+exec /path/to/ohos-sdk/linux/native/llvm/bin/clang++ \
+  -target aarch64-linux-ohos \
+  --sysroot=/path/to/ohos-sdk/linux/native/sysroot \
+  -D__MUSL__ \
+  "$@"
+</code></pre>
+<p><code>armv7-unknown-linux-ohos-clang.sh</code></p>
+<pre><code class="language-sh">#!/bin/sh
+exec /path/to/ohos-sdk/linux/native/llvm/bin/clang \
+  -target arm-linux-ohos \
+  --sysroot=/path/to/ohos-sdk/linux/native/sysroot \
+  -D__MUSL__ \
+  -march=armv7-a \
+  -mfloat-abi=softfp \
+  -mtune=generic-armv7-a \
+  -mthumb \
+  "$@"
+</code></pre>
+<p><code>armv7-unknown-linux-ohos-clang++.sh</code></p>
+<pre><code class="language-sh">#!/bin/sh
+exec /path/to/ohos-sdk/linux/native/llvm/bin/clang++ \
+  -target arm-linux-ohos \
+  --sysroot=/path/to/ohos-sdk/linux/native/sysroot \
+  -D__MUSL__ \
+  -march=armv7-a \
+  -mfloat-abi=softfp \
+  -mtune=generic-armv7-a \
+  -mthumb \
+  "$@"
+</code></pre>
+<p><code>x86_64-unknown-linux-ohos-clang.sh</code></p>
+<pre><code class="language-sh">#!/bin/sh
+exec /path/to/ohos-sdk/linux/native/llvm/bin/clang \
+  -target x86_64-linux-ohos \
+  --sysroot=/path/to/ohos-sdk/linux/native/sysroot \
+  -D__MUSL__ \
+  "$@"
+</code></pre>
+<p><code>x86_64-unknown-linux-ohos-clang++.sh</code></p>
+<pre><code class="language-sh">#!/bin/sh
+exec /path/to/ohos-sdk/linux/native/llvm/bin/clang++ \
+  -target x86_64-linux-ohos \
+  --sysroot=/path/to/ohos-sdk/linux/native/sysroot \
+  -D__MUSL__ \
+  "$@"
+</code></pre>
+<p>نسخه‌های آیندهٔ OpenHarmony SDK نیاز به این فرایند را برطرف خواهند کرد.</p>
+<h2 id="building-rust-programs"><a class="header" href="#building-rust-programs">ساخت برنامه‌های Rust</a></h2>
+<p>Rustup برای این هدف آرتیفکت‌های از پیش کامپایل‌شده ارائه می‌کند که می‌توانید با دستورهای زیر نصب کنید:</p>
+<pre><code class="language-sh">rustup target add aarch64-unknown-linux-ohos
+rustup target add armv7-unknown-linux-ohos
+rustup target add x86_64-unknown-linux-ohos
+</code></pre>
+<p>باید پیوندده‌ای (linker) را که قرار است استفاده شود در <code>~/.cargo/config.toml</code> پیکربندی کنید:</p>
+<pre><code class="language-toml">[target.aarch64-unknown-linux-ohos]
+ar = "/path/to/ohos-sdk/linux/native/llvm/bin/llvm-ar"
+linker = "/path/to/aarch64-unknown-linux-ohos-clang.sh"
+
+[target.armv7-unknown-linux-ohos]
+ar = "/path/to/ohos-sdk/linux/native/llvm/bin/llvm-ar"
+linker = "/path/to/armv7-unknown-linux-ohos-clang.sh"
+
+[target.x86_64-unknown-linux-ohos]
+ar = "/path/to/ohos-sdk/linux/native/llvm/bin/llvm-ar"
+linker = "/path/to/x86_64-unknown-linux-ohos-clang.sh"
+</code></pre>
+<h2 id="building-the-target-from-source"><a class="header" href="#building-the-target-from-source">ساخت هدف از روی کد منبع</a></h2>
+<p>به‌جای استفاده از <code>rustup</code>، می‌توانید یک زنجیرهٔ ابزار Rust را از روی کد منبع بسازید. یک فایل <code>bootstrap.toml</code> با محتوای زیر ایجاد کنید:</p>
+<pre><code class="language-toml">profile = "compiler"
+change-id = 115898
+
+[build]
+sanitizers = true
+profiler = true
+
+[target.aarch64-unknown-linux-ohos]
+cc = "/path/to/aarch64-unknown-linux-ohos-clang.sh"
+cxx = "/path/to/aarch64-unknown-linux-ohos-clang++.sh"
+ar = "/path/to/ohos-sdk/linux/native/llvm/bin/llvm-ar"
+ranlib = "/path/to/ohos-sdk/linux/native/llvm/bin/llvm-ranlib"
+linker  = "/path/to/aarch64-unknown-linux-ohos-clang.sh"
+
+[target.armv7-unknown-linux-ohos]
+cc = "/path/to/armv7-unknown-linux-ohos-clang.sh"
+cxx = "/path/to/armv7-unknown-linux-ohos-clang++.sh"
+ar = "/path/to/ohos-sdk/linux/native/llvm/bin/llvm-ar"
+ranlib = "/path/to/ohos-sdk/linux/native/llvm/bin/llvm-ranlib"
+linker  = "/path/to/armv7-unknown-linux-ohos-clang.sh"
+
+[target.x86_64-unknown-linux-ohos]
+cc = "/path/to/x86_64-unknown-linux-ohos-clang.sh"
+cxx = "/path/to/x86_64-unknown-linux-ohos-clang++.sh"
+ar = "/path/to/ohos-sdk/linux/native/llvm/bin/llvm-ar"
+ranlib = "/path/to/ohos-sdk/linux/native/llvm/bin/llvm-ranlib"
+linker  = "/path/to/x86_64-unknown-linux-ohos-clang.sh"
+</code></pre>
+<h2 id="testing"><a class="header" href="#testing">آزمون</a></h2>
+<p>اجرای مجموعه آزمون Rust ممکن است، اما در حال حاضر به‌دلیل نحوهٔ راه‌اندازی شبیه‌ساز OpenHarmony (بدون شبکه) دشوار است.</p>
+<h2 id="cross-compilation-toolchains-and-c-code"><a class="header" href="#cross-compilation-toolchains-and-c-code">زنجیرهٔ ابزار کامپایل متقابل و کد C</a></h2>
+<p>می‌توانید از اسکریپت‌های شل بالا برای کامپایل کد C برای این هدف استفاده کنید.</p><nav class="page-nav"><a href="android.html">→ *-android و *-androideabi</a><a href="hurd.html">*-hurd-gnu ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

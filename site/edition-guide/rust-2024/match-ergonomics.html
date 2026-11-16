@@ -1,0 +1,66 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>رزروهای ارگونومی match — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2024/match-ergonomics"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="match-ergonomics-reservations"><a class="header" href="#match-ergonomics-reservations">رزروهای match ergonomics</a></h1>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<ul>
+<li>نوشتن <code>mut</code>، <code>ref</code> یا <code>ref mut</code> روی یک اتصال (binding) درون یک الگو فقط زمانی مجاز است که الگوی منتهی به آن اتصال کاملاً صریح باشد (یعنی از match ergonomics استفاده نکند).
+<ul>
+<li>به بیان دیگر، وقتی حالت اتصال پیش‌فرض <code>move</code> نیست، نوشتن <code>mut</code>، <code>ref</code> یا <code>ref mut</code> روی یک اتصال خطا است.</li>
+</ul>
+</li>
+<li>الگوهای ارجاع (<code>&amp;</code> یا <code>&amp;mut</code>) فقط در پیشوند کاملاً صریح یک الگو مجاز هستند.
+<ul>
+<li>به بیان دیگر، الگوهای ارجاع فقط زمانی می‌توانند با ارجاع‌ها در مقدار مورد تطبیق (scrutinee) تطبیق پیدا کنند که حالت اتصال پیش‌فرض <code>move</code> باشد.</li>
+</ul>
+</li>
+</ul>
+<h2 id="details"><a class="header" href="#details">جزئیات</a></h2>
+<h3 id="background"><a class="header" href="#background">پیش‌زمینه</a></h3>
+<p>درون <code>match</code>، <code>let</code> و ساختارهای دیگر، یک <em>الگو</em> را با یک <em>مقدار مورد تطبیق</em> (scrutinee) تطبیق می‌دهیم. برای مثال:</p>
+<pre><code class="language-rust">let &amp;[&amp;mut [ref x]] = &amp;[&amp;mut [()]]; // x: &amp;()
+//  ~~~~~~~~~~~~~~~   ~~~~~~~~~~~~
+//      Pattern        Scrutinee</code></pre>
+<p>چنین الگویی کاملاً صریح نامیده می‌شود، چون هیچ ارجاعی را در مقدار مورد تطبیق حذف (یعنی «رد» یا «عبور») نمی‌کند. در مقابل، این الگوی هم‌ارز، کاملاً صریح نیست:</p>
+<pre><code class="language-rust">let [[x]] = &amp;[&amp;mut [()]]; // x: &amp;()</code></pre>
+<p>گفته می‌شود چنین الگوهایی از match ergonomics استفاده می‌کنند که در ابتدا در <a href="https://github.com/rust-lang/rfcs/pull/2005">RFC 2005</a> معرفی شد.</p>
+<p>در match ergonomics، هنگامی که الگو را گام‌به‌گام با مقدار مورد تطبیق تطبیق می‌دهیم، حالت اتصال پیش‌فرض را پیگیری می‌کنیم. این حالت می‌تواند یکی از <code>move</code>، <code>ref mut</code> یا <code>ref</code> باشد و از <code>move</code> شروع می‌شود. وقتی به یک اتصال می‌رسیم، مگر اینکه حالت اتصال صریحی داده شده باشد، حالت اتصال پیش‌فرض برای تعیین نوع آن اتصال به کار می‌رود.</p>
+<p>برای مثال، در اینجا یک حالت اتصال صریح می‌دهیم که باعث می‌شود <code>x</code> به‌صورت ارجاعی متصل شود:</p>
+<pre><code class="language-rust">let ref x = (); // &amp;()</code></pre>
+<p>در مقابل:</p>
+<pre><code class="language-rust">let [x] = &amp;[()]; // &amp;()</code></pre>
+<p>در اینجا، در الگو، از ارجاع مشترک بیرونی در مقدار مورد تطبیق عبور می‌کنیم. این کار باعث می‌شود حالت اتصال پیش‌فرض از <code>move</code> به <code>ref</code> تغییر کند. از آنجا که حالت اتصال صریحی مشخص نشده است، هنگام اتصال <code>x</code> از حالت اتصال <code>ref</code> استفاده می‌شود.</p>
+<h3 id="mut-restriction"><a class="header" href="#mut-restriction">محدودیت <code>mut</code></a></h3>
+<p>در Rust 2021 و ویرایش‌های قبلی‌تر، این ناهنجاری مجاز است:</p>
+<pre><code class="language-rust edition2021">let [x, mut y] = &amp;[(), ()]; // x: &amp;(), mut y: ()</code></pre>
+<p>در اینجا، چون در الگو از ارجاع مشترک عبور می‌کنیم، حالت اتصال پیش‌فرض به <code>ref</code> تغییر می‌کند. اما سپس، در این ویرایش‌ها، نوشتن <code>mut</code> روی اتصال، حالت اتصال پیش‌فرض را به <code>move</code> بازنشانی می‌کند.</p>
+<p>این می‌تواند شگفت‌آور باشد، چون بدیهی نیست که تغییرپذیری باید بر نوع اثر بگذارد.</p>
+<p>برای باز گذاشتن جا برای رفع این مسئله، در Rust 2024 نوشتن <code>mut</code> روی یک اتصال وقتی حالت اتصال پیش‌فرض <code>move</code> نیست خطا است. یعنی <code>mut</code> فقط زمانی می‌تواند روی یک اتصال نوشته شود که الگو (تا آن اتصال) کاملاً صریح باشد.</p>
+<p>در Rust 2024 می‌توانیم مثال بالا را این‌گونه بنویسیم:</p>
+<pre><code class="language-rust">let &amp;[ref x, mut y] = &amp;[(), ()]; // x: &amp;(), mut y: ()</code></pre>
+<h3 id="ref--ref-mut-restriction"><a class="header" href="#ref--ref-mut-restriction">محدودیت <code>ref</code> / <code>ref mut</code></a></h3>
+<p>در Rust 2021 و ویرایش‌های قبلی‌تر، این کار مجاز است:</p>
+<pre><code class="language-rust edition2021">let [ref x] = &amp;[()]; // x: &amp;()</code></pre>
+<p>در اینجا، حالت اتصال صریح <code>ref</code> زائد است، چون با عبور از ارجاع مشترک (یعنی ذکر نکردن آن در الگو)، حالت اتصال به <code>ref</code> تغییر می‌کند.</p>
+<p>برای باز گذاشتن جا برای امکانات دیگر زبان، در Rust 2024 حالت‌های اتصال صریح را در جاهایی که زائد هستند ممنوع می‌کنیم. می‌توانیم مثال بالا را به‌سادگی این‌گونه بازنویسی کنیم:</p>
+<pre><code class="language-rust">let [x] = &amp;[()]; // x: &amp;()</code></pre>
+<h3 id="reference-patterns-restriction"><a class="header" href="#reference-patterns-restriction">محدودیت الگوهای ارجاع</a></h3>
+<p>در Rust 2021 و ویرایش‌های قبلی‌تر، این ناهنجاری مجاز است:</p>
+<pre><code class="language-rust edition2021">let [&amp;x, y] = &amp;[&amp;(), &amp;()]; // x: (), y: &amp;&amp;()</code></pre>
+<p>در اینجا، <code>&amp;</code> در الگو هم با ارجاع روی <code>&amp;()</code> تطبیق پیدا می‌کند و هم حالت اتصال پیش‌فرض را به <code>move</code> بازنشانی می‌کند. این می‌تواند شگفت‌آور باشد، چون یک <code>&amp;</code> واحد در الگو با حذف هر دو لایهٔ ارجاع، تغییری بزرگ‌تر از انتظار در نوع ایجاد می‌کند.</p>
+<p>برای باز گذاشتن جا برای رفع این مسئله، در Rust 2024 نوشتن <code>&amp;</code> یا <code>&amp;mut</code> در الگو وقتی حالت اتصال پیش‌فرض <code>move</code> نیست خطا است. یعنی <code>&amp;</code> یا <code>&amp;mut</code> فقط زمانی می‌توانند نوشته شوند که الگو (تا آن نقطه) کاملاً صریح باشد.</p>
+<p>در Rust 2024 می‌توانیم مثال بالا را این‌گونه بنویسیم:</p>
+<pre><code class="language-rust">let &amp;[&amp;x, ref y] = &amp;[&amp;(), &amp;()];</code></pre>
+<h2 id="migration"><a class="header" href="#migration">مهاجرت</a></h2>
+<p>lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html#rust-2024-incompatible-pat"><code>rust_2024_incompatible_pat</code></a> الگوهایی را که در Rust 2024 مجاز نیستند علامت‌گذاری می‌کند. این lint بخشی از گروه lint با نام <code>rust-2024-compatibility</code> است که هنگام اجرای <code>cargo fix --edition</code> به‌طور خودکار اعمال می‌شود. این lint الگوهای تحت‌تأثیر را به‌طور خودکار به الگوهای کاملاً صریحی تبدیل می‌کند که در Rust 2024 و در همهٔ ویرایش‌های قبلی به‌درستی کار می‌کنند.</p>
+<p>برای مهاجرت کد خود به سازگاری با Rust 2024، این دستور را اجرا کنید:</p>
+<pre><code class="language-sh">cargo fix --edition
+</code></pre>
+<p>برای مثال، این کد را تبدیل می‌کند…</p>
+<pre><code class="language-rust edition2021">let [x, mut y] = &amp;[(), ()];
+let [ref x] = &amp;[()];
+let [&amp;x, y] = &amp;[&amp;(), &amp;()];</code></pre>
+<p>…به این:</p>
+<pre><code class="language-rust">let &amp;[ref x, mut y] = &amp;[(), ()];
+let &amp;[ref x] = &amp;[()];
+let &amp;[&amp;x, ref y] = &amp;[&amp;(), &amp;()];</code></pre>
+<p>همچنین می‌توانید lint را به‌صورت دستی فعال کنید تا الگوهایی را که باید مهاجرت داده شوند پیدا کنید:</p>
+<pre><code class="language-rust">// Add this to the root of your crate to do a manual migration.
+#![warn(rust_2024_incompatible_pat)]</code></pre><nav class="page-nav"><a href="temporary-tail-expr-scope.html">→ دامنهٔ موقت عبارت انتهایی</a><a href="unsafe-extern.html">بلوک‌های unsafe extern ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

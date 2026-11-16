@@ -1,0 +1,113 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>مبانی — کتاب Clippy</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="development/basics"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Clippy</a><small class="en-title" dir="ltr">The Clippy Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="basics-for-hacking-on-clippy"><a class="header" href="#basics-for-hacking-on-clippy">مبانی کار روی Clippy</a></h1>
+<p>این سند مبانی کار روی Clippy را توضیح می‌دهد. از جمله اینکه چگونه Clippy را بسازید و آزمایش کنید. برای توضیح عمیق‌تر دربارهٔ کدبیس، به <a href="adding_lints.html">افزودن lintها</a> یا <a href="common_tools_writing_lints.html">ابزارهای رایج</a> نگاه کنید.</p>
+<ul>
+<li><a href="#basics-for-hacking-on-clippy">مبانی کار روی Clippy</a>
+<ul>
+<li><a href="#get-the-code">دریافت کد</a></li>
+<li><a href="#building-and-testing">ساخت و آزمایش</a></li>
+<li><a href="#cargo-dev"><code>cargo dev</code></a></li>
+<li><a href="#lintcheck">lintcheck</a></li>
+<li><a href="#on-prs">PR</a></li>
+<li><a href="#common-abbreviations">اختصارهای رایج</a></li>
+<li><a href="#install-from-source">نصب از سورس</a></li>
+</ul>
+</li>
+</ul>
+<h2 id="get-the-code"><a class="header" href="#get-the-code">دریافت کد</a></h2>
+<p>نخست مطمئن شوید آخرین نسخهٔ Clippy را دریافت کرده‌اید. اگر این نخستین بار است که روی Clippy کار می‌کنید، یک fork از مخزن بسازید و سپس آن را با دستور زیر clone کنید:</p>
+<pre><code class="language-bash">git clone git@github.com:&lt;your-username&gt;/rust-clippy
+</code></pre>
+<p>اگر پیش‌تر Clippy را clone کرده‌اید، آن را به آخرین نسخه به‌روز کنید:</p>
+<pre><code class="language-bash"># If the upstream remote has not been added yet
+git remote add upstream https://github.com/rust-lang/rust-clippy
+# upstream has to be the remote of the rust-lang/rust-clippy repo
+git fetch upstream
+# make sure that you are on the master branch
+git checkout master
+# rebase your master branch on the upstream master
+git rebase upstream/master
+# push to the master branch of your fork
+git push
+</code></pre>
+<h2 id="building-and-testing"><a class="header" href="#building-and-testing">ساخت و آزمایش</a></h2>
+<p>می‌توانید Clippy را مانند هر پروژهٔ Rust دیگری بسازید و آزمایش کنید:</p>
+<pre><code class="language-bash">cargo build  # builds Clippy
+cargo test   # tests Clippy
+</code></pre>
+<p>از آنجا که مجموعه آزمون‌های Clippy بسیار بزرگ است، چند دستور وجود دارد که فقط زیرمجموعه‌ای از آزمون‌های Clippy را اجرا می‌کنند:</p>
+<pre><code class="language-bash"># only run UI tests
+cargo uitest
+# only run UI tests starting with `test_`
+TESTNAME="test_" cargo uitest
+# only run dogfood tests
+cargo dev dogfood
+</code></pre>
+<p>اگر خروجی یک <a href="https://rustc-dev-guide.rust-lang.org/tests/adding.html#ui-test-walkthrough">آزمون UI</a> با خروجی مورد انتظار تفاوت داشته باشد، می‌توانید فایل مرجع را با دستور زیر به‌روز کنید:</p>
+<pre><code class="language-bash">cargo bless
+</code></pre>
+<p>برای مثال، اگر یک غلط املایی را در پیام خطای یک lint اصلاح کنید یا یک فایل آزمون را برای افزودن یک مورد آزمون تغییر دهید، این کار لازم است.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><em>توجه:</em> این دستور ممکن است فایل‌های بیشتری از آنچه مدنظر داشتید به‌روز کند. در آن صورت فقط فایل‌هایی را commit کنید که می‌خواستید به‌روز شوند.</p>
+</blockquote>
+<h2 id="cargo-dev"><a class="header" href="#cargo-dev"><code>cargo dev</code></a></h2>
+<p>Clippy چند ابزار توسعه دارد تا کار روی Clippy راحت‌تر شود. این ابزارها از طریق دستور <code>cargo dev</code> در دسترس هستند. ابزارهای موجود در زیر فهرست شده‌اند. برای دریافت اطلاعات بیشتر دربارهٔ این دستورها، کافی است آن‌ها را با <code>--help</code> فراخوانی کنید.</p>
+<pre><code class="language-bash"># formats the whole Clippy codebase and all tests
+cargo dev fmt
+# register or update lint names/groups/...
+cargo dev update_lints
+# create a new lint and register it
+cargo dev new_lint
+# deprecate a lint and attempt to remove code relating to it
+cargo dev deprecate
+# automatically formatting all code before each commit
+cargo dev setup git-hook
+# (experimental) Setup Clippy to work with RustRover
+cargo dev setup intellij
+# runs the `dogfood` tests
+cargo dev dogfood
+</code></pre>
+<p>اطلاعات بیشتر دربارهٔ نحوهٔ استفاده و دلایل فرمان <a href="https://github.com/rust-lang/rust-clippy/blob/HEAD/CONTRIBUTING.md#rustrover">intellij</a>.</p>
+<h2 id="lintcheck"><a class="header" href="#lintcheck">lintcheck</a></h2>
+<p>دستور <code>cargo lintcheck</code> ‏Clippy را روی مجموعه‌ای ثابت از crateها می‌سازد و اجرا می‌کند و گزارشی از نتایج تولید می‌کند. می‌توانید با <code>git diff</code> گزارش به‌روزشده را با نسخهٔ قبلی‌اش مقایسه کنید و ببینید lint شما چه تأثیری روی مجموعه‌ای کوچک از crateها داشته است. اگر lint جدیدی اضافه می‌کنید، لطفاً هشدارهای حاصل را بررسی کنید و مطمئن شوید هشدار اشتباهی وجود ندارد و پیشنهادها معتبر هستند.</p>
+<p>برای جزئیات بیشتر به <a href="https://github.com/rust-lang/rust-clippy/blob/HEAD/lintcheck/README.md">README</a> این ابزار مراجعه کنید.</p>
+<h2 id="on-prs"><a class="header" href="#on-prs">دربارهٔ PRها</a></h2>
+<p>ما از سیاست عدم استفاده از merge-commit در rustc پیروی می‌کنیم. به <a href="https://rustc-dev-guide.rust-lang.org/contributing.html#opening-a-pr">https://rustc-dev-guide.rust-lang.org/contributing.html#opening-a-pr</a> مراجعه کنید.</p>
+<p>پیش از باز کردن pull request خود بدانید که ما یک سیاست دربارهٔ LLM داریم. <a href="llm_usage.html">سیاست LLM</a> را ببینید.</p>
+<h2 id="common-abbreviations"><a class="header" href="#common-abbreviations">اختصارهای رایج</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>اختصار</th><th>معنا</th></tr>
+</thead>
+<tbody>
+<tr><td>UB</td><td>رفتار تعریف‌نشده (Undefined Behavior)</td></tr>
+<tr><td>FP</td><td>هشدار اشتباه (False Positive)</td></tr>
+<tr><td>FN</td><td>شناسایی‌نشدن مورد واقعی (False Negative)</td></tr>
+<tr><td>ICE</td><td>خطای داخلی کامپایلر (Internal Compiler Error)</td></tr>
+<tr><td>AST</td><td>درخت نحو انتزاعی (Abstract Syntax Tree)</td></tr>
+<tr><td>MIR</td><td>بازنمایی میانی سطح متوسط (Mid-Level Intermediate Representation)</td></tr>
+<tr><td>HIR</td><td>بازنمایی میانی سطح بالا (High-Level Intermediate Representation)</td></tr>
+<tr><td>TCX</td><td>بافت نوع (Type context)</td></tr>
+</tbody>
+</table>
+</div>
+<p>این فهرستی مختصر از اختصارهایی است که ممکن است هنگام توسعهٔ Clippy پیش بیایند. فهرست عمومی و جامع‌تر را می‌توانید در <a href="https://rustc-dev-guide.rust-lang.org/appendix/glossary.html">واژه‌نامهٔ rustc-dev-guide</a> بیابید. اگر اختصار یا معنایی برایتان روشن نیست، همیشه در پرسیدن راحت باشید.</p>
+<h2 id="install-from-source"><a class="header" href="#install-from-source">نصب از روی سورس</a></h2>
+<p>اگر روی Clippy کار می‌کنید و می‌خواهید آن را از سورس نصب کنید، مراحل زیر را انجام دهید:</p>
+<p>از ریشهٔ پروژهٔ Clippy، دستور زیر را اجرا کنید تا فایل‌های باینری Clippy ساخته شوند و در پوشهٔ toolchain کپی شوند. این کار به‌طور پیش‌فرض یک toolchain جدید با نام <code>clippy</code> ایجاد می‌کند؛ برای گزینه‌های دیگر <code>cargo dev setup toolchain --help</code> را ببینید.</p>
+<pre><code class="language-terminal">cargo dev setup toolchain
+</code></pre>
+<p>اکنون می‌توانید در هر پروژه‌ای با استفاده از toolchain جدید، <code>cargo +clippy clippy</code> را اجرا کنید.</p>
+<pre><code class="language-terminal">cd my-project
+cargo +clippy clippy
+</code></pre>
+<p>…یا <code>clippy-driver</code></p>
+<pre><code class="language-terminal">clippy-driver +clippy &lt;filename&gt;
+</code></pre>
+<p>اگر دیگر به این toolchain نیازی ندارید، می‌توانید آن را با <code>rustup</code> حذف کنید:</p>
+<pre><code class="language-terminal">rustup toolchain uninstall clippy
+</code></pre>
+<blockquote>
+<p><strong>هرگز</strong> با <code>cargo install --path . --force</code> نصب نکنید، زیرا این کار <a href="https://rust-lang.github.io/rustup/concepts/proxies.html">proxyهای</a> rustup را بازنویسی می‌کند. یعنی <code>~/.cargo/bin/cargo-clippy</code> و <code>~/.cargo/bin/clippy-driver</code> باید hard link یا soft link به <code>~/.cargo/bin/rustup</code> باشند. می‌توانید با اجرای <code>rustup update</code> این موارد را ترمیم کنید.</p>
+</blockquote><nav class="page-nav"><a href="index.html">→ توسعه</a><a href="adding_lints.html">افزودن lint ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../clippy/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

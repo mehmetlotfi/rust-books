@@ -1,0 +1,136 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>queryها و passهای MIR: دریافت MIR — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="mir/passes"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="mir-queries-and-passes"><a class="header" href="#mir-queries-and-passes">کوئری‌ها و گذرهای MIR</a></h1>
+<p>اگر می‌خواهید MIR را بگیرید:</p>
+<ul>
+<li>برای یک تابع - می‌توانید از کوئری <code>optimized_mir</code> (که معمولاً codegen استفاده می‌کند) یا کوئری <code>mir_for_ctfe</code> (که معمولاً ارزیابی تابع در زمان کامپایل، یعنی <em>CTFE</em>، استفاده می‌کند) بهره ببرید؛</li>
+<li>برای یک promoted - می‌توانید از کوئری <code>promoted_mir</code> استفاده کنید.</li>
+</ul>
+<p>این‌ها MIR نهایی و بهینه‌شده را برمی‌گردانند.
+برای def-idهای خارجی، MIR را از فرادادهٔ crate دیگر می‌خوانیم.
+اما برای def-idهای محلی، کوئری MIR بهینه‌شده را با درخواست خط لوله‌ای از کوئری‌های بالادستی می‌سازد<sup class="footnote-reference" id="fr-query-1"><a href="#footnote-query">1</a></sup>.
+هر کوئری شامل رشته‌ای از گذرهاست.
+این بخش توضیح می‌دهد آن کوئری‌ها و گذرها چگونه کار می‌کنند و چگونه می‌توان آن‌ها را گسترش داد.</p>
+<p>برای تولید MIR بهینه‌شده برای یک def-id به نام <code>D</code>، <code>optimized_mir(D)</code>
+از چند مجموعه گذر عبور می‌کند که هر کدام با یک کوئری گروه‌بندی شده‌اند.
+هر مجموعه از گذرهایی تشکیل شده که linting، تحلیل، تبدیل یا بهینه‌سازی انجام می‌دهند.
+هر کوئری نقطهٔ میانی مفیدی را نشان می‌دهد که می‌توانیم برای بررسی نوع یا اهداف دیگر به گویش MIR دسترسی داشته باشیم:</p>
+<ul>
+<li><code>mir_built(D)</code> – MIR اولیه را درست پس از ساخته‌شدن می‌دهد؛</li>
+<li><code>mir_const(D)</code> – چند گذر تبدیل ساده را اعمال می‌کند تا MIR برای const qualification آماده شود؛</li>
+<li><code>mir_promoted(D)</code> - temporaryهای قابل‌ارتقا (promotable) را در بدنه‌های MIR جداگانه استخراج می‌کند، و MIR را برای borrow checking هم آماده می‌کند؛</li>
+<li><code>mir_drops_elaborated_and_const_checked(D)</code> - borrow checking انجام می‌دهد، گذرهای تبدیل عمده (مثل drop elaboration) را اجرا می‌کند و MIR را برای بهینه‌سازی آماده می‌کند؛</li>
+<li><code>optimized_mir(D)</code> – همهٔ بهینه‌سازی‌های فعال را اجرا می‌کند و به حالت نهایی می‌رسد.</li>
+</ul>
+<h2 id="implementing-and-registering-a-pass"><a class="header" href="#implementing-and-registering-a-pass">پیاده‌سازی و ثبت یک گذر</a></h2>
+<p><code>MirPass</code> تکه‌کدی است که MIR را پردازش می‌کند، و معمولاً در طول مسیر آن را تغییر می‌دهد. اما ممکن است کارهای دیگری مثل linting هم بکند (مثلاً <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/check_packed_ref/struct.CheckPackedRef.html"><code>CheckPackedRef</code></a>،
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/check_const_item_mutation/struct.CheckConstItemMutation.html"><code>CheckConstItemMutation</code></a>، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/function_item_references/struct.FunctionItemReferences.html"><code>FunctionItemReferences</code></a> که <code>MirLint</code> را پیاده‌سازی می‌کنند) یا
+بهینه‌سازی (مثلاً <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/simplify/enum.SimplifyCfg.html"><code>SimplifyCfg</code></a>، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/remove_unneeded_drops/struct.RemoveUnneededDrops.html"><code>RemoveUnneededDrops</code></a>). در حالی که بیشتر گذرهای MIR
+در crate با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/"><code>rustc_mir_transform</code></a> تعریف شده‌اند، خود trait با نام <code>MirPass</code>
+در crate با نام <code>rustc_middle</code> <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/pass_manager/trait.MirPass.html">یافت می‌شود</a> و اساساً از یک متد اصلی تشکیل شده،
+<code>run_pass</code>، که فقط <code>&amp;mut Body</code> (به‌همراه <code>tcx</code>) می‌گیرد.
+بنابراین MIR در جا تغییر می‌کند (که به کارآمد‌ماندن کمک می‌کند).</p>
+<p>مثال پایه‌ای از گذر MIR <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/remove_storage_markers/struct.RemoveStorageMarkers.html"><code>RemoveStorageMarkers</code></a> است که
+MIR را پیمایش می‌کند و همهٔ نشانگرهای storage را حذف می‌کند اگر هنگام codegen صادر نشوند.
+همان‌طور که از منبعش می‌بینید،
+گذر MIR با تعریف نوعی ساختگی (dummy)، یعنی struct بدون فیلد، تعریف می‌شود:</p>
+<pre><code class="language-rust">pub struct RemoveStorageMarkers;</code></pre>
+<p>که برایش trait با نام <code>MirPass</code> را پیاده‌سازی می‌کنیم.
+سپس می‌توانیم این گذر را در فهرست مناسب گذرهای کوئری‌هایی مثل
+<code>mir_built</code>، <code>optimized_mir</code> و غیره درج کنیم. (اگر بهینه‌سازی است،
+باید در فهرست <code>optimized_mir</code> برود.)</p>
+<p>مثال ساده دیگری از گذر MIR <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/cleanup_post_borrowck/struct.CleanupPostBorrowck.html"><code>CleanupPostBorrowck</code></a> است که
+MIR را پیمایش می‌کند و همهٔ دستورهای نامرتبط با تولید کد را حذف می‌کند.
+همان‌طور که از
+<a href="https://github.com/rust-lang/rust/blob/e2b52ff73edc8b0b7c74bc28760d618187731fe8/compiler/rustc_mir_transform/src/cleanup_post_borrowck.rs#L27">منبعش</a> می‌بینید، با تعریف نوعی ساختگی، یعنی struct بدون فیلد، تعریف می‌شود:</p>
+<pre><code class="language-rust">pub struct CleanupPostBorrowck;</code></pre>
+<p>که برایش trait با نام <code>MirPass</code> را پیاده‌سازی می‌کنیم:</p>
+<pre><code class="language-rust">impl&lt;'tcx&gt; MirPass&lt;'tcx&gt; for CleanupPostBorrowck {
+    fn run_pass(&amp;self, tcx: TyCtxt&lt;'tcx&gt;, body: &amp;mut Body&lt;'tcx&gt;) {
+        ...
+    }
+}</code></pre>
+<p>این گذر را درون کوئری <code>mir_drops_elaborated_and_const_checked</code> <a href="https://github.com/rust-lang/rust/blob/e2b52ff73edc8b0b7c74bc28760d618187731fe8/compiler/rustc_mir_transform/src/lib.rs#L413">ثبت می‌کنیم</a>.
+(اگر بهینه‌سازی است، باید در فهرست <code>optimized_mir</code> برود.)</p>
+<p>اگر گذر می‌نویسید، احتمال خوبی هست که بخواهید از <a href="./visitor.html">visitor مربوط به MIR</a> استفاده کنید.
+visitorهای MIR راه راحتی برای پیمایش همهٔ بخش‌های MIR هستند، چه برای جست‌وجوی چیزی چه برای ویرایش‌های کوچک.</p>
+<h2 id="stealing"><a class="header" href="#stealing">Stealing</a></h2>
+<p>کوئری‌های میانی <code>mir_const()</code> و <code>mir_promoted()</code> مقدار
+<code>&amp;'tcx Steal&lt;Body&lt;'tcx&gt;&gt;</code> را می‌دهند که با <code>tcx.alloc_steal_mir()</code> تخصیص یافته است.
+این نشان می‌دهد نتیجه ممکن است توسط کوئری بعدی <strong>دزدیده شود</strong> – بهینه‌سازی برای پرهیز از clone کردن MIR.
+تلاش برای استفاده از نتیجهٔ دزدیده‌شده باعث panic در کامپایلر می‌شود.
+بنابراین مهم است که به‌طور تصادفی از این کوئری‌های میانی بدون در نظر گرفتن وابستگی در خط لوله پردازش MIR نخوانید.</p>
+<p>به‌دلیل این سازوکار دزدیدن، باید مراقب بود
+پیش از دزدیده‌شدن MIR در مرحلهٔ مشخصی از خط لوله، هر کسی که ممکن است بخواهد از آن بخواند قبلاً این کار را کرده باشد.</p>
+<p>به‌طور مشخص، یعنی اگر کوئری <code>foo(D)</code> داشته باشید
+که می‌خواهد به نتیجهٔ <code>mir_promoted(D)</code> دسترسی یابد، باید <code>foo(D)</code>
+ابتدا کوئری <code>mir_const(D)</code> را فراخوانی کند.
+این باعث می‌شود اجرا شود، هرچند مستقیماً به نتیجه‌اش نیاز ندارید.</p>
+<blockquote>
+<p>این سازوکار کمی مشکوک است. بحثی دربارهٔ جایگزین‌های زیباتر در
+<a href="https://github.com/rust-lang/rust/issues/41710">rust-lang/rust#41710</a> هست.</p>
+</blockquote>
+<h3 id="overview"><a class="header" href="#overview">Overview</a></h3>
+<p>در ادامه نمای کلی وابستگی دزدیدن در خط لوله پردازش MIR آمده است<sup class="footnote-reference" id="fr-part-1"><a href="#footnote-part">2</a></sup>:</p>
+<pre><code class="language-mermaid">flowchart BT
+  mir_for_ctfe* --borrow--&gt; id40
+  id5 --steal--&gt; id40
+
+  mir_borrowck* --borrow--&gt; id3
+  id41 --steal part 1--&gt; id3
+  id40 --steal part 0--&gt; id3
+
+  mir_const_qualif* -- borrow --&gt; id2
+  id3 -- steal --&gt; id2
+
+  id2 -- steal --&gt; id1
+
+  id1([mir_built])
+  id2([mir_const])
+  id3([mir_promoted])
+  id40([mir_drops_elaborated_and_const_checked])
+  id41([promoted_mir])
+  id5([optimized_mir])
+
+  style id1 fill:#bbf
+  style id2 fill:#bbf
+  style id3 fill:#bbf
+  style id40 fill:#bbf
+  style id41 fill:#bbf
+  style id5 fill:#bbf
+</code></pre>
+<p>کوئری‌های به‌شکل ورزشگاه (مثلاً <code>mir_built</code>) با رنگ تیره، کوئری‌های اصلی خط لوله‌اند، در حالی که کوئری‌های مستطیلی (مثلاً <code>mir_const_qualif*</code><sup class="footnote-reference" id="fr-star-1"><a href="#footnote-star">3</a></sup>) با رنگ روشن
+کوئری‌های بعدی‌اند که باید نتایج را از <code>&amp;'tcx Steal&lt;Body&lt;'tcx&gt;&gt;</code> بخوانند.
+با سازوکار دزدیدن،
+کوئری‌های مستطیلی باید پیش از هر کوئری ورزشگاهی
+که ارتفاع برابر یا بیشتری در درخت وابستگی دارد انجام شوند.</p>
+<h3 id="example"><a class="header" href="#example">Example</a></h3>
+<p>به‌عنوان مثال، const qualification در MIR را در نظر بگیرید.
+می‌خواهد نتیجهٔ تولیدشده توسط کوئری <code>mir_const</code> را بخواند.
+اما آن نتیجه در زمانی در خط لوله توسط کوئری <code>mir_promoted</code> <strong>دزدیده</strong> می‌شود.
+پیش از اینکه <code>mir_promoted</code> کوئری شود، فراخوانی کوئری <code>mir_const_qualif</code>
+موفق می‌شود چون <code>mir_const</code> نتیجهٔ <code>Steal</code> را تولید می‌کند (اگر اولین بار کوئری شود) یا cache می‌کند (اگر چند بار کوئری شود)
+و نتیجه هنوز دزدیده <strong>نشده</strong> است.
+پس از کوئری‌شدن <code>mir_promoted</code>،
+نتیجه دزدیده می‌شود و فراخوانی کوئری <code>mir_const_qualif</code> برای خواندن نتیجه باعث panic می‌شود.</p>
+<p>بنابراین با این سازوکار دزدیدن، <code>mir_promoted</code> باید تضمین کند هر کوئری <code>mir_const_qualif*</code>
+پیش از اینکه واقعاً دزدی کند فراخوانی شده باشد، تا خواندن‌ها از قبل رخ داده باشند
+(یادتان باشد <a href="../query.html">کوئری‌ها memoize می‌شوند</a>، پس اجرای دوبارهٔ کوئری
+بار دوم فقط از cache بارگذاری می‌کند).</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-query">
+<p>برای مفهوم کلی کوئری، فصل <a href="../query.html">کوئری‌ها</a> را ببینید. <a href="#fr-query-1">↩</a></p>
+</li>
+<li id="footnote-part">
+<p>کوئری <code>mir_promoted</code> یک tuple می‌دهد:
+<code>(&amp;'tcx Steal&lt;Body&lt;'tcx&gt;&gt;, &amp;'tcx Steal&lt;IndexVec&lt;Promoted, Body&lt;'tcx&gt;&gt;&gt;)</code>، <code>promoted_mir</code> بخش ۱
+(<code>&amp;'tcx Steal&lt;IndexVec&lt;Promoted, Body&lt;'tcx&gt;&gt;&gt;</code>) را می‌دزدد و <code>mir_drops_elaborated_and_const_checked</code>
+بخش ۰ (<code>&amp;'tcx Steal&lt;Body&lt;'tcx&gt;&gt;</code>) را می‌دزدد.
+و دزدیدن آن‌ها به یکدیگر ربطی ندارد،
+یعنی می‌توان جداگانه انجام داد. <a href="#fr-part-1">↩</a></p>
+</li>
+<li id="footnote-star">
+<p>توجه کنید پسوند <code>*</code> در کوئری‌ها نمایندهٔ مجموعه‌ای از کوئری‌ها با پیشوند یکسان است.
+برای مثال، <code>mir_borrowck*</code> نمایندهٔ <code>mir_borrowck</code>، <code>mir_borrowck_const_arg</code> و
+<code>mir_borrowck_opt_const_arg</code> است. <a href="#fr-star-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="visitor.html">→ بازدیدکننده و پیمایش MIR</a><a href="../asm.html">اسمبلی درون‌خطی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

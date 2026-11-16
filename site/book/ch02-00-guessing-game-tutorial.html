@@ -1,0 +1,765 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>برنامه‌نویسی یک بازی حدس عدد — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch02-00-guessing-game-tutorial"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="programming-a-guessing-game"><a class="header" href="#programming-a-guessing-game">برنامه‌نویسی یک بازی حدس عدد</a></h1>
+<p>بیایید با کار روی یک پروژه عملی، همراه یکدیگر وارد دنیای Rust شویم! این فصل با نشان دادن کاربرد چند مفهوم رایج Rust در یک برنامه واقعی، شما را با آن‌ها آشنا می‌کند. درباره <code>let</code>، <code>match</code>، متدها، تابع‌های وابسته (associated functions)، crateهای خارجی و موارد دیگر خواهید آموخت! در فصل‌های بعدی این ایده‌ها را با جزئیات بیشتری بررسی می‌کنیم. در این فصل فقط مبانی را تمرین می‌کنید.</p>
+<p>ما یک مسئله کلاسیک برنامه‌نویسی برای مبتدیان را پیاده‌سازی می‌کنیم: بازی حدس عدد. روش کار چنین است: برنامه یک عدد صحیح تصادفی بین ۱ تا ۱۰۰ تولید می‌کند. سپس از بازیکن می‌خواهد حدسی وارد کند. پس از وارد شدن حدس، برنامه نشان می‌دهد که حدس بیش از حد کوچک است یا بیش از حد بزرگ. اگر حدس درست باشد، بازی پیام تبریک چاپ می‌کند و خارج می‌شود.</p>
+<h2 id="setting-up-a-new-project"><a class="header" href="#setting-up-a-new-project">راه‌اندازی یک پروژه جدید</a></h2>
+<p>برای راه‌اندازی یک پروژه جدید، به پوشه <em>projects</em> که در فصل ۱ ساختید بروید و با استفاده از Cargo یک پروژه جدید به این صورت بسازید:</p>
+<pre><code class="language-console">$ cargo new guessing_game
+$ cd guessing_game
+</code></pre>
+<p>دستور اول، <code>cargo new</code>، نام پروژه (<code>guessing_game</code>) را به عنوان اولین آرگومان می‌گیرد. دستور دوم به پوشه پروژه جدید می‌رود.</p>
+<p>فایل <em>Cargo.toml</em> تولیدشده را ببینید:</p>
+<!-- manual-regeneration
+cd listings/ch02-guessing-game-tutorial
+rm -rf no-listing-01-cargo-new
+cargo new no-listing-01-cargo-new --name guessing_game
+cd no-listing-01-cargo-new
+cargo run > output.txt 2>&1
+cd ../../..
+-->
+<p><span class="filename">نام فایل: Cargo.toml</span></p>
+<pre><code class="language-toml">[package]
+name = "guessing_game"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+</code></pre>
+<p>همان‌طور که در فصل ۱ دیدید، <code>cargo new</code> یک برنامه «Hello, world!» برای شما تولید می‌کند. فایل <em>src/main.rs</em> را بررسی کنید:</p>
+<p><span class="filename">نام فایل: src/main.rs</span></p>
+<pre><code class="language-rust">fn main() {
+    println!("Hello, world!");
+}</code></pre>
+<p>حالا بیایید این برنامه «Hello, world!» را با دستور <code>cargo run</code> در یک مرحله کامپایل و اجرا کنیم:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling guessing_game v0.1.0 (file:///projects/guessing_game)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running `target/debug/guessing_game`
+Hello, world!
+</code></pre>
+<p>دستور <code>run</code> زمانی به کار می‌آید که لازم است روی یک پروژه سریع تکرار کنید، همان‌طور که در این بازی انجام می‌دهیم، یعنی هر تکرار را پیش از رفتن به تکرار بعدی سریع آزمایش کنید.</p>
+<p>فایل <em>src/main.rs</em> را دوباره باز کنید. تمام کد را در این فایل خواهید نوشت.</p>
+<h2 id="processing-a-guess"><a class="header" href="#processing-a-guess">پردازش یک حدس</a></h2>
+<p>بخش اول برنامه بازی حدس عدد از کاربر ورودی می‌گیرد، آن ورودی را پردازش می‌کند و بررسی می‌کند که ورودی به شکل مورد انتظار باشد. برای شروع، به بازیکن اجازه می‌دهیم یک حدس وارد کند. کد لیستینگ ۲-۱ را در <em>src/main.rs</em> وارد کنید.</p>
+<figure class="listing" id="listing-2-1">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore">use std::io;
+
+fn main() {
+    println!("Guess the number!");
+
+    println!("Please input your guess.");
+
+    let mut guess = String::new();
+
+    io::stdin()
+        .read_line(&amp;mut guess)
+        .expect("Failed to read line");
+
+    println!("You guessed: {guess}");
+}</code></pre>
+<figcaption><a href="#listing-2-1">لیست ۲-۱</a>: کدی که یک حدس از کاربر می‌گیرد و آن را چاپ می‌کند</figcaption>
+</figure>
+<p>این کد اطلاعات زیادی دارد، پس آن را خط به خط بررسی می‌کنیم. برای دریافت ورودی کاربر و سپس چاپ نتیجه به عنوان خروجی، باید کتابخانه ورودی/خروجی <code>io</code> را به دامنه بیاوریم. کتابخانه <code>io</code> از کتابخانه استاندارد می‌آید که با نام <code>std</code> شناخته می‌شود:</p>
+<pre><code class="language-rust ignore">use std::io;
+<span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    println!("Please input your guess.");
+</span><span class="boring">
+</span><span class="boring">    let mut guess = String::new();
+</span><span class="boring">
+</span><span class="boring">    io::stdin()
+</span><span class="boring">        .read_line(&amp;mut guess)
+</span><span class="boring">        .expect("Failed to read line");
+</span><span class="boring">
+</span><span class="boring">    println!("You guessed: {guess}");
+</span><span class="boring">}</span></code></pre>
+<p>Rust به‌طور پیش‌فرض مجموعه‌ای از آیتم‌ها را که در کتابخانه استاندارد تعریف شده‌اند به دامنه هر برنامه می‌آورد. این مجموعه <em>prelude</em> نامیده می‌شود و می‌توانید همه محتویات آن را <a href="https://doc.rust-lang.org/std/prelude/index.html">در مستندات کتابخانه استاندارد</a> ببینید.</p>
+<p>اگر نوعی که می‌خواهید استفاده کنید در prelude نباشد، باید آن نوع را با یک دستور <code>use</code> به‌صراحت به دامنه بیاورید. استفاده از کتابخانه <code>std::io</code> امکانات مفید زیادی در اختیار شما می‌گذارد، از جمله امکان پذیرفتن ورودی کاربر.</p>
+<p>همان‌طور که در فصل ۱ دیدید، تابع <code>main</code> نقطه ورود به برنامه است:</p>
+<pre><code class="language-rust ignore"><span class="boring">use std::io;
+</span><span class="boring">
+</span>fn main() {
+<span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    println!("Please input your guess.");
+</span><span class="boring">
+</span><span class="boring">    let mut guess = String::new();
+</span><span class="boring">
+</span><span class="boring">    io::stdin()
+</span><span class="boring">        .read_line(&amp;mut guess)
+</span><span class="boring">        .expect("Failed to read line");
+</span><span class="boring">
+</span><span class="boring">    println!("You guessed: {guess}");
+</span><span class="boring">}</span></code></pre>
+<p>سینتکس <code>fn</code> یک تابع جدید اعلام می‌کند؛ پرانتزها، <code>()</code>، نشان می‌دهند که پارامتری وجود ندارد؛ و آکولاد باز، <code>{</code>، بدنه تابع را آغاز می‌کند.</p>
+<p>همچنین همان‌طور که در فصل ۱ آموختید، <code>println!</code> ماکرویی است که یک رشته را روی صفحه چاپ می‌کند:</p>
+<pre><code class="language-rust ignore"><span class="boring">use std::io;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span>    println!("Guess the number!");
+
+    println!("Please input your guess.");
+<span class="boring">
+</span><span class="boring">    let mut guess = String::new();
+</span><span class="boring">
+</span><span class="boring">    io::stdin()
+</span><span class="boring">        .read_line(&amp;mut guess)
+</span><span class="boring">        .expect("Failed to read line");
+</span><span class="boring">
+</span><span class="boring">    println!("You guessed: {guess}");
+</span><span class="boring">}</span></code></pre>
+<p>این کد یک پیام راهنما چاپ می‌کند که بازی را معرفی می‌کند و از کاربر ورودی می‌خواهد.</p>
+<h3 id="storing-values-with-variables"><a class="header" href="#storing-values-with-variables">ذخیره مقادیر با متغیرها</a></h3>
+<p>سپس یک <em>متغیر</em> برای ذخیره ورودی کاربر می‌سازیم، به این صورت:</p>
+<pre><code class="language-rust ignore"><span class="boring">use std::io;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    println!("Please input your guess.");
+</span><span class="boring">
+</span>    let mut guess = String::new();
+<span class="boring">
+</span><span class="boring">    io::stdin()
+</span><span class="boring">        .read_line(&amp;mut guess)
+</span><span class="boring">        .expect("Failed to read line");
+</span><span class="boring">
+</span><span class="boring">    println!("You guessed: {guess}");
+</span><span class="boring">}</span></code></pre>
+<p>حالا برنامه دارد جالب می‌شود! در همین یک خط کوچک اتفاقات زیادی در جریان است. از دستور <code>let</code> برای ساخت متغیر استفاده می‌کنیم. این هم مثال دیگری:</p>
+<pre><code class="language-rust ignore">let apples = 5;</code></pre>
+<p>این خط یک متغیر جدید با نام <code>apples</code> می‌سازد و آن را به مقدار <code>5</code> متصل می‌کند. در Rust متغیرها به‌طور پیش‌فرض تغییرناپذیر (immutable) هستند، یعنی وقتی به متغیر مقداری بدهیم، آن مقدار تغییر نخواهد کرد. این مفهوم را در بخش <a href="ch03-01-variables-and-mutability.html#variables-and-mutability">«متغیرها و تغییرپذیری»</a><!-- ignore --> در فصل ۳ به تفصیل بحث می‌کنیم. برای تغییرپذیر کردن یک متغیر، پیش از نام متغیر <code>mut</code> را اضافه می‌کنیم:</p>
+<pre><code class="language-rust ignore">let apples = 5; // immutable
+let mut bananas = 5; // mutable</code></pre>
+<blockquote>
+<p>نکته: سینتکس <code>//</code> یک توضیح (comment) را آغاز می‌کند که تا انتهای خط ادامه دارد. Rust هر چیزی را که در توضیحات باشد نادیده می‌گیرد. درباره توضیحات در <a href="ch03-04-comments.html">فصل ۳</a><!-- ignore --> با جزئیات بیشتری بحث خواهیم کرد.</p>
+</blockquote>
+<p>با بازگشت به برنامه بازی حدس عدد، اکنون می‌دانید که <code>let mut guess</code> یک متغیر تغییرپذیر به نام <code>guess</code> معرفی می‌کند. علامت مساوی (<code>=</code>) به Rust می‌گوید که می‌خواهیم اکنون چیزی را به متغیر متصل کنیم. در سمت راست علامت مساوی، مقداری قرار دارد که <code>guess</code> به آن متصل می‌شود؛ این مقدار نتیجه فراخوانی <code>String::new</code> است، تابعی که یک نمونه جدید از <code>String</code> برمی‌گرداند. <a href="https://doc.rust-lang.org/std/string/struct.String.html"><code>String</code></a><!-- ignore --> نوع رشته‌ای است که کتابخانه استاندارد فراهم می‌کند و یک متن قابل رشد با کدگذاری UTF-8 است.</p>
+<p>سینتکس <code>::</code> در خط <code>::new</code> نشان می‌دهد که <code>new</code> یک تابع وابسته (associated function) از نوع <code>String</code> است. <em>تابع وابسته</em> تابعی است که روی یک نوع پیاده‌سازی شده است، که در این مورد <code>String</code> است. این تابع <code>new</code> یک رشته جدید و خالی می‌سازد. تابع <code>new</code> را در بسیاری از نوع‌ها خواهید یافت، زیرا نام رایجی برای تابعی است که یک مقدار جدید از نوعی خاص می‌سازد.</p>
+<p>در مجموع، خط <code>let mut guess = String::new();</code> یک متغیر تغییرپذیر ساخته است که اکنون به یک نمونه جدید و خالی از <code>String</code> متصل است. اوه، چه کار طولانی‌ای!</p>
+<h3 id="receiving-user-input"><a class="header" href="#receiving-user-input">دریافت ورودی کاربر</a></h3>
+<p>به یاد بیاورید که قابلیت ورودی/خروجی را از کتابخانه استاندارد با <code>use std::io;</code> در خط اول برنامه وارد کردیم. اکنون تابع <code>stdin</code> از ماژول <code>io</code> را فراخوانی می‌کنیم که به ما اجازه می‌دهد ورودی کاربر را مدیریت کنیم:</p>
+<pre><code class="language-rust ignore"><span class="boring">use std::io;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    println!("Please input your guess.");
+</span><span class="boring">
+</span><span class="boring">    let mut guess = String::new();
+</span><span class="boring">
+</span>    io::stdin()
+        .read_line(&amp;mut guess)
+<span class="boring">        .expect("Failed to read line");
+</span><span class="boring">
+</span><span class="boring">    println!("You guessed: {guess}");
+</span><span class="boring">}</span></code></pre>
+<p>اگر ماژول <code>io</code> را با <code>use std::io;</code> در ابتدای برنامه وارد نکرده بودیم، باز هم می‌توانستیم با نوشتن این فراخوانی به شکل <code>std::io::stdin</code> از تابع استفاده کنیم. تابع <code>stdin</code> یک نمونه از <a href="https://doc.rust-lang.org/std/io/struct.Stdin.html"><code>std::io::Stdin</code></a><!-- ignore --> برمی‌گرداند که نوعی است که یک دستگیره (handle) به ورودی استاندارد ترمینال شما را نمایش می‌دهد.</p>
+<p>سپس، خط <code>.read_line(&amp;mut guess)</code> متد <a href="https://doc.rust-lang.org/std/io/struct.Stdin.html#method.read_line"><code>read_line</code></a><!-- ignore --> را روی دستگیره ورودی استاندارد فراخوانی می‌کند تا از کاربر ورودی بگیرد. همچنین <code>&amp;mut guess</code> را به عنوان آرگومان به <code>read_line</code> می‌دهیم تا به آن بگوییم ورودی کاربر را در کدام رشته ذخیره کند. کار کامل <code>read_line</code> این است که هر چه کاربر در ورودی استاندارد تایپ می‌کند را بگیرد و به یک رشته اضافه کند (بدون بازنویسی محتوای آن)، بنابراین آن رشته را به عنوان آرگومان می‌دهیم. آرگومان رشته‌ای باید تغییرپذیر باشد تا متد بتواند محتوای رشته را تغییر دهد.</p>
+<p>علامت <code>&amp;</code> نشان می‌دهد که این آرگومان یک <em>ارجاع</em> است، که راهی به شما می‌دهد تا چند بخش از کدتان بدون نیاز به کپی کردن چندباره آن داده در حافظه، به یک تکه داده دسترسی داشته باشند. ارجاع‌ها ویژگی پیچیده‌ای هستند و یکی از مزیت‌های اصلی Rust این است که استفاده از ارجاع‌ها چقدر ایمن و آسان است. برای تکمیل این برنامه لازم نیست جزئیات زیادی از آن‌ها بدانید. فعلاً فقط باید بدانید که ارجاع‌ها نیز مانند متغیرها به‌طور پیش‌فرض تغییرناپذیر هستند. از این رو برای تغییرپذیر کردن آن باید <code>&amp;mut guess</code> بنویسید، نه <code>&amp;guess</code>. (فصل ۴ ارجاع‌ها را کامل‌تر توضیح می‌دهد.)</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="handling-potential-failure-with-the-result-type"></a></p>
+<h3 id="handling-potential-failure-with-result"><a class="header" href="#handling-potential-failure-with-result">مدیریت شکست احتمالی با <code>Result</code></a></h3>
+<p>هنوز روی همین خط کد کار می‌کنیم. اکنون درباره سومین خط متن بحث می‌کنیم، اما توجه کنید که این هنوز بخشی از یک خط منطقی کد است. بخش بعدی این متد است:</p>
+<pre><code class="language-rust ignore"><span class="boring">use std::io;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    println!("Please input your guess.");
+</span><span class="boring">
+</span><span class="boring">    let mut guess = String::new();
+</span><span class="boring">
+</span><span class="boring">    io::stdin()
+</span><span class="boring">        .read_line(&amp;mut guess)
+</span>        .expect("Failed to read line");
+<span class="boring">
+</span><span class="boring">    println!("You guessed: {guess}");
+</span><span class="boring">}</span></code></pre>
+<p>می‌توانستیم این کد را به این صورت بنویسیم:</p>
+<pre><code class="language-rust ignore">io::stdin().read_line(&amp;mut guess).expect("Failed to read line");</code></pre>
+<p>با این حال، یک خط طولانی خواندنش دشوار است، پس بهتر است آن را تقسیم کنیم. هنگام فراخوانی متد با سینتکس <code>.method_name()</code>، اغلب عاقلانه است که یک خط جدید و فاصله‌های خالی دیگر وارد کنیم تا خطوط طولانی شکسته شوند. حالا بیایید بحث کنیم که این خط چه کاری انجام می‌دهد.</p>
+<p>همان‌طور که پیش‌تر گفته شد، <code>read_line</code> هر چه کاربر وارد می‌کند را در رشته‌ای که به آن می‌دهیم قرار می‌دهد، اما یک مقدار <code>Result</code> هم برمی‌گرداند. <a href="https://doc.rust-lang.org/std/result/enum.Result.html"><code>Result</code></a><!-- ignore --> یک <a href="ch06-00-enums.html"><em>شمارش</em> (enumeration)</a><!-- ignore --> است که اغلب <em>enum</em> نامیده می‌شود و نوعی است که می‌تواند در یکی از چند حالت ممکن باشد. هر حالت ممکن را یک <em>واریانت</em> (variant) می‌نامیم.</p>
+<p><a href="ch06-00-enums.html">فصل ۶</a><!-- ignore --> شمارش‌ها را با جزئیات بیشتری پوشش می‌دهد. هدف این نوع‌های <code>Result</code> رمزگذاری اطلاعات مدیریت خطا است.</p>
+<p>واریانت‌های <code>Result</code> عبارت‌اند از <code>Ok</code> و <code>Err</code>. واریانت <code>Ok</code> نشان می‌دهد که عملیات موفق بوده است و حاوی مقدار تولیدشده با موفقیت است. واریانت <code>Err</code> یعنی عملیات شکست خورده است و حاوی اطلاعاتی درباره چگونگی یا چرایی شکست است.</p>
+<p>مقادیر نوع <code>Result</code>، مانند مقادیر هر نوع دیگر، متدهایی دارند که روی آن‌ها تعریف شده است. یک نمونه از <code>Result</code> یک <a href="https://doc.rust-lang.org/std/result/enum.Result.html#method.expect">متد <code>expect</code></a><!-- ignore --> دارد که می‌توانید آن را فراخوانی کنید. اگر این نمونه <code>Result</code> یک مقدار <code>Err</code> باشد، <code>expect</code> باعث می‌شود برنامه از کار بیفتد و پیامی را که به عنوان آرگومان به <code>expect</code> داده‌اید نمایش دهد. اگر متد <code>read_line</code> یک <code>Err</code> برگرداند، احتمالاً نتیجه خطایی است که از سیستم‌عامل زیربنایی می‌آید. اگر این نمونه <code>Result</code> یک مقدار <code>Ok</code> باشد، <code>expect</code> مقدار بازگشتی‌ای را که <code>Ok</code> نگه داشته است می‌گیرد و فقط همان مقدار را به شما برمی‌گرداند تا بتوانید از آن استفاده کنید. در این مورد، آن مقدار تعداد بایت‌های ورودی کاربر است.</p>
+<p>اگر <code>expect</code> را فراخوانی نکنید، برنامه کامپایل می‌شود، اما یک هشدار دریافت خواهید کرد:</p>
+<pre><code class="language-console">$ cargo build
+   Compiling guessing_game v0.1.0 (file:///projects/guessing_game)
+warning: unused `Result` that must be used
+  --&gt; src/main.rs:10:5
+   |
+10 |     io::stdin().read_line(&amp;mut guess);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: this `Result` may be an `Err` variant, which should be handled
+   = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+   |
+10 |     let _ = io::stdin().read_line(&amp;mut guess);
+   |     +++++++
+
+warning: `guessing_game` (bin "guessing_game") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.59s
+</code></pre>
+<p>Rust هشدار می‌دهد که از مقدار <code>Result</code> که <code>read_line</code> برگردانده است استفاده نکرده‌اید، که نشان می‌دهد برنامه یک خطای احتمالی را مدیریت نکرده است.</p>
+<p>راه درست خاموش کردن هشدار این است که واقعاً کد مدیریت خطا بنویسید، اما در مورد ما فقط می‌خواهیم هنگام بروز مشکل این برنامه از کار بیفتد، پس می‌توانیم از <code>expect</code> استفاده کنیم. درباره بازیابی از خطاها در <a href="ch09-02-recoverable-errors-with-result.html">فصل ۹</a><!-- ignore --> خواهید آموخت.</p>
+<h3 id="printing-values-with-println-placeholders"><a class="header" href="#printing-values-with-println-placeholders">چاپ مقادیر با جانگهدارهای <code>println!</code></a></h3>
+<p>جدا از آکولاد بسته، تنها یک خط دیگر در کدی که تا اینجا نوشته‌ایم باقی مانده است که باید درباره‌اش بحث کنیم:</p>
+<pre><code class="language-rust ignore"><span class="boring">use std::io;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    println!("Please input your guess.");
+</span><span class="boring">
+</span><span class="boring">    let mut guess = String::new();
+</span><span class="boring">
+</span><span class="boring">    io::stdin()
+</span><span class="boring">        .read_line(&amp;mut guess)
+</span><span class="boring">        .expect("Failed to read line");
+</span><span class="boring">
+</span>    println!("You guessed: {guess}");
+<span class="boring">}</span></code></pre>
+<p>این خط رشته‌ای را که اکنون حاوی ورودی کاربر است چاپ می‌کند. مجموعه آکولادهای <code>{}</code> یک جانگهدار (placeholder) است: <code>{}</code> را مانند انبرک‌های کوچک خرچنگ تصور کنید که یک مقدار را در جای خود نگه می‌دارند. هنگام چاپ مقدار یک متغیر، نام متغیر می‌تواند درون آکولادها قرار بگیرد. هنگام چاپ نتیجه ارزیابی یک عبارت، آکولادهای خالی را در رشته قالب قرار دهید، سپس پس از رشته قالب فهرستی از عبارت‌ها را که با ویرگول جدا شده‌اند بیاورید تا به همان ترتیب در هر جانگهدار آکولاد خالی چاپ شوند. چاپ یک متغیر و نتیجه یک عبارت در یک فراخوانی <code>println!</code> به این شکل خواهد بود:</p>
+<pre><code class="language-rust">let x = 5;
+let y = 10;
+
+println!("x = {x} and y + 2 = {}", y + 2);</code></pre>
+<p>این کد <code>x = 5 and y + 2 = 12</code> را چاپ می‌کند.</p>
+<h3 id="testing-the-first-part"><a class="header" href="#testing-the-first-part">آزمایش بخش اول</a></h3>
+<p>بیایید بخش اول بازی حدس عدد را آزمایش کنیم. آن را با <code>cargo run</code> اجرا کنید:</p>
+<!-- manual-regeneration
+cd listings/ch02-guessing-game-tutorial/listing-02-01/
+cargo clean
+cargo run
+input 6 -->
+<pre><code class="language-console">$ cargo run
+   Compiling guessing_game v0.1.0 (file:///projects/guessing_game)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.44s
+     Running `target/debug/guessing_game`
+Guess the number!
+Please input your guess.
+6
+You guessed: 6
+</code></pre>
+<p>در این مرحله بخش اول بازی تمام شده است: از صفحه‌کلید ورودی می‌گیریم و سپس آن را چاپ می‌کنیم.</p>
+<h2 id="generating-a-secret-number"><a class="header" href="#generating-a-secret-number">تولید یک عدد مخفی</a></h2>
+<p>سپس باید یک عدد مخفی تولید کنیم که کاربر سعی کند آن را حدس بزند. عدد مخفی باید هر بار متفاوت باشد تا بازی بیش از یک بار هم سرگرم‌کننده باشد. از یک عدد تصادفی بین ۱ و ۱۰۰ استفاده می‌کنیم تا بازی خیلی دشوار نباشد. Rust هنوز قابلیت تولید عدد تصادفی را در کتابخانه استاندارد خود ندارد. با این حال، تیم Rust یک <a href="https://crates.io/crates/rand">crate با نام <code>rand</code></a> با این قابلیت ارائه می‌دهد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="using-a-crate-to-get-more-functionality"></a></p>
+<h3 id="increasing-functionality-with-a-crate"><a class="header" href="#increasing-functionality-with-a-crate">افزایش قابلیت‌ها با یک crate</a></h3>
+<p>به یاد داشته باشید که crate مجموعه‌ای از فایل‌های کد منبع Rust است. پروژه‌ای که تا اینجا ساخته‌ایم یک crate باینری است، یعنی یک فایل اجرایی. crate با نام <code>rand</code> یک crate کتابخانه‌ای است که حاوی کدی است که قرار است در برنامه‌های دیگر استفاده شود و به‌تنهایی قابل اجرا نیست.</p>
+<p>هماهنگی Cargo در مدیریت crateهای خارجی جایی است که Cargo واقعاً می‌درخشد. پیش از اینکه بتوانیم کدی بنویسیم که از <code>rand</code> استفاده کند، باید فایل <em>Cargo.toml</em> را تغییر دهیم تا crate با نام <code>rand</code> را به عنوان وابستگی شامل کند. اکنون آن فایل را باز کنید و خط زیر را به انتهای آن، زیر سرفصل بخش <code>[dependencies]</code> که Cargo برای شما ساخته است، اضافه کنید. حتماً <code>rand</code> را دقیقاً همان‌طور که اینجا آمده است و با همین شماره نسخه مشخص کنید، وگرنه ممکن است مثال‌های کد این آموزش کار نکنند:</p>
+<!-- When updating the version of `rand` used, also update the version of
+`rand` used in these files so they all match:
+
+* ch01-01-installation.md
+* ch07-04-bringing-paths-into-scope-with-the-use-keyword.md
+* ch14-03-cargo-workspaces.md
+-->
+<p><span class="filename">نام فایل: Cargo.toml</span></p>
+<pre><code class="language-toml">[dependencies]
+rand = "0.10.1"
+</code></pre>
+<p>در فایل <em>Cargo.toml</em>، هر چیزی که پس از یک سرفصل می‌آید بخشی از آن قسمت است که تا شروع قسمت دیگر ادامه دارد. در <code>[dependencies]</code> به Cargo می‌گویید پروژه شما به کدام crateهای خارجی وابسته است و به کدام نسخه‌های آن crateها نیاز دارید. در این مورد، crate با نام <code>rand</code> را با مشخصه نسخه معنایی <code>0.10.1</code> تعیین می‌کنیم. Cargo <a href="http://semver.org">نسخه‌گذاری معنایی</a><!-- ignore --> (Semantic Versioning، که گاهی <em>SemVer</em> نامیده می‌شود) را می‌فهمد که استانداردی برای نوشتن شماره نسخه‌هاست. مشخصه <code>0.10.1</code> در واقع کوتاه‌نویسی برای <code>^0.10.1</code> است، که یعنی هر نسخه‌ای که دست‌کم 0.10.1 باشد اما کمتر از 0.11.0 باشد.</p>
+<p>Cargo این نسخه‌ها را دارای API عمومی سازگار با نسخه 0.10.1 می‌داند، و این مشخصه تضمین می‌کند که آخرین نسخه وصله (patch) را دریافت می‌کنید که همچنان با کد این فصل کامپایل شود. هر نسخه 0.11.0 یا بالاتر تضمین نمی‌شود API یکسانی با آنچه مثال‌های بعدی استفاده می‌کنند داشته باشد.</p>
+<p>حالا، بدون تغییر دادن هیچ بخشی از کد، بیایید پروژه را ساخت (build) کنیم، همان‌طور که در لیستینگ ۲-۲ نشان داده شده است.</p>
+<!-- manual-regeneration
+cd listings/ch02-guessing-game-tutorial/listing-02-02/
+rm Cargo.lock
+cargo clean
+cargo build -->
+<figure class="listing" id="listing-2-2">
+<pre><code class="language-console">$ cargo build
+    Updating crates.io index
+     Locking 8 packages to latest Rust 1.96.0 compatible versions
+  Downloaded rand_core v0.10.1
+  Downloaded chacha20 v0.10.1
+  Downloaded rand v0.10.1
+  Downloaded 3 crates (162.9KiB) in 0.59s
+   Compiling libc v0.2.186
+   Compiling rand_core v0.10.1
+   Compiling getrandom v0.4.3
+   Compiling cfg-if v1.0.4
+   Compiling chacha20 v0.10.1
+   Compiling rand v0.10.1
+   Compiling guessing_game v0.1.0 (file:///projects/guessing_game)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.03s
+</code></pre>
+<figcaption><a href="#listing-2-2">لیست ۲-۲</a>: خروجی اجرای &lt;code&gt;&lt;/x-listing&gt;cargo build&lt;/code&gt; پس از افزودن crate با نام &lt;code&gt;rand&lt;/code&gt; به عنوان وابستگی</figcaption>
+</figure>
+<p>ممکن است شماره نسخه‌های متفاوتی ببینید (اما به لطف SemVer همه آن‌ها با کد سازگار خواهند بود!) و خطوط متفاوتی هم ببینید (بسته به سیستم‌عامل)، و ممکن است خطوط به ترتیب دیگری باشند.</p>
+<p>وقتی یک وابستگی خارجی اضافه می‌کنیم، Cargo آخرین نسخهٔ هر چیزی را که آن وابستگی نیاز دارد از <em>رجیستری</em> (registry) دریافت می‌کند؛ رجیستری رونوشتی از داده‌های <a href="https://crates.io/">Crates.io</a> است. Crates.io جایی است که افراد در اکوسیستم Rust پروژه‌های متن‌بازِ Rust خود را برای استفادهٔ دیگران منتشر می‌کنند.</p>
+<p>پس از به‌روزرسانی رجیستری، Cargo بخش <code>[dependencies]</code> را بررسی می‌کند و هر crateای را که فهرست شده و هنوز دانلود نشده است دانلود می‌کند. در این مورد، اگرچه ما فقط <code>rand</code> را به عنوان وابستگی فهرست کرده‌ایم، Cargo crateهای دیگری را نیز که <code>rand</code> برای کار کردن به آن‌ها وابسته است برداشت. پس از دانلود crateها، Rust آن‌ها را کامپایل می‌کند و سپس پروژه را با وابستگی‌های در دسترس کامپایل می‌کند.</p>
+<p>اگر بدون هیچ تغییری بلافاصله دوباره <code>cargo build</code> را اجرا کنید، به جز خط <code>Finished</code> خروجی دیگری نخواهید گرفت. Cargo می‌داند که وابستگی‌ها را پیش‌تر دانلود و کامپایل کرده است و شما هم در فایل <em>Cargo.toml</em> چیزی درباره آن‌ها تغییر نداده‌اید. Cargo همچنین می‌داند که چیزی در کد شما تغییر نکرده است، بنابراین آن را هم دوباره کامپایل نمی‌کند. چون کاری برای انجام دادن نیست، به سادگی خارج می‌شود.</p>
+<p>اگر فایل <em>src/main.rs</em> را باز کنید، یک تغییر ناچیز در آن بدهید، سپس ذخیره کنید و دوباره ساخت را اجرا کنید، فقط دو خط خروجی خواهید دید:</p>
+<!-- manual-regeneration
+cd listings/ch02-guessing-game-tutorial/listing-02-02/
+touch src/main.rs
+cargo build -->
+<pre><code class="language-console">$ cargo build
+   Compiling guessing_game v0.1.0 (file:///projects/guessing_game)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.13s
+</code></pre>
+<p>این خطوط نشان می‌دهند که Cargo ساخت را فقط با تغییر کوچک شما در فایل <em>src/main.rs</em> به‌روز می‌کند. وابستگی‌های شما تغییر نکرده‌اند، پس Cargo می‌داند که می‌تواند از آنچه را که پیش‌تر برای آن‌ها دانلود و کامپایل کرده است دوباره استفاده کند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="ensuring-reproducible-builds-with-the-cargo-lock-file"></a></p>
+<h4 id="ensuring-reproducible-builds"><a class="header" href="#ensuring-reproducible-builds">اطمینان از ساخت‌های قابل بازتولید</a></h4>
+<p>Cargo سازوکاری دارد که تضمین می‌کند هر بار که شما یا هر کس دیگری کد شما را می‌سازد، می‌توانید همان مصنوع (artifact) را دوباره بسازید: Cargo فقط از نسخه‌هایی از وابستگی‌ها استفاده می‌کند که شما مشخص کرده‌اید، مگر اینکه خلاف آن را اعلام کنید. برای مثال، فرض کنید هفته آینده نسخه 0.10.2 از crate با نام <code>rand</code> منتشر شود و آن نسخه یک رفع اشکال مهم داشته باشد، اما یک پسرفت (regression) هم داشته باشد که کد شما را خراب می‌کند. برای مدیریت این وضعیت، Rust فایل <em>Cargo.lock</em> را اولین باری که <code>cargo build</code> را اجرا می‌کنید می‌سازد، پس اکنون این فایل را در پوشه <em>guessing_game</em> داریم.</p>
+<p>وقتی پروژه‌ای را برای اولین بار می‌سازید، Cargo همه نسخه‌های وابستگی‌ها را که با معیارها سازگارند مشخص می‌کند و سپس آن‌ها را در فایل <em>Cargo.lock</em> می‌نویسد. وقتی در آینده پروژه‌تان را می‌سازید، Cargo می‌بیند که فایل <em>Cargo.lock</em> وجود دارد و به جای انجام دوباره همه کار تعیین نسخه‌ها، از نسخه‌های مشخص‌شده در آن استفاده می‌کند. این کار به‌طور خودکار یک ساخت قابل بازتولید به شما می‌دهد. به عبارت دیگر، به لطف فایل <em>Cargo.lock</em>، پروژه شما تا زمانی که به‌صراحت ارتقا ندهید در نسخه 0.10.1 باقی می‌ماند. چون فایل <em>Cargo.lock</em> برای ساخت‌های قابل بازتولید مهم است، اغلب همراه با بقیه کد پروژه شما در سیستم کنترل نسخه ثبت می‌شود.</p>
+<h4 id="updating-a-crate-to-get-a-new-version"><a class="header" href="#updating-a-crate-to-get-a-new-version">به‌روزرسانی یک crate برای دریافت نسخه جدید</a></h4>
+<p>وقتی <em>می‌خواهید</em> یک crate را به‌روز کنید، Cargo دستور <code>update</code> را فراهم می‌کند که فایل <em>Cargo.lock</em> را نادیده می‌گیرد و همه آخرین نسخه‌هایی را که با مشخصات شما در <em>Cargo.toml</em> جور هستند پیدا می‌کند. سپس Cargo آن نسخه‌ها را در فایل <em>Cargo.lock</em> می‌نویسد. در غیر این صورت، به‌طور پیش‌فرض Cargo فقط نسخه‌های بزرگ‌تر از 0.10.1 و کوچک‌تر از 0.11.0 را جست‌وجو می‌کند. اگر crate با نام <code>rand</code> دو نسخه جدید 0.10.2 و 0.999.0 را منتشر کرده باشد و <code>cargo update</code> را اجرا کنید، موارد زیر را خواهید دید:</p>
+<!-- manual-regeneration
+cd listings/ch02-guessing-game-tutorial/listing-02-02/
+cargo update
+assuming there is a new version of rand; otherwise use another update
+as a guide to creating the hypothetical output shown here -->
+<pre><code class="language-console">$ cargo update
+    Updating crates.io index
+     Locking 1 package to latest Rust 1.96.0 compatible version
+    Updating rand v0.10.1 -&gt; v0.10.2 (available: v0.999.0)
+</code></pre>
+<p>Cargo نسخه 0.999.0 را نادیده می‌گیرد. در این مرحله، تغییری هم در فایل <em>Cargo.lock</em> خود خواهید دید که نشان می‌دهد نسخه crate با نام <code>rand</code> که اکنون استفاده می‌کنید 0.10.2 است. برای استفاده از <code>rand</code> نسخه 0.999.0 یا هر نسخه‌ای در سری 0.999.<em>x</em>، باید فایل <em>Cargo.toml</em> را به جای آن به شکل زیر تغییر دهید (در واقع این تغییر را اعمال نکنید، زیرا مثال‌های بعدی فرض می‌کنند از <code>rand</code> نسخه 0.10 استفاده می‌کنید):</p>
+<pre><code class="language-toml">[dependencies]
+rand = "0.999.0"
+</code></pre>
+<p>دفعه بعد که <code>cargo build</code> را اجرا کنید، Cargo رجیستری crateهای موجود را به‌روز می‌کند و نیازمندی‌های <code>rand</code> شما را بر اساس نسخه جدیدی که مشخص کرده‌اید دوباره ارزیابی می‌کند.</p>
+<p>درباره <a href="../cargo/index.html">Cargo</a><!-- ignore --> و <a href="../cargo/reference/publishing.html">اکوسیستم آن</a><!-- ignore --> چیزهای بسیار بیشتری برای گفتن هست که در فصل ۱۴ بحث می‌کنیم، اما فعلاً این همان چیزی است که باید بدانید. Cargo استفاده مجدد از کتابخانه‌ها را بسیار آسان می‌کند، بنابراین Rustaceanها می‌توانند پروژه‌های کوچک‌تری بنویسند که از تعدادی بسته (package) مونتاژ شده‌اند.</p>
+<h3 id="generating-a-random-number"><a class="header" href="#generating-a-random-number">تولید یک عدد تصادفی</a></h3>
+<p>بیایید شروع کنیم به استفاده از <code>rand</code> برای تولید عددی که باید حدس زده شود. گام بعدی به‌روزرسانی <em>src/main.rs</em> است، همان‌طور که در لیستینگ ۲-۳ نشان داده شده است.</p>
+<figure class="listing" id="listing-2-3">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore">use std::io;
+
+use rand::prelude::*;
+
+fn main() {
+    println!("Guess the number!");
+
+    let secret_number = rand::rng().random_range(1..=100);
+
+    println!("The secret number is: {secret_number}");
+
+    println!("Please input your guess.");
+
+    let mut guess = String::new();
+
+    io::stdin()
+        .read_line(&amp;mut guess)
+        .expect("Failed to read line");
+
+    println!("You guessed: {guess}");
+}</code></pre>
+<figcaption><a href="#listing-2-3">لیست ۲-۳</a>: افزودن کد برای تولید یک عدد تصادفی</figcaption>
+</figure>
+<p>ابتدا خط <code>use rand::prelude::*;</code> را اضافه می‌کنیم. ماژول <code>prelude</code> پرکاربردترین بخش‌های crate با نام <code>rand</code> را در بر دارد و <code>use</code> آن آیتم‌ها را در دامنه برنامه ما در دسترس قرار می‌دهد.</p>
+<p>سپس دو خط را در میانه اضافه می‌کنیم. در خط اول، تابع <code>rand::rng</code> را فراخوانی می‌کنیم که مولد عدد تصادفی خاصی را که می‌خواهیم استفاده کنیم به ما می‌دهد: مولدی که محلی برای نخ اجرای فعلی است و توسط سیستم‌عامل مقداردهی اولیه (seed) می‌شود. سپس متد <code>random_range</code> را روی مولد عدد تصادفی فراخوانی می‌کنیم. این متد توسط صفت <code>RngExt</code> تعریف شده است که بخشی از ماژول <code>rand::prelude</code> است که با دستور <code>use rand::prelude::*;</code> به دامنه آورده‌ایم. متد <code>random_range</code> یک عبارت بازه را به عنوان آرگومان می‌گیرد و یک عدد تصادفی در آن بازه تولید می‌کند. نوع عبارت بازه‌ای که اینجا استفاده می‌کنیم به شکل <code>start..=end</code> است و کران‌های پایین و بالا را شامل می‌شود، بنابراین برای درخواست عددی بین ۱ و ۱۰۰ باید <code>1..=100</code> را مشخص کنیم.</p>
+<blockquote>
+<p>نکته: خودتان به‌طور شهودی نمی‌دانید که از یک crate چه چیزی را باید به دامنه بیاورید و کدام متدها و تابع‌ها را باید فراخوانی کنید، پس هر crate مستنداتی با دستورالعمل استفاده از آن دارد. ویژگی جالب دیگر Cargo این است که اجرای دستور <code>cargo doc --open</code> مستنداتی را که همه وابستگی‌های شما فراهم کرده‌اند به‌صورت محلی می‌سازد و در مرورگر شما باز می‌کند. برای مثال، اگر به قابلیت‌های دیگر crate با نام <code>rand</code> علاقه‌مند هستید، <code>cargo doc --open</code> را اجرا کنید و در نوار کناری سمت چپ روی <code>rand</code> کلیک کنید.</p>
+</blockquote>
+<p>خط جدید دوم عدد مخفی را چاپ می‌کند. این کار در حین توسعه برنامه برای اینکه بتوانیم آن را آزمایش کنیم مفید است، اما آن را از نسخه نهایی حذف می‌کنیم. اگر برنامه به محض شروع پاسخ را چاپ کند، چندان بازی به حساب نمی‌آید!</p>
+<p>برنامه را چند بار اجرا کنید:</p>
+<!-- manual-regeneration
+cd listings/ch02-guessing-game-tutorial/listing-02-03/
+cargo run
+4
+cargo run
+5
+-->
+<pre><code class="language-console">$ cargo run
+   Compiling guessing_game v0.1.0 (file:///projects/guessing_game)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/guessing_game`
+Guess the number!
+The secret number is: 7
+Please input your guess.
+4
+You guessed: 4
+
+$ cargo run
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/guessing_game`
+Guess the number!
+The secret number is: 83
+Please input your guess.
+5
+You guessed: 5
+</code></pre>
+<p>باید اعداد تصادفی متفاوتی دریافت کنید و همه آن‌ها باید بین ۱ و ۱۰۰ باشند. اگر هشدار دریافت کردید، می‌توانید با خیال راحت آن‌ها را نادیده بگیرید. اگر خطا گرفتید، لطفاً بررسی کنید که <code>rand = "0.10.1"</code> را در فایل <em>Cargo.toml</em> خود دارید، زیرا نسخه‌های آینده <code>rand</code> ممکن است API متفاوتی داشته باشند، اما هر نسخه‌ای در سری <code>0.10</code> باید با کد این فصل کار کند.</p>
+<h2 id="comparing-the-guess-to-the-secret-number"><a class="header" href="#comparing-the-guess-to-the-secret-number">مقایسهٔ حدس با عدد مخفی</a></h2>
+<p>اکنون که ورودی کاربر و یک عدد تصادفی داریم، می‌توانیم آن‌ها را مقایسه کنیم. این گام در لیستینگ ۲-۴ نشان داده شده است. توجه کنید که این کد هنوز کامپایل نمی‌شود، همان‌طور که توضیح خواهیم داد.</p>
+<figure class="listing" id="listing-2-4">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">use std::cmp::Ordering;
+use std::io;
+
+use rand::prelude::*;
+
+fn main() {
+    // --snip--
+<span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    let secret_number = rand::rng().random_range(1..=100);
+</span><span class="boring">
+</span><span class="boring">    println!("The secret number is: {secret_number}");
+</span><span class="boring">
+</span><span class="boring">    println!("Please input your guess.");
+</span><span class="boring">
+</span><span class="boring">    let mut guess = String::new();
+</span><span class="boring">
+</span><span class="boring">    io::stdin()
+</span><span class="boring">        .read_line(&amp;mut guess)
+</span><span class="boring">        .expect("Failed to read line");
+</span>
+    println!("You guessed: {guess}");
+
+    match guess.cmp(&amp;secret_number) {
+        Ordering::Less =&gt; println!("Too small!"),
+        Ordering::Greater =&gt; println!("Too big!"),
+        Ordering::Equal =&gt; println!("You win!"),
+    }
+}</code></pre>
+<figcaption><a href="#listing-2-4">لیست ۲-۴</a>: مدیریت مقادیر بازگشتی ممکن از مقایسه دو عدد</figcaption>
+</figure>
+<p>ابتدا یک دستور <code>use</code> دیگر اضافه می‌کنیم که نوعی به نام <code>std::cmp::Ordering</code> را از کتابخانه استاندارد به دامنه می‌آورد. نوع <code>Ordering</code> یک enum دیگر است و واریانت‌های <code>Less</code>، <code>Greater</code> و <code>Equal</code> را دارد. این‌ها سه نتیجه ممکن هنگام مقایسه دو مقدار هستند.</p>
+<p>سپس پنج خط جدید در پایین اضافه می‌کنیم که از نوع <code>Ordering</code> استفاده می‌کنند. متد <code>cmp</code> دو مقدار را مقایسه می‌کند و می‌تواند روی هر چیزی که قابل مقایسه باشد فراخوانی شود. این متد یک ارجاع به هر چیزی که می‌خواهید با آن مقایسه کنید می‌گیرد: اینجا <code>guess</code> را با <code>secret_number</code> مقایسه می‌کند. سپس یکی از واریانت‌های شمارش <code>Ordering</code> را که با دستور <code>use</code> به دامنه آوردیم برمی‌گرداند. ما از عبارت <a href="ch06-02-match.html"><code>match</code></a><!-- ignore --> استفاده می‌کنیم تا بر اساس اینکه کدام واریانت <code>Ordering</code> از فراخوانی <code>cmp</code> با مقادیر <code>guess</code> و <code>secret_number</code> برگردانده شده است، تصمیم بگیریم بعد چه کاری انجام دهیم.</p>
+<p>عبارت <code>match</code> از <em>بازوها</em> (arms) ساخته شده است. هر بازو شامل یک <em>الگو</em> (pattern) برای تطبیق و کدی است که اگر مقدار داده‌شده به <code>match</code> با الگوی آن بازو جور باشد باید اجرا شود. Rust مقدار داده‌شده به <code>match</code> را می‌گیرد و الگوی هر بازو را به ترتیب بررسی می‌کند. الگوها و ساختار <code>match</code> ویژگی‌های قدرتمند Rust هستند: به شما اجازه می‌دهند موقعیت‌های متنوعی را که کدتان ممکن است با آن‌ها روبه‌رو شود بیان کنید و مطمئن می‌شوند که همه آن‌ها را مدیریت کرده‌اید. این ویژگی‌ها به ترتیب در فصل ۶ و فصل ۱۹ با جزئیات پوشش داده خواهند شد.</p>
+<p>بیایید مثالی را با عبارت <code>match</code> که اینجا استفاده می‌کنیم مرور کنیم. فرض کنید کاربر ۵۰ را حدس زده است و عدد مخفی تصادفی که این بار تولید شده ۳۸ است.</p>
+<p>وقتی کد ۵۰ را با ۳۸ مقایسه می‌کند، متد <code>cmp</code> مقدار <code>Ordering::Greater</code> را برمی‌گرداند، زیرا ۵۰ از ۳۸ بزرگ‌تر است. عبارت <code>match</code> مقدار <code>Ordering::Greater</code> را می‌گیرد و شروع به بررسی الگوی هر بازو می‌کند. به الگوی بازوی اول، یعنی <code>Ordering::Less</code>، نگاه می‌کند و می‌بیند که مقدار <code>Ordering::Greater</code> با <code>Ordering::Less</code> جور نیست، پس کد آن بازو را نادیده می‌گیرد و به بازوی بعدی می‌رود. الگوی بازوی بعدی <code>Ordering::Greater</code> است که <em>با</em> <code>Ordering::Greater</code> جور است! کد وابسته در آن بازو اجرا می‌شود و <code>Too big!</code> را روی صفحه چاپ می‌کند. عبارت <code>match</code> پس از اولین تطبیق موفق پایان می‌یابد، پس در این سناریو به بازوی آخر نگاه نمی‌کند.</p>
+<p>با این حال، کد لیستینگ ۲-۴ هنوز کامپایل نمی‌شود. بیایید امتحانش کنیم:</p>
+<!--
+The error numbers in this output should be that of the code **WITHOUT** the
+anchor or snip comments
+-->
+<pre><code class="language-console">$ cargo build
+   Compiling libc v0.2.186
+   Compiling rand_core v0.10.1
+   Compiling cfg-if v1.0.0
+   Compiling getrandom v0.4.3
+   Compiling chacha20 v0.10.1
+   Compiling rand v0.10.1
+   Compiling guessing_game v0.1.0 (file:///projects/guessing_game)
+error[E0308]: mismatched types
+  --&gt; src/main.rs:23:21
+   |
+23 |     match guess.cmp(&amp;secret_number) {
+   |                 --- ^^^^^^^^^^^^^^ expected `&amp;String`, found `&amp;{integer}`
+   |                 |
+   |                 arguments to this method are incorrect
+   |
+   = note: expected reference `&amp;String`
+              found reference `&amp;{integer}`
+note: method defined here
+  --&gt; /rustc/88d9e12ae178fab0fb5cc050a94da85685d449ea/library/core/src/cmp.rs:1000:7
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `guessing_game` (bin "guessing_game") due to 1 previous error
+</code></pre>
+<p>هسته خطا بیان می‌کند که <em>نوع‌ها ناسازگارند</em> (mismatched types). Rust یک سیستم نوع ایستای قوی دارد. با این حال، استنتاج نوع هم دارد. وقتی نوشتیم <code>let mut guess = String::new()</code>، Rust توانست استنتاج کند که <code>guess</code> باید یک <code>String</code> باشد و ما را مجبور به نوشتن نوع نکرد. در مقابل، <code>secret_number</code> یک نوع عددی است. چند نوع عددی Rust می‌توانند مقداری بین ۱ تا ۱۰۰ داشته باشند: <code>i32</code>، یک عدد ۳۲ بیتی؛ <code>u32</code>، یک عدد ۳۲ بیتی بدون علامت؛ <code>i64</code>، یک عدد ۶۴ بیتی؛ و دیگر انواع. مگر اینکه خلاف آن مشخص شود، Rust به‌طور پیش‌فرض <code>i32</code> را انتخاب می‌کند که نوع <code>secret_number</code> است، مگر اینکه در جای دیگری اطلاعات نوعی اضافه کنید که باعث شود Rust نوع عددی متفاوتی را استنتاج کند. دلیل خطا این است که Rust نمی‌تواند یک رشته و یک نوع عددی را با هم مقایسه کند.</p>
+<p>در نهایت، می‌خواهیم <code>String</code> ای را که برنامه به عنوان ورودی می‌خواند به یک نوع عددی تبدیل کنیم تا بتوانیم آن را به‌صورت عددی با عدد مخفی مقایسه کنیم. این کار را با افزودن این خط به بدنه تابع <code>main</code> انجام می‌دهیم:</p>
+<p><span class="filename">نام فایل: src/main.rs</span></p>
+<pre><code class="language-rust ignore"><span class="boring">use std::cmp::Ordering;
+</span><span class="boring">use std::io;
+</span><span class="boring">
+</span><span class="boring">use rand::prelude::*;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    let secret_number = rand::rng().random_range(1..=100);
+</span><span class="boring">
+</span><span class="boring">    println!("The secret number is: {secret_number}");
+</span><span class="boring">
+</span><span class="boring">    println!("Please input your guess.");
+</span><span class="boring">
+</span>    // --snip--
+
+    let mut guess = String::new();
+
+    io::stdin()
+        .read_line(&amp;mut guess)
+        .expect("Failed to read line");
+
+    let guess: u32 = guess.trim().parse().expect("Please type a number!");
+
+    println!("You guessed: {guess}");
+
+    match guess.cmp(&amp;secret_number) {
+        Ordering::Less =&gt; println!("Too small!"),
+        Ordering::Greater =&gt; println!("Too big!"),
+        Ordering::Equal =&gt; println!("You win!"),
+    }
+<span class="boring">}</span></code></pre>
+<p>آن خط این است:</p>
+<pre><code class="language-rust ignore">let guess: u32 = guess.trim().parse().expect("Please type a number!");</code></pre>
+<p>یک متغیر با نام <code>guess</code> می‌سازیم. اما صبر کنید، مگر برنامه از پیش متغیری به نام <code>guess</code> ندارد؟ دارد، اما Rust مفید است و به ما اجازه می‌دهد مقدار قبلی <code>guess</code> را با یک مقدار جدید سایه (shadow) کنیم. <em>سایه‌زنی</em> (shadowing) به ما اجازه می‌دهد نام متغیر <code>guess</code> را دوباره استفاده کنیم، به جای اینکه مجبور شویم دو متغیر یکتا مثلاً <code>guess_str</code> و <code>guess</code> بسازیم. این را در <a href="ch03-01-variables-and-mutability.html#shadowing">فصل ۳</a><!-- ignore --> با جزئیات بیشتری پوشش می‌دهیم، اما فعلاً بدانید که این ویژگی اغلب زمانی استفاده می‌شود که می‌خواهید مقداری را از یک نوع به نوع دیگر تبدیل کنید.</p>
+<p>این متغیر جدید را به عبارت <code>guess.trim().parse()</code> متصل می‌کنیم. <code>guess</code> در این عبارت به متغیر اصلی <code>guess</code> اشاره می‌کند که ورودی را به صورت رشته در خود داشت. متد <code>trim</code> روی یک نمونه <code>String</code> هر فضای خالی را در ابتدا و انتها حذف می‌کند، که باید پیش از تبدیل رشته به <code>u32</code> انجام دهیم، چون <code>u32</code> فقط می‌تواند داده عددی داشته باشد. کاربر باید <kbd>enter</kbd> را بزند تا <code>read_line</code> ارضا شود و حدسش را وارد کند، که یک نویسه خط جدید به رشته اضافه می‌کند. برای مثال، اگر کاربر <kbd>5</kbd> را تایپ کند و <kbd>enter</kbd> را بزند، <code>guess</code> به این شکل است: <code>5\n</code>. نماد <code>\n</code> «خط جدید» (newline) را نشان می‌دهد. (در ویندوز، زدن <kbd>enter</kbd> به یک carriage return و یک خط جدید، یعنی <code>\r\n</code>، می‌انجامد.) متد <code>trim</code> مقدار <code>\n</code> یا <code>\r\n</code> را حذف می‌کند و فقط <code>5</code> باقی می‌ماند.</p>
+<p><a href="https://doc.rust-lang.org/std/primitive.str.html#method.parse">متد <code>parse</code> روی رشته‌ها</a><!-- ignore --> یک رشته را به نوع دیگری تبدیل می‌کند. اینجا از آن برای تبدیل رشته به عدد استفاده می‌کنیم. باید با استفاده از <code>let guess: u32</code> به Rust بگوییم دقیقاً چه نوع عددی می‌خواهیم. دو نقطه (<code>:</code>) بعد از <code>guess</code> به Rust می‌گوید که نوع متغیر را مشخص (annotate) خواهیم کرد. Rust چند نوع عددی داخلی دارد؛ <code>u32</code> که اینجا دیده می‌شود یک عدد صحیح ۳۲ بیتی بدون علامت است. انتخاب پیش‌فرض خوبی برای یک عدد مثبت کوچک است. درباره نوع‌های عددی دیگر در <a href="ch03-02-data-types.html#integer-types">فصل ۳</a><!-- ignore --> خواهید آموخت.</p>
+<p>علاوه بر این، حاشیه‌نویسی <code>u32</code> در این برنامه نمونه و مقایسه با <code>secret_number</code> یعنی Rust استنتاج می‌کند که <code>secret_number</code> هم باید <code>u32</code> باشد. بنابراین اکنون مقایسه بین دو مقدار از یک نوع خواهد بود!</p>
+<p>متد <code>parse</code> فقط روی نویسه‌هایی کار می‌کند که منطقاً بتوانند به عدد تبدیل شوند و بنابراین به‌آسانی می‌تواند باعث بروز خطا شود. برای مثال، اگر رشته حاوی <code>A👍%</code> بود، هیچ راهی برای تبدیل آن به عدد نبود. چون ممکن است شکست بخورد، متد <code>parse</code> یک نوع <code>Result</code> برمی‌گرداند، دقیقاً مانند متد <code>read_line</code> (که پیش‌تر در <a href="#handling-potential-failure-with-result">«مدیریت شکست احتمالی با <code>Result</code>»</a><!-- ignore --> بحث شد). با این <code>Result</code> هم به همان شیوه رفتار می‌کنیم و دوباره از متد <code>expect</code> استفاده می‌کنیم. اگر <code>parse</code> به این دلیل که نتوانسته از رشته عددی بسازد واریانت <code>Err</code> از <code>Result</code> را برگرداند، فراخوانی <code>expect</code> بازی را از کار می‌اندازد و پیامی را که به آن داده‌ایم چاپ می‌کند. اگر <code>parse</code> بتواند با موفقیت رشته را به عدد تبدیل کند، واریانت <code>Ok</code> از <code>Result</code> را برمی‌گرداند و <code>expect</code> عددی را که می‌خواهیم از مقدار <code>Ok</code> برمی‌گرداند.</p>
+<p>حالا برنامه را اجرا کنیم:</p>
+<!-- manual-regeneration
+cd listings/ch02-guessing-game-tutorial/no-listing-03-convert-string-to-number/
+touch src/main.rs
+cargo run
+  76
+-->
+<pre><code class="language-console">$ cargo run
+   Compiling guessing_game v0.1.0 (file:///projects/guessing_game)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running `target/debug/guessing_game`
+Guess the number!
+The secret number is: 58
+Please input your guess.
+  76
+You guessed: 76
+Too big!
+</code></pre>
+<p>عالی! با اینکه فاصله‌هایی پیش از حدس اضافه شد، برنامه باز هم فهمید که کاربر ۷۶ را حدس زده است. برنامه را چند بار اجرا کنید تا رفتار متفاوت با انواع مختلف ورودی را بررسی کنید: عدد را درست حدس بزنید، عددی بزرگ‌تر از حد حدس بزنید و عددی کوچک‌تر از حد حدس بزنید.</p>
+<p>بیشتر بازی اکنون کار می‌کند، اما کاربر فقط می‌تواند یک حدس بزند. بیایید با افزودن یک حلقه این را تغییر دهیم!</p>
+<h2 id="allowing-multiple-guesses-with-looping"><a class="header" href="#allowing-multiple-guesses-with-looping">اجازه دادن به چند حدس با حلقه</a></h2>
+<p>کلیدواژه <code>loop</code> یک حلقه بی‌نهایت می‌سازد. یک حلقه اضافه می‌کنیم تا به کاربران فرصت‌های بیشتری برای حدس زدن عدد بدهیم:</p>
+<p><span class="filename">نام فایل: src/main.rs</span></p>
+<pre><code class="language-rust ignore"><span class="boring">use std::cmp::Ordering;
+</span><span class="boring">use std::io;
+</span><span class="boring">
+</span><span class="boring">use rand::prelude::*;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    let secret_number = rand::rng().random_range(1..=100);
+</span><span class="boring">
+</span>    // --snip--
+
+    println!("The secret number is: {secret_number}");
+
+    loop {
+        println!("Please input your guess.");
+
+        // --snip--
+
+<span class="boring">
+</span><span class="boring">        let mut guess = String::new();
+</span><span class="boring">
+</span><span class="boring">        io::stdin()
+</span><span class="boring">            .read_line(&amp;mut guess)
+</span><span class="boring">            .expect("Failed to read line");
+</span><span class="boring">
+</span><span class="boring">        let guess: u32 = guess.trim().parse().expect("Please type a number!");
+</span><span class="boring">
+</span><span class="boring">        println!("You guessed: {guess}");
+</span><span class="boring">
+</span>        match guess.cmp(&amp;secret_number) {
+            Ordering::Less =&gt; println!("Too small!"),
+            Ordering::Greater =&gt; println!("Too big!"),
+            Ordering::Equal =&gt; println!("You win!"),
+        }
+    }
+}</code></pre>
+<p>همان‌طور که می‌بینید، همه چیز را از پیام ورودی حدس به بعد به درون یک حلقه منتقل کرده‌ایم. حتماً خطوط داخل حلقه را هر کدام چهار فاصله دیگر تورفتگی بدهید و برنامه را دوباره اجرا کنید. برنامه اکنون تا ابد حدس دیگری می‌خواهد، که در واقع مشکل جدیدی ایجاد می‌کند. به نظر نمی‌رسد کاربر بتواند خارج شود!</p>
+<p>کاربر همیشه می‌تواند با میانبر صفحه‌کلید <kbd>ctrl</kbd>-<kbd>C</kbd> برنامه را قطع کند. اما راه دیگری هم برای فرار از این هیولای سیری‌ناپذیر وجود دارد، همان‌طور که در بحث <code>parse</code> در <a href="#comparing-the-guess-to-the-secret-number">«مقایسه حدس با عدد مخفی»</a><!-- ignore --> اشاره شد: اگر کاربر پاسخی غیرعددی وارد کند، برنامه از کار می‌افتد. می‌توانیم از این موضوع بهره ببریم تا به کاربر اجازه خروج بدهیم، همان‌طور که اینجا نشان داده شده است:</p>
+<!-- manual-regeneration
+cd listings/ch02-guessing-game-tutorial/no-listing-04-looping/
+touch src/main.rs
+cargo run
+(too small guess)
+(too big guess)
+(correct guess)
+quit
+-->
+<pre><code class="language-console">$ cargo run
+   Compiling guessing_game v0.1.0 (file:///projects/guessing_game)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running `target/debug/guessing_game`
+Guess the number!
+The secret number is: 59
+Please input your guess.
+45
+You guessed: 45
+Too small!
+Please input your guess.
+60
+You guessed: 60
+Too big!
+Please input your guess.
+59
+You guessed: 59
+You win!
+Please input your guess.
+quit
+
+thread 'main' (6694925) panicked at src/main.rs:28:47:
+Please type a number!: ParseIntError { kind: InvalidDigit }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</code></pre>
+<p>تایپ <code>quit</code> بازی را ترک می‌کند، اما همان‌طور که متوجه می‌شوید، وارد کردن هر ورودی غیرعددی دیگر هم همین کار را می‌کند. این، به بیان ملایم، چندان مطلوب نیست؛ می‌خواهیم بازی وقتی عدد درست حدس زده شد هم متوقف شود.</p>
+<h3 id="quitting-after-a-correct-guess"><a class="header" href="#quitting-after-a-correct-guess">خروج پس از یک حدس درست</a></h3>
+<p>بیایید بازی را طوری برنامه‌ریزی کنیم که وقتی کاربر برنده می‌شود با افزودن یک دستور <code>break</code> خارج شود:</p>
+<p><span class="filename">نام فایل: src/main.rs</span></p>
+<pre><code class="language-rust ignore"><span class="boring">use std::cmp::Ordering;
+</span><span class="boring">use std::io;
+</span><span class="boring">
+</span><span class="boring">use rand::prelude::*;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    let secret_number = rand::rng().random_range(1..=100);
+</span><span class="boring">
+</span><span class="boring">    println!("The secret number is: {secret_number}");
+</span><span class="boring">
+</span><span class="boring">    loop {
+</span><span class="boring">        println!("Please input your guess.");
+</span><span class="boring">
+</span><span class="boring">        let mut guess = String::new();
+</span><span class="boring">
+</span><span class="boring">        io::stdin()
+</span><span class="boring">            .read_line(&amp;mut guess)
+</span><span class="boring">            .expect("Failed to read line");
+</span><span class="boring">
+</span><span class="boring">        let guess: u32 = guess.trim().parse().expect("Please type a number!");
+</span><span class="boring">
+</span><span class="boring">        println!("You guessed: {guess}");
+</span><span class="boring">
+</span>        // --snip--
+
+        match guess.cmp(&amp;secret_number) {
+            Ordering::Less =&gt; println!("Too small!"),
+            Ordering::Greater =&gt; println!("Too big!"),
+            Ordering::Equal =&gt; {
+                println!("You win!");
+                break;
+            }
+        }
+    }
+}</code></pre>
+<p>افزودن خط <code>break</code> بعد از <code>You win!</code> باعث می‌شود وقتی کاربر عدد مخفی را درست حدس می‌زند برنامه از حلقه خارج شود. خارج شدن از حلقه به معنی خارج شدن از برنامه هم هست، زیرا حلقه آخرین بخش <code>main</code> است.</p>
+<h3 id="handling-invalid-input"><a class="header" href="#handling-invalid-input">مدیریت ورودی نامعتبر</a></h3>
+<p>برای اصلاح بیشتر رفتار بازی، به جای از کار انداختن برنامه هنگامی که کاربر ورودی غیرعددی وارد می‌کند، بیایید بازی را طوری کنیم که ورودی غیرعددی را نادیده بگیرد تا کاربر بتواند به حدس زدن ادامه دهد. می‌توانیم این کار را با تغییر خطی که <code>guess</code> را از <code>String</code> به <code>u32</code> تبدیل می‌کند انجام دهیم، همان‌طور که در لیستینگ ۲-۵ نشان داده شده است.</p>
+<figure class="listing" id="listing-2-5">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">use std::cmp::Ordering;
+</span><span class="boring">use std::io;
+</span><span class="boring">
+</span><span class="boring">use rand::prelude::*;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    let secret_number = rand::rng().random_range(1..=100);
+</span><span class="boring">
+</span><span class="boring">    println!("The secret number is: {secret_number}");
+</span><span class="boring">
+</span><span class="boring">    loop {
+</span><span class="boring">        println!("Please input your guess.");
+</span><span class="boring">
+</span><span class="boring">        let mut guess = String::new();
+</span><span class="boring">
+</span>        // --snip--
+
+        io::stdin()
+            .read_line(&amp;mut guess)
+            .expect("Failed to read line");
+
+        let guess: u32 = match guess.trim().parse() {
+            Ok(num) =&gt; num,
+            Err(_) =&gt; continue,
+        };
+
+        println!("You guessed: {guess}");
+
+        // --snip--
+<span class="boring">
+</span><span class="boring">        match guess.cmp(&amp;secret_number) {
+</span><span class="boring">            Ordering::Less =&gt; println!("Too small!"),
+</span><span class="boring">            Ordering::Greater =&gt; println!("Too big!"),
+</span><span class="boring">            Ordering::Equal =&gt; {
+</span><span class="boring">                println!("You win!");
+</span><span class="boring">                break;
+</span><span class="boring">            }
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-2-5">لیست ۲-۵</a>: نادیده گرفتن حدس غیرعددی و درخواست حدس دیگر به جای از کار انداختن برنامه</figcaption>
+</figure>
+<p>از فراخوانی <code>expect</code> به یک عبارت <code>match</code> روی می‌آوریم تا از از کار افتادن در برابر خطا به مدیریت خطا برسیم. به یاد داشته باشید که <code>parse</code> یک نوع <code>Result</code> برمی‌گرداند و <code>Result</code> یک enum است که واریانت‌های <code>Ok</code> و <code>Err</code> را دارد. ما اینجا از عبارت <code>match</code> استفاده می‌کنیم، همان‌طور که با نتیجه <code>Ordering</code> متد <code>cmp</code> انجام دادیم.</p>
+<p>اگر <code>parse</code> بتواند با موفقیت رشته را به عدد تبدیل کند، یک مقدار <code>Ok</code> برمی‌گرداند که حاوی عدد حاصل است. آن مقدار <code>Ok</code> با الگوی بازوی اول جور می‌شود و عبارت <code>match</code> فقط مقدار <code>num</code> را که <code>parse</code> تولید کرده و درون مقدار <code>Ok</code> گذاشته است برمی‌گرداند. آن عدد دقیقاً همان جایی که می‌خواهیم، در متغیر جدید <code>guess</code> که می‌سازیم، قرار می‌گیرد.</p>
+<p>اگر <code>parse</code> <em>نتواند</em> رشته را به عدد تبدیل کند، یک مقدار <code>Err</code> برمی‌گرداند که حاوی اطلاعات بیشتری درباره خطاست. مقدار <code>Err</code> با الگوی <code>Ok(num)</code> در بازوی اول <code>match</code> جور نمی‌شود، اما با الگوی <code>Err(_)</code> در بازوی دوم جور می‌شود. زیرخط، <code>_</code>، یک مقدار فراگیر (catch-all) است؛ در این مثال می‌گوییم می‌خواهیم با همه مقادیر <code>Err</code> تطبیق دهیم، مهم نیست چه اطلاعاتی درون آن‌ها باشد. پس برنامه کد بازوی دوم، یعنی <code>continue</code>، را اجرا می‌کند که به برنامه می‌گوید به تکرار بعدی <code>loop</code> برود و حدس دیگری بخواهد. بنابراین عملاً برنامه همه خطاهایی را که <code>parse</code> ممکن است با آن‌ها مواجه شود نادیده می‌گیرد!</p>
+<p>اکنون همه چیز در برنامه باید طبق انتظار کار کند. بیایید امتحانش کنیم:</p>
+<!-- manual-regeneration
+cd listings/ch02-guessing-game-tutorial/listing-02-05/
+cargo run
+(too small guess)
+(too big guess)
+foo
+(correct guess)
+-->
+<pre><code class="language-console">$ cargo run
+   Compiling guessing_game v0.1.0 (file:///projects/guessing_game)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running `target/debug/guessing_game`
+Guess the number!
+The secret number is: 61
+Please input your guess.
+10
+You guessed: 10
+Too small!
+Please input your guess.
+99
+You guessed: 99
+Too big!
+Please input your guess.
+foo
+Please input your guess.
+61
+You guessed: 61
+You win!
+</code></pre>
+<p>عالی! با یک تغییر کوچک نهایی بازی حدس عدد را تمام می‌کنیم. به یاد بیاورید که برنامه هنوز عدد مخفی را چاپ می‌کند. این برای آزمایش خوب بود، اما بازی را خراب می‌کند. بیایید <code>println!</code> ای را که عدد مخفی را چاپ می‌کند حذف کنیم. لیستینگ ۲-۶ کد نهایی را نشان می‌دهد.</p>
+<figure class="listing" id="listing-2-6">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore">use std::cmp::Ordering;
+use std::io;
+
+use rand::prelude::*;
+
+fn main() {
+    println!("Guess the number!");
+
+    let secret_number = rand::rng().random_range(1..=100);
+
+    loop {
+        println!("Please input your guess.");
+
+        let mut guess = String::new();
+
+        io::stdin()
+            .read_line(&amp;mut guess)
+            .expect("Failed to read line");
+
+        let guess: u32 = match guess.trim().parse() {
+            Ok(num) =&gt; num,
+            Err(_) =&gt; continue,
+        };
+
+        println!("You guessed: {guess}");
+
+        match guess.cmp(&amp;secret_number) {
+            Ordering::Less =&gt; println!("Too small!"),
+            Ordering::Greater =&gt; println!("Too big!"),
+            Ordering::Equal =&gt; {
+                println!("You win!");
+                break;
+            }
+        }
+    }
+}</code></pre>
+<figcaption><a href="#listing-2-6">لیست ۲-۶</a>: کد کامل بازی حدس عدد</figcaption>
+</figure>
+<p>در این مرحله، بازی حدس عدد را با موفقیت ساخته‌اید. تبریک!</p>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<p>این پروژه روشی عملی بود برای آشنا کردن شما با بسیاری از مفاهیم جدید Rust: <code>let</code>، <code>match</code>، تابع‌ها، استفاده از crateهای خارجی و موارد دیگر. در چند فصل بعدی درباره این مفاهیم با جزئیات بیشتری خواهید آموخت. فصل ۳ مفاهیمی را که بیشتر زبان‌های برنامه‌نویسی دارند، مانند متغیرها، نوع‌های داده و تابع‌ها، پوشش می‌دهد و نشان می‌دهد چگونه در Rust از آن‌ها استفاده کنیم. فصل ۴ مالکیت را بررسی می‌کند، ویژگی‌ای که Rust را از زبان‌های دیگر متمایز می‌کند. فصل ۵ ساختارها و سینتکس متد را بحث می‌کند و فصل ۶ توضیح می‌دهد شمارش‌ها چگونه کار می‌کنند.</p><nav class="page-nav"><a href="ch01-03-hello-cargo.html">→ سلام، Cargo!</a><a href="ch03-00-common-programming-concepts.html">مفاهیم رایج برنامه‌نویسی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

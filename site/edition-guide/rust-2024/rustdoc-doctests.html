@@ -1,0 +1,61 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>آزمون‌های ترکیبی Rustdoc — راهنمای ویرایش‌های Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rust-2024/rustdoc-doctests"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">راهنمای ویرایش‌های Rust</a><small class="en-title" dir="ltr">The Edition Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="rustdoc-combined-tests"><a class="header" href="#rustdoc-combined-tests">آزمون‌های ترکیبی Rustdoc</a></h1>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<ul>
+<li><a href="../../rustdoc/write-documentation/documentation-tests.html">آزمون‌های مستندات (doctest)</a> اکنون در یک فایل اجرایی واحد ترکیب می‌شوند که باید به بهبود چشمگیر کارایی منجر شود.</li>
+</ul>
+<h2 id="details"><a class="header" href="#details">جزئیات</a></h2>
+<p>پیش از ویرایش 2024، حالت «آزمون» rustdoc هر بلوک کد در مستندات شما را به‌صورت یک فایل اجرایی جداگانه کامپایل می‌کرد. اگرچه پیاده‌سازی این کار نسبتاً ساده بود، اما وقتی تعداد زیادی آزمون مستندات وجود داشت بار کارایی قابل‌توجهی ایجاد می‌کرد. از ویرایش 2024 به بعد، rustdoc تلاش می‌کند آزمون‌های مستندات را در یک فایل اجرایی واحد ترکیب کند و سربار کامپایل doctestها را به‌طور چشمگیری کاهش دهد.</p>
+<pre><code class="language-rust">/// Adds two numbers
+///
+/// ```
+/// assert_eq!(add(1, 1), 2);
+/// ```
+pub fn add(left: u64, right: u64) -&gt; u64 {
+    left + right
+}
+
+/// Subtracts two numbers
+///
+/// ```
+/// assert_eq!(subtract(2, 1), 1);
+/// ```
+pub fn subtract(left: u64, right: u64) -&gt; u64 {
+    left - right
+}</code></pre>
+<p>در این مثال، دو doctest اکنون در یک فایل اجرایی واحد کامپایل خواهند شد. Rustdoc در اصل هر مثال را در یک تابع جداگانه درون یک فایل اجرایی واحد قرار می‌دهد. آزمون‌ها همچنان مانند قبل در فرایندهای مستقل اجرا می‌شوند، بنابراین هر وضعیت سراسری (مانند staticهای سراسری) همچنان باید به‌درستی کار کند.<sup class="footnote-reference" id="fr-implementation-1"><a href="#footnote-implementation">1</a></sup></p>
+<p>این تغییر فقط در ویرایش 2024 در دسترس است تا از ناسازگاری‌های احتمالی با doctestهای موجود که ممکن است در یک فایل اجرایی ترکیبی کار نکنند جلوگیری شود. با این حال، انتظار می‌رود این ناسازگاری‌ها بسیار نادر باشند.</p>
+<h3 id="standalone_crate-tag"><a class="header" href="#standalone_crate-tag">برچسب <code>standalone_crate</code></a></h3>
+<p>در برخی موقعیت‌ها rustdoc نمی‌تواند مثال‌ها را در یک فایل اجرایی واحد ترکیب کند. Rustdoc تلاش می‌کند به‌طور خودکار تشخیص دهد که آیا این کار ممکن نیست یا نه. برای مثال، یک آزمون با دیگر آزمون‌ها ترکیب نخواهد شد اگر:</p>
+<ul>
+<li>از برچسب <a href="../../rustdoc/write-documentation/documentation-tests.html#attributes"><code>compile_fail</code></a> استفاده کند که نشان می‌دهد مثال باید کامپایل نشود.</li>
+<li>از برچسب <a href="../../rustdoc/write-documentation/documentation-tests.html#attributes"><code>edition</code></a> استفاده کند که ویرایش مثال را مشخص می‌کند.<sup class="footnote-reference" id="fr-edition-tag-1"><a href="#footnote-edition-tag">2</a></sup></li>
+<li>از attributeهای سراسری مانند attribute با نام <a href="https://doc.rust-lang.org/std/alloc/trait.GlobalAlloc.html"><code>global_allocator</code></a> استفاده کند که ممکن است با آزمون‌های دیگر تداخل پیدا کند.</li>
+<li>هر attribute سطح crate (مانند <code>#![feature(...)]</code>) را تعریف کند.</li>
+<li>ماکرویی تعریف کند که از <code>$crate</code> استفاده می‌کند، چون مسیر <code>$crate</code> به‌درستی کار نخواهد کرد.</li>
+</ul>
+<p>با این حال، rustdoc نمی‌تواند به‌طور خودکار <em>همهٔ</em> موقعیت‌هایی را که یک مثال نمی‌تواند با مثال‌های دیگر ترکیب شود تشخیص دهد. در این موقعیت‌ها می‌توانید برچسب زبان <code>standalone_crate</code> را اضافه کنید تا مشخص شود مثال باید به‌صورت یک فایل اجرایی جداگانه ساخته شود. برای مثال:</p>
+<pre><code class="language-rust">//! ```
+//! let location = std::panic::Location::caller();
+//! assert_eq!(location.line(), 5);
+//! ```</code></pre>
+<p>این به ساختار کد نحوهٔ کامپایل مثال حساس است و با رویکرد «ترکیبی» کار نخواهد کرد، چون شمارهٔ خط‌ها بسته به نحوهٔ ترکیب doctestها جابه‌جا می‌شود. در این موقعیت‌ها می‌توانید برچسب <code>standalone_crate</code> را اضافه کنید تا مثال مجبور شود دقیقاً مانند ویرایش‌های قبلی به‌صورت جداگانه ساخته شود. برای مثال:</p>
+<pre><code class="language-rust">//! ```standalone_crate
+//! let location = std::panic::Location::caller();
+//! assert_eq!(location.line(), 5);
+//! ```</code></pre>
+<h2 id="migration"><a class="header" href="#migration">مهاجرت</a></h2>
+<p>مهاجرت خودکاری برای تعیین اینکه کدام doctestها باید با برچسب <code>standalone_crate</code> علامت‌گذاری شوند وجود ندارد. بعید است هر doctest مشخصی پس از مهاجرت به‌درستی کار نکند. پیشنهاد می‌کنیم crate خود را به ویرایش 2024 به‌روزرسانی کنید و سپس آزمون‌های مستندات خود را اجرا کنید و ببینید آیا موردی شکست می‌خورد. اگر موردی شکست خورد، باید تحلیل کنید که آیا می‌توان آن را طوری بازنویسی کرد که با رویکرد ترکیبی سازگار شود، یا به‌جای آن برچسب <code>standalone_crate</code> را اضافه کنید تا رفتار قبلی حفظ شود.</p>
+<p>برخی مواردی که باید مراقب آن‌ها بود و از آن‌ها پرهیز کرد عبارت‌اند از:</p>
+<ul>
+<li>بررسی مقادیر <a href="https://doc.rust-lang.org/std/panic/struct.Location.html"><code>std::panic::Location</code></a> یا چیزهایی که از <code>Location</code> استفاده می‌کنند. موقعیت کد اکنون متفاوت است، چون چند آزمون اکنون در همان crate آزمون قرار دارند.</li>
+<li>بررسی مقدار <a href="https://doc.rust-lang.org/std/any/fn.type_name.html"><code>std::any::type_name</code></a> که اکنون مسیر ماژول متفاوتی دارد.</li>
+</ul>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-implementation">
+<p>برای اطلاعات بیشتر دربارهٔ جزئیات نحوهٔ کار این مورد، <a href="https://blog.guillaume-gomez.fr/articles/2024-08-17+Doctests+-+How+were+they+improved%3F">“Doctests - How were they improved?”</a> را ببینید. <a href="#fr-implementation-1">↩</a></p>
+</li>
+<li id="footnote-edition-tag">
+<p>توجه داشته باشید که rustdoc فقط در صورتی آزمون‌ها را ترکیب می‌کند که کل crate در ویرایش 2024 یا بالاتر باشد. استفاده از برچسب <code>edition2024</code> در ویرایش‌های قدیمی‌تر باعث ترکیب شدن آن آزمون‌ها نخواهد شد. <a href="#fr-edition-tag-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="rustdoc.html">→ Rustdoc</a><a href="rustdoc-nested-includes.html">تغییر include! تودرتو در Rustdoc ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../edition-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

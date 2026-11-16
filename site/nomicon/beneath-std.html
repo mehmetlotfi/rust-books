@@ -1,0 +1,42 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>زیر std — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="beneath-std"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="beneath-std"><a class="header" href="#beneath-std">زیر <code>std</code></a></h1>
+<p>این بخش ویژگی‌هایی را مستند می‌کند که معمولاً crate با نام <code>std</code> فراهم می‌کند و توسعه‌دهندگان <code>#![no_std]</code> برای ساخت crateهای باینری <code>#![no_std]</code> باید با آن‌ها سروکار داشته باشند (یعنی خودشان فراهمشان کنند).</p>
+<h2 id="using-libc"><a class="header" href="#using-libc">استفاده از <code>libc</code></a></h2>
+<p>برای ساخت یک فایل اجرایی <code>#[no_std]</code> به <code>libc</code> به‌عنوان وابستگی نیاز خواهیم داشت. می‌توانیم این را در فایل <code>Cargo.toml</code> مشخص کنیم:</p>
+<pre><code class="language-toml">[dependencies]
+libc = { version = "0.2.146", default-features = false }
+</code></pre>
+<p>توجه کنید که feature های پیش‌فرض غیرفعال شده‌اند. این یک گام حیاتی است - <strong>feature های پیش‌فرض <code>libc</code> شامل crate با نام <code>std</code> هستند و بنابراین باید غیرفعال شوند.</strong></p>
+<p>به‌طور جایگزین، می‌توانیم از feature ناپایدار و خصوصی <code>rustc_private</code> همراه با اعلان <code>extern crate libc;</code> استفاده کنیم، همان‌طور که در مثال‌های زیر نشان داده شده است. توجه کنید که هدف‌های windows-msvc به libc نیاز ندارند و بر همین اساس هیچ crate با نام <code>libc</code> در sysroot آن‌ها وجود ندارد. ما به <code>extern crate libc;</code> زیر نیازی نداریم، و داشتن آن روی یک هدف windows-msvc خطای کامپایل خواهد بود.</p>
+<h2 id="writing-an-executable-without-std"><a class="header" href="#writing-an-executable-without-std">نوشتن یک فایل اجرایی بدون <code>std</code></a></h2>
+<p>احتمالاً برای تولید یک فایل اجرایی <code>#![no_std]</code> به نسخه‌ی nightly کامپایلر نیاز خواهیم داشت، زیرا در بسیاری از پلتفرم‌ها باید <a href="../unstable/language-features/lang-items.html">lang item</a> با نام <code>eh_personality</code> را فراهم کنیم که ناپایدار است.</p>
+<p>باید یک نماد (symbol) برای نقطه‌ی ورود تعریف کنید که برای هدف شما مناسب باشد. برای مثال <code>main</code>، <code>_start</code>، <code>WinMain</code>، یا هر نقطه‌ی شروعی که برای هدف شما مرتبط است. علاوه بر این، باید از attribute با نام <code>#![no_main]</code> استفاده کنید تا کامپایلر تلاش نکند خودش یک نقطه‌ی ورود تولید کند.</p>
+<p>همچنین لازم است یک <a href="panic-handler.html">تابع panic handler</a> تعریف شود.</p>
+<pre><code class="language-rust">#![feature(lang_items, core_intrinsics, rustc_private)]
+#![allow(internal_features)]
+#![no_std]
+#![no_main]
+
+// Necessary for `panic = "unwind"` builds on cfg(unix) platforms.
+#![feature(panic_unwind)]
+extern crate unwind;
+
+// Pull in the system libc library for what crt0.o likely requires.
+#[cfg(not(windows))]
+extern crate libc;
+
+use core::ffi::{c_char, c_int};
+use core::panic::PanicInfo;
+
+// Entry point for this program.
+#[unsafe(no_mangle)] // ensure that this symbol is included in the output as `main`
+extern "C" fn main(_argc: c_int, _argv: *const *const c_char) -&gt; c_int {
+    0
+}
+
+// These functions are used by the compiler, but not for an empty program like this.
+// They are normally provided by `std`.
+#[lang = "eh_personality"]
+fn rust_eh_personality() {}
+#[panic_handler]
+fn panic_handler(_info: &amp;PanicInfo) -&gt; ! { core::intrinsics::abort_immediate() }</code></pre>
+<p>اگر با هدفی (target) کار می‌کنید که نسخه‌های باینری کتابخانهٔ استاندارد برایش از طریق rustup در دسترس نیست (احتمالاً یعنی خودتان crate با نام <code>core</code> را می‌سازید) و به intrinsicهای compiler-rt نیاز دارید (یعنی احتمالاً هنگام ساخت فایل اجرایی با خطاهای لینکر مواجه می‌شوید: <code>undefined reference to `__aeabi_memcpy'</code>)، باید برای دریافت آن intrinsicها و رفع خطاهای لینکر، به‌صورت دستی با <a href="https://crates.io/crates/compiler_builtins">crate با نام <code>compiler_builtins</code></a> لینک کنید.</p><nav class="page-nav"><a href="ffi.html">→ FFI</a><a href="panic-handler.html">#[panic_handler] ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

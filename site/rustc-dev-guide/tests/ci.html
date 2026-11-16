@@ -1,0 +1,393 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>آزمون با CI — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tests/ci"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="testing-with-ci"><a class="header" href="#testing-with-ci">تست با CI</a></h1>
+<p>هدف اصلی سامانهٔ CI ما این است که تضمین کند شاخهٔ <code>main</code> در
+<code>rust-lang/rust</code> با گذراندن مجموعهٔ تست ما همیشه در وضعیت معتبر است.</p>
+<p>از دید سطح بالا، وقتی در <code>rust-lang/rust</code> یک pull request باز می‌کنید،
+این اتفاق‌ها می‌افتد:</p>
+<ul>
+<li>پس از هر push به PR، یک <a href="#pull-request-builds">زیرمجموعهٔ</a> کوچک از تست‌ها و بررسی‌ها اجرا می‌شود.
+این باید به گرفتن خطاهای رایج کمک کند.</li>
+<li>وقتی PR تأیید شود، ربات <a href="https://github.com/rust-lang/bors">bors</a> آن را در یک <a href="https://bors.rust-lang.org/queue/rust">صف merge</a> قرار می‌دهد.</li>
+<li>وقتی PR به ابتدای صف برسد، bors یک merge commit می‌سازد
+و <a href="#auto-builds">مجموعهٔ کامل تست</a> را روی آن اجرا می‌کند.
+merge commit یا فقط یک PR مشخص را شامل می‌شود یا می‌تواند یک <a href="#rollups">«rollup»</a> باشد که
+چند PR را با هم ترکیب می‌کند تا هزینه‌های CI و تأخیر merge کاهش یابد.</li>
+<li>وقتی کل مجموعهٔ تست تمام شد، دو اتفاق ممکن است بیفتد.
+یا CI با خطایی شکست می‌خورد که باید توسط توسعه‌دهنده رفع شود، یا CI موفق می‌شود و
+مerge commit به شاخهٔ <code>main</code> push می‌شود.</li>
+</ul>
+<p>اگر می‌خواهید آنچه در CI اجرا می‌شود را تغییر دهید، <a href="#modifying-ci-jobs">تغییر jobهای CI</a> را ببینید.</p>
+<h2 id="ci-workflow"><a class="header" href="#ci-workflow">CI workflow</a></h2>
+<!-- date-check: Oct 2024 -->
+<p>CI ما عمدتاً روی <a href="https://github.com/rust-lang/rust/actions">GitHub Actions</a> اجرا می‌شود، با یک workflow واحد که در
+<a href="https://github.com/rust-lang/rust/blob/HEAD/.github/workflows/ci.yml"><code>.github/workflows/ci.yml</code></a> تعریف شده و شامل مجموعه‌ای از گام‌هاست که برای
+همهٔ jobهای CI که اجرا می‌کنیم یکسان‌اند.
+وقتی commitی به شاخهٔ متناظر یا یک PR push شود، workflow
+crate با نام <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/citool"><code>src/ci/citool</code></a> را اجرا می‌کند که به‌طور پویا jobهای مشخص CI را که باید اجرا شوند تولید می‌کند.
+این اسکریپت فایل <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/github-actions/jobs.yml"><code>jobs.yml</code></a> را به‌عنوان
+ورودی به‌کار می‌برد که پیکربندی اعلانی همهٔ jobهای CI ما را دارد.</p>
+<blockquote>
+<p>تقریباً همهٔ گام‌های ساخت به اسکریپت‌های جداگانه shell می‌کنند. این CI را نسبتاً
+مستقل از پلتفرم نگه می‌دارد (یعنی بیش‌ازحد به GitHub Actions وابسته نیستیم).
+به GitHub Actions فقط برای راه‌اندازی فرایند CI و
+هماهنگ‌کردن اسکریپت‌هایی که فرایند را پیش می‌برند تکیه می‌شود.</p>
+</blockquote>
+<p>در اصل، همهٔ jobهای CI دستور <code>./x test</code>، <code>./x dist</code> یا دستور دیگری را با
+پیکربندی‌های مختلف، روی سیستم‌عامل‌ها، هدف‌ها و پلتفرم‌های گوناگون اجرا می‌کنند.
+دو دستهٔ کلی از jobها اجرا می‌شود: jobهای <code>dist</code> و غیر <code>dist</code>.</p>
+<ul>
+<li>jobهای dist نسخهٔ کامل انتشار کامپایلر را برای یک پلتفرم مشخص می‌سازند،
+از جمله همهٔ ابزارهایی که از طریق rustup عرضه می‌کنیم.
+آن ساخت‌ها سپس در سطل S3 با نام <code>rust-lang-ci2</code> بارگذاری می‌شوند و با ابزار
+<a href="https://github.com/kennytm/rustup-toolchain-install-master">rustup-toolchain-install-master</a> برای نصب محلی در دسترس‌اند.
+همین ساخت‌ها برای انتشارهای واقعی هم به‌کار می‌روند:
+فرایند انتشار ما اساساً کپی‌کردن آن آرتیفکت‌ها از <code>rust-lang-ci2</code> به نقطهٔ تولید و امضای آن‌هاست.</li>
+<li>jobهای غیر dist مجموعهٔ کامل تست ما را روی پلتفرم اجرا می‌کنند، به‌علاوهٔ مجموعهٔ تست
+همهٔ ابزارهایی که از طریق rustup عرضه می‌کنیم؛
+مقدار چیزهایی که تست می‌کنیم به پلتفرم بستگی دارد (برای مثال برخی تست‌ها فقط روی پلتفرم‌های Tier 1 اجرا می‌شوند)، و
+برخی پلتفرم‌های سریع‌تر روی یک builder مشترک گروه‌بندی شده‌اند تا منابع CI هدر نرود.</li>
+</ul>
+<p>بر اساس یک رویداد ورودی (معمولاً push به یک شاخه)، یکی از سه نوع ساخت (مجموعه‌ای از jobها) اجرا می‌شود.</p>
+<ol>
+<li>PR builds</li>
+<li>Auto builds</li>
+<li>Try builds</li>
+</ol>
+<h3 id="pull-request-builds"><a class="header" href="#pull-request-builds">Pull Request builds</a></h3>
+<p>پس از هر push به یک pull request، مجموعه‌ای از jobهای <code>pr</code> اجرا می‌شود.
+فعلاً این‌ها jobهای <code>test-x86_64-gnu-llvm-X</code>، <code>test-x86_64-gnu-tools</code>، <code>test-pr-check-1</code>، <code>test-pr-check-2</code>
+و <code>test-tidy</code> را اجرا می‌کنند که همه روی لینوکس‌اند.
+این‌ها مجموعهٔ تست نسبتاً کوتاه
+(حدود ۴۰ دقیقه) و سبکی را اجرا می‌کنند که باید مشکلات رایج را بگیرد.
+به‌طور مشخص‌تر، مجموعه‌ای از lintها را اجرا می‌کنند، سعی می‌کنند یک ساخت بررسی cross-compile
+به Windows mingw انجام دهند (بدون تولید آرتیفکت)، و کامپایلر را با نسخهٔ <em>سیستمی</em> LLVM تست می‌کنند.
+متأسفانه اجرای مجموعهٔ کامل تست برای هر commit در هر PR منابع بسیار زیادی می‌خواهد.</p>
+<blockquote>
+<p><strong>نکته دربارهٔ doc commentها</strong></p>
+<p>توجه کنید که CI مربوط به PR تا اکتبر 2024 <!-- datecheck --> به‌طور پیش‌فرض سعی نمی‌کند
+<code>./x doc xxx</code> را اجرا کند. یعنی اگر پیوندهای intradoc شکسته‌ای دارید که
+باعث شکست <code>./x doc xxx</code> می‌شوند، این در مراحل بسیار پایانی
+پایپ‌لاین CI کامل صف merge رخ می‌دهد.</p>
+<p>بنابراین ایدهٔ خوبی است برای هر تغییر در doc commentها <code>./x doc xxx</code> را به‌صورت محلی اجرا کنید تا این‌ها را زود بگیرید.</p>
+</blockquote>
+<p>jobهای PR در بخش <code>pr</code> فایل <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/github-actions/jobs.yml"><code>jobs.yml</code></a> تعریف شده‌اند.
+نتایج آن‌ها را می‌توان
+مستقیماً روی PR، در بخش «CI checks» پایین صفحهٔ PR دید.</p>
+<h3 id="auto-builds"><a class="header" href="#auto-builds">Auto builds</a></h3>
+<p>پیش از اینکه یک commit بتواند به شاخهٔ <code>main</code> merge شود، باید از مجموعهٔ کامل تست ما بگذرد.
+این را ساخت <code>auto</code> می‌نامیم.
+این ساخت ده‌ها job CI را اجرا می‌کند که تست‌های مختلف را روی سیستم‌عامل‌ها و هدف‌های گوناگون می‌آزمایند.
+مجموعهٔ کامل تست نسبتاً کند است؛
+ممکن است چند ساعت طول بکشد تا همهٔ jobهای <code>auto</code> CI تمام شوند.</p>
+<p>بیشتر پلتفرم‌ها فقط گام‌های ساخت را اجرا می‌کنند، برخی مجموعهٔ محدودی از تست‌ها را اجرا می‌کنند؛
+فقط زیرمجموعه‌ای مجموعهٔ کامل تست‌ها را اجرا می‌کنند (<a href="https://forge.rust-lang.org/release/platform-support.html#rust-platform-support">ردهٔ پلتفرم‌ها</a> در Rust را ببینید).</p>
+<p>jobهای auto در بخش <code>auto</code> فایل <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/github-actions/jobs.yml"><code>jobs.yml</code></a> تعریف شده‌اند.
+آن‌ها روی شاخهٔ <a href="https://github.com/rust-lang/rust/tree/automation/bors/auto"><code>automation/bors/auto</code></a> در مخزن <code>rust-lang/rust</code> اجرا می‌شوند،
+و نتیجهٔ نهایی با کامنتی که bors روی PR مربوطه می‌گذارد گزارش می‌شود.
+نتایج زنده را می‌توان در <a href="https://github.com/rust-lang/rust/actions">صفحهٔ workflowهای GitHub Actions</a> دید.</p>
+<p>در هر زمان، حداکثر یک ساخت <code>auto</code> در حال اجراست.
+بیشتر در <a href="#merging-prs-serially-with-bors">Merge‌کردن PRها به‌صورت سریالی با bors</a> بخوانید.</p>
+<p>معمولاً وقتی یک job از نوع auto شکست می‌خورد، کل workflow در CI فوراً پایان می‌یابد.
+اما می‌تواند مفید باشد
+jobهای auto «غیرمسدودکننده» یا اختیاری بسازیم تا مدتی در CI تستشان کنیم پیش از اینکه merge‌ها را به آن‌ها منوط کنیم.
+این وقتی مفید است که آن jobها ممکن است flaky باشند.</p>
+<p>برای این کار، به نام چنین jobای پیشوند <code>optional-</code> بدهید و برای آن در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/github-actions/jobs.yml"><code>jobs.yml</code></a> مقدار <code>continue_on_error: true</code> را تنظیم کنید.</p>
+<h3 id="try-builds"><a class="header" href="#try-builds">Try builds</a></h3>
+<p>گاهی می‌خواهیم زیرمجموعه‌ای از مجموعهٔ تست را برای یک PR مشخص در CI اجرا کنیم، یا
+مجموعه‌ای از آرتیفکت‌های کامپایلر را از آن PR بسازیم، بدون اینکه تلاش کنیم آن را merge کنیم.
+این را «try build» می‌نامیم. یک try build وقتی شروع می‌شود که کاربری با مجوزهای مناسب
+یک کامنت PR با دستور <code>@bors try</code> بگذارد.</p>
+<p>چند مورد استفاده برای try buildها هست:</p>
+<ul>
+<li>اجرای مجموعه‌ای از benchmarkهای عملکرد با مجموعهٔ benchmark ما یعنی <a href="https://github.com/rust-lang/rustc-perf">rustc-perf</a>.
+برای این، یک ساخت کامپایلر که کار کند لازم است، که می‌توان آن را با
+یک try build تولید کرد که job CI به نام <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/docker/host-x86_64/dist-x86_64-linux/Dockerfile">dist-x86_64-linux</a> را اجرا می‌کند و نسخهٔ بهینه‌شدهٔ
+کامپایلر را روی لینوکس می‌سازد (این job فعلاً به‌طور پیش‌فرض اجرا می‌شود
+وقتی try build شروع کنید).
+برای ساخت یک try build و زمان‌بندی آن برای
+benchmark عملکرد، می‌توانید از ترکیب دستورهای <code>@bors try @rust-timer queue</code> استفاده کنید.</li>
+<li>بررسی اثر PR در سراسر اکوسیستم Rust، با اجرای <a href="crater.html">Crater</a>.
+باز هم برای این به ساخت کامپایلر کارا نیاز است، که با
+job CI به نام <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/docker/host-x86_64/dist-x86_64-linux/Dockerfile">dist-x86_64-linux</a> تولید می‌شود.</li>
+<li>اجرای یک job مشخص CI (مثلاً تست‌های Windows) روی یک PR، تا سریعاً
+تست شود که آیا مجموعهٔ تست آن job را می‌گذراند.</li>
+</ul>
+<p>به‌طور پیش‌فرض، اگر کامنتی با <code>@bors try</code> بفرستید، jobهای تعریف‌شده در بخش <code>try</code> فایل
+<a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/github-actions/jobs.yml"><code>jobs.yml</code></a> اجرا می‌شوند.
+این حالت را «fast try build» می‌نامیم.
+چنین try buildای هیچ تستی اجرا نمی‌کند و هشدارهای کامپایل را مجاز می‌داند.
+وقتی می‌خواهید یک toolchain بهینه را تا حد ممکن سریع
+برای اجرای Crater یا benchmarkهای عملکرد بگیرید مفید است،
+حتی اگر ممکن است کاملاً درست کار نکند.</p>
+<p>job CI اجراشده در fast try buildها پسوند ویژه‌ای (<code>-quick</code>) دارد،
+تا از ساخت کامل job پیش‌فرض try متمایز شود.
+اگر می‌خواهید به‌جای آن ساخت کامل را انجام دهید،
+نام job آن را در یک الگوی job مشخص کنید (در ادامه توضیح داده شده).</p>
+<p>اگر می‌خواهید jobهای سفارشی CI را در یک try build اجرا کنید و مطمئن شوید همهٔ تست‌ها را می‌گذرانند و
+هیچ هشدار کامپایلی تولید نمی‌کنند، می‌توانید jobهای CI را با مشخص‌کردن یک <em>الگوی job</em> انتخاب کنید،
+که می‌تواند به یکی از دو شکل استفاده شود:</p>
+<ul>
+<li>می‌توانید مجموعه‌ای از directiveهای <code>try-job: &lt;job pattern&gt;</code> را به توضیحات PR اضافه کنید (در ادامه توضیح داده شده) و سپس
+فقط <code>@bors try</code> را اجرا کنید.
+CI این directiveها را می‌خواند و jobهایی را که مشخص کرده‌اید اجرا می‌کند.
+این
+وقتی مفید است که می‌خواهید پس از تغییر تدریجی PR، همان مجموعهٔ jobهای try را چند بار دوباره اجرا کنید.</li>
+<li>You can specify the job pattern using the <code>jobs</code> parameter of the try command: <code>@bors try jobs=&lt;job pattern&gt;</code>.
+This is useful for one-off try builds with specific jobs.
+Note that the <code>jobs</code> parameter has a higher priority than the PR description directives.
+<ul>
+<li>همچنین می‌توان چند الگو را مشخص کرد، مثلاً <code>@bors try jobs=job1,job2,job3</code>.</li>
+</ul>
+</li>
+</ul>
+<p>هر الگوی job می‌تواند نام دقیق یک job یا الگوی glob باشد که چند job را تطبیق می‌دهد،
+مثلاً <code>*msvc*</code> یا <code>*-alt</code>.
+می‌توانید حداکثر ۲۰ job را در یک try build شروع کنید.
+هنگام استفاده از
+الگوهای glob در توضیحات PR، می‌توانید به‌صورت اختیاری آن‌ها را داخل backtick (<code>`</code>) بگذارید تا GitHub
+الگو را اگر مثلاً ستاره دارد به‌عنوان Markdown رندر نکند. توجه کنید که این escape هنگام استفاده از
+پارامتر <code>@bors jobs=</code> کار نمی‌کند.</p>
+<p>الگوی job باید یک یا چند job تعریف‌شده در بخش‌های <code>auto</code> یا <code>optional</code>
+فایل <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/github-actions/jobs.yml"><code>jobs.yml</code></a> را تطبیق دهد:</p>
+<ul>
+<li>jobهای <code>auto</code> پیش از merge شدن یک commit به شاخهٔ <code>main</code> اجرا می‌شوند.</li>
+<li>jobهای <code>optional</code> فقط وقتی اجرا می‌شوند که صراحتاً از طریق try build درخواست شوند.
+معمولاً برای هدف‌های tier 2 و tier 3 به‌کار می‌روند.</li>
+</ul>
+<p>یکی از دلایل انجام try build اجرای perf است، همان‌طور که بالا گفته شد، با <code>@rust-timer queue</code>.
+این ساخت perf سپس با برخی commitها در main مقایسه می‌شود.
+با <code>@bors try parent=&lt;sha&gt;</code> می‌توانید try build و اجرای perf بعدی را بر یک commit مشخص در <code>main</code> مبتنی کنید،
+تا مقایسهٔ perf تا حد ممکن منصفانه باشد.</p>
+<blockquote>
+<p><strong>استفاده از directiveهای <code>try-job</code> در توضیحات PR</strong></p>
+<ol>
+<li>
+<p>مشخص کنید کدام مجموعه از jobهای try را می‌خواهید بیازمایید. نام jobهای CI را
+می‌توانید در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/github-actions/jobs.yml"><code>jobs.yml</code></a> بیابید.</p>
+</li>
+<li>
+<p>توضیحات PR را اصلاح کنید تا مجموعه‌ای از الگوها را شامل شود (معمولاً در انتهای
+توضیحات PR)، برای مثال:</p>
+<pre><code class="language-text">This PR fixes #123456.
+
+try-job: x86_64-msvc
+try-job: test-various
+try-job: `*-alt`
+</code></pre>
+<p>هر الگوی <code>try-job</code> باید در خط جداگانهٔ خودش باشد.</p>
+</li>
+<li>
+<p>jobهای try تجویزشده را با <code>@bors try</code> اجرا کنید. همان‌طور که گفته شد، این
+نیاز دارد کاربر یا (۱) مجوز <code>try</code> داشته باشد یا (۲) توسط کسی که مجوز <code>try</code> دارد
+با <code>@bors delegate try</code> مجوز <code>try</code> به او تفویض شده باشد.</p>
+</li>
+</ol>
+<p>توجه کنید که انجام این معمولاً آسان‌تر از ویرایش دستی <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/github-actions/jobs.yml"><code>jobs.yml</code></a> است.
+اما می‌تواند انعطاف کمتری داشته باشد چون نمی‌توانید مجموعهٔ تست‌هایی را که
+به این شکل اجرا می‌شوند تنظیم کنید.</p>
+</blockquote>
+<p>try buildها روی شاخهٔ <a href="https://github.com/rust-lang/rust/tree/automation/bors/try"><code>automation/bors/try</code></a> در مخزن <code>rust-lang/rust</code> اجرا می‌شوند و
+نتایجشان را می‌توان در <a href="https://github.com/rust-lang/rust/actions">صفحهٔ workflowهای GitHub Actions</a> دید،
+هرچند معمولاً نتیجه را با کامنتی که bors روی
+PR مربوطه می‌گذارد مطلع می‌شوید.</p>
+<p>چند try build می‌توانند هم‌زمان روی PRهای مختلف اجرا شوند، اما در هر زمان حداکثر
+یک try build روی یک PR واحد می‌تواند اجرا شود.</p>
+<h3 id="modifying-ci-jobs"><a class="header" href="#modifying-ci-jobs">Modifying CI jobs</a></h3>
+<p>اگر می‌خواهید آنچه در CI ما اجرا می‌شود را تغییر دهید، می‌توانید به‌سادگی بخش‌های
+<code>pr</code>، <code>auto</code> یا <code>try</code> فایل <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/github-actions/jobs.yml"><code>jobs.yml</code></a> را تغییر دهید.</p>
+<p>همچنین می‌توانید آنچه اجرا می‌شود را موقتاً تغییر دهید، مثلاً برای تست
+پلتفرم یا پیکربندی خاصی که تست محلی آن دشوار است (برای
+مثال، اگر ساخت Windows شکست می‌خورد اما به ماشین Windows دسترسی ندارید).
+در چنین موقعیت‌هایی در استفاده از منابع CI تردید نکنید.</p>
+<p>می‌توانید یک job دلخواه CI را به دو شکل اجرا کنید:</p>
+<ul>
+<li>از قابلیت <a href="#try-builds">try build</a> استفاده کنید و jobهای CI‌ای را که
+می‌خواهید در try buildها اجرا شوند در توضیحات PR مشخص کنید.</li>
+<li>بخش <a href="#pull-request-builds"><code>pr</code></a> در <code>jobs.yml</code> را تغییر دهید تا مشخص کنید
+کدام jobهای CI باید پس از هر push به PR شما اجرا شوند.
+این ممکن است سریع‌تر از شروع مکرر try buildها باشد.</li>
+</ul>
+<p>برای تغییر jobهایی که پس از هر push به یک PR اجرا می‌شوند، می‌توانید به‌سادگی یکی از
+تعریف‌های job را از بخش <code>auto</code> به بخش <code>pr</code> کپی کنید.
+برای مثال، job با نام <code>x86_64-msvc</code> مسئول اجرای تست‌های MSVC ۶۴ بیتی است.
+می‌توانید آن را به بخش <code>pr</code> کپی کنید تا پس از push شدن یک commit
+به PR شما اجرا شود، به این شکل:</p>
+<pre><code class="language-yaml">pr:
+  ...
+  - image: test-x86_64-gnu-tools
+    &lt;&lt;: *job-linux-16c
+  # this item was copied from the `auto` section
+  # vvvvvvvvvvvvvvvvvv
+  - image: test-x86_64-msvc
+    env:
+      RUST_CONFIGURE_ARGS: --build=x86_64-pc-windows-msvc --enable-profiler
+      SCRIPT: make ci-msvc
+    &lt;&lt;: *job-windows-8c
+</code></pre>
+<p>سپس می‌توانید فایل را commit کنید و به شاخهٔ PR خود در GitHub push کنید.
+GitHub Actions باید پس از هر push به PR شما این job CI را اجرا کند.</p>
+<div class="warning">
+<p><strong>پس از پایان آزمایش‌هایتان، فراموش نکنید هر تغییری را که در <code>jobs.yml</code> داده‌اید و قرار بود موقتی باشد حذف کنید!</strong></p>
+<p>روش خوب این است که تا وقتی jobهای try در حال اجرا هستند پیشوند <code>[WIP]</code> را به عنوان PR اضافه کنید
+و <code>[DO NOT MERGE]</code> را به commitی که jobهای CI را برای تست تغییر می‌دهد.</p>
+</div>
+
+<p>هرچند خوش‌آمدید که از CI استفاده کنید، فقط آگاه باشید که این یک منبع مشترک
+با همزمانی محدود است.
+سعی کنید jobهای زیادی را هم‌زمان فعال نکنید؛
+در بیشتر موارد یکی دو مورد کافی است.</p>
+<h2 id="merging-prs-serially-with-bors"><a class="header" href="#merging-prs-serially-with-bors">Merge‌کردن PRها به‌صورت سریالی با bors</a></h2>
+<p>سرویس‌های CI معمولاً آخرین commit یک شاخه را که با آخرین commit در <code>main</code> merge شده تست می‌کنند،
+و هرچند این برای بررسی اینکه آیا قابلیت به‌تنهایی کار می‌کند عالی است،
+تضمینی نمی‌دهد که کد پس از merge شدن کار کند.
+شکست‌هایی از این دست معمولاً وقتی رخ می‌دهند که PR دیگر و ناسازگاری
+پس از انجام ساخت merge شود.</p>
+<p>برای تضمین شاخهٔ <code>main</code> که همیشه کار می‌کند، mergeهای دستی را ممنوع می‌کنیم.
+به‌جای آن، همهٔ PRها باید از طریق ربات ما، <a href="https://github.com/rust-lang/bors">bors</a>، تأیید شوند.
+همهٔ PRهای تأییدشده در یک <a href="https://bors.rust-lang.org/queue/rust">صف merge</a> قرار می‌گیرند
+(مرتب‌شده بر اساس اولویت و تاریخ ایجاد) و به‌طور خودکار یکی‌یکی تست می‌شوند.
+اگر همهٔ builderها سبز باشند، PR merge می‌شود، در غیر این صورت شکست
+ثبت می‌شود و PR باید دوباره تأیید شود.</p>
+<p>Bors مستقیماً با سرویس‌های CI تعامل ندارد، بلکه با push‌کردن
+merge commitی که می‌خواهد تست کند به شاخه‌های مشخص (مثل <code>automation/bors/auto</code> یا <code>automation/bors/try</code>) کار می‌کند،
+که برای اجرای بررسی‌های CI پیکربندی شده‌اند.
+Bors سپس با گوش‌دادن به Commit Statusها یا Check Runها نتیجهٔ ساخت را تشخیص می‌دهد.
+از آنجا که merge commit
+بر آخرین <code>main</code> مبتنی است و فقط یکی را می‌توان هم‌زمان تست کرد، وقتی
+نتایج سبز باشند، <code>main</code> به آن merge commit fast-forward می‌شود.</p>
+<p>متأسفانه تست‌کردن یک PR در هر زمان، همراه با CI طولانی ما (حدود ۲
+ساعت برای یک اجرای کامل)، یعنی نمی‌توانیم در یک روز PRهای زیادی merge کنیم، و
+یک شکست واحد اثر زیادی بر توان عملیاتی ما دارد.
+حداکثر تعداد PRهایی که می‌توانیم در یک روز merge کنیم حدود ۱۰ است.</p>
+<p>زمان‌های اجرای طولانی CI و نیاز به مجموعهٔ بزرگ builderها عمدتاً به این دلیل است
+که آرتیفکت‌های کامل انتشار در builderهای <code>dist-</code> ساخته می‌شوند.
+این ارزشش را دارد چون این آرتیفکت‌های انتشار:</p>
+<ul>
+<li>امکان تست perf را حتی در تاریخی دیرتر فراهم می‌کنند.</li>
+<li>امکان bisection را هنگام کشف باگ‌ها در آینده فراهم می‌کنند.</li>
+<li>کیفیت انتشار را تضمین می‌کنند چون اگر همیشه در حال انتشار باشیم، مشکلات را زود می‌گیریم.</li>
+</ul>
+<h3 id="rollups"><a class="header" href="#rollups">Rollups</a></h3>
+<p>برخی PRها نیاز به اجرای کل مجموعهٔ تست ندارند: تغییرهای بی‌اهمیت مثل رفع غلط‌های تایپی یا بهبود README <em>نباید</em> ساخت را بشکنند، و تست‌کردن
+هر کدام برای بیش از ۲ ساعت اتلاف است.
+برای حل این، به‌طور منظم یک «rollup» می‌سازیم، PRای که در آن چند PR بی‌اهمیت منتظر را merge می‌کنیم تا
+با هم تست شوند.
+rollupها را یکی از اعضای تیم به‌صورت دستی با
+دکمهٔ «create a rollup» در <a href="https://bors.rust-lang.org/queue/rust">صف merge</a> می‌سازد.
+عضو تیم با قضاوت خود تصمیم می‌گیرد آیا یک PR پرخطر است یا نه.</p>
+<h2 id="docker"><a class="header" href="#docker">Docker</a></h2>
+<p>همهٔ jobهای CI، به‌جز آن‌هایی که روی macOS و Windows هستند، درون
+<a href="https://github.com/rust-lang/rust/tree/HEAD/src/ci/docker">container Docker</a> سفارشی آن پلتفرم اجرا می‌شوند.
+این مزایای زیادی برای ما دارد:</p>
+<ul>
+<li>
+<p>محیط ساخت صرف‌نظر از تغییرات ایمیج زیربنایی سازگار است (تغییر از ایمیج trusty به xenial برای ما بی‌دردسر بود).</p>
+</li>
+<li>
+<p>می‌توانیم از محیط‌های ساخت بسیار قدیمی برای تضمین حداکثر سازگاری دودویی استفاده کنیم،
+مثلاً <a href="https://github.com/rust-lang/rust/blob/HEAD/src/ci/docker/host-x86_64/dist-x86_64-linux/Dockerfile">با استفاده از انتشارهای قدیمی‌تر CentOS</a> روی builderهای لینوکس.</p>
+</li>
+<li>
+<p>به لطف cache ایمیج Docker می‌توانیم از نصب مجدد ابزارها (مثل QEMU یا شبیه‌ساز Android) در هر بار پرهیز کنیم.</p>
+</li>
+<li>
+<p>کاربران می‌توانند همین تست‌ها را در همین محیط به‌صورت محلی با اجرای این دستور اجرا کنند:</p>
+<pre><code>cargo run --manifest-path src/ci/citool/Cargo.toml run-local &lt;job-name&gt;
+</code></pre>
+<p>این برای اشکال‌زدایی شکست‌ها مفید است.
+توجه کنید که به‌دلیل مجوزها و
+محدودیت‌های دیگر، فقط ایمیج‌های Docker لینوکس به‌صورت محلی در دسترس‌اند.</p>
+</li>
+</ul>
+<p>ایمیج‌های Docker با پیشوند <code>dist-</code> برای ساخت آرتیفکت‌ها به‌کار می‌روند،
+در حالی که آن‌هایی که این پیشوند را ندارند تست‌ها و بررسی‌ها را اجرا می‌کنند.</p>
+<p>ما در CI تست‌هایی برای معماری‌های کمتر رایج (عمدتاً پلتفرم‌های Tier 2 و Tier 3) هم اجرا می‌کنیم.
+از آنجا که آن پلتفرم‌ها x86 نیستند، یا همه‌چیز را
+درون QEMU اجرا می‌کنیم، یا اگر نمی‌خواهیم تست‌ها را برای آن پلتفرم اجرا کنیم فقط cross-compile می‌کنیم.</p>
+<p>این builderها روی یک مجموعهٔ ویژه از builderها اجرا می‌شوند که GitHub برای ما راه‌اندازی و نگهداری می‌کند.</p>
+<h2 id="caching"><a class="header" href="#caching">Caching</a></h2>
+<p>workflow در CI ما از سازوکارهای cache گوناگون استفاده می‌کند، عمدتاً برای دو چیز:</p>
+<h3 id="docker-images-caching"><a class="header" href="#docker-images-caching">Docker images caching</a></h3>
+<p>ایمیج‌های Docker که برای اجرای بیشتر builderهای مبتنی بر لینوکس به‌کار می‌بریم ساخت کامل‌شان <em>زمان زیادی</em> می‌برد.
+برای سرعت‌دادن به ساخت، آن‌ها را با <a href="https://docs.docker.com/build/cache/backends/registry/">cache رجیستری Docker</a> cache می‌کنیم،
+و آرتیفکت‌های میانی روی <a href="https://github.com/rust-lang/rust/pkgs/container/rust-ci">ghcr.io</a> ذخیره می‌شوند.
+ایمیج‌های Docker ساخته‌شده را هم به ghcr push می‌کنیم تا ابزارهای دیگر
+(rustup) یا توسعه‌دهندگانی که ساخت Docker را به‌صورت محلی اجرا می‌کنند بتوانند دوباره از آن‌ها استفاده کنند (تا ساختشان سریع‌تر شود).</p>
+<p>از آنجا که چند شاخهٔ واگرا (<code>main</code>، <code>beta</code> و <code>stable</code>) را تست می‌کنیم،
+نمی‌توانیم به یک cache واحد برای ایمیج‌ها تکیه کنیم، وگرنه ساخت‌ها روی یک شاخه
+cache شاخه‌های دیگر را بازنویسی می‌کردند.
+به‌جای آن، ایمیج‌ها را زیر
+تگ‌های مختلف ذخیره می‌کنیم و آن‌ها را با هش سفارشی‌ای که از محتوای همهٔ
+Dockerfileها و اسکریپت‌های مرتبط ساخته می‌شود شناسایی می‌کنیم.</p>
+<p>CI یک کلید هش محاسبه می‌کند، تا cache یک ایمیج Docker
+اگر یکی از موارد زیر تغییر کند باطل شود:</p>
+<ul>
+<li>Dockerfile</li>
+<li>فایل‌هایی که در Dockerfile به ایمیج Docker کپی می‌شوند</li>
+<li>معماری runner در GitHub (x86 یا ARM)</li>
+</ul>
+<h3 id="llvm-caching-with-sccache"><a class="header" href="#llvm-caching-with-sccache">cache کردن LLVM با Sccache</a></h3>
+<p>در jobهای مختلف CI مقداری C/C++ می‌سازیم، و برای cache کردن
+آرتیفکت‌های میانی LLVM به <a href="https://github.com/mozilla/sccache">Sccache</a> تکیه می‌کنیم.
+Sccache یک ccache توزیع‌شده است که توسط
+Mozilla توسعه یافته و می‌تواند یک سطل ذخیره‌سازی شیء را به‌عنوان backend ذخیره‌سازی به‌کار ببرد.</p>
+<p>با Sccache نیازی نیست خودمان کلید هش را محاسبه کنیم.
+Sccache وقتی تغییر ورودی‌های مرتبط را تشخیص می‌دهد، cache را به‌طور خودکار باطل می‌کند،
+مثل کد منبع، نسخهٔ کامپایلر و متغیرهای محیطی مهم.
+بنابراین فقط wrapper مربوط به Sccache را روی Cargo قرار می‌دهیم و بقیه را Sccache انجام می‌دهد.</p>
+<p>آرتیفکت‌های پایدار را روی سطل S3 با نام <code>rust-lang-ci-sccache2</code> ذخیره می‌کنیم.
+پس وقتی CI اجرا می‌شود، اگر Sccache ببیند LLVM با همان کامپایلر C/C++
+و همان کد منبع LLVM در حال کامپایل است، واحدهای ترجمهٔ کامپایل‌شدهٔ جداگانه را
+از S3 بازیابی می‌کند.</p>
+<h2 id="custom-tooling-around-ci"><a class="header" href="#custom-tooling-around-ci">ابزارهای سفارشی پیرامون CI</a></h2>
+<p>در طول سال‌ها، چند ابزار سفارشی برای بهبود تجربهٔ CI توسعه داده‌ایم.</p>
+<h3 id="rust-log-analyzer-to-show-the-error-message-in-prs"><a class="header" href="#rust-log-analyzer-to-show-the-error-message-in-prs">Rust Log Analyzer برای نمایش پیام خطا در PRها</a></h3>
+<p>لاگ‌های ساخت <code>rust-lang/rust</code> عظیم‌اند، و پیدا‌کردن
+اینکه چه چیزی باعث شکست ساخت شده با نگاه‌کردن به لاگ‌ها عملی نیست.
+بنابراین رباتی به نام <a href="https://github.com/rust-lang/rust-log-analyzer">Rust Log Analyzer</a> (RLA) توسعه دادیم که
+هنگام شکست لاگ‌های ساخت را دریافت می‌کند، و پیام خطا را به‌طور خودکار استخراج می‌کند
+و در رشتهٔ PR می‌گذارد.</p>
+<p>ربات برای جست‌وجوی رشته‌های خطا hardcode نشده، بلکه با مجموعه‌ای
+از شکست‌های ساخت آموزش دیده تا تشخیص دهد کدام خطوط بین ساخت‌ها مشترک‌اند و کدام نه.
+هرچند تکه‌کدهای تولیدشده گاهی عجیب‌اند، ربات در
+تشخیص خطوط مرتبط بسیار خوب است، حتی اگر خطایی باشد که قبلاً هرگز ندیده‌ایم.</p>
+<h3 id="toolstate-to-support-allowed-failures"><a class="header" href="#toolstate-to-support-allowed-failures">Toolstate برای پشتیبانی از شکست‌های مجاز</a></h3>
+<p>مخزن <code>rust-lang/rust</code> در CI خود فقط کامپایلر را تست نمی‌کند، بلکه
+مجموعه‌ای از ابزارها و مستندات را هم تست می‌کند.
+برخی مستندات از طریق زیرماژول‌های git وارد می‌شوند.
+اگر merge‌کردن PRهای rustc را منوط به رفع مستندات کنیم،
+با مشکل مرغ و تخم‌مرغ روبه‌رو می‌شویم، چون CI مستندات
+نمی‌گذرد: به‌روزرسانی آن‌ها نیازمند نسخهٔ هنوز merge‌نشدهٔ rustc برای تست است
+(و ما معمولاً لازم داریم CI بگذرد).</p>
+<p>برای پرهیز از این مشکل، به زیرماژول‌ها اجازهٔ شکست داده شده و وضعیتشان در
+<a href="https://rust-lang-nursery.github.io/rust-toolstate">rust-toolstate</a> ثبت می‌شود.
+وقتی یک زیرماژول می‌شکند، ربات به‌طور خودکار نگه‌دارندگان را
+مطلع می‌کند تا از شکستگی باخبر شوند، و شکست را در مخزن toolstate ثبت می‌کند.
+فرایند انتشار سپس ابزارهای شکسته را در nightly نادیده می‌گیرد و
+آن‌ها را از nightlyهای عرضه‌شده حذف می‌کند.</p>
+<p>هرچند شکست ابزارها بیشتر اوقات مجاز است، یک هفته پیش از انتشار به‌طور خودکار
+ممنوع می‌شود: برایمان مهم نیست ابزارها روی nightly شکسته باشند،
+اما باید روی beta و stable کار کنند، پس باید چند روز پیش از ارتقای nightly به beta هم
+روی nightly کار کنند.</p>
+<p>اطلاعات بیشتر در <a href="https://forge.rust-lang.org/infra/toolstate.html">مستندات toolstate</a> موجود است.</p>
+<h2 id="public-ci-dashboard"><a class="header" href="#public-ci-dashboard">Public CI dashboard</a></h2>
+<p>برای پایش CI در Rust می‌توانید به <a href="https://p.datadoghq.com/sb/3a172e20-e9e1-11ed-80e3-da7ad0900002-b5f7bb7e08b664a06b08527da85f7e30">داشبورد عمومی</a> که تیم infra نگه‌داری می‌کند نگاه کنید.</p>
+<p>این‌ها برخی پنل‌های مفید داشبورد هستند:</p>
+<ul>
+<li>مدت پایپ‌لاین: بررسی کنید ساخت‌های auto چقدر طول می‌کشند.</li>
+<li>کندترین jobها: بررسی کنید کدام jobها بیشترین زمان را می‌برند.</li>
+<li>تغییر در میانهٔ مدت job: بررسی کنید کدام jobها کندتر از قبل‌اند.
+این برای تشخیص رگرسیون‌ها مفید است.</li>
+<li>بیشترین jobهای شکست‌خورده: بررسی کنید کدام jobها بیشترین شکست را دارند.</li>
+</ul>
+<p>برای آشنایی بیشتر با داشبورد، <a href="https://docs.datadoghq.com/continuous_integration/">مستندات Datadog CI</a> را ببینید.</p>
+<h2 id="determining-the-ci-configuration"><a class="header" href="#determining-the-ci-configuration">تعیین پیکربندی CI</a></h2>
+<p>اگر می‌خواهید تعیین کنید کدام تنظیمات <code>bootstrap.toml</code> برای یک job مشخص در CI استفاده می‌شوند، احتمالاً ساده‌ترین راه نگاه‌کردن به لاگ ساخت است.
+برای این کار:</p>
+<ol>
+<li>به <a href="https://github.com/rust-lang/rust/actions?query=branch%3Aautomation%2Fbors%2Fauto+is%3Asuccess">صفحهٔ اجراهای موفق workflow در Rust CI</a> بروید
+و روی جدیدترین آن‌ها کلیک کنید.</li>
+<li>job مورد نظرتان را در سمت چپ انتخاب کنید.</li>
+<li>روی آیکون چرخ‌دنده کلیک کنید و «View raw logs» را انتخاب کنید</li>
+<li>رشتهٔ «Configure the build» را جست‌وجو کنید</li>
+<li>همهٔ تنظیمات ساخت در خطی که متن <code>build.configure-args</code> دارد فهرست شده‌اند</li>
+</ol><nav class="page-nav"><a href="docker.html">→ آزمون با Docker</a><a href="adding.html">افزودن آزمون‌های جدید ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

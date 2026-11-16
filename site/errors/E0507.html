@@ -1,0 +1,104 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0507 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0507"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>یک مقدار قرض‌گرفته‌شده به بیرون منتقل شده است.</p>
+<p>نمونه کد خطادار:</p>
+<pre><code class="language-compile_fail E0507">use std::cell::RefCell;
+
+struct TheDarkKnight;
+
+impl TheDarkKnight {
+    fn nothing_is_true(self) {}
+}
+
+fn main() {
+    let x = RefCell::new(TheDarkKnight);
+
+    x.borrow().nothing_is_true(); // error: cannot move out of borrowed content
+}
+</code></pre>
+<p>در اینجا متد <code>nothing_is_true</code> مالکیت <code>self</code> را می‌گیرد. اما <code>self</code> را نمی‌توان منتقل کرد، زیرا <code>.borrow()</code> فقط یک <code>&amp;TheDarkKnight</code> فراهم می‌کند که قرضی از محتوای متعلق به <code>RefCell</code> است. برای رفع این خطا سه انتخاب دارید:</p>
+<ul>
+<li>سعی کنید از انتقال متغیر پرهیز کنید.</li>
+<li>به‌گونه‌ای مالکیت را بازپس بگیرید.</li>
+<li>صفت <code>Copy</code> را برای آن نوع پیاده‌سازی کنید.</li>
+</ul>
+<p>این وضعیت می‌تواند هنگام استفاده از نوعی که <code>Fn</code> یا <code>FnMut</code> را پیاده‌سازی می‌کند نیز پیش بیاید، زیرا هیچ‌یک اجازه انتقال از درون خود را نمی‌دهند (این‌ها معمولاً closureهایی را نشان می‌دهند که می‌توان بیش از یک بار فراخوانی کرد). بخش زیادی از متن زیر برای بدنه closureهای غیر <code>FnOnce</code> نیز به همان اندازه صدق می‌کند.</p>
+<p>مثال‌ها:</p>
+<pre><code>use std::cell::RefCell;
+
+struct TheDarkKnight;
+
+impl TheDarkKnight {
+    fn nothing_is_true(&amp;self) {} // First case, we don't take ownership
+}
+
+fn main() {
+    let x = RefCell::new(TheDarkKnight);
+
+    x.borrow().nothing_is_true(); // ok!
+}
+</code></pre>
+<p>یا:</p>
+<pre><code>use std::cell::RefCell;
+
+struct TheDarkKnight;
+
+impl TheDarkKnight {
+    fn nothing_is_true(self) {}
+}
+
+fn main() {
+    let x = RefCell::new(TheDarkKnight);
+    let x = x.into_inner(); // we get back ownership
+
+    x.nothing_is_true(); // ok!
+}
+</code></pre>
+<p>یا:</p>
+<pre><code>use std::cell::RefCell;
+
+#[derive(Clone, Copy)] // we implement the Copy trait
+struct TheDarkKnight;
+
+impl TheDarkKnight {
+    fn nothing_is_true(self) {}
+}
+
+fn main() {
+    let x = RefCell::new(TheDarkKnight);
+
+    x.borrow().nothing_is_true(); // ok!
+}
+</code></pre>
+<p>انتقال یک عضو از درون یک ساختار که به‌صورت تغییرپذیر قرض گرفته شده نیز خطای E0507 را ایجاد می‌کند:</p>
+<pre><code class="language-compile_fail E0507">struct TheDarkKnight;
+
+impl TheDarkKnight {
+    fn nothing_is_true(self) {}
+}
+
+struct Batcave {
+    knight: TheDarkKnight
+}
+
+fn main() {
+    let mut cave = Batcave {
+        knight: TheDarkKnight
+    };
+    let borrowed = &amp;mut cave;
+
+    borrowed.knight.nothing_is_true(); // E0507
+}
+</code></pre>
+<p>این کار فقط در صورتی مجاز است که چیزی را جایش بگذارید. برای این منظور می‌توان از <code>mem::replace</code> استفاده کرد:</p>
+<pre><code># struct TheDarkKnight;
+# impl TheDarkKnight { fn nothing_is_true(self) {} }
+# struct Batcave { knight: TheDarkKnight }
+use std::mem;
+
+let mut cave = Batcave {
+    knight: TheDarkKnight
+};
+let borrowed = &amp;mut cave;
+
+mem::replace(&amp;mut borrowed.knight, TheDarkKnight).nothing_is_true(); // ok!
+</code></pre>
+<p>برای اطلاعات بیشتر درباره‌ی سامانه‌ی مالکیت Rust، بخش <a href="../book/ch04-02-references-and-borrowing.html">ارجاع‌ها و قرض‌گیری</a> کتاب را ببینید.</p><nav class="page-nav"><a href="../errors/E0506.html">→ E0506</a><a href="../errors/E0508.html">E0508 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

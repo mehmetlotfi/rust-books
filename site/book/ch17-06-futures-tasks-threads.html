@@ -1,0 +1,43 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Futureها، taskها و نخ‌ها — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch17-06-futures-tasks-threads"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="putting-it-all-together-futures-tasks-and-threads"><a class="header" href="#putting-it-all-together-futures-tasks-and-threads">کنار هم گذاشتن همه‌چیز: Futureها، Taskها و نخ‌ها</a></h2>
+<p>همان‌گونه که در <a href="ch16-00-concurrency.html">فصل ۱۶</a> دیدیم، نخ‌ها یک رویکرد برای هم‌روندی فراهم می‌کنند. در این فصل رویکرد دیگری دیدیم: استفاده از async همراه با Futureها و Streamها. اگر می‌پرسید چه زمانی یکی را به دیگری ترجیح دهید، پاسخ این است: بستگی دارد! در بسیاری موارد نیز انتخاب میان نخ‌ها <em>یا</em> async نیست، بلکه نخ‌ها <em>و</em> async را با هم به کار می‌بریم.</p>
+<p>دهه‌ها است که بسیاری از سیستم‌عامل‌ها مدل هم‌روندی مبتنی بر نخ ارائه می‌کنند و در نتیجه زبان‌های برنامه‌نویسی بسیاری نیز از آن پشتیبانی دارند. بااین‌حال، این مدل‌ها بدون بده‌بستان نیستند. در بسیاری سیستم‌عامل‌ها، هر نخ مقدار قابل توجهی حافظه مصرف می‌کند. نخ‌ها تنها زمانی گزینه‌اند که سیستم‌عامل و سخت‌افزار از آن‌ها پشتیبانی کنند. برخلاف رایانه‌های رومیزی و همراه رایج، بعضی سامانه‌های نهفته اصلاً سیستم‌عامل ندارند و در نتیجه نخ نیز ندارند.</p>
+<p>مدل async مجموعه‌ای متفاوت و در نهایت مکمل از بده‌بستان‌ها دارد. در مدل async، عملیات هم‌روند به نخ اختصاصی خود نیاز ندارند. در عوض می‌توانند روی Task اجرا شوند؛ مانند زمانی که در بخش Streamها با <code>trpl::spawn_task</code> کاری را از یک تابع همگام آغاز کردیم. Task شبیه نخ است، اما به‌جای سیستم‌عامل، کد سطح کتابخانه یعنی محیط اجرا آن را مدیریت می‌کند.</p>
+<p>دلیلی وجود دارد که APIهای ساخت نخ و ساخت Task تا این اندازه شبیه‌اند. نخ‌ها مرزی برای مجموعه‌ای از عملیات همگام هستند و هم‌روندی <em>میان</em> نخ‌ها ممکن است. Taskها مرزی برای مجموعه‌ای از عملیات <em>ناهمگام</em> هستند و هم‌روندی هم <em>میان</em> Taskها و هم <em>درون</em> آن‌ها ممکن است، زیرا Task می‌تواند میان Futureهای بدنهٔ خود جابه‌جا شود. سرانجام Futureها ریزدانه‌ترین واحد هم‌روندی در Rust هستند و هر Future ممکن است درختی از Futureهای دیگر را نمایش دهد. محیط اجرا ــ به‌طور مشخص اجراکنندهٔ آن ــ Taskها را مدیریت می‌کند و Taskها Futureها را. از این نظر Taskها شبیه نخ‌های سبک‌وزنی هستند که محیط اجرا مدیریتشان می‌کند و به‌دلیل مدیریت‌شدن با محیط اجرا به‌جای سیستم‌عامل، قابلیت‌های افزوده‌ای دارند.</p>
+<p>این موضوع به معنای بهتر بودن همیشگی Taskهای async از نخ‌ها یا برعکس نیست. هم‌روندی با نخ‌ها از بعضی جنبه‌ها مدل برنامه‌نویسی ساده‌تری از هم‌روندی با <code>async</code> است؛ این ویژگی می‌تواند نقطهٔ قوت یا ضعف باشد. نخ‌ها تا حدی «راه‌اندازی کن و فراموش کن» هستند؛ معادل بومی Future ندارند، بنابراین تا پایان اجرا می‌شوند و جز به‌وسیلهٔ خود سیستم‌عامل متوقف نمی‌شوند.</p>
+<p>همچنین نخ‌ها و Taskها اغلب به‌خوبی با هم کار می‌کنند، زیرا Taskها ــ دست‌کم در بعضی محیط‌های اجرا ــ می‌توانند میان نخ‌ها جابه‌جا شوند. در واقع محیط اجرایی که استفاده کرده‌ایم، از جمله توابع <code>spawn_blocking</code> و <code>spawn_task</code>، در پشت صحنه به‌طور پیش‌فرض چندنخی است! بسیاری از محیط‌های اجرا از روشی به نام <em>سرقت کار</em> استفاده می‌کنند تا بر پایهٔ میزان استفادهٔ جاری از نخ‌ها، Taskها را به‌طور شفاف میان آن‌ها جابه‌جا کنند و کارایی کلی سامانه را بهبود دهند. این رویکرد در واقع هم به نخ‌ها و هم به Taskها و در نتیجه Futureها نیاز دارد.</p>
+<p>برای انتخاب روش مناسب، این قواعد سرانگشتی را در نظر بگیرید:</p>
+<ul>
+<li>اگر کار <em>بسیار موازی‌پذیر</em> یا مقید به CPU است، مانند پردازش مجموعه‌ای از داده که هر بخش آن جداگانه قابل پردازش است، نخ‌ها انتخاب بهتری هستند.</li>
+<li>اگر کار <em>بسیار هم‌روند</em> یا مقید به ورودی/خروجی است، مانند مدیریت پیام‌هایی از منابع متعدد که ممکن است با فاصله‌ها یا نرخ‌های متفاوت برسند، async انتخاب بهتری است.</li>
+</ul>
+<p>اگر هم به موازی‌سازی و هم هم‌روندی نیاز دارید، لازم نیست میان نخ‌ها و async یکی را انتخاب کنید. می‌توانید آن‌ها را آزادانه کنار هم به کار ببرید و هر یک را در نقشی قرار دهید که در آن بهترین است. برای نمونه، فهرست ۱۷-۲۵ نمونه‌ای نسبتاً رایج از این ترکیب در کد واقعی Rust را نشان می‌دهد.</p>
+<figure class="listing" id="listing-17-25">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">extern crate trpl; // for mdbook test
+</span><span class="boring">
+</span>use std::{thread, time::Duration};
+
+fn main() {
+    let (tx, mut rx) = trpl::channel();
+
+    thread::spawn(move || {
+        for i in 1..11 {
+            tx.send(i).unwrap();
+            thread::sleep(Duration::from_secs(1));
+        }
+    });
+
+    trpl::block_on(async {
+        while let Some(message) = rx.recv().await {
+            println!("{message}");
+        }
+    });
+}</code></pre>
+<figcaption><a href="#listing-17-25">لیست ۱۷-۲۵</a>: ارسال پیام با کد مسدودکننده در یک نخ و انتظار برای پیام‌ها در بلوک async</figcaption>
+</figure>
+<p>کار را با ساختن یک کانال async آغاز می‌کنیم. سپس نخی ایجاد می‌کنیم که با واژهٔ کلیدی <code>move</code> مالکیت سمت فرستندهٔ کانال را می‌گیرد. درون نخ، اعداد ۱ تا ۱۰ را می‌فرستیم و میان هر ارسال یک ثانیه می‌خوابیم. سرانجام درست مانند سراسر این فصل، Future ساخته‌شده با بلوک async را که به <code>trpl::block_on</code> داده شده اجرا می‌کنیم. در آن Future نیز مانند نمونه‌های دیگر پیام‌رسانی، منتظر پیام‌ها می‌مانیم.</p>
+<p>به سناریوی آغاز فصل بازگردیم: تصور کنید مجموعه‌ای از کارهای رمزگذاری ویدیو را با نخی اختصاصی اجرا می‌کنید، چون رمزگذاری ویدیو مقید به محاسبه است، اما پایان عملیات را با یک کانال async به رابط کاربری خبر می‌دهید. در کاربردهای واقعی نمونه‌های بی‌شماری از چنین ترکیب‌هایی وجود دارد.</p>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<p>این آخرین رویارویی شما با هم‌روندی در این کتاب نیست. پروژهٔ <a href="ch21-00-final-project-a-web-server.html">فصل ۲۱</a> این مفاهیم را در موقعیتی واقعی‌تر از نمونه‌های سادهٔ اینجا به کار می‌گیرد و حل مسئله با نخ‌ها را مستقیم‌تر با Taskها و Futureها مقایسه می‌کند.</p>
+<p>هرکدام از این رویکردها را که برگزینید، Rust ابزارهای لازم برای نوشتن کد امن، سریع و هم‌روند را در اختیارتان می‌گذارد؛ چه برای وب‌سروری با توان عملیاتی بالا و چه برای سیستم‌عاملی نهفته.</p>
+<p>در ادامه دربارهٔ روش‌های اصطلاحی مدل‌سازی مسئله‌ها و ساختاربندی راه‌حل‌ها هم‌زمان با بزرگ‌ترشدن برنامه‌های Rust صحبت می‌کنیم. همچنین رابطهٔ شیوه‌های رایج Rust با روش‌هایی را بررسی می‌کنیم که شاید از برنامه‌نویسی شیءگرا بشناسید.</p><nav class="page-nav"><a href="ch17-05-traits-for-async.html">→ نگاهی دقیق‌تر به صفت‌های async</a><a href="ch18-00-oop.html">ویژگی‌های برنامه‌نویسی شیءگرا ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

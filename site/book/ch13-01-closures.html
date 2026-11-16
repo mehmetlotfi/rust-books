@@ -1,0 +1,392 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>closureها — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch13-01-closures"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><!-- Old headings. Do not remove or links may break. -->
+<p><a id="closures-anonymous-functions-that-can-capture-their-environment"></a>
+<a id="closures-anonymous-functions-that-capture-their-environment"></a></p>
+<h2 id="closures"><a class="header" href="#closures">Closureها</a></h2>
+<p>closureهای Rust توابع ناشناسی هستند که می‌توانید آن‌ها را در یک متغیر ذخیره کنید یا به عنوان آرگومان به توابع دیگر ارسال کنید. شما می‌توانید closure را در یک مکان ایجاد کنید و سپس آن را در جای دیگری فراخوانی کنید تا در یک زمینه متفاوت ارزیابی شود. برخلاف توابع، closureها می‌توانند مقادیر را از محیطی که در آن تعریف شده‌اند، بگیرند. ما نشان خواهیم داد که چگونه این ویژگی‌های closure امکان استفاده مجدد از کد و سفارشی‌سازی رفتار را فراهم می‌کند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="creating-an-abstraction-of-behavior-with-closures"></a>
+<a id="refactoring-using-functions"></a>
+<a id="refactoring-with-closures-to-store-code"></a>
+<a id="capturing-the-environment-with-closures"></a></p>
+<h3 id="capturing-the-environment"><a class="header" href="#capturing-the-environment">گرفتن محیط با closureها</a></h3>
+<p>در ابتدا بررسی می‌کنیم که چگونه می‌توانیم از closureها برای گرفتن مقادیر از محیطی که در آن تعریف شده‌اند جهت استفاده در آینده استفاده کنیم. سناریو به این صورت است: هر از چندگاهی، شرکت تی‌شرت ما یک تی‌شرت خاص و نسخه محدود را به عنوان تبلیغ به یکی از افراد موجود در لیست ایمیل هدیه می‌دهد. افراد موجود در لیست ایمیل می‌توانند به‌صورت اختیاری رنگ مورد علاقه خود را به پروفایلشان اضافه کنند. اگر فردی که برای دریافت تی‌شرت رایگان انتخاب شده، رنگ مورد علاقه‌ای مشخص کرده باشد، همان رنگ را دریافت خواهد کرد. اگر رنگی انتخاب نکرده باشد، رنگی را دریافت خواهد کرد که شرکت در حال حاضر بیشترین موجودی از آن را دارد.</p>
+<p>راه‌های زیادی برای پیاده‌سازی این سناریو وجود دارد. در این مثال، از یک <code>enum</code> به نام <code>ShirtColor</code> استفاده می‌کنیم که شامل دو حالت <code>Red</code> و <code>Blue</code> است (برای سادگی، تعداد رنگ‌ها را محدود کرده‌ایم). موجودی شرکت با یک <code>struct</code> به نام <code>Inventory</code> نمایش داده می‌شود که دارای فیلدی به نام <code>shirts</code> است و یک <code>Vec&lt;ShirtColor&gt;</code> شامل رنگ‌های تی‌شرت موجود در انبار را نگهداری می‌کند. متد <code>giveaway</code> که روی <code>Inventory</code> تعریف شده، رنگ دلخواه (اختیاری) فرد برنده تی‌شرت رایگان را دریافت می‌کند و رنگ تی‌شرتی که قرار است به او داده شود را بازمی‌گرداند. این ساختار در لیست 13-1 نشان داده شده است.</p>
+<figure class="listing" id="listing-13-1">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust noplayground">#[derive(Debug, PartialEq, Copy, Clone)]
+enum ShirtColor {
+    Red,
+    Blue,
+}
+
+struct Inventory {
+    shirts: Vec&lt;ShirtColor&gt;,
+}
+
+impl Inventory {
+    fn giveaway(&amp;self, user_preference: Option&lt;ShirtColor&gt;) -&gt; ShirtColor {
+        user_preference.unwrap_or_else(|| self.most_stocked())
+    }
+
+    fn most_stocked(&amp;self) -&gt; ShirtColor {
+        let mut num_red = 0;
+        let mut num_blue = 0;
+
+        for color in &amp;self.shirts {
+            match color {
+                ShirtColor::Red =&gt; num_red += 1,
+                ShirtColor::Blue =&gt; num_blue += 1,
+            }
+        }
+        if num_red &gt; num_blue {
+            ShirtColor::Red
+        } else {
+            ShirtColor::Blue
+        }
+    }
+}
+
+fn main() {
+    let store = Inventory {
+        shirts: vec![ShirtColor::Blue, ShirtColor::Red, ShirtColor::Blue],
+    };
+
+    let user_pref1 = Some(ShirtColor::Red);
+    let giveaway1 = store.giveaway(user_pref1);
+    println!(
+        "The user with preference {:?} gets {:?}",
+        user_pref1, giveaway1
+    );
+
+    let user_pref2 = None;
+    let giveaway2 = store.giveaway(user_pref2);
+    println!(
+        "The user with preference {:?} gets {:?}",
+        user_pref2, giveaway2
+    );
+}</code></pre>
+<figcaption><a href="#listing-13-1">لیست ۱۳-۱</a>: سناریوی هدیه شرکت تی‌شرت</figcaption>
+</figure>
+<p>در این کد، <code>store</code> تعریف‌شده در <code>main</code> دو تی‌شرت آبی و یک تی‌شرت قرمز باقی‌مانده برای توزیع در این تبلیغ نسخه محدود دارد. ما متد <code>giveaway</code> را برای یک کاربر با ترجیح یک تی‌شرت قرمز و یک کاربر بدون هیچ ترجیحی فراخوانی می‌کنیم.</p>
+<p>باز هم، این کد را می‌توان به روش‌های بسیار متفاوتی پیاده‌سازی کرد، و در اینجا، برای تمرکز بر closureها، به مفاهیمی که پیش‌تر آموخته‌اید پایبند مانده‌ایم، به‌جز بدنهٔ متد <code>giveaway</code> که از یک closure استفاده می‌کند. در متد <code>giveaway</code>، ترجیح کاربر را به‌عنوان پارامتری از نوع <code>Option&lt;ShirtColor&gt;</code> دریافت می‌کنیم و متد <code>unwrap_or_else</code> را روی <code>user_preference</code> فراخوانی می‌کنیم. <a href="https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap_or_else">متد <code>unwrap_or_else</code> روی <code>Option&lt;T&gt;</code></a><!-- ignore --> توسط کتابخانهٔ استاندارد تعریف شده است. این متد یک آرگومان می‌گیرد: یک closure بدون هیچ آرگومانی که مقداری از نوع <code>T</code> را برمی‌گرداند (همان نوعی که در حالت <code>Some</code> از <code>Option&lt;T&gt;</code> ذخیره می‌شود، که در اینجا <code>ShirtColor</code> است). اگر <code>Option&lt;T&gt;</code> حالت <code>Some</code> باشد، <code>unwrap_or_else</code> مقدار درون <code>Some</code> را برمی‌گرداند. اگر <code>Option&lt;T&gt;</code> حالت <code>None</code> باشد، <code>unwrap_or_else</code> آن closure را فراخوانی می‌کند و مقداری را که closure برمی‌گرداند بازمی‌گرداند.</p>
+<p>ما عبارت closure <code>|| self.most_stocked()</code> را به عنوان آرگومان به <code>unwrap_or_else</code> ارسال می‌کنیم. این یک closure است که خود هیچ آرگومانی نمی‌گیرد (اگر closure آرگومان‌هایی داشت، آن‌ها بین دو خط عمودی قرار می‌گرفتند). بدنه closure متد <code>self.most_stocked()</code> را فراخوانی می‌کند. ما closure را اینجا تعریف می‌کنیم و پیاده‌سازی <code>unwrap_or_else</code> در صورت نیاز، closure را ارزیابی می‌کند.</p>
+<p>اجرای این کد موارد زیر را چاپ می‌کند:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling shirt-company v0.1.0 (file:///projects/shirt-company)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.27s
+     Running `target/debug/shirt-company`
+The user with preference Some(Red) gets Red
+The user with preference None gets Blue
+</code></pre>
+<p>یکی از جنبه‌های جالب در اینجا این است که ما یک closure ارسال کرده‌ایم که متد <code>self.most_stocked()</code> را روی نمونه فعلی <code>Inventory</code> فراخوانی می‌کند. کتابخانه استاندارد نیازی به دانستن چیزی درباره انواع <code>Inventory</code> یا <code>ShirtColor</code> که تعریف کرده‌ایم یا منطقی که می‌خواهیم در این سناریو استفاده کنیم، ندارد. closure یک ارجاع غیرقابل تغییر به نمونه <code>self</code> از <code>Inventory</code> را می‌گیرد و آن را همراه با کدی که مشخص کرده‌ایم به متد <code>unwrap_or_else</code> ارسال می‌کند. از طرف دیگر، توابع قادر به گرفتن محیط خود به این صورت نیستند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="closure-type-inference-and-annotation"></a></p>
+<h3 id="inferring-and-annotating-closure-types"><a class="header" href="#inferring-and-annotating-closure-types">استنباط نوع closure و حاشیه‌نویسی</a></h3>
+<p>تفاوت‌های بیشتری بین توابع و closureها وجود دارد. closureها معمولاً نیازی به حاشیه‌نویسی انواع آرگومان‌ها یا مقدار بازگشتی ندارند، برخلاف توابع <code>fn</code> که به این حاشیه‌نویسی نیاز دارند. حاشیه‌نویسی انواع در توابع ضروری است زیرا این انواع بخشی از رابط کاربری صریحی هستند که برای کاربران شما ارائه می‌شود. تعریف این رابط به صورت سختگیرانه برای اطمینان از توافق همه در مورد انواع مقادیر استفاده شده و بازگشتی یک تابع مهم است. از طرف دیگر، closureها به این صورت در یک رابط کاربری صریح استفاده نمی‌شوند: آن‌ها در متغیرها ذخیره می‌شوند و بدون نام‌گذاری و افشای آن‌ها به کاربران کتابخانه ما استفاده می‌شوند.</p>
+<p>closureها معمولاً کوتاه هستند و فقط در یک زمینه محدود مرتبط هستند، نه در هر سناریوی دلخواه. در این زمینه‌های محدود، کامپایلر می‌تواند انواع پارامترها و مقدار بازگشتی را استنباط کند، مشابه آنچه که می‌تواند انواع اکثر متغیرها را استنباط کند (موارد نادری وجود دارند که کامپایلر به حاشیه‌نویسی نوع closure نیز نیاز دارد).</p>
+<p><br> همانند متغیرها، ما می‌توانیم حاشیه‌نویسی نوع اضافه کنیم اگر بخواهیم وضوح و شفافیت را افزایش دهیم، به قیمت پرحرف‌تر شدن از آنچه که به طور دقیق ضروری است. افزودن حاشیه‌نویسی نوع برای یک closure به این صورت است که در لیستینگ 13-2 نشان داده شده است. در این مثال، ما یک closure تعریف کرده و آن را در یک متغیر ذخیره می‌کنیم، به جای اینکه closure را در مکانی که به عنوان آرگومان ارسال می‌کنیم تعریف کنیم، همانطور که در لیستینگ 13-1 انجام دادیم.</p>
+<figure class="listing" id="listing-13-2">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">use std::thread;
+</span><span class="boring">use std::time::Duration;
+</span><span class="boring">
+</span><span class="boring">fn generate_workout(intensity: u32, random_number: u32) {
+</span>    let expensive_closure = |num: u32| -&gt; u32 {
+        println!("calculating slowly...");
+        thread::sleep(Duration::from_secs(2));
+        num
+    };
+<span class="boring">
+</span><span class="boring">    if intensity &lt; 25 {
+</span><span class="boring">        println!("Today, do {} pushups!", expensive_closure(intensity));
+</span><span class="boring">        println!("Next, do {} situps!", expensive_closure(intensity));
+</span><span class="boring">    } else {
+</span><span class="boring">        if random_number == 3 {
+</span><span class="boring">            println!("Take a break today! Remember to stay hydrated!");
+</span><span class="boring">        } else {
+</span><span class="boring">            println!(
+</span><span class="boring">                "Today, run for {} minutes!",
+</span><span class="boring">                expensive_closure(intensity)
+</span><span class="boring">            );
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let simulated_user_specified_value = 10;
+</span><span class="boring">    let simulated_random_number = 7;
+</span><span class="boring">
+</span><span class="boring">    generate_workout(simulated_user_specified_value, simulated_random_number);
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-13-2">لیست ۱۳-۲</a>: افزودن حاشیه‌نویسی‌های اختیاری برای انواع آرگومان‌ها و مقدار بازگشتی در closure</figcaption>
+</figure>
+<p>با اضافه کردن حاشیه‌نویسی نوع، نحوه نوشتن closureها بیشتر شبیه به نوشتن توابع می‌شود. در اینجا، ما یک تابع تعریف کرده‌ایم که 1 به آرگومان خود اضافه می‌کند و یک closure که همان رفتار را دارد، برای مقایسه. ما فضاهایی اضافه کرده‌ایم تا بخش‌های مرتبط را هم‌ردیف کنیم. این نشان می‌دهد که نحو closure چقدر شبیه به نحو توابع است، به جز استفاده از خطوط عمودی و میزان نحوی که اختیاری است.</p>
+<pre><code class="language-rust ignore">fn  add_one_v1   (x: u32) -&gt; u32 { x + 1 }
+let add_one_v2 = |x: u32| -&gt; u32 { x + 1 };
+let add_one_v3 = |x|             { x + 1 };
+let add_one_v4 = |x|               x + 1  ;</code></pre>
+<p>خط اول تعریف یک تابع را نشان می‌دهد، و خط دوم تعریف یک closure با حاشیه‌نویسی کامل را نمایش می‌دهد. در خط سوم، حاشیه‌نویسی انواع از تعریف closure حذف شده است. در خط چهارم، براکت‌ها را حذف می‌کنیم، که اختیاری هستند زیرا بدنه closure فقط یک عبارت دارد. همه این‌ها تعاریف معتبری هستند که هنگام فراخوانی رفتار یکسانی تولید می‌کنند. خطوط <code>add_one_v3</code> و <code>add_one_v4</code> نیاز دارند که closureها ارزیابی شوند تا کامپایل شوند زیرا انواع از نحوه استفاده آن‌ها استنباط خواهند شد. این مشابه با <code>let v = Vec::new();</code> است که نیاز دارد یا حاشیه‌نویسی نوع داشته باشد یا مقادیر از نوعی در <code>Vec</code> وارد شوند تا Rust بتواند نوع را استنباط کند.</p>
+<p>برای تعریف closureها، کامپایلر یک نوع مشخص برای هر یک از پارامترها و مقدار بازگشتی آن‌ها استنباط می‌کند. برای مثال، لیستینگ 13-3 تعریف یک closure کوتاه را نشان می‌دهد که فقط مقداری که به عنوان پارامتر دریافت می‌کند را بازمی‌گرداند. این closure برای اهداف این مثال استفاده چندانی ندارد. توجه کنید که هیچ حاشیه‌نویسی نوعی به تعریف اضافه نکرده‌ایم. چون هیچ حاشیه‌نویسی وجود ندارد، می‌توانیم closure را با هر نوعی فراخوانی کنیم، همان‌طور که اولین بار این کار را با <code>String</code> انجام دادیم. اگر سپس سعی کنیم <code>example_closure</code> را با یک عدد صحیح فراخوانی کنیم، خطایی دریافت خواهیم کرد.</p>
+<figure class="listing" id="listing-13-3">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">fn main() {
+</span>    let example_closure = |x| x;
+
+    let s = example_closure(String::from("hello"));
+    let n = example_closure(5);
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-13-3">لیست ۱۳-۳</a>: تلاش برای فراخوانی یک closure که انواع آن با استفاده از دو نوع مختلف استنباط شده است</figcaption>
+</figure>
+<p>کامپایلر این خطا را می‌دهد:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling closure-example v0.1.0 (file:///projects/closure-example)
+error[E0308]: mismatched types
+ --&gt; src/main.rs:5:29
+  |
+5 |     let n = example_closure(5);
+  |             --------------- ^ expected `String`, found integer
+  |             |
+  |             arguments to this function are incorrect
+  |
+note: expected because the closure was earlier called with an argument of type `String`
+ --&gt; src/main.rs:4:29
+  |
+4 |     let s = example_closure(String::from("hello"));
+  |             --------------- ^^^^^^^^^^^^^^^^^^^^^ expected because this argument is of type `String`
+  |             |
+  |             in this closure call
+note: closure parameter defined here
+ --&gt; src/main.rs:2:28
+  |
+2 |     let example_closure = |x| x;
+  |                            ^
+help: try using a conversion method
+  |
+5 |     let n = example_closure(5.to_string());
+  |                              ++++++++++++
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `closure-example` (bin "closure-example") due to 1 previous error
+</code></pre>
+<p>اولین باری که <code>example_closure</code> را با مقدار <code>String</code> فراخوانی می‌کنیم، کامپایلر نوع <code>x</code> و مقدار بازگشتی closure را به عنوان <code>String</code> استنباط می‌کند. سپس این انواع در closure <code>example_closure</code> قفل می‌شوند و هنگام تلاش برای استفاده از یک نوع دیگر با همان closure، یک خطای نوع دریافت می‌کنیم.</p>
+<h3 id="capturing-references-or-moving-ownership"><a class="header" href="#capturing-references-or-moving-ownership">گرفتن ارجاعات یا انتقال مالکیت</a></h3>
+<p>closureها می‌توانند مقادیر را از محیط خود به سه روش بگیرند که مستقیماً به سه روشی که یک تابع می‌تواند یک پارامتر بگیرد، نگاشت می‌شوند: قرض‌گیری غیرقابل تغییر، قرض‌گیری قابل تغییر، و گرفتن مالکیت. closure تصمیم می‌گیرد که کدام یک از این‌ها را بر اساس کاری که بدنه تابع با مقادیر گرفته شده انجام می‌دهد، استفاده کند.</p>
+<p>در لیستینگ 13-4، یک closure تعریف می‌کنیم که یک ارجاع غیرقابل تغییر به بردار با نام <code>list</code> را می‌گیرد زیرا فقط به یک ارجاع غیرقابل تغییر نیاز دارد تا مقدار را چاپ کند:</p>
+<figure class="listing" id="listing-13-4">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let list = vec![1, 2, 3];
+    println!("Before defining closure: {list:?}");
+
+    let only_borrows = || println!("From closure: {list:?}");
+
+    println!("Before calling closure: {list:?}");
+    only_borrows();
+    println!("After calling closure: {list:?}");
+}</code></pre>
+<figcaption><a href="#listing-13-4">لیست ۱۳-۴</a>: تعریف و فراخوانی یک closure که یک ارجاع غیرقابل تغییر می‌گیرد</figcaption>
+</figure>
+<p>این مثال همچنین نشان می‌دهد که یک متغیر می‌تواند به تعریف یک closure متصل شود و بعداً می‌توان closure را با استفاده از نام متغیر و پرانتزها فراخوانی کرد، گویی که نام متغیر یک نام تابع است.</p>
+<p>از آنجا که می‌توانیم چندین ارجاع غیرقابل تغییر به <code>list</code> به طور همزمان داشته باشیم، <code>list</code> همچنان از کدی که قبل از تعریف closure، بعد از تعریف closure اما قبل از فراخوانی closure و بعد از فراخوانی closure وجود دارد، قابل دسترسی است. این کد کامپایل شده، اجرا می‌شود و نتیجه زیر را چاپ می‌کند:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling closure-example v0.1.0 (file:///projects/closure-example)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.43s
+     Running `target/debug/closure-example`
+Before defining closure: [1, 2, 3]
+Before calling closure: [1, 2, 3]
+From closure: [1, 2, 3]
+After calling closure: [1, 2, 3]
+</code></pre>
+<p>در ادامه، در لیستینگ 13-5، بدنه closure را تغییر می‌دهیم تا یک عنصر به بردار <code>list</code> اضافه کند. closure اکنون یک ارجاع قابل تغییر می‌گیرد:</p>
+<figure class="listing" id="listing-13-5">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let mut list = vec![1, 2, 3];
+    println!("Before defining closure: {list:?}");
+
+    let mut borrows_mutably = || list.push(7);
+
+    borrows_mutably();
+    println!("After calling closure: {list:?}");
+}</code></pre>
+<figcaption><a href="#listing-13-5">لیست ۱۳-۵</a>: تعریف و فراخوانی یک closure که یک ارجاع قابل تغییر می‌گیرد</figcaption>
+</figure>
+<p>این کد کامپایل شده، اجرا می‌شود و نتیجه زیر را چاپ می‌کند:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling closure-example v0.1.0 (file:///projects/closure-example)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.43s
+     Running `target/debug/closure-example`
+Before defining closure: [1, 2, 3]
+After calling closure: [1, 2, 3, 7]
+</code></pre>
+<p>توجه داشته باشید که دیگر <code>println!</code> بین تعریف و فراخوانی closure <code>borrows_mutably</code> وجود ندارد: زمانی که <code>borrows_mutably</code> تعریف می‌شود، یک ارجاع قابل تغییر به <code>list</code> می‌گیرد. ما بعد از فراخوانی closure دوباره از آن استفاده نمی‌کنیم، بنابراین قرض‌گیری قابل تغییر پایان می‌یابد. بین تعریف closure و فراخوانی آن، قرض‌گیری غیرقابل تغییر برای چاپ مجاز نیست، زیرا هیچ قرض دیگری هنگام وجود یک قرض قابل تغییر مجاز نیست. سعی کنید یک <code>println!</code> در آنجا اضافه کنید تا ببینید چه پیام خطایی دریافت می‌کنید!</p>
+<p>اگر بخواهید closure را مجبور کنید که مالکیت مقادیر استفاده‌شده در محیط را بگیرد، حتی اگر بدنه closure به طور دقیق به مالکیت نیاز نداشته باشد، می‌توانید از کلیدواژه <code>move</code> قبل از لیست پارامترها استفاده کنید.</p>
+<p>این تکنیک بیشتر زمانی مفید است که یک closure را به یک نخ جدید ارسال می‌کنید تا داده‌ها به گونه‌ای انتقال داده شوند که توسط نخ جدید مالکیت پیدا کنند. ما موضوع نخ‌ها و دلایلی که ممکن است بخواهید از آن‌ها استفاده کنید را به تفصیل در فصل 16 زمانی که در مورد هم‌زمانی صحبت می‌کنیم، بررسی خواهیم کرد. اما برای حالا، بیایید به صورت مختصر ایجاد یک نخ جدید با استفاده از یک closure که به کلیدواژه <code>move</code> نیاز دارد را بررسی کنیم. لیستینگ 13-6 لیستینگ 13-4 را اصلاح می‌کند تا بردار را در یک نخ جدید چاپ کند به جای اینکه در نخ اصلی این کار را انجام دهد:</p>
+<figure class="listing" id="listing-13-6">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::thread;
+
+fn main() {
+    let list = vec![1, 2, 3];
+    println!("Before defining closure: {list:?}");
+
+    thread::spawn(move || println!("From thread: {list:?}"))
+        .join()
+        .unwrap();
+}</code></pre>
+<figcaption><a href="#listing-13-6">لیست ۱۳-۶</a>: استفاده از &lt;code&gt;&lt;/x-listing&gt;move&lt;/code&gt; برای مجبور کردن closure به گرفتن مالکیت &lt;code&gt;list&lt;/code&gt; برای نخ</figcaption>
+</figure>
+<p>یک نخ (thread) جدید ایجاد می‌کنیم و یک closure را به‌عنوان آرگومان برای اجرا به آن می‌دهیم. بدنهٔ closure لیست را چاپ می‌کند. در لیستینگ ۱۳-۴، closure فقط با یک ارجاع تغییرناپذیر <code>list</code> را capture می‌کرد، زیرا این کمترین میزان دسترسی به <code>list</code> است که برای چاپ آن لازم است. در این مثال، با اینکه بدنهٔ closure هنوز فقط به یک ارجاع تغییرناپذیر نیاز دارد، باید با گذاشتن کلیدواژهٔ <code>move</code> در ابتدای تعریف closure مشخص کنیم که <code>list</code> باید به درون closure منتقل شود. اگر نخ اصلی پیش از فراخوانی <code>join</code> روی نخ جدید عملیات بیشتری انجام می‌داد، ممکن بود نخ جدید پیش از پایان بقیهٔ کار نخ اصلی تمام شود، یا نخ اصلی زودتر تمام شود. اگر نخ اصلی مالکیت <code>list</code> را نگه می‌داشت اما پیش از نخ جدید پایان می‌یافت و <code>list</code> را drop می‌کرد، ارجاع تغییرناپذیر درون نخ نامعتبر می‌شد. بنابراین کامپایلر الزام می‌کند که <code>list</code> به درون closureای که به نخ جدید داده می‌شود منتقل شود تا ارجاع معتبر بماند. کلیدواژهٔ <code>move</code> را حذف کنید یا پس از تعریف closure از <code>list</code> در نخ اصلی استفاده کنید تا ببینید با چه خطاهای کامپایلری روبه‌رو می‌شوید!</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="storing-closures-using-generic-parameters-and-the-fn-traits"></a>
+<a id="limitations-of-the-cacher-implementation"></a>
+<a id="moving-captured-values-out-of-the-closure-and-the-fn-traits"></a>
+<a id="moving-captured-values-out-of-closures-and-the-fn-traits"></a></p>
+<h3 id="moving-captured-values-out-of-closures"><a class="header" href="#moving-captured-values-out-of-closures">انتقال مقادیر گرفته‌شده (captured) به بیرون از closureها</a></h3>
+<p>زمانی که یک closure رفرنس یا مالکیت یک مقدار را از محیطی که در آن تعریف شده، <strong>گرفته باشد</strong> (که مشخص می‌کند چه چیزی — در صورت وجود — به <strong>درون</strong> closure منتقل می‌شود)، کدی که در بدنه‌ی closure قرار دارد تعیین می‌کند که چه اتفاقی برای آن رفرنس‌ها یا مقادیر در زمان اجرای closure می‌افتد (که مشخص می‌کند چه چیزی — در صورت وجود — از closure به <strong>بیرون</strong> منتقل می‌شود).</p>
+<p>بدنهٔ یک closure می‌تواند هر یک از کارهای زیر را انجام دهد: یک مقدار گرفته‌شده را از closure به بیرون منتقل کند، مقدار گرفته‌شده را تغییر دهد، نه آن را منتقل کند و نه تغییر دهد، یا از همان ابتدا هیچ چیزی را از محیط نگیرد.</p>
+<p>نحوه گرفتن و مدیریت مقادیر توسط closure از محیط مشخص می‌کند که closure کدام صفات را پیاده‌سازی می‌کند. صفات روشی هستند که توابع و ساختارها می‌توانند مشخص کنند از چه نوع closureهایی می‌توانند استفاده کنند. closureها به صورت خودکار یکی، دو یا هر سه این صفات <code>Fn</code> را پیاده‌سازی می‌کنند، به صورت افزایشی، بسته به نحوه مدیریت مقادیر توسط بدنه closure:</p>
+<ul>
+<li><code>FnOnce</code> برای بستارهایی به کار می‌رود که یک بار قابل فراخوانی‌اند. همهٔ بستارها دست‌کم این صفت را پیاده‌سازی می‌کنند، زیرا هر بستاری را می‌توان فراخواند. بستاری که مقادیر گرفته‌شده را از بدنهٔ خود بیرون منتقل کند، فقط <code>FnOnce</code> را پیاده‌سازی می‌کند و هیچ‌یک از صفت‌های دیگر <code>Fn</code> را ندارد، زیرا تنها یک بار قابل فراخوانی است.</li>
+<li><code>FnMut</code> برای بستارهایی به کار می‌رود که مقادیر گرفته‌شده را از بدنهٔ خود بیرون منتقل نمی‌کنند، اما ممکن است آن مقادیر را تغییر دهند. این بستارها بیش از یک بار قابل فراخوانی‌اند.</li>
+<li><code>Fn</code> برای بستارهایی به کار می‌رود که نه مقادیر گرفته‌شده را از بدنه بیرون می‌برند و نه آن‌ها را تغییر می‌دهند؛ همچنین بستارهایی که هیچ‌چیز از محیط خود نمی‌گیرند. این بستارها را می‌توان بدون تغییر محیط بیش از یک بار فراخواند؛ قابلیتی که در مواردی مانند فراخوانی هم‌زمان و چندبارهٔ یک بستار اهمیت دارد.</li>
+</ul>
+<p>بیایید تعریف متد <code>unwrap_or_else</code> در <code>Option&lt;T&gt;</code> را که در لیستینگ 13-1 استفاده کردیم بررسی کنیم:</p>
+<pre><code class="language-rust ignore">impl&lt;T&gt; Option&lt;T&gt; {
+    pub fn unwrap_or_else&lt;F&gt;(self, f: F) -&gt; T
+    where
+        F: FnOnce() -&gt; T
+    {
+        match self {
+            Some(x) =&gt; x,
+            None =&gt; f(),
+        }
+    }
+}</code></pre>
+<p>به یاد داشته باشید که <code>T</code> نوع جنریک است که نوع مقدار موجود در واریانت <code>Some</code> از <code>Option</code> را نشان می‌دهد. این نوع <code>T</code> همچنین نوع بازگشتی تابع <code>unwrap_or_else</code> است: به عنوان مثال، کدی که <code>unwrap_or_else</code> را روی یک <code>Option&lt;String&gt;</code> فراخوانی می‌کند، یک <code>String</code> دریافت خواهد کرد.</p>
+<p>بعدی، توجه داشته باشید که تابع <code>unwrap_or_else</code> پارامتر نوع جنریک اضافی <code>F</code> را دارد. نوع <code>F</code> نوع پارامتر نام‌گذاری‌شده <code>f</code> است، که closureی است که هنگام فراخوانی <code>unwrap_or_else</code> ارائه می‌دهیم.</p>
+<p>محدودیت صفت مشخص‌شده روی نوع جنریک <code>F</code>، <code>FnOnce() -&gt; T</code> است، که به این معناست که <code>F</code> باید بتواند یک بار فراخوانی شود، هیچ آرگومانی نگیرد و یک <code>T</code> بازگرداند. استفاده از <code>FnOnce</code> در محدودیت صفت، محدودیت این موضوع را بیان می‌کند که <code>unwrap_or_else</code> حداکثر یک بار <code>f</code> را فراخوانی خواهد کرد. در بدنه <code>unwrap_or_else</code>، می‌بینیم که اگر <code>Option</code> برابر با <code>Some</code> باشد، <code>f</code> فراخوانی نمی‌شود. اگر <code>Option</code> برابر با <code>None</code> باشد، <code>f</code> یک بار فراخوانی خواهد شد. از آنجایی که تمام closureها <code>FnOnce</code> را پیاده‌سازی می‌کنند، <code>unwrap_or_else</code> همه انواع سه‌گانه closureها را می‌پذیرد و به اندازه کافی انعطاف‌پذیر است.</p>
+<blockquote>
+<p>نکته: اگر کاری که می‌خواهیم انجام دهیم نیازی به گرفتن مقدار از محیط نداشته باشد، می‌توانیم به‌جای یک closure، از نام یک تابع استفاده کنیم؛ در جایی که نیاز به چیزی داریم که یکی از traitهای <code>Fn</code> را پیاده‌سازی کند. برای مثال، روی یک مقدار از نوع <code>Option&lt;Vec&lt;T&gt;&gt;</code> می‌توانیم <code>unwrap_or_else(Vec::new)</code> را فراخوانی کنیم تا در صورتی که مقدار <code>None</code> بود، یک <code>vector</code> جدید و خالی دریافت کنیم. کامپایلر به‌طور خودکار هرکدام از traitهای <code>Fn</code> که برای تعریف یک تابع مناسب باشند را پیاده‌سازی می‌کند.</p>
+</blockquote>
+<p>حال بیایید به متد <code>sort_by_key</code> از کتابخانه استاندارد که روی sliceها تعریف شده است نگاهی بیندازیم تا ببینیم چه تفاوتی با <code>unwrap_or_else</code> دارد و چرا <code>sort_by_key</code> به جای <code>FnOnce</code> از <code>FnMut</code> به‌عنوان محدودیت trait استفاده می‌کند. این closure یک آرگومان دریافت می‌کند که به‌صورت رفرنسی به آیتم جاری در slice است، و مقداری از نوع <code>K</code> برمی‌گرداند که قابل مرتب‌سازی باشد. این تابع زمانی مفید است که بخواهید یک slice را بر اساس ویژگی خاصی از هر آیتم مرتب کنید. در لیستینگ 13-7، ما یک لیست از نمونه‌های <code>Rectangle</code> داریم و از <code>sort_by_key</code> برای مرتب‌سازی آن‌ها بر اساس ویژگی <code>width</code> از کم به زیاد استفاده می‌کنیم.</p>
+<figure class="listing" id="listing-13-7">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">#[derive(Debug)]
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+fn main() {
+    let mut list = [
+        Rectangle { width: 10, height: 1 },
+        Rectangle { width: 3, height: 5 },
+        Rectangle { width: 7, height: 12 },
+    ];
+
+    list.sort_by_key(|r| r.width);
+    println!("{list:#?}");
+}</code></pre>
+<figcaption><a href="#listing-13-7">لیست ۱۳-۷</a>: استفاده از &lt;code&gt;&lt;/x-listing&gt;sort_by_key&lt;/code&gt; برای مرتب‌سازی مستطیل‌ها بر اساس عرض</figcaption>
+</figure>
+<p>این کد خروجی زیر را چاپ می‌کند:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling rectangles v0.1.0 (file:///projects/rectangles)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.41s
+     Running `target/debug/rectangles`
+[
+    Rectangle {
+        width: 3,
+        height: 5,
+    },
+    Rectangle {
+        width: 7,
+        height: 12,
+    },
+    Rectangle {
+        width: 10,
+        height: 1,
+    },
+]
+</code></pre>
+<p>دلیل اینکه <code>sort_by_key</code> به گونه‌ای تعریف شده که یک closure <code>FnMut</code> بگیرد این است که closure را چندین بار فراخوانی می‌کند: یک بار برای هر آیتم در برش. closure <code>|r| r.width</code> چیزی را از محیط خود نمی‌گیرد، تغییر نمی‌دهد یا منتقل نمی‌کند، بنابراین با الزامات محدودیت صفت مطابقت دارد.</p>
+<p>در مقابل، لیست 13-8 مثالی از closureی را نشان می‌دهد که فقط صفت <code>FnOnce</code> را پیاده‌سازی می‌کند، زیرا مقداری را از محیط منتقل می‌کند. کامپایلر اجازه نمی‌دهد از این closure با <code>sort_by_key</code> استفاده کنیم:</p>
+<figure class="listing" id="listing-13-8">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">#[derive(Debug)]
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+fn main() {
+    let mut list = [
+        Rectangle { width: 10, height: 1 },
+        Rectangle { width: 3, height: 5 },
+        Rectangle { width: 7, height: 12 },
+    ];
+
+    let mut sort_operations = vec![];
+    let value = String::from("closure called");
+
+    list.sort_by_key(|r| {
+        sort_operations.push(value);
+        r.width
+    });
+    println!("{list:#?}");
+}</code></pre>
+<figcaption><a href="#listing-13-8">لیست ۱۳-۸</a>: تلاش برای استفاده از closure &lt;code&gt;&lt;/x-listing&gt;FnOnce&lt;/code&gt; با &lt;code&gt;sort_by_key&lt;/code&gt;</figcaption>
+</figure>
+<p>این یک روش مصنوعی و پیچیده (که کار نمی‌کند) برای تلاش در شمارش تعداد دفعاتی است که <code>sort_by_key</code> closure را هنگام مرتب کردن <code>list</code> فراخوانی می‌کند. این کد سعی می‌کند این شمارش را با افزودن <code>value</code>—یک <code>String</code> از محیط closure—به وکتور <code>sort_operations</code> انجام دهد. closure، <code>value</code> را می‌گیرد و سپس با انتقال مالکیت <code>value</code> به وکتور <code>sort_operations</code>، <code>value</code> را از closure منتقل می‌کند. این closure فقط یک بار می‌تواند فراخوانی شود؛ تلاش برای فراخوانی آن برای بار دوم کار نمی‌کند زیرا <code>value</code> دیگر در محیط وجود ندارد که دوباره به <code>sort_operations</code> اضافه شود! بنابراین، این closure فقط صفت <code>FnOnce</code> را پیاده‌سازی می‌کند. وقتی سعی می‌کنیم این کد را کامپایل کنیم، این خطا دریافت می‌شود که <code>value</code> نمی‌تواند از closure منتقل شود، زیرا closure باید <code>FnMut</code> را پیاده‌سازی کند:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling rectangles v0.1.0 (file:///projects/rectangles)
+error[E0507]: cannot move out of `value`, a captured variable in an `FnMut` closure
+  --&gt; src/main.rs:18:30
+   |
+15 |     let value = String::from("closure called");
+   |         -----   ------------------------------ move occurs because `value` has type `String`, which does not implement the `Copy` trait
+   |         |
+   |         captured outer variable
+16 |
+17 |     list.sort_by_key(|r| {
+   |                      --- captured by this `FnMut` closure
+18 |         sort_operations.push(value);
+   |                              ^^^^^ `value` is moved here
+   |
+help: `Fn` and `FnMut` closures require captured values to be able to be consumed multiple times, but `FnOnce` closures may consume them only once
+  --&gt; /rustc/88d9e12ae178fab0fb5cc050a94da85685d449ea/library/alloc/src/slice.rs:249:11
+help: consider cloning the value if the performance cost is acceptable
+   |
+18 |         sort_operations.push(value.clone());
+   |                                   ++++++++
+
+For more information about this error, try `rustc --explain E0507`.
+error: could not compile `rectangles` (bin "rectangles") due to 1 previous error
+</code></pre>
+<p>این خطا به خطی در بدنه closure اشاره می‌کند که <code>value</code> را از محیط منتقل می‌کند. برای رفع این مشکل، باید بدنه closure را تغییر دهیم تا مقادیر را از محیط منتقل نکند. برای شمارش تعداد دفعاتی که closure فراخوانی می‌شود، نگه داشتن یک شمارنده در محیط و افزایش مقدار آن در بدنه closure روشی ساده‌تر برای محاسبه آن است. closure در لیست 13-9 با <code>sort_by_key</code> کار می‌کند زیرا فقط یک ارجاع قابل تغییر به شمارنده <code>num_sort_operations</code> را می‌گیرد و بنابراین می‌تواند بیش از یک بار فراخوانی شود:</p>
+<figure class="listing" id="listing-13-9">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">#[derive(Debug)]
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+fn main() {
+    let mut list = [
+        Rectangle { width: 10, height: 1 },
+        Rectangle { width: 3, height: 5 },
+        Rectangle { width: 7, height: 12 },
+    ];
+
+    let mut num_sort_operations = 0;
+    list.sort_by_key(|r| {
+        num_sort_operations += 1;
+        r.width
+    });
+    println!("{list:#?}, sorted in {num_sort_operations} operations");
+}</code></pre>
+<figcaption><a href="#listing-13-9">لیست ۱۳-۹</a>: استفاده از یک closure &lt;code&gt;&lt;/x-listing&gt;FnMut&lt;/code&gt; با &lt;code&gt;sort_by_key&lt;/code&gt; مجاز است</figcaption>
+</figure>
+<p>صفات <code>Fn</code> هنگام تعریف یا استفاده از توابع یا انواعی که از closureها استفاده می‌کنند، مهم هستند. در بخش بعدی، ما درباره iteratorها بحث خواهیم کرد. بسیاری از متدهای iterator آرگومان‌های closure می‌گیرند، بنابراین این جزئیات closure را هنگام ادامه مطالعه در نظر داشته باشید!</p><nav class="page-nav"><a href="ch13-00-functional-features.html">→ ویژگی‌های زبان تابعی: iteratorها و closureها</a><a href="ch13-02-iterators.html">پردازش دنباله‌ای از آیتم‌ها با iteratorها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

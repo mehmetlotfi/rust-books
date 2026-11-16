@@ -1,0 +1,99 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>هدایت خطاها به خروجی خطای استاندارد — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch12-06-writing-to-stderr-instead-of-stdout"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><!-- Old headings. Do not remove or links may break. -->
+<p><a id="writing-error-messages-to-standard-error-instead-of-standard-output"></a></p>
+<h2 id="redirecting-errors-to-standard-error"><a class="header" href="#redirecting-errors-to-standard-error">نوشتن پیام‌های خطا به خروجی خطای استاندارد به جای خروجی استاندارد</a></h2>
+<p>در حال حاضر، ما تمام خروجی‌های خود را با استفاده از ماکروی <code>println!</code> به ترمینال می‌نویسیم. در بیشتر ترمینال‌ها، دو نوع خروجی وجود دارد: <em>خروجی استاندارد</em> (<code>stdout</code>) برای اطلاعات عمومی و <em>خروجی خطای استاندارد</em> (<code>stderr</code>) برای پیام‌های خطا. این تمایز به کاربران امکان می‌دهد که خروجی موفقیت‌آمیز یک برنامه را به یک فایل هدایت کنند اما همچنان پیام‌های خطا را روی صفحه ببینند.</p>
+<p>ماکروی <code>println!</code> فقط قادر به نوشتن در خروجی استاندارد است، بنابراین برای نوشتن به خروجی خطای استاندارد باید از چیزی دیگر استفاده کنیم.</p>
+<h3 id="checking-where-errors-are-written"><a class="header" href="#checking-where-errors-are-written">بررسی محل نوشتن خطاها</a></h3>
+<p>ابتدا بررسی می‌کنیم که محتوای چاپ‌شده توسط <code>minigrep</code> در حال حاضر به خروجی استاندارد نوشته می‌شود، از جمله پیام‌های خطایی که می‌خواهیم به جای آن‌ها در خروجی خطای استاندارد نوشته شوند. این کار را با هدایت جریان خروجی استاندارد به یک فایل و عمداً ایجاد یک خطا انجام خواهیم داد. ما جریان خروجی خطای استاندارد را هدایت نمی‌کنیم، بنابراین هر محتوایی که به خروجی خطای استاندارد ارسال شود همچنان روی صفحه نمایش داده خواهد شد.</p>
+<p>برنامه‌های خط فرمان انتظار می‌رود که پیام‌های خطای خود را به جریان خروجی خطای استاندارد ارسال کنند تا در صورت هدایت جریان خروجی استاندارد به یک فایل، پیام‌های خطا همچنان روی صفحه نمایش داده شوند. برنامه ما در حال حاضر به درستی عمل نمی‌کند: ما به زودی خواهیم دید که پیام خطا به جای صفحه نمایش به فایل ذخیره می‌شود!</p>
+<p>برای نشان دادن این رفتار، برنامه را با استفاده از دستور <code>&gt;</code> و مسیر فایل <em>output.txt</em> که می‌خواهیم جریان خروجی استاندارد را به آن هدایت کنیم، اجرا می‌کنیم. هیچ آرگومانی ارائه نخواهیم کرد، که باید منجر به یک خطا شود:</p>
+<pre><code class="language-console">$ cargo run &gt; output.txt
+</code></pre>
+<p>دستور <code>&gt;</code> به شل می‌گوید که محتوای جریان خروجی استاندارد را به <em>output.txt</em> بنویسد به جای اینکه آن را روی صفحه نمایش دهد. ما پیام خطایی که انتظار داشتیم روی صفحه ببینیم را ندیدیم، بنابراین به این معنی است که باید در فایل ذخیره شده باشد. این همان چیزی است که <em>output.txt</em> شامل می‌شود:</p>
+<pre><code class="language-text">Problem parsing arguments: not enough arguments
+</code></pre>
+<p>بله، پیام خطای ما به خروجی استاندارد چاپ می‌شود. برای پیام‌های خطایی مانند این بهتر است که به خروجی خطای استاندارد چاپ شوند تا فقط داده‌های حاصل از اجرای موفقیت‌آمیز در فایل قرار گیرند. ما این موضوع را تغییر خواهیم داد.</p>
+<h3 id="printing-errors-to-standard-error"><a class="header" href="#printing-errors-to-standard-error">نوشتن خطاها به خروجی خطای استاندارد</a></h3>
+<p>ما از کدی که در لیستینگ 12-24 نشان داده شده است برای تغییر نحوه چاپ پیام‌های خطا استفاده می‌کنیم. به دلیل بازسازی‌ای که قبلاً در این فصل انجام دادیم، تمام کدی که پیام‌های خطا را چاپ می‌کند در یک تابع به نام <code>main</code> قرار دارد. کتابخانه استاندارد ماکروی <code>eprintln!</code> را ارائه می‌دهد که به جریان خروجی خطای استاندارد چاپ می‌کند، بنابراین دو جایی که ما <code>println!</code> را برای چاپ خطاها فراخوانی کرده‌ایم را به <code>eprintln!</code> تغییر می‌دهیم.</p>
+<figure class="listing" id="listing-12-24">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">use std::env;
+</span><span class="boring">use std::error::Error;
+</span><span class="boring">use std::fs;
+</span><span class="boring">use std::process;
+</span><span class="boring">
+</span><span class="boring">use minigrep::{search, search_case_insensitive};
+</span><span class="boring">
+</span>fn main() {
+    let args: Vec&lt;String&gt; = env::args().collect();
+
+    let config = Config::build(&amp;args).unwrap_or_else(|err| {
+        eprintln!("Problem parsing arguments: {err}");
+        process::exit(1);
+    });
+
+    if let Err(e) = run(config) {
+        eprintln!("Application error: {e}");
+        process::exit(1);
+    }
+}
+<span class="boring">
+</span><span class="boring">pub struct Config {
+</span><span class="boring">    pub query: String,
+</span><span class="boring">    pub file_path: String,
+</span><span class="boring">    pub ignore_case: bool,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Config {
+</span><span class="boring">    fn build(args: &amp;[String]) -&gt; Result&lt;Config, &amp;'static str&gt; {
+</span><span class="boring">        if args.len() &lt; 3 {
+</span><span class="boring">            return Err("not enough arguments");
+</span><span class="boring">        }
+</span><span class="boring">
+</span><span class="boring">        let query = args[1].clone();
+</span><span class="boring">        let file_path = args[2].clone();
+</span><span class="boring">
+</span><span class="boring">        let ignore_case = env::var("IGNORE_CASE").is_ok();
+</span><span class="boring">
+</span><span class="boring">        Ok(Config {
+</span><span class="boring">            query,
+</span><span class="boring">            file_path,
+</span><span class="boring">            ignore_case,
+</span><span class="boring">        })
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">fn run(config: Config) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+</span><span class="boring">    let contents = fs::read_to_string(config.file_path)?;
+</span><span class="boring">
+</span><span class="boring">    let results = if config.ignore_case {
+</span><span class="boring">        search_case_insensitive(&amp;config.query, &amp;contents)
+</span><span class="boring">    } else {
+</span><span class="boring">        search(&amp;config.query, &amp;contents)
+</span><span class="boring">    };
+</span><span class="boring">
+</span><span class="boring">    for line in results {
+</span><span class="boring">        println!("{line}");
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    Ok(())
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-12-24">لیست ۱۲-۲۴</a>: نوشتن پیام‌های خطا به خروجی خطای استاندارد به جای خروجی استاندارد با استفاده از &lt;code&gt;&lt;/x-listing&gt;eprintln!&lt;/code&gt;</figcaption>
+</figure>
+<p>حالا برنامه را دوباره اجرا می‌کنیم به همان روش، بدون هیچ آرگومانی و با هدایت خروجی استاندارد با استفاده از <code>&gt;</code>:</p>
+<pre><code class="language-console">$ cargo run &gt; output.txt
+Problem parsing arguments: not enough arguments
+</code></pre>
+<p>حالا خطا را روی صفحه می‌بینیم و <em>output.txt</em> خالی است، که همان رفتاری است که از برنامه‌های خط فرمان انتظار داریم.</p>
+<p>برنامه را دوباره اجرا می‌کنیم با آرگومان‌هایی که خطایی ایجاد نمی‌کنند اما همچنان خروجی استاندارد را به یک فایل هدایت می‌کنند، مانند این:</p>
+<pre><code class="language-console">$ cargo run -- to poem.txt &gt; output.txt
+</code></pre>
+<p>هیچ خروجی روی ترمینال نخواهیم دید و <em>output.txt</em> شامل نتایج ما خواهد بود:</p>
+<p><span class="filename">نام فایل: output.txt</span></p>
+<pre><code class="language-text">Are you nobody, too?
+How dreary to be somebody!
+</code></pre>
+<p>این نشان می‌دهد که اکنون از خروجی استاندارد برای خروجی‌های موفقیت‌آمیز و از خروجی خطای استاندارد برای خروجی‌های خطا استفاده می‌کنیم، همان‌طور که مناسب است.</p>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<p>این فصل به طور خلاصه برخی از مفاهیم اصلی که تاکنون آموخته‌اید را مرور کرد و توضیح داد که چگونه عملیات ورودی/خروجی معمول را در Rust انجام دهید. با استفاده از آرگومان‌های خط فرمان، فایل‌ها، متغیرهای محیطی و ماکروی <code>eprintln!</code> برای چاپ خطاها، شما اکنون آماده‌اید تا برنامه‌های خط فرمان بنویسید. همراه با مفاهیم فصل‌های قبلی، کد شما سازماندهی خوبی خواهد داشت، داده‌ها را به طور مؤثر در ساختارهای داده مناسب ذخیره می‌کند، خطاها را به خوبی مدیریت می‌کند و به خوبی تست شده است.</p>
+<p>در ادامه، برخی ویژگی‌های Rust را که از زبان‌های تابعی تأثیر گرفته‌اند بررسی می‌کنیم: closureها و تکرارگرها.</p><nav class="page-nav"><a href="ch12-05-working-with-environment-variables.html">→ کار با متغیرهای محیطی</a><a href="ch13-00-functional-features.html">ویژگی‌های زبان تابعی: iteratorها و closureها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

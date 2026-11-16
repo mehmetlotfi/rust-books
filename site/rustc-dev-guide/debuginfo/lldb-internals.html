@@ -1,0 +1,181 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>درونیات LLDB — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="debuginfo/lldb-internals"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="lldb-internals"><a class="header" href="#lldb-internals">درونیات LLDB</a></h1>
+<p>پردازش اطلاعات اشکال‌زدایی در LLDB بر مجموعه‌ای از رابط‌های قابل‌گسترش تکیه دارد که عمدتاً در
+<a href="https://github.com/llvm/llvm-project/tree/main/lldb/source/Plugins">lldb/src/Plugins</a> تعریف شده‌اند.
+هدف از آن‌ها این است که توسعه‌دهندگان کامپایلرهای شخص ثالث بتوانند
+پشتیبانی زبان را اضافه کنند که در زمان اجرا توسط LLDB بارگذاری می‌شود، اما در زمان نگارش (نوامبر ۲۰۲۵) API
+عمومی نهایی نشده است، پس افزونه‌ها یا درون خود LLDB یا در forkهای مستقل LLDB وجود دارند.</p>
+<p>معمولاً پشتیبانی زبان به‌صورت یک خط لولهٔ این افزونه‌ها نوشته می‌شود: <code>*ASTParser</code> -&gt;
+<code>TypeSystem</code> -&gt; <code>ExpressionParser</code>/<code>Language</code>.</p>
+<p>در ادامه چند پیاده‌سازی موجود از API افزونهٔ LLDB آمده است:</p>
+<ul>
+<li><a href="https://github.com/swiftlang/llvm-project">fork شرکت Apple با پشتیبانی از Swift</a></li>
+<li><a href="https://archive.softwareheritage.org/browse/origin/directory/?branch=refs/heads/codelldb/16.x&amp;origin_url=https://github.com/vadimcn/llvm-project&amp;path=lldb/source/Plugins/TypeSystem/Rust&amp;timestamp=2023-09-11T04:55:10Z">fork سابق CodeLLDB با پشتیبانی از Rust</a></li>
+<li><a href="https://github.com/Walnut356/llvm-project/tree/lldbrust/19.x">بازپیاده‌سازی در دست انجام پشتیبانی از Rust</a></li>
+<li><a href="https://github.com/tromey/lldb/tree/a0fc10ce0dacb3038b7302fff9f6cb8cb34b37c6/source/Plugins/ExpressionParser/Rust">یک افزونهٔ تجزیه‌گر عبارت Rust</a>.
+این پیش از ایجاد API ‏<code>TypeSystem</code> نوشته شد.
+به‌دلیل ماهیت آزاد تجزیهٔ عبارت،
+lexing، parsing، فراخوانی تابع و غیره در زیر آن همچنان باید بینش‌های ارزشمندی ارائه دهد.</li>
+</ul>
+<h2 id="rust-support-and-typesystemclang"><a class="header" href="#rust-support-and-typesystemclang">پشتیبانی از Rust و TypeSystemClang</a></h2>
+<p>همان‌طور که در مرور کلی اطلاعات اشکال‌زدایی اشاره شد، LLDB پشتیبانی جزئی از Rust دارد.
+برای روشن‌تر شدن،
+Rust از خط لولهٔ افزونه‌ای استفاده می‌کند که برای C/C++ ساخته شده است
+(هرچند شامل چند کمک‌کننده برای نوع‌های enum در Rust است)،
+که مستقیماً به بازنمایی نوع‌ها در کامپایلر <code>clang</code> تکیه دارد.
+این محدودیت‌های سنگینی بر میزان تغییری که می‌توانیم بدهیم تحمیل می‌کند
+وقتی خروجی LLDB با آنچه می‌خواهیم مطابقت ندارد.
+برخی راه‌حل‌های موقت می‌توانند کمک کنند، اما در نهایت،
+نیازهای Rust در مقایسه با اطمینان از درست کار کردن
+کامپایل و اشکال‌زدایی C و C++ در درجهٔ دوم است.</p>
+<p>LLDB پذیرای افزودن یک <code>TypeSystemRust</code> است، اما کار بسیار بزرگی است.
+این بخش نه‌تنها برای مستند کردن چگونگی تعامل فعلی ما با <a href="https://github.com/llvm/llvm-project/tree/main/lldb/source/Plugins/TypeSystem/Clang"><code>TypeSystemClang</code></a> است،
+بلکه همچنین راهنمایی سبک برای پیاده‌سازی یک <code>TypeSystemRust</code> در آینده است.</p>
+<p>شایان ذکر است که تعامل مستقیم یک <code>TypeSystem</code> با کامپایلر زبان هدف
+مقصود است، اما الزام نیست.
+می‌توان همهٔ نوع‌های پشتیبان لازم را درون پیاده‌سازی افزونهٔ خود ساخت.</p>
+<blockquote>
+<p>توجه: مستندات LLDB، از جمله کامنت‌های کد منبع، بسیار کم است. تلاش برای
+درک چگونگی کار پشتیبانی زبان با خواندن پیاده‌سازی <code>TypeSystemClang</code> تا حدی
+دشوار است، به‌دلیل الزام اضافی درک درونیات کامپایلر <code>clang</code>. توصیه می‌شود
+به دو پیاده‌سازی <code>TypeSystemRust</code> فهرست‌شده در بالا نگاه کنید، چون «از صفر» نوشته شده‌اند
+بدون بهره‌گیری از بازنمایی نوع در یک کامپایلر. آن‌ها نسبتاً به
+کمینهٔ لازم برای پیاده‌سازی پشتیبانی زبان نزدیک‌اند.</p>
+</blockquote>
+<h2 id="dwarf-vs-pdb"><a class="header" href="#dwarf-vs-pdb">DWARF در برابر PDB</a></h2>
+<p>LLDB از این نظر منحصربه‌فرد است که می‌تواند هم اطلاعات اشکال‌زدایی DWARF و هم PDB را مدیریت کند.
+این با مقداری پیچیدگی اضافی همراه است.
+برای پیچیده‌تر شدن بیشتر، پشتیبانی PDB میان <code>dia</code> که
+به کتابخانهٔ <code>msdia140.dll</code> توزیع‌شده با Visual Studio تکیه دارد، و <code>native</code> که
+از صفر با استفاده از اطلاعات عمومی در دسترس دربارهٔ قالب PDB نوشته شده، تقسیم شده است.</p>
+<blockquote>
+<p>توجه: <code>dia</code> تا نسخهٔ 21 LLDB پیش‌فرض بود. <code>native</code> از زمان انتشار
+LLDB 22 پیش‌فرض جدید است. برنامه‌هایی برای منسوخ کردن و حذف کامل افزونه‌های مبتنی بر <code>dia</code> هست. به
+همین دلیل، در ادامه فقط تجزیهٔ <code>native</code> بحث می‌شود. برای پیگیری پیشرفت، لطفاً
+<a href="https://discourse.llvm.org/t/rfc-removing-the-dia-pdb-plugin-from-lldb/87827">این رشتهٔ discourse</a> و <a href="https://github.com/llvm/llvm-project/issues/114906">issue پیگیری</a> مربوطه را ببینید.</p>
+<p>می‌توان <code>native</code> را از طریق تنظیم <code>plugin.symbol-file.pdb.reader</code> که در LLDB 22 اضافه شد یا با استفاده از
+متغیر محیطی <code>LLDB_USE_NATIVE_PDB_READER=0/1</code> تغییر داد</p>
+</blockquote>
+<h2 id="debug-node-parsing"><a class="header" href="#debug-node-parsing">تجزیهٔ گره‌های اشکال‌زدایی</a></h2>
+<p>گام اول پردازش گره‌های خام اشکال‌زدایی به چیزی قابل‌استفاده است.
+این عمدتاً در کلاس‌های <a href="https://github.com/llvm/llvm-project/tree/main/lldb/source/Plugins/SymbolFile/DWARF"><code>DWARFASTParser</code></a> و <a href="https://github.com/llvm/llvm-project/tree/main/lldb/source/Plugins/SymbolFile/NativePDB"><code>PdbAstBuilder</code></a> رخ می‌دهد.
+به این کلاس‌ها شکل deserialize‌شدهٔ اطلاعات اشکال‌زدایی داده می‌شود
+که به‌ترتیب از <a href="https://github.com/llvm/llvm-project/blob/main/lldb/source/Plugins/SymbolFile/DWARF/SymbolFileDWARF.h"><code>SymbolFileDWARF</code></a> و <a href="https://github.com/llvm/llvm-project/blob/main/lldb/source/Plugins/SymbolFile/NativePDB/SymbolFileNativePDB.h"><code>SymbolFileNativePDB</code></a> تولید می‌شود.
+پیاده‌سازان <code>SymbolFile</code> تقریباً هیچ
+تبدیلی روی اطلاعات اشکال‌زدایی زیرین پیش از دادن آن به parserها انجام نمی‌دهند.
+هم برای PDB و هم DWARF، اطلاعات اشکال‌زدایی با استفاده از handlerهای اطلاعات اشکال‌زدایی LLVM خوانده می‌شود.</p>
+<p>parserها گره‌ها را به قالب‌هایی راحت‌تر برای اهداف LLDB ترجمه می‌کنند.
+برای <code>clang</code>، این قالب‌ها <code>clang::QualType</code>، <code>clang::Decl</code> و <code>clang::DeclContext</code> هستند،
+که نوع‌هایی‌اند که <code>clang</code> هنگام کامپایل C و C++ در درون به کار می‌برد.
+باز هم، استفاده از بازنمایی نوع‌های کامپایلر
+الزام نیست، اما سامانهٔ افزونه با در نظر گرفتن آن به‌عنوان یک امکان ساخته شده است.</p>
+<blockquote>
+<p>توجه: نوع‌های بالا به‌صورت مستقل از زبان با نام <code>LangType</code>، <code>Decl</code> و
+<code>DeclContext</code> نامیده می‌شوند، وقتی جزئیات پیاده‌سازی مشخص <code>TypeSystemClang</code> مرتبط نیستند.</p>
+</blockquote>
+<p><code>LangType</code> یک نوع را نمایش می‌دهد.
+این شامل اطلاعاتی مانند نام نوع، اندازه و
+تراز، طبقه‌بندی آن (مثلاً struct، اولیه، اشاره‌گر)، qualifierهای آن (مثلاً
+<code>const</code>، <code>volatile</code>)، آرگومان‌های template، نوع‌های آرگومان و بازگشتی تابع و غیره است. <a href="https://github.com/Walnut356/llvm-project/blob/13bcfd502452606d69faeea76aec3a06db554af9/lldb/source/Plugins/TypeSystem/Rust/TypeSystemRust.h#L618">اینجا</a>
+نمونه‌ای از شکل احتمالی یک <code>RustType</code> آمده است.</p>
+<p><code>Decl</code> هر نوع declaration را نمایش می‌دهد.
+می‌تواند یک نوع، یک متغیر، یک فیلد static از یک
+struct، مقداری که یک static یا const با آن مقداردهی می‌شود و غیره باشد.</p>
+<p><code>DeclContext</code> کم‌وبیش یک scope را نمایش می‌دهد.
+<code>DeclContext</code>ها معمولاً شامل <code>Decl</code>ها و
+<code>DeclContexts</code>های دیگر هستند، هرچند رابطه چندان سرراست نیست.
+برای مثال، یک تابع می‌تواند هم <code>Decl</code> باشد (چون امضای تابع نوع است)،
+<strong>و</strong> هم <code>DeclContext</code>
+(چون توابع شامل declarationهای متغیر، declarationهای تابع تودرتو و غیره هستند).</p>
+<p>فرایند ترجمه می‌تواند بسیار پرگو باشد، اما معمولاً سرراست است.
+بخش زیادی از کار در اینجا به اطلاعات دقیق لازم برای پر کردن <code>LangType</code>،
+<code>Decl</code> و <code>DeclContext</code> وابسته است.</p>
+<p>پس از ترجمهٔ یک گره، اشاره‌گر به آن type-erased می‌شود (<code>void*</code>) و در <code>CompilerType</code>،
+<code>CompilerDecl</code> یا <code>CompilerDeclContext</code> پیچیده می‌شود.
+این wrapperها آن‌ها را با <code>TypeSystem</code>ی که مالکشان است مرتبط می‌کنند.
+متدهای این اشیا به <code>TypeSystem</code> واگذار می‌شوند، که <code>void*</code> را به
+<code>LangType*</code>/<code>Decl*</code>/<code>DeclContext*</code> مناسب برمی‌گرداند و روی درونیات عمل می‌کند.
+در اصطلاح Rust،
+رابطه چیزی شبیه این است:</p>
+<pre><code class="language-Rust">struct CompilerType {
+    inner_type: *mut c_void,
+    type_system: Arc&lt;dyn TypeSystem&gt;,
+}
+
+impl CompilerType {
+    pub fn get_byte_size(&amp;self) -&gt; usize {
+        self.type_system.get_byte_size(self.lang_type)
+    }
+
+}
+
+...
+
+impl TypeSystem for TypeSystemLang {
+    pub fn get_byte_size(lang_type: *mut c_void) -&gt; usize {
+        let lang_type = lang_type as *mut LangType;
+
+        // Operate on the internals of the LangType to
+        // determine its size
+        ...
+    }
+}
+</code></pre>
+<h2 id="type-systems"><a class="header" href="#type-systems">سامانه‌های نوع (Type systems)</a></h2>
+<p><a href="https://github.com/llvm/llvm-project/blob/main/lldb/include/lldb/Symbol/TypeSystem.h#L69">رابط <code>TypeSystem</code></a> سه هدف عمده دارد:</p>
+<ol>
+<li>به‌عنوان «مرجع یگانه» نوع‌های یک زبان عمل کند.
+این اجازه می‌دهد سامانهٔ نوع به «مخزن» سامانه‌های نوع LLDB اضافه شود.
+وقتی یک فایل اجرایی بارگذاری می‌شود، زبان هدف تعیین می‌شود و
+از مخزن پرس‌وجو می‌شود تا <code>TypeSystem</code>ای یافت شود که ادعا می‌کند می‌تواند آن زبان را مدیریت کند.
+همچنین می‌توان از <code>TypeSystem</code> برای بازیابی <code>SymbolFile</code> پشتیبان،
+جستجوی نوع‌ها و ساخت نوع‌های پایه‌ای استفاده کرد
+که ممکن است در اطلاعات اشکال‌زدایی وجود نداشته باشند (مثلاً نوع‌های اولیه، آرایه‌های <code>T</code>، اشاره‌گرها به <code>T</code>).</li>
+<li>طول عمر اشیای <code>LangType</code>، <code>Decl</code> و <code>DeclContext</code> را مدیریت کند</li>
+<li>«پیش‌فرض‌های» نحوهٔ ظاهر شدن آن نوع‌ها و نحوهٔ تعامل با آن‌ها را سفارشی کند.</li>
+</ol>
+<p>دو کارکرد اول کاملاً سرراست‌اند، پس بر سومی تمرکز می‌کنیم.</p>
+<p>بسیاری از توابع در رابط <code>TypeSystem</code> اگر با
+اسکریپت‌های visualizer کار کرده باشید آشنا به نظر می‌رسند.
+این توابع زیربنای <code>SBType</code> و توابع <code>SBValue</code> با نام‌های مطابق‌اند.
+برای مثال، <code>TypeSystem::GetFormat</code> قالب پیش‌فرض نوع را برمی‌گرداند اگر هیچ formatter سفارشی
+روی آن اعمال نشده باشد.</p>
+<p>موارد قابل‌توجه به‌ویژه <code>GetIndexOfChildWithName</code> و <code>GetNumChildren</code> هستند.
+نسخه‌های <code>TypeSystem</code> این توابع روی یک <em>نوع</em> عمل می‌کنند،
+نه روی یک مقدار مانند نسخه‌های <code>SBValue</code>.
+مقادیر برگردانده‌شده از توابع <code>TypeSystem</code>
+تعیین می‌کنند چه بخش‌هایی از struct را بقیهٔ LLDB <em>اصلاً</em> می‌تواند با آن‌ها تعامل کند.
+اگر فیلدی حذف شود، آن فیلد در عمل دیگر برای LLDB وجود ندارد.</p>
+<p>افزون بر این، چون با اشیا کار نمی‌کنند، حافظهٔ زیرینی برای بررسی یا
+تفسیر وجود ندارد.
+در اصل، این یعنی این توابع همان هدف توابع معادلشان در
+<code>SyntheticProvider</code> را ندارند.
+راهی برای تعیین اینکه یک <code>Vec</code> چند عنصر دارد یا آن عناصر در چه نشانی‌ای قرار دارند وجود ندارد.
+همچنین نمی‌توان مقدار discriminant یک sum-type را تعیین کرد.</p>
+<p>در حالت ایده‌آل، <code>TypeSystem</code> باید نوع‌ها را همان‌طور که در اطلاعات اشکال‌زدایی ظاهر می‌شوند با کمترین
+تغییر ممکن در دسترس بگذارد.
+syntheticها و frontend مربوط به LLDB می‌توانند زیباسازی نوع را مدیریت کنند.
+اگر بخشی از اطلاعات بی‌فایده است،
+کامپایلر Rust باید طوری تغییر کند که از ابتدا آن اطلاعات اشکال‌زدایی را خروجی ندهد.</p>
+<h2 id="expression-parsing"><a class="header" href="#expression-parsing">تجزیهٔ عبارت</a></h2>
+<p><code>TypeSystem</code> معمولاً طوری نوشته می‌شود که همتایی داشته باشد که بتواند تجزیهٔ عبارت را مدیریت کند.
+این پیاده‌سازی چند تابع اضافی در رابط <code>TypeSystem</code> را الزام می‌کند.
+بخش عمدهٔ کد تجزیهٔ عبارت باید در <a href="https://github.com/llvm/llvm-project/tree/main/lldb/source/Plugins/ExpressionParser">lldb/source/Plugins/ExpressionParser</a> قرار گیرد.</p>
+<p>دربارهٔ parser چیز زیادی که شایان ذکر باشد نیست.
+نیاز به پیاده‌سازی یک مفسر ساده دارد که بتواند نحو (احتمالاً ساده‌شدهٔ) Rust را مدیریت کند.
+آن‌ها روی <code>lldb::ValueObject</code>ها عمل می‌کنند، که اشیایی‌اند که زیربنای <code>SBValue</code> هستند.</p>
+<h2 id="language"><a class="header" href="#language">Language</a></h2>
+<p><a href="https://github.com/llvm/llvm-project/tree/main/lldb/source/Plugins/Language">افزونه‌های <code>Language</code></a> معادل C++ اسکریپت‌های visualizer در Python هستند.
+آن‌ها با همان هدف روی اشیای <code>SBValue</code> عمل می‌کنند:
+ساخت فرزندان synthetic و چاپ زیبا (pretty-printing).
+<a href="https://github.com/llvm/llvm-project/tree/main/lldb/source/Plugins/Language/CPlusPlus">پیاده‌سازی‌های CPlusPlusLanguage</a> برای نوع‌های LibCxx منابع عالی برای
+یادگیری چگونگی نوشتن visualizerها هستند.</p>
+<p>این افزونه‌ها می‌توانند به درونیات خصوصی LLDB (از جمله <code>TypeSystem</code> زیرین) دسترسی یابند، پس
+synthetic/summary providerهایی که به‌صورت افزونهٔ <code>Language</code> نوشته شوند می‌توانند خروجی با کیفیت بالاتری نسبت به
+معادل Python خود ارائه دهند.</p>
+<p>در حالی که تجزیهٔ گره‌های اشکال‌زدایی، سامانه‌های نوع و تجزیهٔ عبارت همگی با هم پیوند نزدیک دارند،
+افزونهٔ <code>Language</code> بیشتر کپسوله شده و بنابراین می‌تواند «مستقل» برای هر زبانی نوشته شود
+که یک سامانهٔ نوع موجود از آن پشتیبانی می‌کند.
+به‌دلیل مانع ورود پایین‌تر، یک افزونهٔ <code>RustLanguage</code>
+ممکن است پلهٔ خوبی به‌سوی پشتیبانی کامل زبان در LLDB باشد.</p>
+<h2 id="visualizers"><a class="header" href="#visualizers">Visualizerها</a></h2>
+<p>در دست تکمیل (WIP)</p><nav class="page-nav"><a href="debugger-internals.html">→ درونیات دیباگر</a><a href="gdb-internals.html">درونیات GDB (ناقص) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

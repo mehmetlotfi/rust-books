@@ -1,0 +1,85 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>TypeFolder و TypeFoldable — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ty-fold"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><!-- date-check: may 2024 -->
+<h1 id="typefoldable-and-typefolder"><a class="header" href="#typefoldable-and-typefolder"><code>TypeFoldable</code> و <code>TypeFolder</code></a></h1>
+<p>در <a href="ty-module/instantiating-binders.html">فصلی پیشین</a> دربارهٔ نمونه‌سازی binderها بحث کردیم.
+این کار شامل نگاه کردن به همه‌چیز درون یک <code>Early(Binder)</code> است
+تا هر کاربرد متغیرهای مقید (bound vars) را برای جایگزین کردنشان پیدا کنیم.
+Binderها می‌توانند هر نوع دلخواه Rust به نام <code>T</code> را دربر بگیرند، نه فقط یک <code>Ty</code>.
+پس چگونه متدهای <code>instantiate</code> را روی نوع‌های <code>Early/Binder</code> پیاده‌سازی کنیم؟</p>
+<p>پاسخ، چند صفت (trait) است: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/trait.TypeFoldable.html"><code>TypeFoldable</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/trait.TypeFolder.html"><code>TypeFolder</code></a>.</p>
+<ul>
+<li><code>TypeFoldable</code> توسط نوع‌هایی پیاده‌سازی می‌شود که اطلاعات نوع را در خود جای داده‌اند.
+این صفت به شما اجازه می‌دهد محتویات <code>TypeFoldable</code> را به‌صورت بازگشتی پردازش کنید و کارهایی روی آن‌ها انجام دهید.</li>
+<li><code>TypeFolder</code> تعیین می‌کند با نوع‌هایی که هنگام پردازش
+<code>TypeFoldable</code> با آن‌ها روبه‌رو می‌شوید چه کاری می‌خواهید انجام دهید.</li>
+</ul>
+<p>برای مثال، صفت <code>TypeFolder</code> متدی به نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/trait.TypeFolder.html#method.fold_ty"><code>fold_ty</code></a> دارد
+که یک نوع را به‌عنوان ورودی می‌گیرد و یک نوع جدید به‌عنوان نتیجه برمی‌گرداند.
+<code>TypeFoldable</code> متدهای <code>TypeFolder</code> با نام <code>fold_foo</code> را روی خودش فراخوانی می‌کند
+و به <code>TypeFolder</code> به محتویاتش (نوع‌ها، ناحیه‌ها و غیره که درون آن قرار دارند) دسترسی می‌دهد.</p>
+<p>می‌توانید با این قیاس با ترکیب‌گرهای iterator که در Rust دوستشان داریم به آن فکر کنید:</p>
+<pre><code class="language-rust ignore">vec.iter().map(|e1| foo(e2)).collect()
+//             ^^^^^^^^^^^^ analogous to `TypeFolder`
+//         ^^^ analogous to `TypeFoldable`</code></pre>
+<p>پس برای تکرار:</p>
+<ul>
+<li><code>TypeFolder</code>  صفتی است که یک عملیات «map» را تعریف می‌کند.</li>
+<li><code>TypeFoldable</code>  صفتی است که توسط چیزهایی پیاده‌سازی می‌شود که نوع‌ها را در خود جای داده‌اند.</li>
+</ul>
+<p>در مورد <code>subst</code> می‌بینیم که به‌صورت یک <code>TypeFolder</code> پیاده‌سازی شده است: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/binder/struct.ArgFolder.html"><code>ArgFolder</code></a>.
+با نگاه به پیاده‌سازی آن می‌بینیم جایگزینی‌های واقعی کجا اتفاق می‌افتند.</p>
+<p>با این حال، ممکن است متوجه شوید که پیاده‌سازی، متد <code>super_fold_with</code> را صدا می‌زند.
+آن چیست؟
+متدی از <code>TypeFoldable</code> است.
+نوع <code>TypeFoldable</code> زیر به نام <code>MyFoldable</code> را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">struct MyFoldable&lt;'tcx&gt; {
+  def_id: DefId,
+  ty: Ty&lt;'tcx&gt;,
+}</code></pre>
+<p><code>TypeFolder</code> می‌تواند <code>super_fold_with</code> را روی <code>MyFoldable</code> فراخوانی کند، اگر فقط بخواهد برخی از
+فیلدهای <code>MyFoldable</code> را با مقادیر جدید جایگزین کند.
+اگر در عوض بخواهد کل <code>MyFoldable</code> را با یک مقدار دیگر جایگزین کند،
+به‌جای آن <code>fold_with</code> را فراخوانی می‌کند (متد دیگری روی <code>TypeFoldable</code>).</p>
+<p>تقریباً در همهٔ موارد نمی‌خواهیم کل struct را جایگزین کنیم؛ فقط می‌خواهیم <code>ty::Ty</code>ها را در
+struct جایگزین کنیم، بنابراین معمولاً <code>super_fold_with</code> را فراخوانی می‌کنیم.
+یک پیاده‌سازی نمونه که <code>MyFoldable</code> می‌تواند داشته باشد ممکن است چیزی شبیه این انجام دهد:</p>
+<pre><code class="language-rust ignore">my_foldable: MyFoldable&lt;'tcx&gt;
+my_foldable.subst(..., subst)
+
+impl TypeFoldable for MyFoldable {
+  fn super_fold_with(&amp;self, folder: &amp;mut impl TypeFolder&lt;'tcx&gt;) -&gt; MyFoldable {
+    MyFoldable {
+      def_id: self.def_id.fold_with(folder),
+      ty: self.ty.fold_with(folder),
+    }
+  }
+
+  fn super_visit_with(..) { }
+}</code></pre>
+<p>توجه کنید که در اینجا
+<code>super_fold_with</code> را طوری پیاده‌سازی می‌کنیم که روی فیلدهای <code>MyFoldable</code> پیمایش کند و <code>fold_with</code> را روی <em>آن‌ها</em> فراخوانی کند.
+یعنی یک folder ممکن است <code>def_id</code> و <code>ty</code> را جایگزین کند، اما نه کل struct به نام <code>MyFoldable</code> را.</p>
+<p>این هم مثالی دیگر برای جمع‌بندی: فرض کنید نوعی مانند <code>Vec&lt;Vec&lt;X&gt;&gt;</code> داریم.
+<code>ty::Ty</code> آن چنین به نظر می‌رسد: <code>Adt(Vec, &amp;[Adt(Vec, &amp;[Param(X)])])</code>.
+اگر بخواهیم <code>subst(X =&gt; u32)</code> انجام دهیم،
+ابتدا به نوع کلی نگاه می‌کنیم.
+می‌بینیم که در سطح بیرونی جایگزینی‌ای برای انجام نیست،
+پس یک سطح پایین می‌رویم و به <code>Adt(Vec, &amp;[Param(X)])</code> نگاه می‌کنیم.
+اینجا هم هنوز جایگزینی‌ای نیست، پس دوباره پایین می‌رویم.
+اکنون به <code>Param(X)</code> نگاه می‌کنیم که قابل جایگزینی است، پس آن را با <code>u32</code> عوض می‌کنیم.
+دیگر نمی‌توانیم پایین‌تر برویم، پس کار تمام است
+و نتیجهٔ کلی <code>Adt(Vec, &amp;[Adt(Vec, &amp;[u32])])</code> است.</p>
+<p>یک نکتهٔ آخر: اغلب هنگام پیمایش (fold) روی یک <code>TypeFoldable</code>
+نمی‌خواهیم بیشتر چیزها را تغییر دهیم.
+فقط می‌خواهیم وقتی به یک نوع رسیدیم کاری انجام دهیم.
+یعنی ممکن است نوع‌های <code>TypeFoldable</code> بسیاری وجود داشته باشند که
+پیاده‌سازی‌شان اساساً فقط به پیاده‌سازی‌های <code>TypeFoldable</code> فیلدهایشان ارجاع می‌دهد.
+نوشتن دستی چنین پیاده‌سازی‌هایی از <code>TypeFoldable</code> معمولاً بسیار خسته‌کننده است.
+به همین دلیل یک ماکروی <code>derive</code> وجود دارد که اجازه می‌دهد <code>#![derive(TypeFoldable)]</code> را بنویسید.
+این ماکرو <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_macros/src/type_foldable.rs">اینجا</a> تعریف شده است.</p>
+<p><strong><code>subst</code></strong> در مورد جایگزینی‌ها، <a href="https://github.com/rust-lang/rust/blob/75ff3110ac6d8a0259023b83fd20d7ab295f8dd6/src/librustc_middle/ty/subst.rs#L440-L451">folder واقعی</a>
+همان اندیس‌گذاری‌ای را که پیش‌تر ذکر کردیم انجام می‌دهد.
+در آنجا یک <code>Folder</code> تعریف می‌کنیم و <code>fold_with</code> را روی <code>TypeFoldable</code> فراخوانی می‌کنیم تا خودش را پردازش کند.
+سپس <a href="https://github.com/rust-lang/rust/blob/75ff3110ac6d8a0259023b83fd20d7ab295f8dd6/src/librustc_middle/ty/subst.rs#L512-L536">fold_ty</a>، متدی که هر نوع را پردازش می‌کند، به دنبال یک <code>ty::Param</code> می‌گردد و برای آن‌ها
+مقدار را با چیزی از فهرست جایگزینی‌ها عوض می‌کند، و در غیر این صورت نوع را به‌صورت بازگشتی پردازش می‌کند.
+برای جایگزین کردن، <a href="https://github.com/rust-lang/rust/blob/75ff3110ac6d8a0259023b83fd20d7ab295f8dd6/src/librustc_middle/ty/subst.rs#L552-L587">ty_for_param</a> را فراخوانی می‌کند
+و تمام کاری که آن انجام می‌دهد این است که با اندیس <code>Param</code> در فهرست جایگزینی‌ها اندیس می‌زند.</p><nav class="page-nav"><a href="ty-module/param-ty-const-regions.html">→ نوع‌ها/ثابت‌ها/ناحیه‌های پارامتر</a><a href="normalization.html">نام‌های مستعار و نرمال‌سازی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

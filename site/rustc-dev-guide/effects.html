@@ -1,0 +1,62 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>صفت‌های ثابت و بررسی شرط ثابت — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="effects"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="effects-const-traits-and-const-condition-checking"><a class="header" href="#effects-const-traits-and-const-condition-checking">Effects، صفت‌های const و بررسی شرط‌های const</a></h1>
+<h2 id="the-hosteffect-predicate"><a class="header" href="#the-hosteffect-predicate">گزاره <code>HostEffect</code></a></h2>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/predicate/struct.HostEffectPredicate.html"><code>HostEffectPredicate</code></a>ها نوعی گزاره هستند که از کران‌های <code>[const] Tr</code> یا <code>const Tr</code> ساخته می‌شوند. هر یک شامل یک ارجاع صفت و یک <code>constness</code> است که بسته به کران می‌تواند <code>Maybe</code> یا <code>Const</code> باشد. از آن‌جا که <code>[const] Tr</code>، یا به بیان دقیق‌تر کران‌های <code>Maybe</code>، بسته به بافتی که در آن قرار دارند به شکل متفاوتی اعمال می‌شوند، رفتارشان با کران‌های معمولی فرق دارد. کران‌های صفت معمولی روی یک تابع، مانند <code>T: Tr</code>، در کوئری <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html#method.clauses_of"><code>clauses_of</code></a> گردآوری می‌شوند تا هنگام فراخوانی تابع اثبات شوند و درون تابع مفروض گرفته شوند. کران‌هایی مانند <code>T: [const] Tr</code> مانند یک کران صفت معمولی رفتار می‌کنند و <code>T: Tr</code> را به نتیجه <code>clauses_of</code> اضافه می‌کنند، اما علاوه بر آن یک <code>HostEffectPredicate</code> هم به کوئری <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html#method.const_conditions"><code>const_conditions</code></a> اضافه می‌کنند.</p>
+<p>در مقابل، کران‌های <code>T: const Tr</code> در بافت‌های مختلف معنایشان تغییر نمی‌کند؛ بنابراین به‌جای <code>const_conditions</code>، عبارت <code>HostEffect(T: Tr, const)</code> به <code>clauses_of</code> اضافه می‌شود.</p>
+<h2 id="the-const_conditions-query"><a class="header" href="#the-const_conditions-query">کوئری <code>const_conditions</code></a></h2>
+<p><code>clauses_of</code> مجموعه‌ای از بندها را نشان می‌دهد که برای استفاده از یک آیتم باید اثبات شوند. برای مثال، برای استفاده از <code>foo</code> در مثال زیر:</p>
+<pre><code class="language-rust">fn foo&lt;T&gt;() where T: Default {}</code></pre>
+<p>باید بتوانیم اثبات کنیم که <code>T</code> صفت <code>Default</code> را پیاده‌سازی می‌کند. به همین ترتیب، <code>const_conditions</code> مجموعه‌ای از گزاره‌ها را نشان می‌دهد که برای استفاده از یک آیتم <em>در بافت‌های const</em> باید اثبات شوند. اگر مثال بالا را طوری تغییر دهیم که از کران‌های صفت <code>const</code> استفاده کند:</p>
+<pre><code class="language-rust">const fn foo&lt;T&gt;() where T: [const] Default {}</code></pre>
+<p>آن‌گاه <code>foo</code> در کوئری <code>const_conditions</code> یک <code>HostEffect(T: Default, maybe)</code> خواهد داشت، که نشان می‌دهد برای فراخوانی <code>foo</code> از بافت‌های const باید اثبات کرد که <code>T</code> یک پیاده‌سازی const از <code>Default</code> دارد.</p>
+<h2 id="enforcement-of-const_conditions"><a class="header" href="#enforcement-of-const_conditions">اعمال <code>const_conditions</code></a></h2>
+<p><code>const_conditions</code> در حال حاضر در چند جای مختلف بررسی می‌شوند.</p>
+<p>هر فراخوانی در HIR که از یک بافت const انجام شود (که شامل <code>const fn</code> و آیتم‌های <code>const</code> است) بررسی می‌کند که <code>const_conditions</code> تابعی که فراخوانی می‌شود برقرار باشند. این کار در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_typeck/fn_ctxt/struct.FnCtxt.html#method.enforce_context_effects"><code>FnCtxt::enforce_context_effects</code></a> انجام می‌شود. توجه کنید که اگر تابع فقط ارجاع داده شود و فراخوانی نشود، این بررسی انجام نمی‌شود، زیرا کد زیر باید کامپایل شود:</p>
+<pre><code class="language-rust">const fn hi&lt;T: [const] Default&gt;() -&gt; T {
+    T::default()
+}
+const X: fn() -&gt; u32 = hi::&lt;u32&gt;;</code></pre>
+<p>برای این‌که یک <code>impl</code> صفت well-formed باشد، باید بتوانیم <code>const_conditions</code> صفت را از محیط آن <code>impl</code> اثبات کنیم. این کار در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_analysis/check/wfcheck/fn.check_impl.html"><code>wfcheck::check_impl</code></a> بررسی می‌شود.</p>
+<p>Here’s an example:</p>
+<pre><code class="language-rust">const trait Bar {}
+const trait Foo: [const] Bar {}
+// `const_conditions` contains `HostEffect(Self: Bar, maybe)`
+
+impl const Bar for () {}
+impl const Foo for () {}
+// ^ here we check `const_conditions` for the impl to be well-formed</code></pre>
+<p>متدهای <code>impl</code>های صفت نباید کران‌های سخت‌گیرانه‌تری از متد متناظر در صفتی که پیاده‌سازی می‌کنند داشته باشند. برای بررسی سازگاری متدها، یک محیط ترکیبی از گزاره‌های <code>impl</code> به‌علاوه‌ی گزاره‌های متد صفت ساخته می‌شود و سپس تلاش می‌کنیم گزاره‌های متد <code>impl</code> را اثبات کنیم. همین کار را برای <code>const_conditions</code> هم انجام می‌دهیم:</p>
+<pre><code class="language-rust">const trait Foo {
+    fn hi&lt;T: [const] Default&gt;();
+}
+
+impl&lt;T: [const] Clone&gt; Foo for Vec&lt;T&gt; {
+    fn hi&lt;T: [const] PartialEq&gt;();
+    // ^ we can't prove `T: [const] PartialEq` given `T: [const] Clone` and
+    // `T: [const] Default`, therefore we know that the method on the impl
+    // is stricter than the method on the trait.
+}</code></pre>
+<p>این بررسی‌ها در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_analysis/check/compare_impl_item/fn.compare_method_clause_entailment.html"><code>compare_method_clause_entailment</code></a> انجام می‌شوند. تابع مشابهی که همین بررسی را برای نوع‌های وابسته انجام می‌دهد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_analysis/check/compare_impl_item/fn.compare_type_clause_entailment.html"><code>compare_type_clause_entailment</code></a> نام دارد. هر دوی این‌ها در بافت‌های const باید <code>const_conditions</code> را هم در نظر بگیرند.</p>
+<p>در MIR، به‌عنوان بخشی از بررسی const، <code>const_conditions</code> آیتم‌هایی که فراخوانی می‌شوند در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_const_eval/check_consts/check/struct.Checker.html#method.revalidate_conditional_constness"><code>Checker::revalidate_conditional_constness</code></a> دوباره اعتبارسنجی می‌شوند.</p>
+<h2 id="explicit_implied_const_bounds-on-associated-types-and-traits"><a class="header" href="#explicit_implied_const_bounds-on-associated-types-and-traits"><code>explicit_implied_const_bounds</code> روی نوع‌های وابسته و صفت‌ها</a></h2>
+<p>کران‌های روی نوع‌های وابسته، نوع‌های opaque و ابَرصفت‌ها، مانند نمونه‌ی زیر، به شکل متفاوتی نمایش داده می‌شوند:</p>
+<pre><code class="language-rust">trait Foo: [const] PartialEq {
+    type X: [const] PartialEq;
+}
+
+fn foo() -&gt; impl [const] PartialEq {
+    // ^ unimplemented syntax
+}</code></pre>
+<p>برخلاف <code>const_conditions</code> که باید برای فراخوانندگان اثبات شوند و درون تعریف می‌توان آن‌ها را مفروض گرفت (مانند کران‌های صفت روی توابع)، این کران‌ها باید در محل تعریف اثبات شوند (در <code>impl</code> یا هنگام بازگرداندن نوع opaque) اما برای فراخوانندگان می‌توان آن‌ها را مفروض گرفت. معادل غیر const این کران‌ها <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html#method.explicit_item_bounds"><code>explicit_item_bounds</code></a> نام دارد.</p>
+<p>این کران‌ها در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_analysis/check/compare_impl_item/fn.check_type_bounds.html"><code>compare_impl_item::check_type_bounds</code></a> برای بررسی نوع HIR، در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/traits/effects/fn.evaluate_host_effect_from_item_bounds.html"><code>evaluate_host_effect_from_item_bounds</code></a> برای حل‌کننده‌ی قدیمی و در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_next_trait_solver/solve/assembly/trait.GoalKind.html#tymethod.consider_additional_alias_assumptions"><code>consider_additional_alias_assumptions</code></a> برای حل‌کننده‌ی جدید بررسی می‌شوند.</p>
+<h2 id="proving-hosteffectpredicates"><a class="header" href="#proving-hosteffectpredicates">اثبات <code>HostEffectPredicate</code>ها</a></h2>
+<p><code>HostEffectPredicate</code>ها هم در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/src/rustc_trait_selection/traits/effects.rs.html">حل‌کننده‌ی قدیمی</a> و هم در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/src/rustc_next_trait_solver/solve/effect_goals.rs.html">حل‌کننده‌ی صفت جدید</a> پیاده‌سازی شده‌اند. به‌طور کلی، وقتی یکی از این شرایط برقرار باشد می‌توانیم یک گزاره‌ی <code>HostEffect</code> را اثبات کنیم:</p>
+<ul>
+<li>گزاره را بتوان از کران‌های فراخواننده مفروض گرفت؛</li>
+<li>نوع یک <code>impl</code> از نوع <code>const</code> برای صفت داشته باشد، <em>و</em> شرط‌های const روی آن <code>impl</code> برقرار باشند، <em>و</em> <code>explicit_implied_const_bounds</code> روی صفت برقرار باشد؛ یا</li>
+<li>نوع در بافت‌های const یک پیاده‌سازی درونی (built-in) برای صفت داشته باشد. برای مثال، <code>Fn</code> ممکن است توسط آیتم‌های تابع پیاده‌سازی شود اگر شرط‌های const آن‌ها برآورده شوند، یا <code>Destruct</code> در بافت‌های const پیاده‌سازی می‌شود اگر نوع بتواند در زمان کامپایل drop شود.</li>
+</ul>
+<h2 id="more-on-const-traits"><a class="header" href="#more-on-const-traits">بیشتر درباره‌ی صفت‌های const</a></h2>
+<p>بعداً تکمیل خواهد شد.</p>
+<h3 id="the-rustc_non_const_trait_method-attribute"><a class="header" href="#the-rustc_non_const_trait_method-attribute">اتریبیوت <code>#[rustc_non_const_trait_method]</code></a></h3>
+<p>این اتریبیوت فقط برای استفاده‌ی داخلی (کتابخانه‌ی استاندارد) در نظر گرفته شده است. وقتی این اتریبیوت روی یک متد صفت اعمال شود، کامپایلر بدنه‌ی پیش‌فرض آن متد را از نظر امکان اجرا در زمان کامپایل بررسی نمی‌کند. کاربران صفت نیز اجازه نخواهند داشت از این متد صفت در بافت‌های const استفاده کنند. این اتریبیوت عمدتاً برای const کردن صفت‌های بزرگ مانند <code>Iterator</code> به کار می‌رود، بدون این‌که لازم باشد همه‌ی متدهای آن هم‌زمان <code>const</code> شوند.</p>
+<p>این اتریبیوت نباید هنگام پایدارسازی (stabilize) صفت به‌صورت <code>const</code> وجود داشته باشد.</p><nav class="page-nav"><a href="borrow-check/opaque-types-region-inference-restrictions.html">→ محدودیت‌های استنتاج ناحیه</a><a href="pat-exhaustive-checking.html">بررسی الگو و جامعیت ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

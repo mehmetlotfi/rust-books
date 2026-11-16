@@ -1,0 +1,626 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>*-unknown-fuchsia — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="platform-support/fuchsia"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="aarch64-unknown-fuchsia-and-x86_64-unknown-fuchsia"><a class="header" href="#aarch64-unknown-fuchsia-and-x86_64-unknown-fuchsia"><code>aarch64-unknown-fuchsia</code> و <code>x86_64-unknown-fuchsia</code></a></h1>
+<p><strong>سطح (Tier): ۲</strong></p>
+<p><a href="https://fuchsia.dev/">Fuchsia</a> یک سیستم‌عامل متن‌باز و مدرن است که ساده، امن، قابل به‌روزرسانی و کارآمد طراحی شده است.</p>
+<h2 id="target-maintainers"><a class="header" href="#target-maintainers">نگهدارندگان هدف</a></h2>
+<ul>
+<li><a href="https://github.com/Nashenas88">@Nashenas88</a></li>
+<li><a href="https://github.com/PiJoules">@PiJoules</a></li>
+<li><a href="https://github.com/erickt">@erickt</a></li>
+<li><a href="https://github.com/ilovepi">@ilovepi</a></li>
+<li><a href="https://github.com/petrhosek">@petrhosek</a></li>
+</ul>
+<p>فهرست به‌روز نگهدارندگان را از طریق <a href="https://github.com/rust-lang/team/blob/master/teams/fuchsia.toml">تیم نشانگر fuchsia</a> نیز می‌توانید ببینید.</p>
+<h2 id="table-of-contents"><a class="header" href="#table-of-contents">فهرست مطالب</a></h2>
+<ol>
+<li><a href="#requirements">پیش‌نیازها</a></li>
+<li><a href="#walkthrough-structure">ساختار راهنمای گام‌به‌گام</a></li>
+<li><a href="#compiling-a-rust-binary-targeting-fuchsia">کامپایل یک برنامه Rust برای Fuchsia</a>
+<ol>
+<li><a href="#targeting-fuchsia-with-rustup-and-cargo">هدف‌گیری Fuchsia با rustup و cargo</a></li>
+<li><a href="#targeting-fuchsia-with-a-compiler-built-from-source">هدف‌گیری Fuchsia با کامپایلری که از سورس ساخته شده است</a></li>
+</ol>
+</li>
+<li><a href="#creating-a-fuchsia-package">ساخت یک بسته Fuchsia</a>
+<ol>
+<li><a href="#creating-a-fuchsia-component">ساخت یک کامپوننت Fuchsia</a></li>
+<li><a href="#building-a-fuchsia-package">ساختن بسته Fuchsia</a></li>
+</ol>
+</li>
+<li><a href="#publishing-a-fuchsia-package">انتشار یک بسته Fuchsia</a>
+<ol>
+<li><a href="#creating-a-fuchsia-package-repository">ایجاد یک مخزن بسته Fuchsia</a></li>
+<li><a href="#publishing-fuchsia-package-to-repository">انتشار بسته Fuchsia در مخزن</a></li>
+</ol>
+</li>
+<li><a href="#running-a-fuchsia-component-on-an-emulator">اجرای یک کامپوننت Fuchsia روی شبیه‌ساز</a>
+<ol>
+<li><a href="#starting-the-fuchsia-emulator">راه‌اندازی شبیه‌ساز Fuchsia</a></li>
+<li><a href="#watching-emulator-logs">مشاهده لاگ‌های شبیه‌ساز</a></li>
+<li><a href="#serving-a-fuchsia-package">سرو کردن یک بسته Fuchsia</a></li>
+<li><a href="#running-a-fuchsia-component">اجرای یک کامپوننت Fuchsia</a></li>
+</ol>
+</li>
+<li><a href="#gitignore-extensions">افزونه‌های <code>.gitignore</code></a></li>
+<li><a href="#testing">آزمون</a>
+<ol>
+<li><a href="#running-unit-tests">اجرای آزمون‌های واحد</a></li>
+<li><a href="#running-the-compiler-test-suite">اجرای مجموعه آزمون‌های کامپایلر</a></li>
+</ol>
+</li>
+<li><a href="#debugging">اشکال‌زدایی</a>
+<ol>
+<li><a href="#zxdb"><code>zxdb</code></a></li>
+<li><a href="#attaching-zxdb">اتصال <code>zxdb</code></a></li>
+<li><a href="#using-zxdb">استفاده از <code>zxdb</code></a></li>
+<li><a href="#displaying-source-code-in-zxdb">نمایش کد منبع در <code>zxdb</code></a></li>
+</ol>
+</li>
+</ol>
+<h2 id="requirements"><a class="header" href="#requirements">الزامات</a></h2>
+<p>این هدف از یک محیط میزبان به‌صورت متقاطع کامپایل می‌شود. به یک نسخهٔ جدید از <a href="https://chrome-infra-packages.appspot.com/p/fuchsia/sdk/core">Fuchsia SDK</a> نیاز دارید که ابزارها، کتابخانه‌ها و فایل‌های دودویی لازم برای ساخت و لینک برنامه‌های Fuchsia را فراهم می‌کند.</p>
+<p>توسعه را می‌توان از روی <a href="https://fuchsia.dev/fuchsia-src/get-started/learn/build">درخت سورس</a> نیز انجام داد.</p>
+<p>اهداف Fuchsia از <code>std</code> پشتیبانی می‌کنند و روی x86_64 از قرارداد فراخوانی <code>sysv64</code> پیروی می‌کنند. فایل‌های دودویی Fuchsia از قالب فایل ELF استفاده می‌کنند.</p>
+<h2 id="walkthrough-structure"><a class="header" href="#walkthrough-structure">ساختار راهنمای گام‌به‌گام</a></h2>
+<p>این راهنما موارد زیر را پوشش می‌دهد:</p>
+<ol>
+<li>کامپایل یک برنامه Rust برای Fuchsia.</li>
+<li>ساختن یک بسته Fuchsia.</li>
+<li>انتشار و اجرای یک بسته Fuchsia روی یک شبیه‌ساز Fuchsia.</li>
+</ol>
+<p>برای اهداف این راهنما، فقط <code>x86_64-unknown-fuchsia</code> را هدف قرار می‌دهیم.</p>
+<h2 id="compiling-a-rust-binary-targeting-fuchsia"><a class="header" href="#compiling-a-rust-binary-targeting-fuchsia">کامپایل یک برنامه Rust برای Fuchsia</a></h2>
+<p>امروزه برای ساخت یک برنامه Rust که با استفاده از Fuchsia SDK به Fuchsia هدف‌گیری می‌شود، دو روش اصلی وجود دارد:</p>
+<ol>
+<li>اجازه دهید <a href="https://rustup.rs/">rustup</a> نصب اهداف Fuchsia را برای شما انجام دهد.</li>
+<li>یک toolchain را به‌صورت محلی بسازید که بتواند Fuchsia را هدف قرار دهد.</li>
+</ol>
+<h3 id="targeting-fuchsia-with-rustup-and-cargo"><a class="header" href="#targeting-fuchsia-with-rustup-and-cargo">هدف‌گیری Fuchsia با rustup و cargo</a></h3>
+<p>ساده‌ترین روش برای ساخت یک برنامهٔ Rust برای Fuchsia این است که بگذارید <a href="https://rustup.rs/">rustup</a> نصب اهداف Fuchsia را برای شما انجام دهد. این کار با اجرای دستورهای زیر انجام می‌شود:</p>
+<pre><code class="language-sh">rustup target add x86_64-unknown-fuchsia
+rustup target add aarch64-unknown-fuchsia
+</code></pre>
+<p>پس از نصب اهداف Fuchsia، اکنون می‌توانیم یک برنامه Rust را که Fuchsia را هدف قرار می‌دهد کامپایل کنیم.</p>
+<p>برای ساخت پروژه Rust می‌توانیم از <a href="../../cargo/index.html"><code>cargo</code></a> به‌صورت زیر استفاده کنیم:</p>
+<p><strong>از دایرکتوری کاری پایه</strong></p>
+<pre><code class="language-sh">cargo new hello_fuchsia
+</code></pre>
+<p>ادامه این راهنما از داخل <code>hello_fuchsia</code> انجام می‌شود، پس همین حالا وارد آن دایرکتوری می‌شویم:</p>
+<pre><code class="language-sh">cd hello_fuchsia
+</code></pre>
+<p><em>توجه: از این نقطه به بعد، همه دستورها از داخل دایرکتوری <code>hello_fuchsia/</code> اجرا می‌شوند و برای اختصار، پیشوند <code>hello_fuchsia/</code> از همه ارجاعات حذف شده است.</em></p>
+<p>می‌توانیم فایل <code>src/main.rs</code> را ویرایش کنیم تا یک آزمون هم در آن باشد:</p>
+<p><strong><code>src/main.rs</code></strong></p>
+<pre><code class="language-rust">fn main() {
+    println!("Hello Fuchsia!");
+}
+
+#[test]
+fn it_works() {
+    assert_eq!(2 + 2, 4);
+}</code></pre>
+<p>علاوه بر workspace استانداردی که ساخته شده است، باید یک فایل <code>.cargo/config.toml</code> بسازیم تا کتابخانه‌های لازم هنگام کامپایل لینک شوند:</p>
+<p><strong><code>.cargo/config.toml</code></strong></p>
+<pre><code class="language-txt">[target.x86_64-unknown-fuchsia]
+
+rustflags = [
+    "-Lnative=&lt;SDK_PATH&gt;/arch/x64/lib",
+    "-Lnative=&lt;SDK_PATH&gt;/arch/x64/sysroot/lib"
+]
+</code></pre>
+<p><em>توجه: مطمئن شوید که <code>&lt;SDK_PATH&gt;</code> را با مسیر <a href="https://chrome-infra-packages.appspot.com/p/fuchsia/sdk/core">Fuchsia SDK</a> دانلودشده جایگزین می‌کنید.</em></p>
+<p>این گزینه‌ها موارد زیر را پیکربندی می‌کنند:</p>
+<ul>
+<li><code>-Lnative=${SDK_PATH}/arch/${ARCH}/lib</code>: لینک با کتابخانه‌های Fuchsia از SDK</li>
+<li><code>-Lnative=${SDK_PATH}/arch/${ARCH}/sysroot/lib</code>: لینک با کتابخانه‌های sysroot Fuchsia از SDK</li>
+</ul>
+<p>در مجموع، پروژه جدید ما به این شکل خواهد بود:</p>
+<p><strong>ساختار فعلی دایرکتوری</strong></p>
+<pre><code class="language-txt">hello_fuchsia/
+┣━ src/
+┃  ┗━ main.rs
+┣━ Cargo.toml
+┗━ .cargo/
+   ┗━ config.toml
+</code></pre>
+<p>در نهایت می‌توانیم برنامه Rust خود را به این صورت بسازیم:</p>
+<pre><code class="language-sh">cargo build --target x86_64-unknown-fuchsia
+</code></pre>
+<p>اکنون یک برنامه Rust در مسیر <code>target/x86_64-unknown-fuchsia/debug/hello_fuchsia</code> داریم که هدف Fuchsia مورد نظر ما را هدف قرار می‌دهد.</p>
+<p><strong>ساختار فعلی دایرکتوری</strong></p>
+<pre><code class="language-txt">hello_fuchsia/
+┣━ src/
+┃  ┗━ main.rs
+┣━ target/
+┃  ┗━ x86_64-unknown-fuchsia/
+┃     ┗━ debug/
+┃        ┗━ hello_fuchsia
+┣━ Cargo.toml
+┗━ .cargo/
+   ┗━ config.toml
+</code></pre>
+<h3 id="targeting-fuchsia-with-a-compiler-built-from-source"><a class="header" href="#targeting-fuchsia-with-a-compiler-built-from-source">هدف‌گیری Fuchsia با کامپایلری که از سورس ساخته شده است</a></h3>
+<p>روش جایگزین برای روش اول این است که Fuchsia را با استفاده از <code>rustc</code> ساخته‌شده از سورس هدف قرار دهیم.</p>
+<p>پیش از ساخت Rust برای Fuchsia، به یک toolchain از clang نیاز دارید که از Fuchsia هم پشتیبانی کند. یک نسخه جدید (۱۴ به بالا) از clang برای کامپایل Rust برای Fuchsia کافی است.</p>
+<p>اهداف Fuchsia برای x86-64، AArch64 و riscv64gc را می‌توان با پیکربندی زیر در <code>bootstrap.toml</code> فعال کرد:</p>
+<pre><code class="language-toml">[build]
+target = ["&lt;host_platform&gt;", "aarch64-unknown-fuchsia", "x86_64-unknown-fuchsia", "riscv64gc-unknown-fuchsia"]
+
+[rust]
+lld = true
+
+[llvm]
+download-ci-llvm = false
+
+[target.x86_64-unknown-fuchsia]
+cc = "clang"
+cxx = "clang++"
+
+[target.aarch64-unknown-fuchsia]
+cc = "clang"
+cxx = "clang++"
+
+[target.riscv64gc-unknown-fuchsia]
+cc = "clang"
+cxx = "clang++"
+</code></pre>
+<p>اگرچه الزامی نیست، ممکن است بخواهید برای هدف میزبان خود نیز از <code>clang</code> استفاده کنید:</p>
+<pre><code class="language-toml">[target.&lt;host_platform&gt;]
+cc = "clang"
+cxx = "clang++"
+</code></pre>
+<p>به‌طور پیش‌فرض، کامپایلر Rust در بیشتر سیستم‌های UNIX خود را در <code>/usr/local</code> نصب می‌کند. ممکن است بخواهید با تعیین یک prefix سفارشی در <code>bootstrap.toml</code> آن را در مکان دیگری (مثلاً یک دایرکتوری محلی به نام <code>install</code>) نصب کنید:</p>
+<pre><code class="language-toml">[install]
+# Make sure to use the absolute path to your install directory
+prefix = "&lt;RUST_SRC_PATH&gt;/install"
+</code></pre>
+<p>سپس باید متغیرهای محیطی زیر پیکربندی شوند. برای مثال، با استفاده از یک اسکریپت به نام <code>config-env.sh</code>:</p>
+<pre><code class="language-sh"># Configure this environment variable to be the path to the downloaded SDK
+export SDK_PATH="&lt;SDK path goes here&gt;"
+
+export CFLAGS_aarch64_unknown_fuchsia="--target=aarch64-unknown-fuchsia --sysroot=${SDK_PATH}/arch/arm64/sysroot -I${SDK_PATH}/pkg/fdio/include"
+export CXXFLAGS_aarch64_unknown_fuchsia="--target=aarch64-unknown-fuchsia --sysroot=${SDK_PATH}/arch/arm64/sysroot -I${SDK_PATH}/pkg/fdio/include"
+export LDFLAGS_aarch64_unknown_fuchsia="--target=aarch64-unknown-fuchsia --sysroot=${SDK_PATH}/arch/arm64/sysroot -L${SDK_PATH}/arch/arm64/lib"
+export CARGO_TARGET_AARCH64_UNKNOWN_FUCHSIA_RUSTFLAGS="-C link-arg=--sysroot=${SDK_PATH}/arch/arm64/sysroot -Lnative=${SDK_PATH}/arch/arm64/sysroot/lib -Lnative=${SDK_PATH}/arch/arm64/lib"
+export CFLAGS_x86_64_unknown_fuchsia="--target=x86_64-unknown-fuchsia --sysroot=${SDK_PATH}/arch/x64/sysroot -I${SDK_PATH}/pkg/fdio/include"
+export CXXFLAGS_x86_64_unknown_fuchsia="--target=x86_64-unknown-fuchsia --sysroot=${SDK_PATH}/arch/x64/sysroot -I${SDK_PATH}/pkg/fdio/include"
+export LDFLAGS_x86_64_unknown_fuchsia="--target=x86_64-unknown-fuchsia --sysroot=${SDK_PATH}/arch/x64/sysroot -L${SDK_PATH}/arch/x64/lib"
+export CARGO_TARGET_X86_64_UNKNOWN_FUCHSIA_RUSTFLAGS="-C link-arg=--sysroot=${SDK_PATH}/arch/x64/sysroot -Lnative=${SDK_PATH}/arch/x64/sysroot/lib -Lnative=${SDK_PATH}/arch/x64/lib"
+export CFLAGS_riscv64gc_unknown_fuchsia="--target=riscv64gc-unknown-fuchsia --sysroot=${SDK_PATH}/arch/riscv64/sysroot -I${SDK_PATH}/pkg/fdio/include"
+export CXXFLAGS_riscv64gc_unknown_fuchsia="--target=riscv64gc-unknown-fuchsia --sysroot=${SDK_PATH}/arch/riscv64/sysroot -I${SDK_PATH}/pkg/fdio/include"
+export LDFLAGS_riscv64gc_unknown_fuchsia="--target=riscv64gc-unknown-fuchsia --sysroot=${SDK_PATH}/arch/riscv64/sysroot -L${SDK_PATH}/arch/riscv64/lib"
+export CARGO_TARGET_RISCV64GC_UNKNOWN_FUCHSIA_RUSTFLAGS="-C link-arg=--sysroot=${SDK_PATH}/arch/riscv64/sysroot -Lnative=${SDK_PATH}/arch/riscv64/sysroot/lib -Lnative=${SDK_PATH}/arch/riscv64/lib"
+</code></pre>
+<p>در نهایت، کامپایلر Rust را می‌توان ساخت و نصب کرد:</p>
+<pre><code class="language-sh">(source config-env.sh &amp;&amp; ./x.py install)
+</code></pre>
+<p>پس از نصب <code>rustc</code>، می‌توانیم یک دایرکتوری کاری جدید به نام <code>hello_fuchsia</code> همراه با <code>hello_fuchsia/src</code> بسازیم تا در آن کار کنیم:</p>
+<pre><code class="language-sh">mkdir hello_fuchsia
+cd hello_fuchsia
+mkdir src
+</code></pre>
+<p><em>توجه: از این نقطه به بعد، همه دستورها از داخل دایرکتوری <code>hello_fuchsia/</code> اجرا می‌شوند و برای اختصار، پیشوند <code>hello_fuchsia/</code> از همه ارجاعات حذف شده است.</em></p>
+<p>در آنجا می‌توانیم فایل جدیدی به نام <code>src/hello_fuchsia.rs</code> بسازیم:</p>
+<p><strong><code>src/hello_fuchsia.rs</code></strong></p>
+<pre><code class="language-rust">fn main() {
+    println!("Hello Fuchsia!");
+}
+
+#[test]
+fn it_works() {
+    assert_eq!(2 + 2, 4);
+}</code></pre>
+<p><strong>ساختار فعلی دایرکتوری</strong></p>
+<pre><code class="language-txt">hello_fuchsia/
+┗━ src/
+    ┗━ hello_fuchsia.rs
+</code></pre>
+<p>با استفاده از <code>rustc</code> که تازه نصب کرده‌اید، می‌توانید با گزینه‌های زیر یک برنامه برای Fuchsia کامپایل کنید:</p>
+<ul>
+<li><code>--target x86_64-unknown-fuchsia</code> / <code>--target aarch64-unknown-fuchsia</code> / <code>--target riscv64gc-unknown-fuchsia</code>: پلتفرم Fuchsia مورد نظر شما را هدف قرار می‌دهد</li>
+<li><code>-Lnative ${SDK_PATH}/arch/${ARCH}/lib</code>: لینک با کتابخانه‌های Fuchsia از SDK</li>
+<li><code>-Lnative ${SDK_PATH}/arch/${ARCH}/sysroot/lib</code>: لینک با کتابخانه‌های sysroot Fuchsia از SDK</li>
+</ul>
+<p>همه را کنار هم بگذاریم:</p>
+<pre><code class="language-sh"># Configure these for the Fuchsia target of your choice
+TARGET_ARCH="&lt;x86_64-unknown-fuchsia|aarch64-unknown-fuchsia|riscv64gc-unknown-fuchsia&gt;"
+ARCH="&lt;x64|aarch64|riscv64&gt;"
+
+rustc \
+    --target ${TARGET_ARCH} \
+    -Lnative=${SDK_PATH}/arch/${ARCH}/lib \
+    -Lnative=${SDK_PATH}/arch/${ARCH}/sysroot/lib \
+    --out-dir bin src/hello_fuchsia.rs
+</code></pre>
+<p><strong>ساختار فعلی دایرکتوری</strong></p>
+<pre><code class="language-txt">hello_fuchsia/
+┣━ src/
+┃   ┗━ hello_fuchsia.rs
+┗━ bin/
+   ┗━ hello_fuchsia
+</code></pre>
+<h2 id="creating-a-fuchsia-package"><a class="header" href="#creating-a-fuchsia-package">ساخت یک بسته Fuchsia</a></h2>
+<p>پیش از ادامه، ساختار دایرکتوری خود را دوباره بررسی کنید:</p>
+<p><strong>ساختار فعلی دایرکتوری</strong></p>
+<pre><code class="language-txt">hello_fuchsia/
+┣━ src/                         (if using rustc)
+┃   ┗━ hello_fuchsia.rs         ...
+┣━ bin/                         ...
+┃  ┗━ hello_fuchsia             ...
+┣━ src/                         (if using cargo)
+┃  ┗━ main.rs                   ...
+┗━ target/                      ...
+   ┗━ x86_64-unknown-fuchsia/   ...
+      ┗━ debug/                 ...
+         ┗━ hello_fuchsia       ...
+</code></pre>
+<p>اکنون که برنامه Rust ساخته شده است، می‌توانیم به سراغ ساخت یک بسته Fuchsia برویم. در Fuchsia، بسته واحد توزیع نرم‌افزار است. باید یک دایرکتوری بسته جدید بسازیم که فایل‌هایی مانند برنامه نهایی و هر داده‌ای که ممکن است لازم داشته باشد را در آن قرار دهیم.</p>
+<p>برای شروع، دایرکتوری‌های <code>pkg</code> و <code>pkg/meta</code> را بسازید:</p>
+<pre><code class="language-sh">mkdir pkg
+mkdir pkg/meta
+</code></pre>
+<p><strong>ساختار فعلی دایرکتوری</strong></p>
+<pre><code class="language-txt">hello_fuchsia/
+┗━ pkg/
+   ┗━ meta/
+</code></pre>
+<p>حالا فایل‌های زیر را در آن بسازید:</p>
+<p><strong><code>pkg/meta/package</code></strong></p>
+<pre><code class="language-json">{
+  "name": "hello_fuchsia",
+  "version": "0"
+}
+</code></pre>
+<p>فایل <code>package</code> نام و شماره نسخه بسته ما را توصیف می‌کند. هر بسته باید یکی از این فایل‌ها را داشته باشد.</p>
+<p><strong><code>pkg/hello_fuchsia.manifest</code> در صورت استفاده از cargo</strong></p>
+<pre><code class="language-txt">bin/hello_fuchsia=target/x86_64-unknown-fuchsia/debug/hello_fuchsia
+lib/ld.so.1=&lt;SDK_PATH&gt;/arch/x64/sysroot/dist/lib/ld.so.1
+lib/libfdio.so=&lt;SDK_PATH&gt;/arch/x64/dist/libfdio.so
+meta/package=pkg/meta/package
+meta/hello_fuchsia.cm=pkg/meta/hello_fuchsia.cm
+</code></pre>
+<p><strong><code>pkg/hello_fuchsia.manifest</code> در صورت استفاده از rustc</strong></p>
+<pre><code class="language-txt">bin/hello_fuchsia=bin/hello_fuchsia
+lib/ld.so.1=&lt;SDK_PATH&gt;/arch/x64/sysroot/dist/lib/ld.so.1
+lib/libfdio.so=&lt;SDK_PATH&gt;/arch/x64/dist/libfdio.so
+meta/package=pkg/meta/package
+meta/hello_fuchsia.cm=pkg/meta/hello_fuchsia.cm
+</code></pre>
+<p><em>توجه: مسیرهای نسبی manifest از دایرکتوری کاری <code>ffx</code> حل می‌شوند. مطمئن شوید که <code>&lt;SDK_PATH&gt;</code> را با مسیر SDK دانلودشده جایگزین می‌کنید.</em></p>
+<p>فایل <code>.manifest</code> برای توصیف محتویات بسته استفاده می‌شود و مکان هر فایل را هنگام نصب به مکان آن در سیستم فایل ربط می‌دهد. ورودی <code>bin/hello_fuchsia=</code> بسته به اینکه برنامه Rust شما چگونه ساخته شده است متفاوت خواهد بود، پس مطابق آن انتخاب کنید.</p>
+<p><strong>ساختار فعلی دایرکتوری</strong></p>
+<pre><code class="language-txt">hello_fuchsia/
+┗━ pkg/
+   ┣━ meta/
+   ┃  ┗━ package
+   ┗━ hello_fuchsia.manifest
+</code></pre>
+<h3 id="creating-a-fuchsia-component"><a class="header" href="#creating-a-fuchsia-component">ساخت یک کامپوننت Fuchsia</a></h3>
+<p>در Fuchsia، کامپوننت‌ها به یک manifest کامپوننت نیاز دارند که به زبان نشانه‌گذاری Fuchsia به نام CML نوشته می‌شود. سایت توسعه‌دهندگان Fuchsia یک <a href="https://fuchsia.dev/fuchsia-src/concepts/components/v2/component_manifests">مرور کلی از CML</a> و یک <a href="https://fuchsia.dev/reference/cml">مرجع قالب فایل</a> دارد. در اینجا یک نمونهٔ ساده را می‌بینید که می‌تواند برنامهٔ تک‌فایلی ما را اجرا کند:</p>
+<p><strong><code>pkg/hello_fuchsia.cml</code></strong></p>
+<pre><code class="language-txt">{
+    include: [ "syslog/client.shard.cml" ],
+    program: {
+        runner: "elf",
+        binary: "bin/hello_fuchsia",
+    },
+}
+</code></pre>
+<p><strong>ساختار فعلی دایرکتوری</strong></p>
+<pre><code class="language-txt">hello_fuchsia/
+┗━ pkg/
+   ┣━ meta/
+   ┃  ┗━ package
+   ┣━ hello_fuchsia.manifest
+   ┗━ hello_fuchsia.cml
+</code></pre>
+<p>اکنون می‌توانیم آن CML را به یک manifest کامپوننت کامپایل کنیم:</p>
+<pre><code class="language-sh">${SDK_PATH}/tools/${ARCH}/cmc compile \
+    pkg/hello_fuchsia.cml \
+    --includepath ${SDK_PATH}/pkg \
+    -o pkg/meta/hello_fuchsia.cm
+</code></pre>
+<p><em>توجه: <code>--includepath</code> به کامپایلر می‌گوید که <code>include</code>های CML ما را از کجا پیدا کند. در مورد ما فقط از <code>syslog/client.shard.cml</code> استفاده می‌کنیم.</em></p>
+<p><strong>ساختار فعلی دایرکتوری</strong></p>
+<pre><code class="language-txt">hello_fuchsia/
+┗━ pkg/
+   ┣━ meta/
+   ┃  ┣━ package
+   ┃  ┗━ hello_fuchsia.cm
+   ┣━ hello_fuchsia.manifest
+   ┗━ hello_fuchsia.cml
+</code></pre>
+<h3 id="building-a-fuchsia-package"><a class="header" href="#building-a-fuchsia-package">ساختن بسته Fuchsia</a></h3>
+<p>سپس یک manifest بسته را مطابق manifest خود می‌سازیم:</p>
+<pre><code class="language-sh">${SDK_PATH}/tools/${ARCH}/ffx package build \
+    --api-level $(${SDK_PATH}/tools/${ARCH}/ffx --machine json version | jq .tool_version.api_level) \
+    --out pkg/hello_fuchsia_manifest \
+    pkg/hello_fuchsia.manifest
+</code></pre>
+<p>این دستور <code>pkg/hello_fuchsia_manifest/</code> را تولید می‌کند که یک manifest بسته است و می‌توانیم آن را مستقیماً در یک مخزن منتشر کنیم.</p>
+<p><strong>ساختار فعلی دایرکتوری</strong></p>
+<pre><code class="language-txt">hello_fuchsia/
+┗━ pkg/
+   ┣━ meta/
+   ┃  ┣━ package
+   ┃  ┗━ hello_fuchsia.cm
+   ┣━ hello_fuchsia_manifest/
+   ┃  ┗━ ...
+   ┣━ hello_fuchsia.manifest
+   ┣━ hello_fuchsia.cml
+   ┗━ hello_fuchsia_package_manifest
+</code></pre>
+<p>اکنون آماده انتشار بسته هستیم.</p>
+<h2 id="publishing-a-fuchsia-package"><a class="header" href="#publishing-a-fuchsia-package">انتشار یک بسته Fuchsia</a></h2>
+<p>با آماده بودن manifest بسته و manifest کامپوننت، اکنون می‌توانیم بسته خود را منتشر کنیم. گام نخست ایجاد یک مخزن بسته Fuchsia است تا بسته را در آن منتشر کنیم.</p>
+<h3 id="creating-a-fuchsia-package-repository"><a class="header" href="#creating-a-fuchsia-package-repository">ایجاد یک مخزن بسته Fuchsia</a></h3>
+<p>مخزن را می‌توانیم با دستور زیر راه‌اندازی کنیم:</p>
+<pre><code class="language-sh">${SDK_PATH}/tools/${ARCH}/ffx repository create pkg/repo
+</code></pre>
+<p><strong>ساختار فعلی دایرکتوری</strong></p>
+<pre><code class="language-txt">hello_fuchsia/
+┗━ pkg/
+   ┣━ meta/
+   ┃  ┣━ package
+   ┃  ┗━ hello_fuchsia.cm
+   ┣━ hello_fuchsia_manifest/
+   ┃  ┗━ ...
+   ┣━ repo/
+   ┃  ┗━ ...
+   ┣━ hello_fuchsia.manifest
+   ┣━ hello_fuchsia.cml
+   ┗━ hello_fuchsia_package_manifest
+</code></pre>
+<h2 id="publishing-fuchsia-package-to-repository"><a class="header" href="#publishing-fuchsia-package-to-repository">انتشار بسته Fuchsia در مخزن</a></h2>
+<p>بسته جدید خود را می‌توانیم با دستور زیر در آن مخزن منتشر کنیم:</p>
+<pre><code class="language-sh">${SDK_PATH}/tools/${ARCH}/ffx repository publish \
+    --package pkg/hello_fuchsia_package_manifest \
+    pkg/repo
+</code></pre>
+<h2 id="running-a-fuchsia-component-on-an-emulator"><a class="header" href="#running-a-fuchsia-component-on-an-emulator">اجرای یک کامپوننت Fuchsia روی شبیه‌ساز</a></h2>
+<p>در این مرحله آماده‌ایم کامپوننت Fuchsia خود را اجرا کنیم. برای مرجع، ساختار نهایی دایرکتوری ما به این شکل خواهد بود:</p>
+<p><strong>ساختار نهایی دایرکتوری</strong></p>
+<pre><code class="language-txt">hello_fuchsia/
+┣━ src/                         (if using rustc)
+┃   ┗━ hello_fuchsia.rs         ...
+┣━ bin/                         ...
+┃  ┗━ hello_fuchsia             ...
+┣━ src/                         (if using cargo)
+┃  ┗━ main.rs                   ...
+┣━ target/                      ...
+┃  ┗━ x86_64-unknown-fuchsia/   ...
+┃     ┗━ debug/                 ...
+┃        ┗━ hello_fuchsia       ...
+┗━ pkg/
+   ┣━ meta/
+   ┃  ┣━ package
+   ┃  ┗━ hello_fuchsia.cm
+   ┣━ hello_fuchsia_manifest/
+   ┃  ┗━ ...
+   ┣━ repo/
+   ┃  ┗━ ...
+   ┣━ hello_fuchsia.manifest
+   ┣━ hello_fuchsia.cml
+   ┗━ hello_fuchsia_package_manifest
+</code></pre>
+<h3 id="starting-the-fuchsia-emulator"><a class="header" href="#starting-the-fuchsia-emulator">راه‌اندازی شبیه‌ساز Fuchsia</a></h3>
+<p>یک شبیه‌ساز Fuchsia را در یک ترمینال جدید با دستورهای زیر راه‌اندازی کنید:</p>
+<pre><code class="language-sh">${SDK_PATH}/tools/${ARCH}/ffx product-bundle get workstation_eng.qemu-${ARCH}
+${SDK_PATH}/tools/${ARCH}/ffx emu start workstation_eng.qemu-${ARCH} --headless
+</code></pre>
+<h3 id="watching-emulator-logs"><a class="header" href="#watching-emulator-logs">مشاهده لاگ‌های شبیه‌ساز</a></h3>
+<p>پس از اجرای شبیه‌ساز، یک ترمینال جداگانه باز کنید تا لاگ‌های شبیه‌ساز را مشاهده کنید:</p>
+<p><strong>در ترمینال جداگانه</strong></p>
+<pre><code class="language-sh">${SDK_PATH}/tools/${ARCH}/ffx log \
+    --since now
+</code></pre>
+<h3 id="serving-a-fuchsia-package"><a class="header" href="#serving-a-fuchsia-package">سرو کردن یک بسته Fuchsia</a></h3>
+<p>اکنون یک سرور مخزن بسته را راه‌اندازی کنید تا بسته ما را به شبیه‌ساز ارائه دهد:</p>
+<pre><code class="language-sh">${SDK_PATH}/tools/${ARCH}/ffx repository server start \
+    --background --repository hello-fuchsia --repo-path pkg-repo
+</code></pre>
+<p>پس از آنکه سرور مخزن بالا آمد و در حال اجراست، آن را در سیستم Fuchsia هدف که در شبیه‌ساز اجرا می‌شود ثبت کنید:</p>
+<pre><code class="language-sh">${SDK_PATH}/tools/${ARCH}/ffx target repository register \
+    --repository hello-fuchsia
+</code></pre>
+<h3 id="running-a-fuchsia-component"><a class="header" href="#running-a-fuchsia-component">اجرای یک کامپوننت Fuchsia</a></h3>
+<p>در پایان، کامپوننت را اجرا کنید:</p>
+<pre><code class="language-sh">${SDK_PATH}/tools/${ARCH}/ffx component run \
+    /core/ffx-laboratory:hello_fuchsia \
+    fuchsia-pkg://hello-fuchsia/hello_fuchsia_manifest#meta/hello_fuchsia.cm
+</code></pre>
+<p>برای اجراهای مجدد کامپوننت، ممکن است لازم باشد آرگومان <code>--recreate</code> نیز داده شود.</p>
+<pre><code class="language-sh">${SDK_PATH}/tools/${ARCH}/ffx component run \
+    --recreate \
+    /core/ffx-laboratory:hello_fuchsia \
+    fuchsia-pkg://hello-fuchsia/hello_fuchsia_manifest#meta/hello_fuchsia.cm
+</code></pre>
+<h2 id="gitignore-extensions"><a class="header" href="#gitignore-extensions">افزونه‌های <code>.gitignore</code></a></h2>
+<p>به‌صورت اختیاری می‌توانیم فایل <code>.gitignore</code> را بسازیم یا گسترش دهیم تا فایل‌ها و دایرکتوری‌هایی که ردیابی‌شان فایده‌ای ندارد نادیده گرفته شوند:</p>
+<pre><code class="language-txt">pkg/repo
+pkg/meta/hello_fuchsia.cm
+pkg/hello_fuchsia_manifest
+pkg/hello_fuchsia_package_manifest
+</code></pre>
+<h2 id="testing"><a class="header" href="#testing">آزمون</a></h2>
+<h3 id="running-unit-tests"><a class="header" href="#running-unit-tests">اجرای آزمون‌های واحد</a></h3>
+<p>آزمون‌ها را می‌توان مانند یک برنامه معمولی اجرا کرد.</p>
+<ul>
+<li>
+<p>اگر از <code>cargo</code> استفاده می‌کنید، کافی است <code>test --no-run</code> را به فراخوانی <code>cargo</code> بدهید و سپس بسته Fuchsia را دوباره بسته‌بندی و اجرا کنید. در مثال قبلی ما، این کار به شکل <code>cargo test --target x86_64-unknown-fuchsia --no-run</code> خواهد بود و مسیر فایل اجرایی که در خط <code>Executable unittests src/main.rs (target/x86_64-unknown-fuchsia/debug/deps/hello_fuchsia-&lt;HASH&gt;)</code> پیدا می‌شود باید در <code>pkg/hello_fuchsia.manifest</code> قرار گیرد.</p>
+</li>
+<li>
+<p>اگر از <code>rustc</code> کامپایل‌شده استفاده می‌کنید، کافی است <code>--test</code> را به فراخوانی <code>rustc</code> بدهید و سپس بسته Fuchsia را دوباره بسته‌بندی و اجرا کنید.</p>
+</li>
+</ul>
+<p>harness آزمون، آزمون‌های واحد مربوط را اجرا می‌کند.</p>
+<p>اغلب هنگام آزمون ممکن است بخواهید آرگومان‌های خط فرمان اضافی را به برنامه خود بدهید. آرگومان‌های اضافی را می‌توان در manifest کامپوننت تعیین کرد:</p>
+<p><strong><code>pkg/hello_fuchsia.cml</code></strong></p>
+<pre><code class="language-txt">{
+    include: [ "syslog/client.shard.cml" ],
+    program: {
+        runner: "elf",
+        binary: "bin/hello_fuchsia",
+        args: ["it_works"],
+    },
+}
+</code></pre>
+<p>این کار آرگومان <code>it_works</code> را به برنامه می‌دهد و آزمون‌ها را فقط به آن‌هایی که با این الگو مطابقت دارند محدود می‌کند. گزینه‌های پیکربندی بسیار بیشتری در CML در دسترس است، از جمله متغیرهای محیطی. مستندات بیشتر در <a href="https://fuchsia.dev/reference/cml">سایت توسعه‌دهندگان Fuchsia</a> موجود است.</p>
+<h3 id="running-the-compiler-test-suite"><a class="header" href="#running-the-compiler-test-suite">اجرای مجموعه آزمون‌های کامپایلر</a></h3>
+<p>دستورهای این بخش فرض می‌کنند که از داخل نسخه محلی سورس Rust شما اجرا می‌شوند:</p>
+<pre><code class="language-sh">cd ${RUST_SRC_PATH}
+</code></pre>
+<p>برای اجرای مجموعه آزمون‌های Rust روی یک دستگاه Fuchsia شبیه‌سازی‌شده، باید یک نسخه از Fuchsia SDK را هم دانلود کنید. حداقل نسخه SDK که در حال حاضر پشتیبانی می‌شود <a href="https://chrome-infra-packages.appspot.com/p/fuchsia/sdk/core/linux-amd64/+/version:20.20240412.3.1">20.20240412.3.1</a> است.</p>
+<p>test runner مربوط به Fuchsia با شبیه‌ساز Fuchsia تعامل می‌کند و در <code>src/ci/docker/scripts/fuchsia-test-runner.py</code> قرار دارد. نخست، متغیرهای زیر را به <code>config-env.sh</code> موجود خود اضافه کنید:</p>
+<pre><code class="language-sh"># TEST_TOOLCHAIN_TMP_DIR can point anywhere, but it:
+#  - must be less than 108 characters, otherwise qemu can't handle the path
+#  - must be consistent across calls to this file (don't use `mktemp -d` here)
+export TEST_TOOLCHAIN_TMP_DIR="/tmp/rust-tmp"
+
+# Keep existing contents of `config-env.sh` from earlier, including SDK_PATH
+</code></pre>
+<p>سپس می‌توانیم از این اسکریپت برای راه‌اندازی محیط آزمون استفاده کنیم:</p>
+<pre><code class="language-sh">( \
+    source config-env.sh &amp;&amp;                                                  \
+    src/ci/docker/scripts/fuchsia-test-runner.py start                       \
+    --rust-build ${RUST_SRC_PATH}/build                                      \
+    --sdk ${SDK_PATH}                                                        \
+    --target {x86_64-unknown-fuchsia|aarch64-unknown-fuchsia|riscv64gc-unknown-fuchsia} \
+    --verbose                                                                \
+)
+</code></pre>
+<p>که در آن <code>${RUST_SRC_PATH}/build</code> همان <code>build-dir</code> تعیین‌شده در <code>bootstrap.toml</code> است.</p>
+<p>پس از راه‌اندازی محیط، می‌توانیم آزمون‌هایمان را مثل همیشه با <code>x.py</code> اجرا کنیم. اسکریپت test runner آزمون‌های کامپایل‌شده را روی یک دستگاه Fuchsia شبیه‌سازی‌شده اجرا می‌کند. برای اجرای مجموعه کامل آزمون‌های <code>tests/ui</code>:</p>
+<pre><code class="language-sh">( \
+    source config-env.sh &amp;&amp;                                                   \
+    ./x.py                                                                    \
+    --config bootstrap.toml                                                   \
+    --stage=2                                                                 \
+    test tests/ui                                                             \
+    --target x86_64-unknown-fuchsia                                           \
+    --run=always                                                              \
+    --test-args --target-rustcflags                                           \
+    --test-args -Lnative=${SDK_PATH}/arch/{x64|arm64}/sysroot/lib             \
+    --test-args --target-rustcflags                                           \
+    --test-args -Lnative=${SDK_PATH}/arch/{x64|arm64}/lib                     \
+    --test-args --target-rustcflags                                           \
+    --test-args -Clink-arg=--undefined-version                                \
+    --test-args --remote-test-client                                          \
+    --test-args src/ci/docker/scripts/fuchsia-test-runner.py                  \
+)
+</code></pre>
+<p>به‌طور پیش‌فرض، <code>x.py</code> فایل‌های دودویی آزمون را با <code>panic=unwind</code> کامپایل می‌کند. اگر toolchain خود را با <code>-Cpanic=abort</code> ساخته‌اید، باید به <code>x.py</code> بگویید که فایل‌های دودویی آزمون را هم با <code>panic=abort</code> کامپایل کند:</p>
+<pre><code class="language-sh">    --test-args --target-rustcflags                                           \
+    --test-args -Cpanic=abort                                                 \
+    --test-args --target-rustcflags                                           \
+    --test-args -Zpanic_abort_tests                                           \
+</code></pre>
+<p>پس از پایان آزمون، می‌توان از test runner برای توقف محیط آزمون استفاده کرد:</p>
+<pre><code class="language-sh">src/ci/docker/scripts/fuchsia-test-runner.py stop
+</code></pre>
+<h2 id="debugging"><a class="header" href="#debugging">اشکال‌زدایی</a></h2>
+<h3 id="zxdb"><a class="header" href="#zxdb"><code>zxdb</code></a></h3>
+<p>اشکال‌زدایی کامپوننت‌هایی که روی شبیه‌ساز Fuchsia اجرا می‌شوند با اشکال‌زدای حالت کنسول، یعنی <a href="https://fuchsia.dev/fuchsia-src/development/debugger">zxdb</a>، امکان‌پذیر است. نشان می‌دهیم که چگونه مسیرهای لازم برای symbolها را متصل کنیم تا کامپوننت <code>hello-fuchsia</code> خود را اشکال‌زدایی کنیم.</p>
+<h3 id="attaching-zxdb"><a class="header" href="#attaching-zxdb">اتصال <code>zxdb</code></a></h3>
+<p>در یک ترمینال جداگانه، دستور زیر را از دایرکتوری <code>hello_fuchsia</code> اجرا کنید تا <code>zxdb</code> راه‌اندازی شود:</p>
+<p><strong>در ترمینال جداگانه</strong></p>
+<pre><code class="language-sh">${SDK_PATH}/tools/${ARCH}/ffx debug connect -- \
+    --symbol-path target/x86_64-unknown-fuchsia/debug
+</code></pre>
+<ul>
+<li><code>--symbol-path</code> مسیرهای لازم symbol را دریافت می‌کند که برای گام‌به‌گام اجرا کردن برنامه ضروری هستند.</li>
+</ul>
+<p>بخش «<a href="#displaying-source-code-in-zxdb">نمایش کد منبع در <code>zxdb</code></a>» توضیح می‌دهد چگونه می‌توانید کد منبع Rust و/یا Fuchsia را در نشست اشکال‌زدایی خود نمایش دهید.</p>
+<h3 id="using-zxdb"><a class="header" href="#using-zxdb">استفاده از <code>zxdb</code></a></h3>
+<p>پس از راه‌اندازی، پنجره زیر به شما نشان داده می‌شود:</p>
+<pre><code class="language-sh">Connecting (use "disconnect" to cancel)...
+Connected successfully.
+👉 To get started, try "status" or "help".
+[zxdb]
+</code></pre>
+<p>برای اتصال به برنامه خود می‌توانیم این را اجرا کنیم:</p>
+<pre><code class="language-sh">[zxdb] attach hello_fuchsia
+</code></pre>
+<p><strong>خروجی مورد انتظار</strong></p>
+<pre><code class="language-sh">Waiting for process matching "hello_fuchsia".
+Type "filter" to see the current filters.
+</code></pre>
+<p>سپس می‌توانیم با دستور “b main” یک breakpoint در main ایجاد کنیم:</p>
+<pre><code class="language-sh">[zxdb] b main
+</code></pre>
+<p><strong>خروجی مورد انتظار</strong></p>
+<pre><code class="language-sh">Created Breakpoint 1 @ main
+</code></pre>
+<p>در پایان می‌توانیم کامپوننت “hello_fuchsia” را از ترمینال اولیه خود دوباره اجرا کنیم:</p>
+<pre><code class="language-sh">${SDK_PATH}/tools/${ARCH}/ffx component run \
+    --recreate \
+    fuchsia-pkg://hello-fuchsia/hello_fuchsia_manifest#meta/hello_fuchsia.cm
+</code></pre>
+<p>پس از اجرای کامپوننت، پنجره <code>zxdb</code> ما همان‌طور که می‌خواستیم اجرا را در main متوقف می‌کند:</p>
+<p><strong>خروجی مورد انتظار</strong></p>
+<pre><code class="language-txt">Breakpoint 1 now matching 1 addrs for main
+🛑 on bp 1 hello_fuchsia::main() • main.rs:2
+   1 fn main() {
+ ▶ 2     println!("Hello Fuchsia!");
+   3 }
+   4
+[zxdb]
+</code></pre>
+<p><code>zxdb</code> دستورهایی مشابه اشکال‌زداهای دیگر مانند <a href="https://www.sourceware.org/gdb/">gdb</a> دارد. برای دیدن فهرست دستورهای موجود، در پنجره <code>zxdb</code> دستور “help” را اجرا کنید یا به <a href="https://fuchsia.dev/fuchsia-src/development/debugger">مستندات zxdb</a> مراجعه کنید.</p>
+<pre><code class="language-sh">[zxdb] help
+</code></pre>
+<p><strong>خروجی مورد انتظار</strong></p>
+<pre><code class="language-sh">Help!
+
+  Type "help &lt;command&gt;" for command-specific help.
+
+Other help topics (see "help &lt;topic&gt;")
+...
+</code></pre>
+<h3 id="displaying-source-code-in-zxdb"><a class="header" href="#displaying-source-code-in-zxdb">نمایش کد منبع در <code>zxdb</code></a></h3>
+<p>به‌طور پیش‌فرض، اشکال‌زدا هنگام اشکال‌زدایی نمی‌تواند کد منبع را نمایش دهد. برای کد کاربر خودمان، با اشاره دادن اشکال‌زدا به فایل دودویی debug از طریق آرگومان <code>--symbol-path</code> کد منبع را نمایش دادیم. برای نمایش کد منبع کتابخانه‌ها در اشکال‌زدا، باید با <code>--build-dir</code> مسیرهای منبع را مشخص کنید. برای مثال، برای نمایش کد منبع Rust و Fuchsia:</p>
+<pre><code class="language-sh">${SDK_PATH}/tools/${ARCH}/ffx debug connect -- \
+    --symbol-path target/x86_64-unknown-fuchsia/debug \
+    --build-dir ${RUST_SRC_PATH}/rust \
+    --build-dir ${FUCHSIA_SRC_PATH}/fuchsia/out/default
+</code></pre>
+<ul>
+<li><code>--build-dir</code> به مسیرهای کد منبع لینک می‌دهد؛ این مسیرها برای اشکال‌زدایی الزاماً لازم نیستند، اما برای نمایش کد منبع در <code>zxdb</code> مفیدند.</li>
+</ul>
+<p>لینک دادن به یک checkout از Fuchsia می‌تواند به اشکال‌زدایی کتابخانه‌های Fuchsia، مانند <a href="https://cs.opensource.google/fuchsia/fuchsia/+/main:sdk/lib/fdio/">fdio</a>، کمک کند.</p>
+<h3 id="debugging-the-compiler-test-suite"><a class="header" href="#debugging-the-compiler-test-suite">اشکال‌زدایی مجموعه آزمون‌های کامپایلر</a></h3>
+<p>اشکال‌زدایی مجموعه آزمون‌های کامپایلر به پیکربندی ویژه‌ای نیاز دارد:</p>
+<p>نخست باید zxdb را درست پیکربندی کنیم تا بتواند symbolهای اشکال‌زدایی و اطلاعات کد منبع آزمون ما را پیدا کند. test runner می‌تواند این کار را برای ما با دستور زیر انجام دهد:</p>
+<pre><code class="language-sh">src/ci/docker/scripts/fuchsia-test-runner.py debug                            \
+    --rust-src ${RUST_SRC_PATH}                                               \
+    --fuchsia-src ${FUCHSIA_SRC_PATH}                                         \
+    --test ${TEST}
+</code></pre>
+<p>که در آن <code>${TEST}</code> نسبت به دایرکتوری <code>tests</code> در Rust است (مثلاً <code>ui/abi/...</code>).</p>
+<p>این کار یک نشست zxdb را راه‌اندازی می‌کند که برای آزمونِ در حال اجرا به‌درستی پیکربندی شده است. هر سه آرگومان اختیاری‌اند، بنابراین اگر نسخه‌ای از <code>--fuchsia-src</code> را دانلود نکرده‌اید می‌توانید آن را حذف کنید. حالا زمان مناسبی است که breakpointهای دلخواه را تنظیم کنید، مثلاً <code>b main</code>.</p>
+<p>سپس باید به <code>x.py</code> بگوییم که symbolهای اشکال‌زدایی فایل‌های دودویی مجموعه آزمون را بهینه‌سازی نکند و حذف نکند. این کار را می‌توان با دادن چند آرگومان جدید به <code>rustc</code> از طریق فراخوانی <code>x.py</code> انجام داد. فراخوانی کامل چنین است:</p>
+<pre><code class="language-sh">( \
+    source config-env.sh &amp;&amp;                                                   \
+    ./x.py                                                                    \
+    --config bootstrap.toml                                                      \
+    --stage=2                                                                 \
+    test tests/${TEST}                                                        \
+    --target x86_64-unknown-fuchsia                                           \
+    --run=always                                                              \
+    --test-args --target-rustcflags                                           \
+    --test-args -Lnative=${SDK_PATH}/arch/{x64|arm64}/sysroot/lib             \
+    --test-args --target-rustcflags                                           \
+    --test-args -Lnative=${SDK_PATH}/arch/{x64|arm64}/lib                     \
+    --test-args --target-rustcflags                                           \
+    --test-args -Clink-arg=--undefined-version                                \
+    --test-args --target-rustcflags                                           \
+    --test-args -Cdebuginfo=2                                                 \
+    --test-args --target-rustcflags                                           \
+    --test-args -Copt-level=0                                                 \
+    --test-args --target-rustcflags                                           \
+    --test-args -Cstrip=none                                                  \
+    --test-args --remote-test-client                                          \
+    --test-args src/ci/docker/scripts/fuchsia-test-runner.py                  \
+)
+</code></pre>
+<p><em>اگر toolchain خود را با <code>panic=abort</code> ساخته‌اید، حتماً پرچم‌های قبلی را هم بیاورید تا فایل‌های دودویی آزمون شما نیز با <code>panic=abort</code> کامپایل شوند.</em></p>
+<p>با اجرای این دستور، فایل دودویی مجموعه آزمون اجرا می‌شود و zxdb به آن متصل می‌شود و هر symbol اشکال‌زدایی مرتبط را بارگذاری می‌کند.</p><nav class="page-nav"><a href="esp-idf.html">→ *-espidf</a><a href="l4re.html">*-unknown-l4re ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

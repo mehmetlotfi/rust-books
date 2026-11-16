@@ -1,0 +1,59 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>wasm32-wali-linux-musl — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="platform-support/wasm32-wali-linux"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="wasm32-wali-linux-"><a class="header" href="#wasm32-wali-linux-"><code>wasm32-wali-linux-*</code></a></h1>
+<p><strong>Tier: 3</strong></p>
+<p>اهداف WebAssembly که از <a href="https://github.com/arjunr2/WALI">WebAssembly Linux Interface (WALI)</a> با حافظهٔ ۳۲ بیتی استفاده می‌کنند. آخرین وضعیت مشخصات و پشتیبانی WALI در مخزن آن مستند شده است.</p>
+<p>WALI با در معرض‌گذاشتن حساب‌شدهٔ فراخوانی‌های سیستمی (syscall) لینوکس درون sandbox، امکان هدف‌گیری روان برنامه‌های سنتی لینوکس به Wasm را فراهم می‌کند. شمار زیادی از برنامه‌ها و سیستم‌های ساخت بدون تغییر روی WALI کار می‌کنند، از جمله کتابخانه‌های سیستمی سطح پایین و پیچیده – فهرستی از برنامه‌ها در مقالهٔ پژوهشی پیوندشده در مخزن اصلی آمده است.</p>
+<p>از دید اکوسیستم گستردهٔ Wasm، پیاده‌سازی WALI در موتورهای اجرا امکان لایه‌گذاری سیاست‌های امنیتی سطح بالا (مثلاً WASI) را بر فراز آن فراهم می‌کند و پیاده‌سازی‌های آن سیاست‌ها را به sandboxing و قابلیت حمل مجهز می‌کند.</p>
+<h2 id="target-maintainers"><a class="header" href="#target-maintainers">نگهدارندگان هدف</a></h2>
+<p><a href="https://github.com/arjunr2">@arjunr2</a></p>
+<h2 id="requirements"><a class="header" href="#requirements">الزامات</a></h2>
+<h3 id="compilation"><a class="header" href="#compilation">کامپایل</a></h3>
+<p>این هدف به‌صورت متقابل کامپایل می‌شود و به نصب <a href="https://github.com/Wasm-Thin-Kernel-Interfaces/WALI.git">WALI sysroot</a> نیاز دارد. این کار باینری‌های استاندارد <code>wasm32</code> تولید می‌کند که متدهای رابط WALI را به‌صورت importهای ماژول دارند و باید توسط یک موتور اجرای پشتیبانی‌شده پیاده‌سازی شوند (بخش «اجرا» را در ادامه ببینید).</p>
+<p>اهداف <code>wali</code> <em>حداقل</em> به پرچم‌های ویژگی LLVM زیر نیاز دارند:</p>
+<ul>
+<li><a href="https://github.com/WebAssembly/spec/blob/main/proposals/bulk-memory-operations/Overview.md">حافظهٔ انبوه (Bulk memory)</a> - <code>+bulk-memory</code></li>
+<li>مقادیر سراسری import‌شدهٔ تغییرپذیر - <code>+mutable-globals</code></li>
+<li><a href="https://github.com/WebAssembly/spec/blob/main/proposals/sign-extension-ops/Overview.md">عملیات گسترش علامت (Sign-extending operations)</a> - <code>+sign-ext</code></li>
+<li><a href="https://github.com/WebAssembly/threads/blob/main/proposals/threads/Overview.md">نخ‌ها/عملیات اتمی (Threading/Atomics)</a> - <code>+atomics</code></li>
+</ul>
+<blockquote>
+<p><strong>نکته</strong>: کاربران می‌توانند انتظار داشته باشند که ویژگی‌های جدید Wasm که در LLVM به‌طور پیش‌فرض فعال می‌شوند، به‌صورت تعدی‌یافته در این هدف نیز قابل استفاده باشند – برای اطلاعات تفصیلی دربارهٔ ویژگی‌های WebAssembly به <a href="wasm32-unknown-unknown.html">wasm32-unknown-unknown</a> مراجعه کنید.</p>
+</blockquote>
+<blockquote>
+<p><strong>نکته</strong>: ABI در WALI <em>با ABI</em> هدف‌های <code>wasm32-wasip2</code> یا <code>wasm32-unknown-unknown</code> <em>یکسان نیست</em>. تفاوت اصلی این است که نوع‌های <code>long</code> در آن ۶۴ بیتی هستند، در مقابل ۳۲ بیتی در wasm32. این کار برای بیشینه‌کردن قابلیت حمل با کمترین تغییر در کد منبع روی پلتفرم‌های میزبان ۶۴ بیتی فعلاً پشتیبانی‌شده لازم است. با تکامل مشخصات، ممکن است این ABIها در آینده به هم نزدیک شوند.</p>
+</blockquote>
+<h3 id="execution"><a class="header" href="#execution">اجرا</a></h3>
+<p>اجرای باینری‌های WALI تولیدشده نیز به یک پیاده‌سازی موتور سازگار و پشتیبانی‌شده نیاز دارد – یک پیاده‌سازی کارا در <a href="https://github.com/arjunr2/WALI">WebAssembly Micro-Runtime (WAMR)</a> در مخزن گنجانده شده است.</p>
+<blockquote>
+<p><strong>نکته</strong>: WALI هنوز تا حدی آزمایشی است و ممکن است در پشتیبانی Rust، زنجیره‌ابزار WALI یا کامپایلر LLVM اشکالاتی وجود داشته باشد. مورد اول را می‌توان در مخازن Rust و دو مورد دیگر را در مخزن WALI گزارش کرد.</p>
+</blockquote>
+<h2 id="building-the-target"><a class="header" href="#building-the-target">ساخت هدف</a></h2>
+<p>می‌توانید Rust را با پشتیبانی از این هدف بسازید؛ برای این کار آن را به فهرست <code>target</code> در <code>bootstrap.toml</code> اضافه کنید و به آرتیفکت‌های زنجیره‌ابزار بخش قبل («الزامات-&gt;کامپایل») اشاره کنید. نمونه‌ای از <code>bootstrap.toml</code> برای محیط <code>musl</code> به این شکل است، که در آن <code>&lt;WALI-root&gt;</code> مسیر مطلق دایرکتوری ریشهٔ <a href="https://github.com/arjunr2/WALI">مخزن WALI</a> است:</p>
+<pre><code class="language-toml">[build]
+target = ["wasm32-wali-linux-musl"]
+
+[target.wasm32-wali-linux-musl]
+musl-root = "&lt;WALI&gt;/build/sysroot"
+cc = "&lt;WALI&gt;/build/llvm/bin/clang"
+cxx = "&lt;WALI&gt;/build/llvm/bin/clang++"
+ar = "&lt;WALI&gt;/build/llvm/bin/llvm-ar"
+ranlib = "&lt;WALI&gt;/build/llvm/bin/llvm-ranlib"
+llvm-libunwind = "system"
+crt-static = true
+</code></pre>
+<h2 id="building-rust-programs"><a class="header" href="#building-rust-programs">ساخت برنامه‌های Rust</a></h2>
+<p>Rust هنوز آرتیفکت‌های از پیش کامپایل‌شده‌ای برای این هدف ارائه نمی‌کند. برای کامپایل برای این هدف، یا باید Rust را با فعال‌بودن این هدف بسازید (به «ساخت هدف» در بالا مراجعه کنید)، یا نسخهٔ خودتان از <code>core</code> را با استفاده از <code>build-std</code> یا روشی مشابه (با پیوندهای sysroot مناسب) بسازید.</p>
+<p>توجه کنید که دستورهای <code>cfg</code> زیر برای <code>wasm32-wali-linux-*</code> تنظیم می‌شوند:</p>
+<ul>
+<li><code>cfg(target_arch = "wasm32")</code></li>
+<li><code>cfg(target_family = {"wasm", "unix"})</code></li>
+<li><code>cfg(target_r = "wasm")</code></li>
+<li><code>cfg(target_os = "linux")</code></li>
+<li><code>cfg(target_env = *)</code></li>
+</ul>
+<h3 id="restrictions"><a class="header" href="#restrictions">محدودیت‌ها</a></h3>
+<p>پشتیبانی مختص سخت‌افزار یا پلتفرم، به‌جز <code>syscall</code>، به‌منظور حفظ قابلیت حمل ISA عمدتاً در WALI پشتیبانی نمی‌شود (این موارد معمولاً کمیاب‌اند).</p>
+<h2 id="testing"><a class="header" href="#testing">آزمایش</a></h2>
+<p>در حال حاضر آزمایش برای اهداف <code>wali</code> پشتیبانی نمی‌شود و پروژهٔ Rust هیچ آزمونی برای این هدف اجرا نمی‌کند.</p>
+<p>با این حال، آزمون‌های استاندارد لینوکس که مستقل از ISA هستند، در تئوری با تغییرات جزئی برای اهداف WALI قابل استفادهٔ مجددند. با تکامل پشتیبانی، یکپارچه‌سازی آزمون‌ها به‌طور مستمر افزوده خواهد شد.</p>
+<h2 id="cross-compilation-toolchains-and-c-code"><a class="header" href="#cross-compilation-toolchains-and-c-code">زنجیره‌ابزارهای کامپایل متقابل و کد C</a></h2>
+<p>بیشتر کدهای C با قابلیت‌های کامل با زنجیره‌ابزار WALI قابل کامپایل هستند – نمونه‌ها را می‌توانید در مخزن ببینید.</p><nav class="page-nav"><a href="wasm32-wasip3.html">→ wasm32-wasip3</a><a href="wasm32-unknown-emscripten.html">wasm32-unknown-emscripten ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

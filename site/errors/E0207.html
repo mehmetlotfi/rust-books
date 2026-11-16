@@ -1,0 +1,164 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0207 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0207"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>یک پارامتر نوع، ثابت (const) یا طول عمر که برای <code>impl</code> مشخص شده است، مقید (constrained) نشده است.</p>
+<p>نمونه کد دارای خطا:</p>
+<pre><code class="language-compile_fail E0207">struct Foo;
+
+impl&lt;T: Default&gt; Foo {
+    // error: the type parameter `T` is not constrained by the impl trait, self
+    // type, or predicates [E0207]
+    fn get(&amp;self) -&gt; T {
+        &lt;T as Default&gt;::default()
+    }
+}
+</code></pre>
+<p>هر پارامتر نوع یا ثابت در یک <code>impl</code> باید دست‌کم یکی از معیارهای زیر را برآورده کند:</p>
+<ul>
+<li>در <em>نوع پیاده‌سازی‌شونده</em> (implementing type) در impl ظاهر شود، مثلاً <code>impl&lt;T&gt; Foo&lt;T&gt;</code></li>
+<li>برای پیاده‌سازی صفت، در <em>صفت پیاده‌سازی‌شده</em> ظاهر شود، مثلاً <code>impl&lt;T&gt; SomeTrait&lt;T&gt; for Foo</code></li>
+<li>به‌عنوان یک نوع وابسته قید شده باشد، مثلاً <code>impl&lt;T, U&gt; SomeTrait for T where T: AnotherTrait&lt;AssocType=U&gt;</code></li>
+</ul>
+<p>هر پارامتر طول عمر مقید‌نشده در یک <code>impl</code> در صورتی که پارامتر طول عمر توسط یک نوع وابسته استفاده شود، پشتیبانی نمی‌شود.</p>
+<h3 id="error-example-1"><a class="header" href="#error-example-1">نمونه خطای ۱</a></h3>
+<p>فرض کنید ساختاری به نام <code>Foo</code> داریم و می‌خواهیم برایش چند متد تعریف کنیم. نمونه کد قبلی تعریفی دارد که به خطای کامپایلر منجر می‌شود:</p>
+<p>مشکل این است که پارامتر <code>T</code> در نوع پیاده‌سازی‌شونده (<code>Foo</code>) در impl ظاهر نمی‌شود. در این حالت می‌توانیم با انتقال پارامتر نوع از <code>impl</code> به متد <code>get</code> خطا را برطرف کنیم:</p>
+<pre><code>struct Foo;
+
+// Move the type parameter from the impl to the method
+impl Foo {
+    fn get&lt;T: Default&gt;(&amp;self) -&gt; T {
+        &lt;T as Default&gt;::default()
+    }
+}
+</code></pre>
+<h3 id="error-example-2"><a class="header" href="#error-example-2">نمونه خطای ۲</a></h3>
+<p>به‌عنوان مثال دیگر، فرض کنید صفتی به نام <code>Maker</code> داریم و می‌خواهیم نوعی به نام <code>FooMaker</code> بسازیم که <code>Foo</code>ها را تولید می‌کند:</p>
+<pre><code class="language-compile_fail E0207">trait Maker {
+    type Item;
+    fn make(&amp;mut self) -&gt; Self::Item;
+}
+
+struct Foo&lt;T&gt; {
+    foo: T
+}
+
+struct FooMaker;
+
+impl&lt;T: Default&gt; Maker for FooMaker {
+// error: the type parameter `T` is not constrained by the impl trait, self
+// type, or predicates [E0207]
+    type Item = Foo&lt;T&gt;;
+
+    fn make(&amp;mut self) -&gt; Foo&lt;T&gt; {
+        Foo { foo: &lt;T as Default&gt;::default() }
+    }
+}
+</code></pre>
+<p>این کد کامپایل نمی‌شود، زیرا <code>T</code> نه در صفت ظاهر شده است و نه در نوع پیاده‌سازی‌شونده.</p>
+<p>یک راه برای دور زدن این مشکل، افزودن یک پارامتر نوع فانتوم (phantom) به <code>FooMaker</code> است، به این صورت:</p>
+<pre><code>use std::marker::PhantomData;
+
+trait Maker {
+    type Item;
+    fn make(&amp;mut self) -&gt; Self::Item;
+}
+
+struct Foo&lt;T&gt; {
+    foo: T
+}
+
+// Add a type parameter to `FooMaker`
+struct FooMaker&lt;T&gt; {
+    phantom: PhantomData&lt;T&gt;,
+}
+
+impl&lt;T: Default&gt; Maker for FooMaker&lt;T&gt; {
+    type Item = Foo&lt;T&gt;;
+
+    fn make(&amp;mut self) -&gt; Foo&lt;T&gt; {
+        Foo {
+            foo: &lt;T as Default&gt;::default(),
+        }
+    }
+}
+</code></pre>
+<p>راه دیگر این است که نوع وابسته در <code>Maker</code> را کنار بگذاریم و به‌جای آن از یک پارامتر نوع ورودی استفاده کنیم:</p>
+<pre><code>// Use a type parameter instead of an associated type here
+trait Maker&lt;Item&gt; {
+    fn make(&amp;mut self) -&gt; Item;
+}
+
+struct Foo&lt;T&gt; {
+    foo: T
+}
+
+struct FooMaker;
+
+impl&lt;T: Default&gt; Maker&lt;Foo&lt;T&gt;&gt; for FooMaker {
+    fn make(&amp;mut self) -&gt; Foo&lt;T&gt; {
+        Foo { foo: &lt;T as Default&gt;::default() }
+    }
+}
+</code></pre>
+<h3 id="error-example-3"><a class="header" href="#error-example-3">نمونه خطای ۳</a></h3>
+<p>فرض کنید ساختاری به نام <code>Foo</code> داریم و می‌خواهیم برایش چند متد تعریف کنیم. نمونه کد زیر تعریفی دارد که به خطای کامپایلر منجر می‌شود:</p>
+<pre><code class="language-compile_fail E0207">struct Foo;
+
+impl&lt;const T: i32&gt; Foo {
+    // error: the const parameter `T` is not constrained by the impl trait, self
+    // type, or predicates [E0207]
+    fn get(&amp;self) -&gt; i32 {
+        i32::default()
+    }
+}
+</code></pre>
+<p>مشکل این است که پارامتر ثابت <code>T</code> در نوع پیاده‌سازی‌شونده (<code>Foo</code>) در impl ظاهر نمی‌شود. در این حالت می‌توانیم با انتقال پارامتر نوع از <code>impl</code> به متد <code>get</code> خطا را برطرف کنیم:</p>
+<pre><code>struct Foo;
+
+// Move the const parameter from the impl to the method
+impl Foo {
+    fn get&lt;const T: i32&gt;(&amp;self) -&gt; i32 {
+        i32::default()
+    }
+}
+</code></pre>
+<h3 id="error-example-4"><a class="header" href="#error-example-4">نمونه خطای ۴</a></h3>
+<p>فرض کنید ساختاری به نام <code>Foo</code> و ساختاری به نام <code>Bar</code> داریم که از طول عمر <code>'a</code> استفاده می‌کند. می‌خواهیم صفت <code>Contains</code> را برای <code>Foo</code> پیاده‌سازی کنیم. صفت <code>Contains</code> نوع وابسته <code>B</code> را دارد. نمونه کد زیر تعریفی دارد که به خطای کامپایلر منجر می‌شود:</p>
+<pre><code class="language-compile_fail E0207">struct Foo;
+struct Bar&lt;'a&gt;;
+
+trait Contains {
+    type B;
+
+    fn get(&amp;self) -&gt; i32;
+}
+
+impl&lt;'a&gt; Contains for Foo {
+    type B = Bar&lt;'a&gt;;
+
+    // error: the lifetime parameter `'a` is not constrained by the impl trait,
+    // self type, or predicates [E0207]
+    fn get(&amp;self) -&gt; i32 {
+        i32::default()
+    }
+}
+</code></pre>
+<p>لطفاً توجه کنید که پارامترهای طول عمر مقید‌نشده در صورتی که توسط یک نوع وابسته استفاده شوند، پشتیبانی نمی‌شوند.</p>
+<p>در مواردی که قرار است طول عمر نوع وابسته به نوع self گره بخورد و هیچ‌یک از متدهای صفت به مالکیت یا قابلیت تغییر متفاوت نیاز نداشته باشند، یک گزینه این است که صفت را روی یک نوع قرض‌گرفته‌شده پیاده‌سازی کنید:</p>
+<pre><code class="language-rust">struct Foo(i32);
+
+trait Contents {
+    type Item;
+
+    fn get(&amp;self) -&gt; Self::Item;
+}
+
+// Note the lifetime `'a` is used both for the self type...
+impl&lt;'a&gt; Contents for &amp;'a Foo {
+    // ...and the associated type.
+    type Item = &amp;'a i32;
+
+    fn get(&amp;self) -&gt; Self::Item {
+        &amp;self.0
+    }
+}</code></pre>
+<h3 id="additional-information"><a class="header" href="#additional-information">اطلاعات بیشتر</a></h3>
+<p>برای اطلاعات بیشتر، لطفاً <a href="https://rust-lang.github.io/rfcs/0447-no-unused-impl-parameters.html">RFC 447</a> را ببینید.</p><nav class="page-nav"><a href="../errors/E0206.html">→ E0206</a><a href="../errors/E0208.html">E0208 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

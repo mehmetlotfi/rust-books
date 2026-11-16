@@ -1,0 +1,404 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>اولویت کاندیدا — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="solve/candidate-preference"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="candidate-preference"><a class="header" href="#candidate-preference">ترجیح candidate</a></h1>
+<p>راه‌های متعددی برای اثبات goalهای <code>Trait</code> و <code>NormalizesTo</code> وجود دارد.
+هر یک از این گزینه‌ها یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_next_trait_solver/solve/assembly/struct.Candidate.html"><code>Candidate</code></a> نامیده می‌شود.
+اگر چند candidate قابل‌اعمال وجود داشته باشد، برخی candidateها را بر برخی دیگر ترجیح می‌دهیم.
+اطلاعات مرتبط را در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_next_trait_solver/solve/enum.CandidateSource.html"><code>CandidateSource</code></a> آن‌ها ذخیره می‌کنیم.</p>
+<p>این ترجیح ممکن است به استنتاج یا قیدهای ناحیهٔ نادرست منجر شود و بنابراین در طول coherence ناسالم (unsound) خواهد بود.
+به همین دلیل، در coherence صرفاً می‌کوشیم همهٔ candidateها را ادغام کنیم.</p>
+<h2 id="trait-goals"><a class="header" href="#trait-goals">goalهای <code>Trait</code></a></h2>
+<p>goalهای صفت، candidateهای قابل‌اعمال خود را در <a href="https://github.com/rust-lang/rust/blob/e3ee7f7aea5b45af3b42b5e4713da43876a65ac9/compiler/rustc_next_trait_solver/src/solve/trait_goals.rs#L1342-L1424"><code>fn merge_trait_candidates</code></a> ادغام می‌کنند.
+این سند جزئیات و ارجاعات بیشتری فراهم می‌کند تا توضیح دهد <em>چرا</em> قواعد ترجیح فعلی را داریم.</p>
+<h3 id="candidatesourcebuiltinimplbuiltinimplsourcetrivial"><a class="header" href="#candidatesourcebuiltinimplbuiltinimplsourcetrivial"><code>CandidateSource::BuiltinImpl(BuiltinImplSource::Trivial))</code></a></h3>
+<p>implهای داخلی بدیهی (trivial builtin impls) آن implهای داخلی‌ای هستند که برای نوع‌های خوش‌ساخت همیشه قابل‌اعمال‌اند.
+این یعنی اگر یکی وجود داشته باشد، استفاده از candidate دیگر هرگز نباید قیدهای کمتری داشته باشد.
+در حال حاضر فقط implهای <code>Sized</code> - و <code>MetaSized</code> - را بدیهی می‌دانیم.</p>
+<p>این برای جلوگیری از یک خطای طول عمر در الگوی زیر لازم است</p>
+<pre><code class="language-rust">trait Trait&lt;T&gt;: Sized {}
+impl&lt;'a&gt; Trait&lt;u32&gt; for &amp;'a str {}
+impl&lt;'a&gt; Trait&lt;i32&gt; for &amp;'a str {}
+fn is_sized&lt;T: Sized&gt;(_: T) {}
+fn foo&lt;'a, 'b, T&gt;(x: &amp;'b str)
+where
+    &amp;'a str: Trait&lt;T&gt;,
+{
+    // Elaborating the `&amp;'a str: Trait&lt;T&gt;` where-bound results in a
+    // `&amp;'a str: Sized` where-bound. We do not want to prefer this
+    // over the builtin impl.
+    is_sized(x);
+}</code></pre>
+<p>این ترجیح در صورتی نادرست است که impl داخلی یک goal تودرتو داشته باشد که به یک بند where غیرپارامتری متکی است</p>
+<pre><code class="language-rust">struct MyType&lt;'a, T: ?Sized&gt;(&amp;'a (), T);
+fn is_sized&lt;T&gt;() {}
+fn foo&lt;'a, T: ?Sized&gt;()
+where
+    (MyType&lt;'a, T&gt;,): Sized,
+    MyType&lt;'static, T&gt;: Sized,
+{
+    // The where-bound is trivial while the builtin `Sized` impl for tuples
+    // requires proving `MyType&lt;'a, T&gt;: Sized` which can only be proven by
+    // using the where-clause, adding an unnecessary `'static` constraint.
+    is_sized::&lt;(MyType&lt;'a, T&gt;,)&gt;();
+    //~^ ERROR lifetime may not live long enough
+}</code></pre>
+<h3 id="candidatesourceparamenv"><a class="header" href="#candidatesourceparamenv"><code>CandidateSource::ParamEnv</code></a></h3>
+<p>به‌محض اینکه دست‌کم یک candidate ‏<code>ParamEnv</code> <em>غیرسراسری</em> وجود داشته باشد، <em>همهٔ</em> candidateهای <code>ParamEnv</code> را بر انواع دیگر candidate ترجیح می‌دهیم.
+یک قید where سراسری (global) است اگر مرتبهٔ بالاتر (higher-ranked) نباشد و هیچ پارامتر جنریکی نداشته باشد.
+ممکن است <code>'static</code> داشته باشد.</p>
+<p>می‌کوشیم قیدهای where را بر candidateهای دیگر ترجیح دهیم، چون کاربران معمولاً بیشترین کنترل را روی آن‌ها دارند و بنابراین
+در صورت نادرست بودن ترجیح candidate ما، می‌توانند به‌راحتی آن‌ها را تنظیم کنند.</p>
+<h4 id="preference-over-impl-candidates"><a class="header" href="#preference-over-impl-candidates">ترجیح بر candidateهای <code>Impl</code></a></h4>
+<p>این برای پرهیز از خطاهای ناحیه در مثال زیر لازم است</p>
+<pre><code class="language-rust">trait Trait&lt;'a&gt; {}
+impl&lt;T&gt; Trait&lt;'static&gt; for T {}
+fn impls_trait&lt;'a, T: Trait&lt;'a&gt;&gt;() {}
+fn foo&lt;'a, T: Trait&lt;'a&gt;&gt;() {
+    impls_trait::&lt;'a, T&gt;();
+}</code></pre>
+<p>به این هم نیاز داریم چون implهای سایه‌خورده (shadowed) می‌توانند به چرخه‌های حل‌گرِ فعلاً مبهم منجر شوند: <a href="https://github.com/rust-lang/trait-system-refactor-initiative/issues/76">trait-system-refactor-initiative#76</a>.
+بدون ترجیح، اگر قید where به قیدهای ناحیه بینجامد، برای پرهیز از ناکامل بودن
+مجبور می‌شدیم با خطاهای ابهام شکست بخوریم.</p>
+<pre><code class="language-rust">trait Super {
+    type SuperAssoc;
+}
+
+trait Trait: Super&lt;SuperAssoc = Self::TraitAssoc&gt; {
+    type TraitAssoc;
+}
+
+impl&lt;T, U&gt; Trait for T
+where
+    T: Super&lt;SuperAssoc = U&gt;,
+{
+    type TraitAssoc = U;
+}
+
+fn overflow&lt;T: Trait&gt;() {
+    // We can use the elaborated `Super&lt;SuperAssoc = Self::TraitAssoc&gt;` where-bound
+    // to prove the where-bound of the `T: Trait` implementation. This currently results in
+    // overflow.
+    let x: &lt;T as Trait&gt;::TraitAssoc;
+}</code></pre>
+<p>این ترجیح مشکلات زیادی ایجاد می‌کند.
+<a href="https://github.com/rust-lang/rust/issues/24066">#24066</a> را ببینید.
+بیشتر
+مشکلات از ترجیح قیدهای where بر implها ناشی می‌شود، حتی اگر قید where استنتاج نوع را هدایت کند:</p>
+<pre><code class="language-rust">trait Trait&lt;T&gt; {
+    fn call_me(&amp;self, x: T) {}
+}
+impl&lt;T&gt; Trait&lt;u32&gt; for T {}
+impl&lt;T&gt; Trait&lt;i32&gt; for T {}
+fn bug&lt;T: Trait&lt;U&gt;, U&gt;(x: T) {
+    x.call_me(1u32);
+    //~^ ERROR mismatched types
+}</code></pre>
+<p>با این حال، حتی اگر این ترجیح را فقط وقتی اعمال کنیم که قید where استنتاج را هدایت نمی‌کند، باز هم ممکن است
+به قیدهای طول عمر نادرست منجر شود:</p>
+<pre><code class="language-rust">trait Trait&lt;'a&gt; {}
+impl&lt;'a&gt; Trait&lt;'a&gt; for &amp;'a str {}
+fn impls_trait&lt;'a, T: Trait&lt;'a&gt;&gt;(_: T) {}
+fn foo&lt;'a, 'b&gt;(x: &amp;'b str)
+where
+    &amp;'a str: Trait&lt;'b&gt;
+{
+    // Need to prove `&amp;'x str: Trait&lt;'b&gt;` with `'b: 'x`.
+    impls_trait::&lt;'b, _&gt;(x);
+    //~^ ERROR lifetime may not live long enough
+}</code></pre>
+<h4 id="preference-over-aliasbound-candidates"><a class="header" href="#preference-over-aliasbound-candidates">ترجیح بر candidateهای <code>AliasBound</code></a></h4>
+<p>این برای پرهیز از خطاهای ناحیه در مثال زیر لازم است</p>
+<pre><code class="language-rust">trait Bound&lt;'a&gt; {}
+trait Trait&lt;'a&gt; {
+    type Assoc: Bound&lt;'a&gt;;
+}
+
+fn impls_bound&lt;'b, T: Bound&lt;'b&gt;&gt;() {}
+fn foo&lt;'a, 'b, 'c, T&gt;()
+where
+    T: Trait&lt;'a&gt;,
+    for&lt;'hr&gt; T::Assoc: Bound&lt;'hr&gt;,
+{
+    impls_bound::&lt;'b, T::Assoc&gt;();
+    impls_bound::&lt;'c, T::Assoc&gt;();
+}</code></pre>
+<p>همچنین می‌تواند به قیدهای غیرضروری منجر شود</p>
+<pre><code class="language-rust">trait Bound&lt;'a&gt; {}
+trait Trait&lt;'a&gt; {
+    type Assoc: Bound&lt;'a&gt;;
+}
+
+fn impls_bound&lt;'b, T: Bound&lt;'b&gt;&gt;() {}
+fn foo&lt;'a, 'b, T&gt;()
+where
+    T: for&lt;'hr&gt; Trait&lt;'hr&gt;,
+    &lt;T as Trait&lt;'b&gt;&gt;::Assoc: Bound&lt;'a&gt;,
+{
+    // Using the where-bound for `&lt;T as Trait&lt;'a&gt;&gt;::Assoc: Bound&lt;'a&gt;`
+    // unnecessarily equates `&lt;T as Trait&lt;'a&gt;&gt;::Assoc` with the
+    // `&lt;T as Trait&lt;'b&gt;&gt;::Assoc` from the env.
+    impls_bound::&lt;'a, &lt;T as Trait&lt;'a&gt;&gt;::Assoc&gt;();
+    // For a `&lt;T as Trait&lt;'b&gt;&gt;::Assoc: Bound&lt;'b&gt;` the self type of the
+    // where-bound matches, but the arguments of the trait bound don't.
+    impls_bound::&lt;'b, &lt;T as Trait&lt;'b&gt;&gt;::Assoc&gt;();
+}</code></pre>
+<h4 id="why-no-preference-for-global-where-bounds"><a class="header" href="#why-no-preference-for-global-where-bounds">چرا برای قیدهای where سراسری ترجیحی وجود ندارد</a></h4>
+<p>قیدهای where سراسری یا کاملاً توسط یک impl مستلزم می‌شوند یا ارضاناپذیرند.
+اگر ارضاناپذیر باشند، واقعاً اهمیتی ندارد چه اتفاقی می‌افتد.
+اگر قید where کاملاً مستلزم باشد، استفاده از impl برای اثبات goal صفت نمی‌تواند به قیدهای اضافی بینجامد.
+برای goalهای صفت، این فقط برای قیدهای whereای مفید است که از <code>'static</code> استفاده می‌کنند:</p>
+<pre><code class="language-rust">trait A {
+    fn test(&amp;self);
+}
+
+fn foo(x: &amp;dyn A)
+where
+    dyn A + 'static: A, // Using this bound would lead to a lifetime error.
+{
+    x.test();
+}</code></pre>
+<p>مهم‌تر اینکه با استفاده از implها در اینجا، از سایه انداختن قیدهای where سراسری بر implها هنگام نرمال‌سازی نوع‌های وابسته جلوگیری می‌کنیم.
+هیچ مشکل شناخته‌شده‌ای از ترجیح implها بر قیدهای where سراسری وجود ندارد.</p>
+<h4 id="why-still-consider-global-where-bounds"><a class="header" href="#why-still-consider-global-where-bounds">چرا همچنان قیدهای where سراسری را در نظر می‌گیریم</a></h4>
+<p>با توجه به اینکه حتی وقتی قید where سراسری وجود دارد فقط از implها استفاده می‌کنیم، ممکن است بپرسید چرا این قیدهای where سراسری را به‌طور کامل نادیده نمی‌گیریم: از آن‌ها برای تضعیف هدایت استنتاج قیدهای where غیرسراسری استفاده می‌کنیم.</p>
+<p>بدون قید where سراسری، در حال حاضر قیدهای where غیرسراسری را ترجیح می‌دهیم، حتی اگر یک impl قابل‌اعمال هم وجود داشته باشد.
+با افزودن یک قید where سراسری، این هدایت استنتاج غیرضروری غیرفعال می‌شود و کامپایل شدن مثال زیر را ممکن می‌کند:</p>
+<pre><code class="language-rust">fn check&lt;Color&gt;(color: Color)
+where
+    Vec: Into&lt;Color&gt; + Into&lt;f32&gt;,
+{
+    let _: f32 = Vec.into();
+    // Without the global `Vec: Into&lt;f32&gt;`  bound we'd
+    // eagerly use the non-global `Vec: Into&lt;Color&gt;` bound
+    // here, causing this to fail.
+}
+
+struct Vec;
+impl From&lt;Vec&gt; for f32 {
+    fn from(_: Vec) -&gt; Self {
+        loop {}
+    }
+}</code></pre>
+<h3 id="candidatesourcealiasbound"><a class="header" href="#candidatesourcealiasbound"><code>CandidateSource::AliasBound</code></a></h3>
+<p>candidateهای alias-bound را بر implها ترجیح می‌دهیم.
+در حال حاضر از این ترجیح برای هدایت استنتاج نوع استفاده می‌کنیم که باعث کامپایل شدن مثال زیر می‌شود.
+شخصاً فکر نمی‌کنم این ترجیح مطلوب باشد 🤷</p>
+<pre><code class="language-rust">pub trait Dyn {
+    type Word: Into&lt;u64&gt;;
+    fn d_tag(&amp;self) -&gt; Self::Word;
+    fn tag32(&amp;self) -&gt; Option&lt;u32&gt; {
+        self.d_tag().into().try_into().ok()
+        // prove `Self::Word: Into&lt;?0&gt;` and then select a method
+        // on `?0`, needs eager inference.
+    }
+}</code></pre>
+<pre><code class="language-rust">fn impl_trait() -&gt; impl Into&lt;u32&gt; {
+    0u16
+}
+
+fn main() {
+    // There are two possible types for `x`:
+    // - `u32` by using the "alias bound" of `impl Into&lt;u32&gt;`
+    // - `impl Into&lt;u32&gt;`, i.e. `u16`, by using `impl&lt;T&gt; From&lt;T&gt; for T`
+    //
+    // We infer the type of `x` to be `u32` even though this is not
+    // strictly necessary and can even lead to surprising errors.
+    let x = impl_trait().into();
+    println!("{}", std::mem::size_of_val(&amp;x));
+}</code></pre>
+<p>این ترجیح همچنین از ابهام ناشی از قیدهای ناحیه جلوگیری می‌کند؛ نمی‌دانم مردم در عمل به این متکی‌اند یا نه.</p>
+<pre><code class="language-rust">trait Bound&lt;'a&gt; {}
+impl&lt;T&gt; Bound&lt;'static&gt; for T {}
+trait Trait&lt;'a&gt; {
+    type Assoc: Bound&lt;'a&gt;;
+}
+
+fn impls_bound&lt;'b, T: Bound&lt;'b&gt;&gt;() {}
+fn foo&lt;'a, T: Trait&lt;'a&gt;&gt;() {
+    // Should we infer this to `'a` or `'static`.
+    impls_bound::&lt;'_, T::Assoc&gt;();
+}</code></pre>
+<h3 id="candidatesourcebuiltinimplbuiltinimplsourceobject_"><a class="header" href="#candidatesourcebuiltinimplbuiltinimplsourceobject_"><code>CandidateSource::BuiltinImpl(BuiltinImplSource::Object(_))</code></a></h3>
+<p>implهای داخلی شیء صفت (trait object) را بر implهای نوشته‌شده توسط کاربر ترجیح می‌دهیم.
+این <strong>ناسالم (unsound)</strong> است و باید در آینده حذف شود.
+برای جزئیات بیشتر <a href="https://github.com/rust-lang/rust/issues/57893">#57893</a> و <a href="https://github.com/rust-lang/rust/pull/141347">#141347</a> را ببینید.</p>
+<h2 id="normalizesto-goals"><a class="header" href="#normalizesto-goals">goalهای <code>NormalizesTo</code></a></h2>
+<p>رفتار ترجیح candidate هنگام نرمال‌سازی در <a href="https://github.com/rust-lang/rust/blob/e3ee7f7aea5b45af3b42b5e4713da43876a65ac9/compiler/rustc_next_trait_solver/src/solve/assembly/mod.rs#L920-L1003"><code>fn assemble_and_merge_candidates</code></a> پیاده‌سازی شده است.</p>
+<h3 id="we-always-consider-aliasbound-candidates"><a class="header" href="#we-always-consider-aliasbound-candidates">همیشه candidateهای <code>AliasBound</code> را در نظر می‌گیریم</a></h3>
+<p>اگر قید where آیتم وابسته را مشخص نکند، به‌جای اینکه alias را صلب (rigid) بدانیم، candidateهای <code>AliasBound</code> را در نظر می‌گیریم، حتی اگر goal صفت از طریق یک candidate ‏<code>ParamEnv</code> اثبات شده باشد.</p>
+<pre><code class="language-rust">trait Super {
+    type Assoc;
+}
+trait Bound {
+    type Assoc: Super&lt;Assoc = u32&gt;;
+}
+trait Trait: Super {}
+
+// Elaborating the environment results in a `T::Assoc: Super` where-bound.
+// This where-bound must not prevent normalization via the `Super&lt;Assoc = u32&gt;`
+// item bound.
+fn heck&lt;T: Bound&lt;Assoc: Trait&gt;&gt;(x: &lt;T::Assoc as Super&gt;::Assoc) -&gt; u32 {
+    x
+}</code></pre>
+<p>استفاده از چنین aliasی می‌تواند به قیدهای ناحیهٔ اضافی منجر شود، رجوع کنید به <a href="https://github.com/rust-lang/rust/issues/133044">#133044</a>.</p>
+<pre><code class="language-rust">trait Bound&lt;'a&gt; {
+    type Assoc;
+}
+trait Trait {
+    type Assoc: Bound&lt;'static, Assoc = u32&gt;;
+}
+
+fn heck&lt;'a, T: Trait&lt;Assoc: Bound&lt;'a&gt;&gt;&gt;(x: &lt;T::Assoc as Bound&lt;'a&gt;&gt;::Assoc) {
+    // Normalizing the associated type requires `T::Assoc: Bound&lt;'static&gt;` as it
+    // uses the `Bound&lt;'static&gt;` alias-bound instead of keeping the alias rigid.
+    drop(x);
+}</code></pre>
+<h3 id="we-prefer-paramenv-candidates-over-aliasbound"><a class="header" href="#we-prefer-paramenv-candidates-over-aliasbound">candidateهای <code>ParamEnv</code> را بر <code>AliasBound</code> ترجیح می‌دهیم</a></h3>
+<p>در حالی که اگر قید where نوع وابسته را مشخص نکند از candidateهای <code>AliasBound</code> استفاده می‌کنیم، در صورتی که مشخص کند، قید where را ترجیح می‌دهیم.
+این برای مثال زیر لازم است:</p>
+<pre><code class="language-rust">// Make sure we prefer the `I::IntoIterator: Iterator&lt;Item = ()&gt;`
+// where-bound over the `I::Intoiterator: Iterator&lt;Item = I::Item&gt;`
+// alias-bound.
+
+trait Iterator {
+    type Item;
+}
+
+trait IntoIterator {
+    type Item;
+    type IntoIter: Iterator&lt;Item = Self::Item&gt;;
+}
+
+fn normalize&lt;I: Iterator&lt;Item = ()&gt;&gt;() {}
+
+fn foo&lt;I&gt;()
+where
+    I: IntoIterator,
+    I::IntoIter: Iterator&lt;Item = ()&gt;,
+{
+    // We need to prefer the `I::IntoIterator: Iterator&lt;Item = ()&gt;`
+    // where-bound over the `I::Intoiterator: Iterator&lt;Item = I::Item&gt;`
+    // alias-bound.
+    normalize::&lt;I::IntoIter&gt;();
+}</code></pre>
+<h3 id="we-always-consider-where-bounds"><a class="header" href="#we-always-consider-where-bounds">همیشه قیدهای where را در نظر می‌گیریم</a></h3>
+<p>حتی اگر goal صفت از طریق یک impl اثبات شده باشد، در صورت وجود، همچنان candidateهای <code>ParamEnv</code> را ترجیح می‌دهیم.</p>
+<h4 id="we-prefer-orphaned-where-bounds"><a class="header" href="#we-prefer-orphaned-where-bounds">قیدهای where «یتیم» (orphaned) را ترجیح می‌دهیم</a></h4>
+<p>بندهای <code>Projection</code> «یتیم» را به <code>ParamEnv</code> اضافه می‌کنیم، هنگام نرمال‌سازی قیدهای آیتم GATها و RPITIT در <code>fn check_type_bounds</code>.
+باید این candidateهای <code>ParamEnv</code> را بر implها و قیدهای where دیگر ترجیح دهیم.</p>
+<pre><code class="language-rust">#![feature(associated_type_defaults)]
+trait Foo {
+    // We should be able to prove that `i32: Baz&lt;Self&gt;` because of
+    // the impl below, which requires that `Self::Bar&lt;()&gt;: Eq&lt;i32&gt;`
+    // which is true, because we assume `for&lt;T&gt; Self::Bar&lt;T&gt; = i32`.
+    type Bar&lt;T&gt;: Baz&lt;Self&gt; = i32;
+}
+trait Baz&lt;T: ?Sized&gt; {}
+impl&lt;T: Foo + ?Sized&gt; Baz&lt;T&gt; for i32 where T::Bar&lt;()&gt;: Eq&lt;i32&gt; {}
+trait Eq&lt;T&gt; {}
+impl&lt;T&gt; Eq&lt;T&gt; for T {}</code></pre>
+<p>موارد لزوم واقعی این ترجیح را کاملاً نمی‌فهمم و هنوز نتوانسته‌ام از آن به شیوه‌های جالب سوءاستفاده کنم، ولی 🤷</p>
+<h4 id="we-prefer-global-where-bounds-over-impls"><a class="header" href="#we-prefer-global-where-bounds-over-impls">قیدهای where سراسری را بر implها ترجیح می‌دهیم</a></h4>
+<p>این برای کامپایل شدن مثال زیر لازم است.
+نمی‌دانم در عمل چیزی به آن متکی است یا نه 🤷</p>
+<pre><code class="language-rust">trait Id {
+    type This;
+}
+impl&lt;T&gt; Id for T {
+    type This = T;
+}
+
+fn foo&lt;T&gt;(x: T) -&gt; &lt;u32 as Id&gt;::This
+where
+    u32: Id&lt;This = T&gt;,
+{
+    x
+}</code></pre>
+<p>این یعنی نرمال‌سازی می‌تواند به قیدهای ناحیهٔ اضافی منجر شود، رجوع کنید به <a href="https://github.com/rust-lang/rust/issues/133044">#133044</a>.</p>
+<pre><code class="language-rust">trait Trait {
+    type Assoc;
+}
+
+impl Trait for &amp;u32 {
+    type Assoc = u32;
+}
+
+fn trait_bound&lt;T: Trait&gt;() {}
+fn normalize&lt;T: Trait&lt;Assoc = u32&gt;&gt;() {}
+
+fn foo&lt;'a&gt;()
+where
+    &amp;'static u32: Trait&lt;Assoc = u32&gt;,
+{
+    trait_bound::&lt;&amp;'a u32&gt;(); // ok, proven via impl
+    normalize::&lt;&amp;'a u32&gt;(); // error, proven via where-bound
+}</code></pre>
+<h3 id="trait-where-bounds-shadow-impls"><a class="header" href="#trait-where-bounds-shadow-impls">قیدهای where صفت بر implها سایه می‌اندازند</a></h3>
+<p>نرمال‌سازی آیتم‌های وابسته، اگر goal صفت متناظر از طریق یک candidate ‏<code>ParamEnv</code> یا <code>AliasBound</code> اثبات شده باشد، implها را در نظر نمی‌گیرد.
+این یعنی برای قیدهای whereای که نوع‌های وابسته را مقید نمی‌کنند، نوع‌های وابسته <em>صلب</em> باقی می‌مانند.</p>
+<h4 id="using-impls-results-in-different-region-constraints"><a class="header" href="#using-impls-results-in-different-region-constraints">استفاده از implها به قیدهای ناحیهٔ متفاوت می‌انجامد</a></h4>
+<p>این برای پرهیز از قیدهای ناحیهٔ غیرضروری ناشی از اعمال implها لازم است.</p>
+<pre><code class="language-rust">trait Trait&lt;'a&gt; {
+    type Assoc;
+}
+impl Trait&lt;'static&gt; for u32 {
+    type Assoc = u32;
+}
+
+fn bar&lt;'b, T: Trait&lt;'b&gt;&gt;() -&gt; T::Assoc { todo!() }
+fn foo&lt;'a&gt;()
+where
+    u32: Trait&lt;'a&gt;,
+{
+    // Normalizing the return type would use the impl, proving
+    // the `T: Trait` where-bound would use the where-bound, resulting
+    // in different region constraints.
+    bar::&lt;'_, u32&gt;();
+}</code></pre>
+<h4 id="rpitit-type_of-cycles"><a class="header" href="#rpitit-type_of-cycles">RPITIT <code>type_of</code> cycles</a></h4>
+<p>در حال حاضر اگر قیدهای where وجود داشته باشند باید از candidateهای impl پرهیز کنیم تا از چرخه‌های query برای RPITIT جلوگیری شود، <a href="https://github.com/rust-lang/rust/pull/139762">#139762</a> را ببینید.
+به نظر من مطلوب است که برای رفع این مشکل، اتکا به نشت auto-trait هنگام محاسبهٔ RPITIT متوقف شود، <a href="https://github.com/rust-lang/rust/issues/139788">#139788</a> را ببینید.</p>
+<pre><code class="language-rust">use std::future::Future;
+pub trait ReactiveFunction: Send {
+    type Output;
+
+    fn invoke(self) -&gt; Self::Output;
+}
+
+trait AttributeValue {
+    fn resolve(self) -&gt; impl Future&lt;Output = ()&gt; + Send;
+}
+
+impl&lt;F, V&gt; AttributeValue for F
+where
+    F: ReactiveFunction&lt;Output = V&gt;,
+    V: AttributeValue,
+{
+    async fn resolve(self) {
+        // We're awaiting `&lt;V as AttributeValue&gt;::{synthetic#0}` here.
+        // Normalizing that one via the the impl we're currently in
+        // relies on `collect_return_position_impl_trait_in_trait_tys` which
+        // ends up relying on auto-trait leakage when checking that the
+        // opaque return type of this function implements the `Send` item
+        // bound of the trait definition.
+        self.invoke().resolve().await
+    }
+}</code></pre>
+<!-- date-check: Mar 2026 -->
+<h4 id="trait-definition-cannot-use-associated-types-from-always-applicable-impls"><a class="header" href="#trait-definition-cannot-use-associated-types-from-always-applicable-impls">تعریف صفت نمی‌تواند از نوع‌های وابستهٔ implهای همیشه قابل‌اعمال استفاده کند</a></h4>
+<p>فرض <code>T: Trait</code> در تعریف صفت از نرمال‌سازی
+<code>&lt;Self as Trait&gt;::Assoc</code> به <code>T</code> با استفاده از blanket impl جلوگیری می‌کند.
+این به نظر محدودیتی تا حدی مطلوب است، هرچند نه فوق‌العاده.</p>
+<pre><code class="language-rust">trait Eq&lt;T&gt; {}
+impl&lt;T&gt; Eq&lt;T&gt; for T {}
+struct IsEqual&lt;T: Eq&lt;U&gt;, U&gt;(T, U);
+
+trait Trait: Sized {
+    type Assoc;
+    fn foo() -&gt; IsEqual&lt;Self, Self::Assoc&gt; {
+        //~^ ERROR the trait bound `Self: Eq&lt;&lt;Self as Trait&gt;::Assoc&gt;` is not satisfied
+        todo!()
+    }
+}
+
+impl&lt;T&gt; Trait for T {
+    type Assoc = T;
+}</code></pre><nav class="page-nav"><a href="the-solver.html">→ حل‌کننده</a><a href="canonicalization.html">متعارف‌سازی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

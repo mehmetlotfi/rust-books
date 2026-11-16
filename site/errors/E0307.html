@@ -1,0 +1,64 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0307 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0307"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>پارامتر <code>self</code> در یک متد دارای «نوع گیرنده» (receiver type) نامعتبر است.</p>
+<p>نمونه کد خطادار:</p>
+<pre><code class="language-compile_fail E0307">struct Foo;
+struct Bar;
+
+trait Trait {
+    fn foo(&amp;self);
+}
+
+impl Trait for Foo {
+    fn foo(self: &amp;Bar) {}
+}
+</code></pre>
+<p>متدها یک پارامتر اول ویژه می‌گیرند که سه شکل دارد: <code>self</code>، <code>&amp;self</code> و <code>&amp;mut self</code>. این‌ها به‌ترتیب شکل‌های خلاصه‌نویسی‌شده‌ی <code>self: Self</code>، <code>self: &amp;Self</code> و <code>self: &amp;mut Self</code> هستند.</p>
+<pre><code># struct Foo;
+trait Trait {
+    fn foo(&amp;self);
+//         ^^^^^ `self` here is a reference to the receiver object
+}
+
+impl Trait for Foo {
+    fn foo(&amp;self) {}
+//         ^^^^^ the receiver type is `&amp;Foo`
+}
+</code></pre>
+<p>نوع <code>Self</code> به‌عنوان نام مستعاری برای نوعِ پیاده‌ساز فعلیِ صفت یا همان «نوع گیرنده» عمل می‌کند. علاوه بر <code>Self</code>، <code>&amp;Self</code> و <code>&amp;mut Self</code> که پیش‌تر گفته شد و انواع گیرنده‌ی معتبر هستند، موارد زیر نیز معتبرند: <code>self: Box&lt;Self&gt;</code>، <code>self: Rc&lt;Self&gt;</code>، <code>self: Arc&lt;Self&gt;</code> و <code>self: Pin&lt;P&gt;</code> (که در آن P یکی از انواع قبلی به‌جز <code>Self</code> است). توجه کنید که <code>Self</code> می‌تواند نوع پیاده‌ساز زیرین نیز باشد، مانند <code>Foo</code> در مثال زیر:</p>
+<pre><code># struct Foo;
+# trait Trait {
+#     fn foo(&amp;self);
+# }
+impl Trait for Foo {
+    fn foo(self: &amp;Foo) {}
+}
+</code></pre>
+<p>کامپایلر هنگام استفاده از نوع گیرنده‌ی نامعتبر، این خطا را صادر می‌کند، مانند مثال زیر:</p>
+<pre><code class="language-compile_fail E0307"># struct Foo;
+# struct Bar;
+# trait Trait {
+#     fn foo(&amp;self);
+# }
+impl Trait for Foo {
+    fn foo(self: &amp;Bar) {}
+}
+</code></pre>
+<p>قابلیت nightly با نام <a href="../unstable/language-features/arbitrary-self-types.html">Arbitrary self types</a> مجموعه‌ی انواع گیرنده‌ی پذیرفته‌شده را گسترش می‌دهد تا هر نوعی را که صفت <code>Receiver</code> را پیاده‌سازی می‌کند و می‌تواند زنجیره‌ی انواع <code>Target</code> خود را تا <code>Self</code> دنبال کند نیز شامل شود. یک پیاده‌سازی فراگیر (blanket implementation) از <code>Receiver</code> برای <code>T: Deref</code> وجود دارد، بنابراین هر نوعی که به <code>Self</code> ارجاع‌زدایی شود قابل استفاده است.</p>
+<pre><code>#![feature(arbitrary_self_types)]
+
+struct Foo;
+struct Bar;
+
+// Because you can dereference `Bar` into `Foo`...
+impl std::ops::Deref for Bar {
+    type Target = Foo;
+
+    fn deref(&amp;self) -&gt; &amp;Foo {
+        &amp;Foo
+    }
+}
+
+impl Foo {
+    fn foo(self: Bar) {}
+//         ^^^^^^^^^ ...it can be used as the receiver type
+}
+</code></pre><nav class="page-nav"><a href="../errors/E0303.html">→ E0303</a><a href="../errors/E0308.html">E0308 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

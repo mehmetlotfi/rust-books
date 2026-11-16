@@ -1,0 +1,105 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>مخرب‌ها — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="destructors"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="destructors"><a class="header" href="#destructors">نابودگرها (Destructors)</a></h1>
+<p>آنچه زبان <em>فراهم می‌کند</em> نابودگرهای خودکار کامل از طریق صفت <code>Drop</code> است که متد زیر را ارائه می‌دهد:</p>
+<!-- ignore: function header -->
+<pre><code class="language-rust ignore">fn drop(&amp;mut self);</code></pre>
+<p>این متد به نوع فرصت می‌دهد تا به شکلی کاری را که در حال انجام آن بود به پایان برساند.</p>
+<p><strong>پس از اجرای <code>drop</code>، Rust به‌صورت بازگشتی تلاش می‌کند همه‌ی فیلدهای <code>self</code> را drop کند.</strong></p>
+<p>این یک ویژگی راحتی است تا لازم نباشد برای drop کردن فرزندان «کد تکراری نابودگر» بنویسید. اگر یک ساختار هیچ منطق ویژه‌ای برای drop شدن جز drop کردن فرزندانش نداشته باشد، یعنی <code>Drop</code> اصلاً نیازی به پیاده‌سازی ندارد!</p>
+<p><strong>در Rust 1.0 هیچ راه پایداری برای جلوگیری از این رفتار وجود ندارد.</strong></p>
+<p>توجه کنید که گرفتن <code>&amp;mut self</code> به این معناست که حتی اگر می‌توانستید Drop بازگشتی را سرکوب کنید، Rust مانع می‌شود که مثلاً فیلدها را از self بیرون منتقل کنید. برای بیشتر نوع‌ها این کاملاً مشکلی ندارد.</p>
+<p>برای مثال، یک پیاده‌سازی سفارشی از <code>Box</code> ممکن است <code>Drop</code> را این‌گونه بنویسد:</p>
+<pre><code class="language-rust">use std::alloc::{Allocator, Global, GlobalAlloc, Layout};
+use std::marker::PhantomData;
+use std::mem;
+use std::ptr::{drop_in_place, NonNull};
+
+struct Box&lt;T&gt;{ ptr: NonNull&lt;T&gt;, _marker: PhantomData&lt;T&gt; }
+
+impl&lt;T&gt; Drop for Box&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        unsafe {
+            drop_in_place(self.ptr.as_ptr());
+            Global.deallocate(self.ptr.cast(), Layout::new::&lt;T&gt;())
+        }
+    }
+}
+<span class="boring">fn main() {}</span></code></pre>
+<p>و این به‌خوبی کار می‌کند، چون وقتی Rust می‌خواهد فیلدها را drop کند، فقط یک <a href="https://doc.rust-lang.org/std/ptr/struct.NonNull.html"><code>NonNull</code></a> و یک <a href="phantom-data.html"><code>PhantomData</code></a> می‌بیند که هیچ‌کدام پیاده‌سازی <code>Drop</code> واقعی ندارند. به‌طور مشابه هیچ چیزی نمی‌تواند <code>ptr</code> را use-after-free کند، چون وقتی drop به پایان می‌رسد، <code>ptr</code> دیگر قابل دسترسی نیست.</p>
+<p>اما این کار نمی‌کند:</p>
+<pre><code class="language-rust">use std::alloc::{Allocator, Global, GlobalAlloc, Layout};
+use std::marker::PhantomData;
+use std::ptr::{drop_in_place, NonNull};
+use std::mem;
+
+struct Box&lt;T&gt;{ ptr: NonNull&lt;T&gt;, _marker: PhantomData&lt;T&gt; }
+
+impl&lt;T&gt; Drop for Box&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        unsafe {
+            drop_in_place(self.ptr.as_ptr());
+            Global.deallocate(self.ptr.cast(), Layout::new::&lt;T&gt;());
+        }
+    }
+}
+
+struct SuperBox&lt;T&gt; { my_box: Box&lt;T&gt; }
+
+impl&lt;T&gt; Drop for SuperBox&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        unsafe {
+            // Hyper-optimized: deallocate the box's contents for it
+            // without `drop`ing the contents
+            Global.deallocate(self.my_box.ptr.cast::&lt;u8&gt;(), Layout::new::&lt;T&gt;());
+        }
+    }
+}
+<span class="boring">fn main() {}</span></code></pre>
+<p>پس از اینکه ptr مربوط به <code>box</code> را در نابودگر SuperBox آزاد کردیم، Rust با کمال میل ادامه می‌دهد و به box می‌گوید خودش را Drop کند و همه‌چیز با use-after-free و double-free منفجر می‌شود.</p>
+<p>توجه کنید که رفتار drop بازگشتی برای همه‌ی ساختارها و شمارش‌ها (enum) اعمال می‌شود، صرف‌نظر از اینکه Drop را پیاده‌سازی کرده باشند یا نه. بنابراین چیزی مانند</p>
+<pre><code class="language-rust">struct Boxy&lt;T&gt; {
+    data1: Box&lt;T&gt;,
+    data2: Box&lt;T&gt;,
+    info: u32,
+}</code></pre>
+<p>هر زمان که «قرار بود» drop شود، نابودگرهای فیلدهای <code>data1</code> و <code>data2</code> آن فراخوانی می‌شوند، حتی اگر خودش Drop را پیاده‌سازی نکرده باشد. می‌گوییم چنین نوعی <em>به Drop نیاز دارد</em> (needs Drop)، هرچند خودش Drop نیست.</p>
+<p>به همین ترتیب،</p>
+<pre><code class="language-rust">enum Link {
+    Next(Box&lt;Link&gt;),
+    None,
+}</code></pre>
+<p>فیلد Box درونی‌اش را اگر و فقط اگر نمونه‌ای واریانت Next را ذخیره کرده باشد drop می‌کند.</p>
+<p>به‌طور کلی این کار بسیار خوب عمل می‌کند چون هنگام بازآرایی چیدمان داده لازم نیست نگران افزودن/حذف drop ها باشید. با این حال قطعاً موارد استفاده‌ی معتبر زیادی وجود دارد که در آن‌ها لازم است کارهای پیچیده‌تری با نابودگرها انجام دهید.</p>
+<p>راه‌حل امن کلاسیک برای نادیده گرفتن drop بازگشتی و اجازه‌ی منتقل کردن از Self در حین <code>drop</code>، استفاده از Option است:</p>
+<pre><code class="language-rust">use std::alloc::{Allocator, GlobalAlloc, Global, Layout};
+use std::marker::PhantomData;
+use std::ptr::{drop_in_place, NonNull};
+use std::mem;
+
+struct Box&lt;T&gt;{ ptr: NonNull&lt;T&gt;, _marker: PhantomData&lt;T&gt; }
+
+impl&lt;T&gt; Drop for Box&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        unsafe {
+            drop_in_place(self.ptr.as_ptr());
+            Global.deallocate(self.ptr.cast(), Layout::new::&lt;T&gt;());
+        }
+    }
+}
+
+struct SuperBox&lt;T&gt; { my_box: Option&lt;Box&lt;T&gt;&gt; }
+
+impl&lt;T&gt; Drop for SuperBox&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        unsafe {
+            // Hyper-optimized: deallocate the box's contents for it
+            // without `drop`ing the contents. Need to set the `box`
+            // field as `None` to prevent Rust from trying to Drop it.
+            let my_box = self.my_box.take().unwrap();
+            Global.deallocate(my_box.ptr.cast(), Layout::new::&lt;T&gt;());
+            mem::forget(my_box);
+        }
+    }
+}
+<span class="boring">fn main() {}</span></code></pre>
+<p>با این حال این معناشناسی نسبتاً عجیبی دارد: شما می‌گویید فیلدی که <em>باید</em> همیشه Some باشد، <em>ممکن است</em> None باشد، فقط به خاطر آنچه در نابودگر رخ می‌دهد. البته در مقابل این کاملاً منطقی است: می‌توانید در طول نابودگر متدهای دلخواه را روی self فراخوانی کنید، و این باید مانع شود که پس از مقداردهی‌زدایی فیلد چنین کاری بکنید. هرچند این مانع تولید هر وضعیت نامعتبر دلخواه دیگری در آنجا نمی‌شود.</p>
+<p>در مجموع این انتخاب قابل‌قبولی است. قطعاً چیزی است که باید به‌صورت پیش‌فرض سراغش بروید. با این حال، انتظار داریم در آینده راهی درجه‌یک برای اعلام اینکه یک فیلد نباید به‌طور خودکار drop شود وجود داشته باشد.</p><nav class="page-nav"><a href="constructors.html">→ سازنده‌ها</a><a href="leaking.html">نشت ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

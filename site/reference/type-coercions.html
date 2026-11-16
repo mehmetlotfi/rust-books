@@ -1,0 +1,393 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>تبدیل‌های نوع (Type coercions) — مرجع زبان Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="type-coercions"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="introduction.html" style="color:inherit;text-decoration:none">مرجع زبان Rust</a><small class="en-title" dir="ltr">The Rust Reference</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><div class="rule" id="r-coerce"><a class="rule-link" href="#r-coerce" title="coerce"><span>[coerce]</span></a>
+</div>
+
+<h1 id="type-coercions"><a class="header" href="#type-coercions">وادارسازی نوع</a></h1>
+<div class="rule" id="r-coerce.intro"><a class="rule-link" href="#r-coerce.intro" title="coerce.intro"><span>[coerce<wbr>.intro]</span></a>
+</div>
+
+<p><strong>وادارسازی نوع</strong> عملیاتی ضمنی است که نوع یک مقدار را تغییر می‌دهد. این عملیات خودکار و فقط در محل‌های مشخص رخ می‌دهد و نوع‌هایی که واقعاً وادار می‌شوند به‌شدت محدودند.</p>
+<div class="rule" id="r-coerce.as"><a class="rule-link" href="#r-coerce.as" title="coerce.as"><span>[coerce<wbr>.as]</span></a>
+</div>
+
+<p>هر تبدیلی که با وادارسازی مجاز باشد، با <a href="expressions/operator-expr.html#type-cast-expressions">عملگر تبدیل نوع</a> <code>as</code> نیز می‌تواند صریحاً انجام شود.</p>
+<p>وادارسازی‌ها ابتدا در <a href="https://github.com/rust-lang/rfcs/blob/master/text/0401-coercions.md">RFC 401</a> تعریف و در <a href="https://github.com/rust-lang/rfcs/blob/master/text/1558-closure-to-fn-coercion.md">RFC 1558</a> گسترش یافتند.</p>
+<div class="rule" id="r-coerce.site"><a class="rule-link" href="#r-coerce.site" title="coerce.site"><span>[coerce<wbr>.site]</span></a>
+</div>
+
+<h2 id="coercion-sites"><a class="header" href="#coercion-sites">محل‌های وادارسازی</a></h2>
+<div class="rule" id="r-coerce.site.intro"><a class="rule-link" href="#r-coerce.site.intro" title="coerce.site.intro"><span>[coerce<wbr>.site<wbr>.intro]</span></a>
+</div>
+
+<p>وادارسازی فقط در محل‌های مشخصی از برنامه رخ می‌دهد؛ معمولاً جاهایی که نوع مطلوب صریح است یا بدون استنتاج نوع، با انتشار از نوع‌های صریح مشتق می‌شود. محل‌های ممکن عبارت‌اند از:</p>
+<div class="rule" id="r-coerce.site.let"><a class="rule-link" href="#r-coerce.site.let" title="coerce.site.let"><span>[coerce<wbr>.site<wbr>.let]</span></a>
+</div>
+
+<ul>
+<li>
+<p>دستورهای <code>let</code> دارای نوع صریح.</p>
+<p>برای مثال، در کد زیر <code>&amp;mut 42</code> به نوع <code>&amp;i8</code> وادار می‌شود:</p>
+<pre><code class="language-rust">let _: &amp;i8 = &amp;mut 42;</code></pre>
+</li>
+</ul>
+<div class="rule" id="r-coerce.site.value"><a class="rule-link" href="#r-coerce.site.value" title="coerce.site.value"><span>[coerce<wbr>.site<wbr>.value]</span></a>
+</div>
+
+<ul>
+<li>اعلان آیتم‌های <code>static</code> و <code>const</code>، مشابه دستورهای <code>let</code>.</li>
+</ul>
+<div class="rule" id="r-coerce.site.argument"><a class="rule-link" href="#r-coerce.site.argument" title="coerce.site.argument"><span>[coerce<wbr>.site<wbr>.argument]</span></a>
+</div>
+
+<ul>
+<li>
+<p>آرگومان‌های فراخوانی تابع.</p>
+<p>مقدار مورد وادارسازی پارامتر واقعی است و به نوع پارامتر صوری وادار می‌شود.</p>
+<p>برای مثال، در کد زیر <code>&amp;mut 42</code> به نوع <code>&amp;i8</code> وادار می‌شود:</p>
+<pre><code class="language-rust">fn bar(_: &amp;i8) { }
+
+fn main() {
+    bar(&amp;mut 42);
+}</code></pre>
+<p>در فراخوانی متد، نوع گیرنده—پارامتر <code>self</code>—به‌شکل دیگری وادار می‌شود. برای جزئیات <a href="expressions/method-call-expr.html">عبارت‌های فراخوانی متد</a> را ببینید.</p>
+</li>
+</ul>
+<div class="rule" id="r-coerce.site.constructor"><a class="rule-link" href="#r-coerce.site.constructor" title="coerce.site.constructor"><span>[coerce<wbr>.site<wbr>.constructor]</span></a>
+</div>
+
+<ul>
+<li>
+<p>نمونه‌سازی فیلدهای struct، ‏union یا گونهٔ enum.</p>
+<p>برای مثال، <code>&amp;mut 42</code> در نمونهٔ زیر به نوع <code>&amp;i8</code> وادار (coerce) می‌شود:</p>
+<pre><code class="language-rust">struct Foo&lt;'a&gt; { x: &amp;'a i8 }
+
+fn main() {
+    Foo { x: &amp;mut 42 };
+}</code></pre>
+</li>
+</ul>
+<div class="rule" id="r-coerce.site.return"><a class="rule-link" href="#r-coerce.site.return" title="coerce.site.return"><span>[coerce<wbr>.site<wbr>.return]</span></a>
+</div>
+
+<ul>
+<li>
+<p>نتایج تابع؛ عبارت آخر بلوک اگر با نقطه‌ویرگول پایان نیافته باشد، یا هر عبارت در دستور <code>return</code>.</p>
+<p>برای مثال، <code>x</code> در کد زیر به <code>&amp;dyn Display</code> وادار می‌شود:</p>
+<pre><code class="language-rust">use std::fmt::Display;
+fn foo(x: &amp;u32) -&gt; &amp;dyn Display {
+    x
+}</code></pre>
+</li>
+</ul>
+<div class="rule" id="r-coerce.site.assignment"><a class="rule-link" href="#r-coerce.site.assignment" title="coerce.site.assignment"><span>[coerce<wbr>.site<wbr>.assignment]</span></a>
+</div>
+
+<ul>
+<li>
+<p>عملوند مقدار نسبت‌داده‌شده در عبارت انتساب.</p>
+<p>برای مثال، <code>y</code> در کد زیر به <code>&amp;i8</code> وادار می‌شود:</p>
+<pre><code class="language-rust">let mut x = &amp;0i8;
+let y = &amp;mut 42i8;
+x = y;</code></pre>
+</li>
+</ul>
+<div class="rule" id="r-coerce.site.subexpr"><a class="rule-link" href="#r-coerce.site.subexpr" title="coerce.site.subexpr"><span>[coerce<wbr>.site<wbr>.subexpr]</span></a>
+</div>
+
+<p>اگر عبارت یکی از این محل‌ها انتشاردهندهٔ وادارسازی باشد، زیرعبارت‌های مرتبط آن نیز محل وادارسازی هستند. انتشار از این محل‌های تازه به‌صورت بازگشتی ادامه می‌یابد. عبارت‌های انتشاردهنده و زیرعبارت‌های مرتبطشان عبارت‌اند از:</p>
+<div class="rule" id="r-coerce.site.array"><a class="rule-link" href="#r-coerce.site.array" title="coerce.site.array"><span>[coerce<wbr>.site<wbr>.array]</span></a>
+</div>
+
+<ul>
+<li>لفظ‌های آرایه با نوع <code>[U; n]</code>. هر زیرعبارت آرایه محل وادارسازی به <code>U</code> است.</li>
+</ul>
+<div class="rule" id="r-coerce.site.repeat"><a class="rule-link" href="#r-coerce.site.repeat" title="coerce.site.repeat"><span>[coerce<wbr>.site<wbr>.repeat]</span></a>
+</div>
+
+<ul>
+<li>لفظ‌های آرایه با نحو تکرار و نوع <code>[U; n]</code>. زیرعبارت تکرارشده محل وادارسازی به <code>U</code> است.</li>
+</ul>
+<div class="rule" id="r-coerce.site.tuple"><a class="rule-link" href="#r-coerce.site.tuple" title="coerce.site.tuple"><span>[coerce<wbr>.site<wbr>.tuple]</span></a>
+</div>
+
+<ul>
+<li>تاپل، هنگامی که محل وادارسازی به نوع <code>(U_0, U_1, ..., U_n)</code> باشد. هر زیرعبارت به نوع متناظر وادار می‌شود؛ برای نمونه زیرعبارت صفرم به <code>U_0</code>.</li>
+</ul>
+<div class="rule" id="r-coerce.site.parenthesis"><a class="rule-link" href="#r-coerce.site.parenthesis" title="coerce.site.parenthesis"><span>[coerce<wbr>.site<wbr>.parenthesis]</span></a>
+</div>
+
+<ul>
+<li>زیرعبارت پرانتزی <code>(e)</code>: اگر عبارت نوع <code>U</code> داشته باشد، زیرعبارت محل وادارسازی به <code>U</code> است.</li>
+</ul>
+<div class="rule" id="r-coerce.site.block"><a class="rule-link" href="#r-coerce.site.block" title="coerce.site.block"><span>[coerce<wbr>.site<wbr>.block]</span></a>
+</div>
+
+<ul>
+<li>بلوک‌ها: اگر بلوک نوع <code>U</code> داشته باشد، آخرین عبارت آن—اگر با نقطه‌ویرگول پایان نیافته باشد—محل وادارسازی به <code>U</code> است. بلوک‌های بخشی از دستورهای کنترل جریان مانند <code>if</code>/<code>else</code> نیز در صورت داشتن نوع معلوم شامل این قاعده‌اند.</li>
+</ul>
+<div class="rule" id="r-coerce.types"><a class="rule-link" href="#r-coerce.types" title="coerce.types"><span>[coerce<wbr>.types]</span></a>
+</div>
+
+<h2 id="coercion-types"><a class="header" href="#coercion-types">نوع‌های وادارسازی</a></h2>
+<div class="rule" id="r-coerce.types.intro"><a class="rule-link" href="#r-coerce.types.intro" title="coerce.types.intro"><span>[coerce<wbr>.types<wbr>.intro]</span></a>
+</div>
+
+<p>وادارسازی میان نوع‌های زیر مجاز است:</p>
+<div class="rule" id="r-coerce.types.reflexive"><a class="rule-link" href="#r-coerce.types.reflexive" title="coerce.types.reflexive"><span>[coerce<wbr>.types<wbr>.reflexive]</span></a>
+</div>
+
+<ul>
+<li><code>T</code> به <code>U</code> اگر <code>T</code> <a href="subtyping.html">زیرنوع</a> <code>U</code> باشد؛ <em>حالت بازتابی</em>.</li>
+</ul>
+<div class="rule" id="r-coerce.types.transitive"><a class="rule-link" href="#r-coerce.types.transitive" title="coerce.types.transitive"><span>[coerce<wbr>.types<wbr>.transitive]</span></a>
+</div>
+
+<ul>
+<li>
+<p><code>T_1</code> به <code>T_3</code> هنگامی که <code>T_1</code> به <code>T_2</code> و <code>T_2</code> به <code>T_3</code> وادار شود؛ <em>حالت تعدی</em>.</p>
+<p>این حالت هنوز به‌طور کامل پشتیبانی نمی‌شود.</p>
+</li>
+</ul>
+<div class="rule" id="r-coerce.types.mut-reborrow"><a class="rule-link" href="#r-coerce.types.mut-reborrow" title="coerce.types.mut-reborrow"><span>[coerce<wbr>.types<wbr>.mut-reborrow]</span></a>
+</div>
+
+<ul>
+<li><code>&amp;mut T</code> به <code>&amp;T</code></li>
+</ul>
+<div class="rule" id="r-coerce.types.mut-pointer"><a class="rule-link" href="#r-coerce.types.mut-pointer" title="coerce.types.mut-pointer"><span>[coerce<wbr>.types<wbr>.mut-pointer]</span></a>
+</div>
+
+<ul>
+<li><code>*mut T</code> به <code>*const T</code></li>
+</ul>
+<div class="rule" id="r-coerce.types.ref-to-pointer"><a class="rule-link" href="#r-coerce.types.ref-to-pointer" title="coerce.types.ref-to-pointer"><span>[coerce<wbr>.types<wbr>.ref-to-pointer]</span></a>
+</div>
+
+<ul>
+<li><code>&amp;T</code> به <code>*const T</code></li>
+</ul>
+<div class="rule" id="r-coerce.types.mut-to-pointer"><a class="rule-link" href="#r-coerce.types.mut-to-pointer" title="coerce.types.mut-to-pointer"><span>[coerce<wbr>.types<wbr>.mut-to-pointer]</span></a>
+</div>
+
+<ul>
+<li><code>&amp;mut T</code> به <code>*mut T</code></li>
+</ul>
+<div class="rule" id="r-coerce.types.deref"><a class="rule-link" href="#r-coerce.types.deref" title="coerce.types.deref"><span>[coerce<wbr>.types<wbr>.deref]</span></a>
+</div>
+
+<ul>
+<li>
+<p><code>&amp;T</code> یا <code>&amp;mut T</code> به <code>&amp;U</code> اگر <code>T</code>، ‏<code>Deref&lt;Target = U&gt;</code> را پیاده‌سازی کند. برای مثال:</p>
+<pre><code class="language-rust">use std::ops::Deref;
+
+struct CharContainer {
+    value: char,
+}
+
+impl Deref for CharContainer {
+    type Target = char;
+
+    fn deref&lt;'a&gt;(&amp;'a self) -&gt; &amp;'a char {
+        &amp;self.value
+    }
+}
+
+fn foo(arg: &amp;char) {}
+
+fn main() {
+    let x = &amp;mut CharContainer { value: 'y' };
+    foo(x); //&amp;mut CharContainer is coerced to &amp;char.
+}</code></pre>
+</li>
+</ul>
+<div class="rule" id="r-coerce.types.deref-mut"><a class="rule-link" href="#r-coerce.types.deref-mut" title="coerce.types.deref-mut"><span>[coerce<wbr>.types<wbr>.deref-mut]</span></a>
+</div>
+
+<ul>
+<li><code>&amp;mut T</code> به <code>&amp;mut U</code> اگر <code>T</code>، ‏<code>DerefMut&lt;Target = U&gt;</code> را پیاده‌سازی کند.</li>
+</ul>
+<div class="rule" id="r-coerce.types.unsize"><a class="rule-link" href="#r-coerce.types.unsize" title="coerce.types.unsize"><span>[coerce<wbr>.types<wbr>.unsize]</span></a>
+</div>
+
+<ul>
+<li>
+<p>‏TyCtor(<code>T</code>) به TyCtor(<code>U</code>)، که TyCtor(<code>T</code>) یکی از موارد زیر باشد:</p>
+<ul>
+<li><code>&amp;T</code></li>
+<li><code>&amp;mut T</code></li>
+<li><code>*const T</code></li>
+<li><code>*mut T</code></li>
+<li><code>Box&lt;T&gt;</code></li>
+</ul>
+<p>و <code>U</code> با <a href="#unsized-coercions">وادارسازی بدون اندازه</a> از <code>T</code> به‌دست آید.</p>
+  <!--In the future, coerce_inner will be recursively extended to tuples and
+  structs. In addition, coercions from subtraits to supertraits will be
+  added. See <a href="https://github.com/rust-lang/rfcs/blob/master/text/0401-coercions.md">RFC 401</a> for more details.-->
+</li>
+</ul>
+<div class="rule" id="r-coerce.types.fn"><a class="rule-link" href="#r-coerce.types.fn" title="coerce.types.fn"><span>[coerce<wbr>.types<wbr>.fn]</span></a>
+</div>
+
+<ul>
+<li>نوع آیتم‌های تابع به اشاره‌گرهای <code>fn</code>.</li>
+</ul>
+<div class="rule" id="r-coerce.types.closure"><a class="rule-link" href="#r-coerce.types.closure" title="coerce.types.closure"><span>[coerce<wbr>.types<wbr>.closure]</span></a>
+</div>
+
+<ul>
+<li>بستارهای بدون تسخیر به اشاره‌گرهای <code>fn</code>.</li>
+</ul>
+<div class="rule" id="r-coerce.types.never"><a class="rule-link" href="#r-coerce.types.never" title="coerce.types.never"><span>[coerce<wbr>.types<wbr>.never]</span></a>
+</div>
+
+<ul>
+<li><code>!</code> به هر <code>T</code>.</li>
+</ul>
+<div class="rule" id="r-coerce.unsize"><a class="rule-link" href="#r-coerce.unsize" title="coerce.unsize"><span>[coerce<wbr>.unsize]</span></a>
+</div>
+
+<h3 id="unsized-coercions"><a class="header" href="#unsized-coercions">وادارسازی‌های بدون اندازه</a></h3>
+<div class="rule" id="r-coerce.unsize.intro"><a class="rule-link" href="#r-coerce.unsize.intro" title="coerce.unsize.intro"><span>[coerce<wbr>.unsize<wbr>.intro]</span></a>
+</div>
+
+<p>وادارسازی‌های زیر <code>unsized coercions</code> نامیده می‌شوند، زیرا به تبدیل نوع‌ها به نوع‌های بدون اندازه (unsized) مربوط‌اند و در چند حالت که وادارسازی‌های دیگر، همان‌طور که در بالا توضیح داده شد، مجاز نیستند، مجازند. این وادارسازی‌ها همچنان می‌توانند در هر جای دیگری که وادارسازی رخ می‌دهد نیز اتفاق بیفتند.</p>
+<div class="rule" id="r-coerce.unsize.trait"><a class="rule-link" href="#r-coerce.unsize.trait" title="coerce.unsize.trait"><span>[coerce<wbr>.unsize<wbr>.trait]</span></a>
+</div>
+
+<p>دو صفت <code>Unsize</code> و <code>CoerceUnsized</code> به این فرایند کمک و آن را برای استفادهٔ کتابخانه آشکار می‌کنند. وادارسازی‌های زیر داخلی‌اند و اگر یکی از آن‌ها <code>T</code> را به <code>U</code> وادار کند، پیاده‌سازی <code>Unsize&lt;U&gt;</code> برای <code>T</code> ارائه می‌شود:</p>
+<div class="rule" id="r-coerce.unsize.slice"><a class="rule-link" href="#r-coerce.unsize.slice" title="coerce.unsize.slice"><span>[coerce<wbr>.unsize<wbr>.slice]</span></a>
+</div>
+
+<ul>
+<li><code>[T; n]</code> به <code>[T]</code>.</li>
+</ul>
+<div class="rule" id="r-coerce.unsize.trait-object"><a class="rule-link" href="#r-coerce.unsize.trait-object" title="coerce.unsize.trait-object"><span>[coerce<wbr>.unsize<wbr>.trait-object]</span></a>
+</div>
+
+<ul>
+<li><code>T</code> به <code>dyn U</code>، هنگامی که <code>T</code>، ‏<code>U + Sized</code> را پیاده‌سازی کند و <code>U</code> <a href="items/traits.html#dyn-compatibility">سازگار با dyn</a> باشد.</li>
+</ul>
+<div class="rule" id="r-coerce.unsize.trait-upcast"><a class="rule-link" href="#r-coerce.unsize.trait-upcast" title="coerce.unsize.trait-upcast"><span>[coerce<wbr>.unsize<wbr>.trait-upcast]</span></a>
+</div>
+
+<ul>
+<li><code>dyn T</code> به <code>dyn U</code>، هنگامی که <code>U</code> یکی از <a href="items/traits.html#supertraits">فراصفت‌های</a> <code>T</code> باشد.
+<ul>
+<li>حذف صفت‌های خودکار مجاز است؛ برای نمونه <code>dyn T + Auto</code> به <code>dyn U</code>.</li>
+<li>اگر صفت اصلی یک صفت خودکار را فراصفت داشته باشد، افزودن آن مجاز است؛ با <code>trait T: U + Send {}</code>، وادارسازی <code>dyn T</code> به <code>dyn T + Send</code> یا <code>dyn U + Send</code> مجاز است.</li>
+</ul>
+</li>
+</ul>
+<div class="rule" id="r-coerce.unsized.composite"><a class="rule-link" href="#r-coerce.unsized.composite" title="coerce.unsized.composite"><span>[coerce<wbr>.unsized<wbr>.composite]</span></a>
+</div>
+
+<ul>
+<li><code>Foo&lt;..., T, ...&gt;</code> به <code>Foo&lt;..., U, ...&gt;</code>، هنگامی که:
+<ul>
+<li><code>Foo</code> یک struct باشد؛</li>
+<li><code>T</code>، ‏<code>Unsize&lt;U&gt;</code> را پیاده‌سازی کند؛</li>
+<li>آخرین فیلد <code>Foo</code> نوعی دربرگیرندهٔ <code>T</code> داشته باشد؛</li>
+<li>اگر نوع فیلد <code>Bar&lt;T&gt;</code> است، ‏<code>Bar&lt;T&gt;</code>، ‏<code>Unsize&lt;Bar&lt;U&gt;&gt;</code> را پیاده‌سازی کند؛</li>
+<li>T بخشی از نوع هیچ فیلد دیگری نیست.</li>
+</ul>
+</li>
+</ul>
+<div class="rule" id="r-coerce.unsized.pointer"><a class="rule-link" href="#r-coerce.unsized.pointer" title="coerce.unsized.pointer"><span>[coerce<wbr>.unsized<wbr>.pointer]</span></a>
+</div>
+
+<p>افزون بر این، نوع <code>Foo&lt;T&gt;</code> می‌تواند هنگامی که <code>T</code>، ‏<code>Unsize&lt;U&gt;</code> یا <code>CoerceUnsized&lt;Foo&lt;U&gt;&gt;</code> را پیاده‌سازی می‌کند، <code>CoerceUnsized&lt;Foo&lt;U&gt;&gt;</code> را پیاده‌سازی کند. این کار اجازه می‌دهد وادارسازی بدون اندازه به <code>Foo&lt;U&gt;</code> فراهم شود.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> تعریف و پیاده‌سازی وادارسازی‌های بدون اندازه پایدار شده، اما خود صفت‌ها هنوز پایدار نیستند و مستقیماً در Rust پایدار قابل استفاده نیستند.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-coerce.least-upper-bound"><a class="rule-link" href="#r-coerce.least-upper-bound" title="coerce.least-upper-bound"><span>[coerce<wbr>.least-upper-bound]</span></a>
+</div>
+
+<h2 id="least-upper-bound-coercions"><a class="header" href="#least-upper-bound-coercions">وادارسازی کمترین کران بالا</a></h2>
+<div class="rule" id="r-coerce.least-upper-bound.intro"><a class="rule-link" href="#r-coerce.least-upper-bound.intro" title="coerce.least-upper-bound.intro"><span>[coerce<wbr>.least-upper-bound<wbr>.intro]</span></a>
+</div>
+
+<p>در بعضی بافت‌ها کامپایلر باید چند نوع را با هم وادار کند تا عمومی‌ترین نوع را بیابد. این کار وادارسازی «کمترین کران بالا» یا LUB نام دارد و فقط در وضعیت‌های زیر استفاده می‌شود:</p>
+<ul>
+<li>یافتن نوع مشترک مجموعه‌ای از شاخه‌های if؛</li>
+<li>یافتن نوع مشترک مجموعه‌ای از بازوهای match؛</li>
+<li>یافتن نوع مشترک عناصر آرایه؛</li>
+<li>یافتن نوع مشترک یک <a href="expressions/loop-expr.html#r-expr.loop.block-labels">عبارت بلوکی برچسب‌دار</a> میان عملوندهای break و عملوند نهایی بلوک؛</li>
+<li>یافتن نوع مشترک یک <a href="expressions/loop-expr.html#r-expr.loop.break-value">عبارت <code>loop</code> دارای break</a> میان عملوندهای break؛</li>
+<li>برای یافتن نوع بازگشتیِ یک بستار با چند دستور return.</li>
+<li>برای بررسی نوع بازگشتیِ یک تابع با چند دستور return.</li>
+</ul>
+<div class="rule" id="r-coerce.least-upper-bound.target"><a class="rule-link" href="#r-coerce.least-upper-bound.target" title="coerce.least-upper-bound.target"><span>[coerce<wbr>.least-upper-bound<wbr>.target]</span></a>
+</div>
+
+<p>در هر حالت مجموعهٔ نوع‌های <code>T0..Tn</code> باید به‌طور متقابل به نوع هدف <code>T_t</code> وادار شوند که در آغاز ناشناخته است.</p>
+<div class="rule" id="r-coerce.least-upper-bound.computation"><a class="rule-link" href="#r-coerce.least-upper-bound.computation" title="coerce.least-upper-bound.computation"><span>[coerce<wbr>.least-upper-bound<wbr>.computation]</span></a>
+</div>
+
+<p>محاسبهٔ LUB تکراری است. نوع هدف <code>T_t</code> ابتدا <code>T0</code> است. برای هر نوع تازهٔ <code>Ti</code> بررسی می‌شود:</p>
+<div class="rule" id="r-coerce.least-upper-bound.computation-identity"><a class="rule-link" href="#r-coerce.least-upper-bound.computation-identity" title="coerce.least-upper-bound.computation-identity"><span>[coerce<wbr>.least-upper-bound<wbr>.computation-identity]</span></a>
+</div>
+
+<ul>
+<li>اگر <code>Ti</code> به نوع هدف جاری <code>T_t</code> وادار شود، تغییری انجام نمی‌شود.</li>
+</ul>
+<div class="rule" id="r-coerce.least-upper-bound.computation-replace"><a class="rule-link" href="#r-coerce.least-upper-bound.computation-replace" title="coerce.least-upper-bound.computation-replace"><span>[coerce<wbr>.least-upper-bound<wbr>.computation-replace]</span></a>
+</div>
+
+<ul>
+<li>وگرنه بررسی می‌شود آیا <code>T_t</code> به <code>Ti</code> وادار می‌شود؛ اگر چنین باشد، <code>T_t</code> به <code>Ti</code> تغییر می‌کند. این بررسی به ضمنی‌بودن وادارسازی همهٔ عبارت‌های منبع بررسی‌شده تا آن لحظه نیز وابسته است.</li>
+</ul>
+<div class="rule" id="r-coerce.least-upper-bound.computation-unify"><a class="rule-link" href="#r-coerce.least-upper-bound.computation-unify" title="coerce.least-upper-bound.computation-unify"><span>[coerce<wbr>.least-upper-bound<wbr>.computation-unify]</span></a>
+</div>
+
+<ul>
+<li>در غیر این صورت تلاش می‌شود ابرنوع مشترکی برای <code>T_t</code> و <code>Ti</code> محاسبه شود تا نوع هدف جدید باشد.</li>
+</ul>
+<h3 id="examples"><a class="header" href="#examples">نمونه‌ها</a></h3>
+<pre><code class="language-rust"><span class="boring">let (a, b, c) = (0, 1, 2);
+</span>// For if branches
+let bar = if true {
+    a
+} else if false {
+    b
+} else {
+    c
+};
+
+// For match arms
+let baw = match 42 {
+    0 =&gt; a,
+    1 =&gt; b,
+    _ =&gt; c,
+};
+
+// For array elements
+let bax = [a, b, c];
+
+// For closure with multiple return statements
+let clo = || {
+    if true {
+        a
+    } else if false {
+        b
+    } else {
+        c
+    }
+};
+let baz = clo();
+
+// For type checking of function with multiple return statements
+fn foo() -&gt; i32 {
+    let (a, b, c) = (0, 1, 2);
+    match 42 {
+        0 =&gt; a,
+        1 =&gt; b,
+        _ =&gt; c,
+    }
+}</code></pre>
+<p>در این نمونه‌ها، نوع‌های <code>ba*</code> با وادارسازی LUB پیدا می‌شوند. و کامپایلر در پردازش تابع <code>foo</code> بررسی می‌کند که آیا نتیجهٔ وادارسازی LUB برای <code>a</code>، <code>b</code> و <code>c</code> برابر <code>i32</code> است یا نه.</p>
+<h3 id="caveat"><a class="header" href="#caveat">ملاحظه</a></h3>
+<p>این توضیح آشکارا غیررسمی است. انتظار می‌رود دقیق‌ترکردن آن بخشی از تلاش عمومی برای مشخص‌کردن دقیق‌تر بررسی‌کنندهٔ نوع Rust باشد.</p><nav class="page-nav"><a href="trait-bounds.html">→ کران‌های صفت و طول‌عمر (Trait and lifetime bounds)</a><a href="divergence.html">واگرایی (Divergence) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../reference/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,115 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>تجزیهٔ آرگومان‌های خط فرمان — کتاب برنامه‌های خط فرمان</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tutorial/cli-args"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../cli/index.html" style="color:inherit;text-decoration:none">کتاب برنامه‌های خط فرمان</a><small class="en-title" dir="ltr">Command Line Applications in Rust</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="parsing-command-line-arguments"><a class="header" href="#parsing-command-line-arguments">تجزیهٔ آرگومان‌های خط فرمان</a></h1>
+<p>یک فراخوانی معمول ابزار CLI ما چنین به نظر می‌رسد:</p>
+<pre><code class="language-console">$ grrs foobar test.txt
+</code></pre>
+<p>انتظار داریم برنامه‌مان به <code>test.txt</code> نگاه کند و خط‌هایی را که شامل <code>foobar</code> هستند چاپ کند. اما این دو مقدار را چگونه به دست بیاوریم؟</p>
+<p>متنی که بعد از نام برنامه می‌آید اغلب «آرگومان‌های خط فرمان» یا «پرچم‌های خط فرمان» نامیده می‌شود (به‌ویژه وقتی شبیه <code>--this</code> باشند). در درون، سیستم‌عامل معمولاً آن‌ها را به‌صورت فهرستی از رشته‌ها نمایش می‌دهد. معمولاً با فاصله از هم جدا می‌شوند.</p>
+<p>راه‌های بسیاری برای فکر کردن به این آرگومان‌ها و تجزیهٔ آن‌ها به چیزی که کار با آن آسان‌تر باشد وجود دارد. همچنین باید به کاربران برنامه‌تان بگویید چه آرگومان‌هایی را باید بدهند و انتظار می‌رود در چه قالبی باشند.</p>
+<h2 id="getting-the-arguments"><a class="header" href="#getting-the-arguments">گرفتن آرگومان‌ها</a></h2>
+<p>کتابخانهٔ استاندارد تابع <a href="https://doc.rust-lang.org/1.39.0/std/env/fn.args.html"><code>std::env::args()</code></a> را دارد که یک <a href="https://doc.rust-lang.org/1.39.0/std/iter/index.html">iterator</a> از آرگومان‌های داده‌شده به شما می‌دهد. نخستین مورد (در اندیس <code>0</code>) نامی است که برای فراخوانی برنامه‌تان به کار رفته (مثلاً <code>grrs</code>). موارد بعدی آن چیزی هستند که کاربر پس از آن نوشته است.</p>
+<p>گرفتن آرگومان‌های خام به این روش سرراست است (در فایل <code>src/main.rs</code>):</p>
+<pre><code class="language-rust ignore">fn main() {
+    let pattern = std::env::args().nth(1).expect("no pattern given");
+    let path = std::env::args().nth(2).expect("no path given");
+
+    println!("pattern: {:?}, path: {:?}", pattern, path)
+}</code></pre>
+<p>می‌توانیم آن را با <code>cargo run</code> اجرا کنیم و آرگومان‌ها را با نوشتن آن‌ها بعد از <code>--</code> بدهیم:</p>
+<pre><code class="language-console">$ cargo run -- some-pattern some-file
+    Finished dev [unoptimized + debuginfo] target(s) in 0.11s
+     Running `target/debug/grrs some-pattern some-file`
+pattern: "some-pattern", path: "some-file"
+</code></pre>
+<h2 id="cli-arguments-as-data-types"><a class="header" href="#cli-arguments-as-data-types">آرگومان‌های CLI به‌عنوان نوع‌های داده</a></h2>
+<p>به‌جای اینکه به آن‌ها به چشم مجموعه‌ای متن نگاه کنیم، اغلب ارزش دارد آرگومان‌های CLI را یک نوع دادهٔ سفارشی در نظر بگیریم که ورودی‌های برنامهٔ شما را نمایش می‌دهد.</p>
+<p>اگر به <code>grrs foobar test.txt</code> نگاه کنیم، دو آرگومان وجود دارد: اول <code>pattern</code> (رشته‌ای که باید جست‌وجو شود)، و سپس <code>path</code> (فایلی که باید در آن جست‌وجو شود).</p>
+<p>دربارهٔ آن‌ها چه چیز دیگری می‌توانیم بگوییم؟ برای شروع، هر دو الزامی هستند. دربارهٔ هیچ مقدار پیش‌فرضی صحبت نکرده‌ایم، پس انتظار داریم کاربران همیشه دو مقدار بدهند. علاوه بر این، می‌توانیم چیزی دربارهٔ نوع آن‌ها بگوییم: انتظار می‌رود الگو یک رشته باشد در حالی که آرگومان دوم مسیر یک فایل است.</p>
+<p>در Rust، ساختاردهی برنامه‌ها پیرامون داده‌هایی که مدیریت می‌کنند رایج است، بنابراین این شیوهٔ نگاه به آرگومان‌های CLI بسیار مناسب است. بیایید با این شروع کنیم (در فایل <code>src/main.rs</code>، قبل از <code>fn main() {</code>):</p>
+<pre><code class="language-rust ignore">struct Cli {
+    pattern: String,
+    path: std::path::PathBuf,
+}</code></pre>
+<p>این یک ساختار جدید (یک <a href="../../book/ch05-00-structs.html"><code>struct</code></a>) تعریف می‌کند که دو فیلد برای ذخیرهٔ داده دارد: <code>pattern</code> و <code>path</code>.</p>
+<aside>
+<p><strong>توجه:</strong> <a href="https://doc.rust-lang.org/1.39.0/std/path/struct.PathBuf.html"><code>PathBuf</code></a> مانند <a href="https://doc.rust-lang.org/1.39.0/std/string/struct.String.html"><code>String</code></a> است، اما برای مسیرهای سیستم فایل که به‌صورت چندسکویی کار می‌کنند.</p>
+</aside>
+<p>اکنون هنوز باید آرگومان‌های واقعی را به این شکل تبدیل کنیم. یک گزینه این است که فهرست رشته‌هایی را که از سیستم‌عامل می‌گیریم خودمان به‌صورت دستی تجزیه کنیم و ساختار را بسازیم. چیزی شبیه این خواهد بود:</p>
+<pre><code class="language-rust ignore">fn main() {
+    let pattern = std::env::args().nth(1).expect("no pattern given");
+    let path = std::env::args().nth(2).expect("no path given");
+
+    let args = Cli {
+        pattern,
+        path: std::path::PathBuf::from(path),
+    };
+
+    println!("pattern: {:?}, path: {:?}", args.pattern, args.path);
+}</code></pre>
+<p>این کار می‌کند، اما چندان راحت نیست. چگونه با نیاز به پشتیبانی از <code>--pattern="foo"</code> یا <code>--pattern "foo"</code> برخورد می‌کردید؟ <code>--help</code> را چگونه پیاده‌سازی می‌کردید؟</p>
+<h2 id="parsing-cli-arguments-with-clap"><a class="header" href="#parsing-cli-arguments-with-clap">تجزیهٔ آرگومان‌های CLI با Clap</a></h2>
+<p>راه راحت‌تر استفاده از یکی از کتابخانه‌های فراوان موجود است. محبوب‌ترین کتابخانه برای تجزیهٔ آرگومان‌های خط فرمان <a href="https://docs.rs/clap/"><code>clap</code></a> نام دارد. همهٔ قابلیت‌هایی را که انتظار دارید دارد، از جمله پشتیبانی از زیرفرمان‌ها، <a href="https://docs.rs/clap_complete/">تکمیل خودکار پوسته</a> و پیام‌های راهنمای عالی.</p>
+<p>بیایید ابتدا با افزودن <code>clap = { version = "4.0", features = ["derive"] }</code> به بخش <code>[dependencies]</code> فایل <code>Cargo.toml</code> خود، <code>clap</code> را وارد کنیم.</p>
+<p>اکنون می‌توانیم در کدمان <code>use clap::Parser;</code> را بنویسیم و <code>#[derive(Parser)]</code> را درست بالای <code>struct Cli</code> اضافه کنیم. بیایید در این بین چند کامنت مستندسازی هم بنویسیم.</p>
+<p>چنین به نظر می‌رسد (در فایل <code>src/main.rs</code>، قبل از <code>fn main() {</code>):</p>
+<pre><code class="language-rust ignore">use clap::Parser;
+
+/// Search for a pattern in a file and display the lines that contain it.
+#[derive(Parser)]
+struct Cli {
+    /// The pattern to look for
+    pattern: String,
+    /// The path to the file to read
+    path: std::path::PathBuf,
+}</code></pre>
+<aside class="node">
+<p><strong>توجه:</strong> ویژگی‌های سفارشی (attribute) بسیاری وجود دارد که می‌توانید به فیلدها اضافه کنید. برای مثال، برای اینکه بگویید می‌خواهید این فیلد برای آرگومان بعد از <code>-o</code> یا <code>--output</code> استفاده شود، باید <code>#[arg(short = 'o', long = "output")]</code> را اضافه کنید. برای اطلاعات بیشتر، <a href="https://docs.rs/clap/">مستندات clap</a> را ببینید.</p>
+</aside>
+<p>درست زیر ساختار <code>Cli</code>، قالب ما تابع <code>main</code> آن را دارد. وقتی برنامه شروع به کار می‌کند، این تابع را فراخوانی می‌کند:</p>
+<pre><code class="language-rust ignore">fn main() {
+    let args = Cli::parse();
+
+    println!("pattern: {:?}, path: {:?}", args.pattern, args.path)
+}</code></pre>
+<p>این تلاش می‌کند آرگومان‌ها را به ساختار <code>Cli</code> ما تجزیه کند.</p>
+<p>اما اگر این شکست بخورد چه؟ زیبایی این رویکرد همین‌جاست: Clap می‌داند چه فیلدهایی را انتظار داشته باشد و قالب مورد انتظار آن‌ها چیست. می‌تواند به‌طور خودکار یک پیام <code>--help</code> زیبا تولید کند و نیز خطاهای بسیار خوبی بدهد که وقتی <code>--putput</code> نوشته‌اید پیشنهاد کند <code>--output</code> را بدهید.</p>
+<aside class="note">
+<p><strong>توجه:</strong> متد <code>parse</code> برای استفاده در تابع <code>main</code> شما در نظر گرفته شده است. وقتی شکست بخورد، یک پیام خطا یا راهنما چاپ می‌کند و بلافاصله از برنامه خارج می‌شود. از آن در جاهای دیگر استفاده نکنید!</p>
+</aside>
+<h2 id="wrapping-up"><a class="header" href="#wrapping-up">جمع‌بندی</a></h2>
+<p>کد شما اکنون باید این‌گونه باشد:</p>
+<pre><code class="language-rust ignore">use clap::Parser;
+
+/// Search for a pattern in a file and display the lines that contain it.
+#[derive(Parser)]
+struct Cli {
+    /// The pattern to look for
+    pattern: String,
+    /// The path to the file to read
+    path: std::path::PathBuf,
+}
+
+fn main() {
+    let args = Cli::parse();
+
+    println!("pattern: {:?}, path: {:?}", args.pattern, args.path)
+}</code></pre>
+<p>اجرای آن بدون هیچ آرگومانی:</p>
+<pre><code class="language-console">$ cargo run
+    Finished dev [unoptimized + debuginfo] target(s) in 10.16s
+     Running `target/debug/grrs`
+error: The following required arguments were not provided:
+    &lt;pattern&gt;
+    &lt;path&gt;
+
+USAGE:
+    grrs &lt;pattern&gt; &lt;path&gt;
+
+For more information try --help
+</code></pre>
+<p>اجرای آن با دادن آرگومان‌ها:</p>
+<pre><code class="language-console">$ cargo run -- some-pattern some-file
+    Finished dev [unoptimized + debuginfo] target(s) in 0.11s
+     Running `target/debug/grrs some-pattern some-file`
+pattern: "some-pattern", path: "some-file"
+</code></pre>
+<p>این خروجی نشان می‌دهد برنامهٔ ما با موفقیت آرگومان‌ها را به ساختار <code>Cli</code> تجزیه کرد.</p><nav class="page-nav"><a href="../../cli/tutorial/setup.html">→ راه‌اندازی پروژه</a><a href="../../cli/tutorial/impl-draft.html">نخستین پیاده‌سازی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cli/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

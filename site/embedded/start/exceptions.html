@@ -1,0 +1,169 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>استثناها — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="start/exceptions"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="exceptions"><a class="header" href="#exceptions">استثناها</a></h1>
+<p>استثناها (exception) و وقفه‌ها (interrupt) سازوکاری سخت‌افزاری‌اند که پردازنده به کمک آن رویدادهای ناهمگام و خطاهای مهلک (مثلاً اجرای یک دستور نامعتبر) را مدیریت می‌کند. استثنا مستلزم پیش‌دستی (preemption) است و شامل کنترل‌گرهای استثنا می‌شود؛ زیرروال‌هایی که در پاسخ به سیگنالی که رویداد را برانگیخته است اجرا می‌شوند.</p>
+<p>crate با نام <code>cortex-m-rt</code> یک attribute به نام <a href="https://docs.rs/cortex-m-rt-macros/latest/cortex_m_rt_macros/attr.exception.html"><code>exception</code></a> برای تعریف کنترل‌گرهای استثنا (exception handlers) فراهم می‌کند.</p>
+<pre><code class="language-rust ignore">// Exception handler for the SysTick (System Timer) exception
+#[exception]
+fn SysTick() {
+    // ..
+}</code></pre>
+<p>جدا از attribute با نام <code>exception</code>، کنترل‌گرهای استثنا شبیه تابع‌های معمولی‌اند، اما یک تفاوت دیگر هم وجود دارد: کنترل‌گرهای <code>exception</code> را نرم‌افزار <em>نمی‌تواند</em> فراخوانی کند. با ادامهٔ مثال قبلی، دستور <code>SysTick();</code> به خطای کامپایل می‌انجامد.</p>
+<p>این رفتار تقریباً عمدی است و برای فراهم کردن یک قابلیت لازم است: متغیرهای <code>static mut</code> که <em>داخل</em> کنترل‌گرهای <code>exception</code> تعریف می‌شوند، استفادهٔ <em>امن</em> دارند.</p>
+<pre><code class="language-rust ignore">#[exception]
+fn SysTick() {
+    static mut COUNT: u32 = 0;
+
+    // `COUNT` has transformed to type `&amp;mut u32` and it's safe to use
+    *COUNT += 1;
+}</code></pre>
+<p>همان‌طور که شاید می‌دانید، استفاده از متغیرهای <code>static mut</code> در یک تابع آن را <a href="https://en.wikipedia.org/wiki/Reentrancy_(computing)"><em>غیرقابل‌بازورود (non-reentrant)</em></a> می‌کند. فراخوانی یک تابع غیرقابل‌بازورود، چه مستقیم و چه غیرمستقیم، از بیش از یک کنترل‌گر استثنا / وقفه، یا از <code>main</code> و یک یا چند کنترل‌گر استثنا / وقفه، رفتار تعریف‌نشده (undefined behavior) است.</p>
+<p>Rust ایمن هرگز نباید به رفتار تعریف‌نشده منجر شود، بنابراین توابع غیرقابل‌بازورود باید با <code>unsafe</code> علامت‌گذاری شوند. با این حال همین الان گفتم که کنترل‌گرهای <code>exception</code> می‌توانند به‌صورت ایمن از متغیرهای <code>static mut</code> استفاده کنند. این چگونه ممکن است؟ ممکن است چون کنترل‌گرهای <code>exception</code> را نمی‌توان از سوی نرم‌افزار فراخوانی کرد و در نتیجه بازورود امکان‌پذیر نیست. این کنترل‌گرها را خود سخت‌افزار فراخوانی می‌کند که فرض می‌شود از نظر فیزیکی غیرهمروند است.</p>
+<p>در نتیجه، در بافت کنترل‌گرهای استثنا در سیستم‌های توکار، نبودِ فراخوانی‌های همروند از یک کنترل‌گر واحد تضمین می‌کند که مشکل بازورود پیش نمی‌آید، حتی اگر کنترل‌گر از متغیرهای ایستای تغییرپذیر استفاده کند.</p>
+<p>در یک سیستم چندهسته‌ای، که در آن چند هستهٔ پردازنده کد را به‌طور همزمان اجرا می‌کنند، احتمال بروز مشکلات بازورود دوباره اهمیت پیدا می‌کند، حتی درون کنترل‌گرهای استثنا. هر هسته ممکن است مجموعهٔ کنترل‌گرهای استثنای خودش را داشته باشد، اما همچنان ممکن است سناریوهایی پیش بیاید که در آن چند هسته بخواهند همزمان یک کنترل‌گر استثنای یکسان را اجرا کنند. برای رفع این نگرانی در محیط چندهسته‌ای، باید درون کنترل‌گرهای استثنا از سازوکارهای همگام‌سازی مناسب استفاده کرد تا دسترسی به منابع مشترک بین هسته‌ها به‌درستی هماهنگ شود. این کار معمولاً شامل استفاده از تکنیک‌هایی مانند قفل‌ها (lock)، سمافورها (semaphore) یا عملیات اتمی (atomic) است تا از رقابت داده‌ای (data race) جلوگیری شود و یکپارچگی داده حفظ گردد.</p>
+<blockquote>
+<p>توجه کنید که attribute با نام <code>exception</code> تعریف متغیرهای ایستا درون تابع را تغییر می‌دهد: آن‌ها را درون بلوک‌های <code>unsafe</code> قرار می‌دهد و متغیرهای جدید و مناسبی از نوع <code>&amp;mut</code> با همان نام در اختیار ما می‌گذارد. بنابراین می‌توانیم با <code>*</code> ارجاع را از ارجاع‌زدایی کنیم و به مقدار متغیرها دسترسی پیدا کنیم، بدون آنکه نیازی به قرار دادن آن‌ها در یک بلوک <code>unsafe</code> باشد.</p>
+</blockquote>
+<h2 id="a-complete-example"><a class="header" href="#a-complete-example">یک مثال کامل</a></h2>
+<p>مثال زیر از تایمر سیستم استفاده می‌کند تا تقریباً هر ثانیه یک استثنای <code>SysTick</code> ایجاد کند. کنترل‌گر استثنای <code>SysTick</code> در متغیر <code>COUNT</code> نگه می‌دارد که چند بار فراخوانی شده است و سپس مقدار <code>COUNT</code> را با semihosting روی کنسول میزبان چاپ می‌کند.</p>
+<blockquote>
+<p><strong>توجه</strong>: می‌توانید این مثال را روی هر دستگاه Cortex-M اجرا کنید؛ همچنین می‌توانید آن را روی QEMU اجرا کنید.</p>
+</blockquote>
+<pre><code class="language-rust ignore">#![deny(unsafe_code)]
+#![no_main]
+#![no_std]
+
+use panic_halt as _;
+
+use core::fmt::Write;
+
+use cortex_m::peripheral::syst::SystClkSource;
+use cortex_m_rt::{entry, exception};
+use cortex_m_semihosting::{
+    debug,
+    hio::{self, HostStream},
+};
+
+#[entry]
+fn main() -&gt; ! {
+    let p = cortex_m::Peripherals::take().unwrap();
+    let mut syst = p.SYST;
+
+    // configures the system timer to trigger a SysTick exception every second
+    syst.set_clock_source(SystClkSource::Core);
+    // this is configured for the LM3S6965 which has a default CPU clock of 12 MHz
+    syst.set_reload(12_000_000);
+    syst.clear_current();
+    syst.enable_counter();
+    syst.enable_interrupt();
+
+    loop {}
+}
+
+#[exception]
+fn SysTick() {
+    static mut COUNT: u32 = 0;
+    static mut STDOUT: Option&lt;HostStream&gt; = None;
+
+    *COUNT += 1;
+
+    // Lazy initialization
+    if STDOUT.is_none() {
+        *STDOUT = hio::hstdout().ok();
+    }
+
+    if let Some(hstdout) = STDOUT.as_mut() {
+        write!(hstdout, "{}", *COUNT).ok();
+    }
+
+    // IMPORTANT omit this `if` block if running on real hardware or your
+    // debugger will end in an inconsistent state
+    if *COUNT == 9 {
+        // This will terminate the QEMU process
+        debug::exit(debug::EXIT_SUCCESS);
+    }
+}</code></pre>
+<pre><code class="language-console">tail -n5 Cargo.toml
+</code></pre>
+<pre><code class="language-toml">[dependencies]
+cortex-m = "0.5.7"
+cortex-m-rt = "0.6.3"
+panic-halt = "0.2.0"
+cortex-m-semihosting = "0.3.1"
+</code></pre>
+<pre><code class="language-text">$ cargo run --release
+     Running `qemu-system-arm -cpu cortex-m3 -machine lm3s6965evb (..)
+123456789
+</code></pre>
+<p>اگر این برنامه را روی برد Discovery اجرا کنید، خروجی را در کنسول OpenOCD خواهید دید. همچنین برنامه وقتی شمارش به 9 برسد متوقف <em>نخواهد</em> شد.</p>
+<h2 id="the-default-exception-handler"><a class="header" href="#the-default-exception-handler">کنترل‌گر پیش‌فرض استثنا</a></h2>
+<p>کاری که attribute با نام <code>exception</code> در واقع انجام می‌دهد، <em>بازنویسی</em> (override) کنترل‌گر پیش‌فرض استثنا برای یک استثنای مشخص است. اگر کنترل‌گر یک استثنای خاص را بازنویسی نکنید، آن استثنا را تابع <code>DefaultHandler</code> مدیریت می‌کند که به‌طور پیش‌فرض چنین است:</p>
+<pre><code class="language-rust ignore">fn DefaultHandler() {
+    loop {}
+}</code></pre>
+<p>این تابع را crate با نام <code>cortex-m-rt</code> فراهم می‌کند و با <code>#[no_mangle]</code> علامت‌گذاری شده است، بنابراین می‌توانید روی «DefaultHandler» یک نقطهٔ توقف (breakpoint) بگذارید و استثناهای <em>رسیدگی‌نشده</em> را بگیرید.</p>
+<p>می‌توان این <code>DefaultHandler</code> را با attribute با نام <code>exception</code> بازنویسی (override) کرد:</p>
+<pre><code class="language-rust ignore">#[exception]
+fn DefaultHandler(irqn: i16) {
+    // custom default handler
+}</code></pre>
+<p>آرگومان <code>irqn</code> نشان می‌دهد کدام استثنا در حال سرویس‌دهی است. مقدار منفی نشان می‌دهد که یک استثنای Cortex-M در حال سرویس‌دهی است؛ و مقدار صفر یا مثبت نشان می‌دهد که یک استثنای مختص دستگاه، که به آن وقفه (interrupt) هم می‌گویند، در حال سرویس‌دهی است.</p>
+<h2 id="the-hard-fault-handler"><a class="header" href="#the-hard-fault-handler">کنترل‌گر hard fault</a></h2>
+<p>استثنای <code>HardFault</code> کمی خاص است. این استثنا وقتی رخ می‌دهد که برنامه وارد یک حالت نامعتبر شود، بنابراین کنترل‌گر آن <em>نمی‌تواند</em> برگردد، چون این کار می‌تواند به رفتار تعریف‌نشده منجر شود. همچنین crate مربوط به runtime پیش از فراخوانی کنترل‌گر <code>HardFault</code> که کاربر تعریف کرده است کمی کار انجام می‌دهد تا قابلیت اشکال‌زدایی بهتر شود.</p>
+<p>نتیجه این است که کنترل‌گر <code>HardFault</code> باید امضای زیر را داشته باشد: <code>fn(&amp;ExceptionFrame) -&gt; !</code>. آرگومان کنترل‌گر اشاره‌گری به ثبات‌هایی است که استثنا آن‌ها را روی پشته push کرده است. این ثبات‌ها تصویری لحظه‌ای از وضعیت پردازنده در لحظهٔ برانگیخته شدن استثنا هستند و برای تشخیص hard fault مفیدند.</p>
+<p>در اینجا مثالی می‌بینید که یک عملیات غیرمجاز انجام می‌دهد: خواندن از یک مکان حافظهٔ ناموجود.</p>
+<blockquote>
+<p><strong>توجه</strong>: این برنامه روی QEMU کار نمی‌کند، یعنی خراب (crash) نمی‌شود، چون <code>qemu-system-arm -machine lm3s6965evb</code> بارگذاری‌های حافظه را بررسی نمی‌کند و با کمال میل در خواندن از حافظهٔ نامعتبر مقدار <code>0</code> را برمی‌گرداند.</p>
+</blockquote>
+<pre><code class="language-rust ignore">#![no_main]
+#![no_std]
+
+use panic_halt as _;
+
+use core::fmt::Write;
+use core::ptr;
+
+use cortex_m_rt::{entry, exception, ExceptionFrame};
+use cortex_m_semihosting::hio;
+
+#[entry]
+fn main() -&gt; ! {
+    // read a nonexistent memory location
+    unsafe {
+        ptr::read_volatile(0x3FFF_0000 as *const u32);
+    }
+
+    loop {}
+}
+
+#[exception]
+fn HardFault(ef: &amp;ExceptionFrame) -&gt; ! {
+    if let Ok(mut hstdout) = hio::hstdout() {
+        writeln!(hstdout, "{:#?}", ef).ok();
+    }
+
+    loop {}
+}</code></pre>
+<p>کنترل‌گر <code>HardFault</code> مقدار <code>ExceptionFrame</code> را چاپ می‌کند. اگر این برنامه را اجرا کنید، چیزی شبیه این را در کنسول OpenOCD خواهید دید.</p>
+<pre><code class="language-text">$ openocd
+(..)
+ExceptionFrame {
+    r0: 0x3fff0000,
+    r1: 0x00000003,
+    r2: 0x080032e8,
+    r3: 0x00000000,
+    r12: 0x00000000,
+    lr: 0x080016df,
+    pc: 0x080016e2,
+    xpsr: 0x61000000,
+}
+</code></pre>
+<p>مقدار <code>pc</code> مقدار شمارندهٔ برنامه (Program Counter) در لحظهٔ وقوع استثنا است و به دستورالعملی اشاره می‌کند که استثنا را برانگیخته است.</p>
+<p>اگر به کد اسمبلی (disassembly) برنامه نگاه کنید:</p>
+<pre><code class="language-text">$ cargo objdump --bin app --release -- -d --no-show-raw-insn --print-imm-hex
+(..)
+ResetTrampoline:
+ 8000942:       movw    r0, #0xfffe
+ 8000946:       movt    r0, #0x3fff
+ 800094a:       ldr     r0, [r0]
+ 800094c:       b       #-0x4 &lt;ResetTrampoline+0xa&gt;
+</code></pre>
+<p>می‌توانید مقدار شمارندهٔ برنامه یعنی <code>0x0800094a</code> را در disassembly جست‌وجو کنید. خواهید دید که یک عملیات بارگذاری (<code>ldr r0, [r0]</code> ) استثنا را ایجاد کرده است. فیلد <code>r0</code> در <code>ExceptionFrame</code> به شما می‌گوید مقدار ثبات <code>r0</code> در آن زمان <code>0x3fff_fffe</code> بوده است.</p><nav class="page-nav"><a href="../../embedded/start/panicking.html">→ Panicking</a><a href="../../embedded/start/interrupts.html">وقفه‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

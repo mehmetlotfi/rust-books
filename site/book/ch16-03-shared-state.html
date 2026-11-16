@@ -1,0 +1,198 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>همروندی با حالت مشترک — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch16-03-shared-state"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="shared-state-concurrency"><a class="header" href="#shared-state-concurrency">همزمانی با حالت مشترک (Shared-State Concurrency)</a></h2>
+<p>ارسال پیام (Message passing) روش مناسبی برای مدیریت هم‌زمانی (concurrency) است، اما تنها روش موجود نیست. روش دیگری نیز وجود دارد که در آن چندین ترد (thread) به داده‌ی مشترک یکسانی دسترسی دارند. دوباره این بخش از شعار مستندات زبان Go را در نظر بگیرید: «با به‌اشتراک‌گذاری حافظه ارتباط برقرار نکنید.»</p>
+<p>ارتباط با به اشتراک‌گذاری حافظه چگونه خواهد بود؟ علاوه بر این، چرا علاقه‌مندان به ارسال پیام هشدار می‌دهند که از اشتراک حافظه استفاده نکنید؟</p>
+<p>به‌نوعی، کانال‌ها (channels) در هر زبان برنامه‌نویسی مشابه مالکیت تکی (single ownership) هستند، چرا که وقتی یک مقدار را از طریق کانال انتقال می‌دهید، دیگر نباید از آن مقدار استفاده کنید. هم‌زمانی با حافظه‌ی مشترک (shared-memory concurrency) شبیه به مالکیت چندگانه است: چندین ترد می‌توانند به‌طور هم‌زمان به یک محل حافظه دسترسی داشته باشند. همان‌طور که در فصل ۱۵ دیدید، جایی که smart pointerها امکان مالکیت چندگانه را فراهم کردند، مالکیت چندگانه می‌تواند پیچیدگی‌هایی را به همراه داشته باشد، چرا که این مالکان مختلف نیاز به مدیریت دارند. سیستم نوع‌دهی و قواعد مالکیت در Rust کمک شایانی به مدیریت درست این وضعیت می‌کنند. به عنوان یک مثال، بیایید به mutexها نگاه کنیم، که یکی از ابتدایی‌ترین سازوکارهای هم‌زمانی برای حافظه‌ی مشترک هستند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="using-mutexes-to-allow-access-to-data-from-one-thread-at-a-time"></a></p>
+<h3 id="controlling-access-with-mutexes"><a class="header" href="#controlling-access-with-mutexes">کنترل دسترسی با Mutexها</a></h3>
+<p>واژه‌ی <em>Mutex</em> مخفف <em>mutual exclusion</em> به‌معنای «ممانعت متقابل» است؛ به این معنا که یک mutex فقط به یک ترد اجازه می‌دهد تا در هر لحظه به داده‌ای دسترسی داشته باشد. برای دسترسی به داده درون یک mutex، یک ترد ابتدا باید اعلام کند که قصد دسترسی دارد، با درخواست قفل (lock) آن mutex. <em>Lock</em> یک ساختار داده‌ای است که بخشی از mutex به‌شمار می‌رود و مسئول پیگیری این است که در حال حاضر چه کسی به‌صورت انحصاری به داده دسترسی دارد. بنابراین، mutex به‌عنوان ابزاری توصیف می‌شود که از داده‌ای که در خود نگه می‌دارد از طریق سیستم قفل‌گذاری <em>محافظت</em> می‌کند.</p>
+<p>Mutex‌ها به دلیل این که باید دو قانون را به خاطر بسپارید، به سخت بودن شهرت دارند:</p>
+<ol>
+<li>پیش از استفاده از داده، باید تلاش کنید تا قفل (lock) آن را به‌دست آورید.</li>
+<li>زمانی که کارتان با داده‌ای که mutex از آن محافظت می‌کند تمام شد، باید قفل را آزاد (unlock) کنید تا سایر تردها بتوانند قفل را به‌دست آورند.</li>
+</ol>
+<p>برای یک تمثیل دنیای واقعی برای mutex، یک بحث پانل در یک کنفرانس را تصور کنید که فقط یک میکروفون وجود دارد. قبل از اینکه یک عضو پانل بتواند صحبت کند، باید درخواست دهد یا سیگنال دهد که می‌خواهد از میکروفون استفاده کند. وقتی میکروفون را می‌گیرد، می‌تواند هر چقدر که بخواهد صحبت کند و سپس میکروفون را به عضو بعدی که درخواست صحبت کرده است بدهد. اگر یک عضو پانل فراموش کند که میکروفون را پس دهد، هیچ کس دیگری نمی‌تواند صحبت کند. اگر مدیریت میکروفون مشترک اشتباه انجام شود، پانل مطابق برنامه پیش نخواهد رفت!</p>
+<p>مدیریت mutex‌ها می‌تواند بسیار دشوار باشد، به همین دلیل است که بسیاری از افراد به کانال‌ها علاقه‌مند هستند. اما به لطف سیستم نوعی و قوانین مالکیت راست، شما نمی‌توانید در قفل کردن و باز کردن قفل اشتباه کنید.</p>
+<h4 id="the-api-of-mutext"><a class="header" href="#the-api-of-mutext">API <code>Mutex&lt;T&gt;</code></a></h4>
+<p>به‌عنوان مثالی از نحوه استفاده از mutex، بیایید با استفاده از یک mutex در یک زمینه تک‌ریسمانی شروع کنیم، همانطور که در فهرست 16-12 نشان داده شده است:</p>
+<figure class="listing" id="listing-16-12">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::sync::Mutex;
+
+fn main() {
+    let m = Mutex::new(5);
+
+    {
+        let mut num = m.lock().unwrap();
+        *num = 6;
+    }
+
+    println!("m = {m:?}");
+}</code></pre>
+<figcaption><a href="#listing-16-12">لیست ۱۶-۱۲</a>: بررسی API &lt;code&gt;&lt;/x-listing&gt;Mutex&lt;T&gt;&lt;/code&gt; در یک زمینه تک‌ریسمانی برای سادگی</figcaption>
+</figure>
+<p>همان‌طور که با بسیاری از نوع‌ها مشاهده می‌شود، یک <code>Mutex&lt;T&gt;</code> را با استفاده از تابع وابسته <code>new</code> ایجاد می‌کنیم. برای دسترسی به داده داخل Mutex، از متد <code>lock</code> استفاده می‌کنیم تا قفل را به دست آوریم. این فراخوانی Thread فعلی را متوقف می‌کند، بنابراین نمی‌تواند کاری انجام دهد تا زمانی که نوبت ما برای گرفتن قفل برسد.</p>
+<p>فراخوانی <code>lock</code> در صورتی که یک Thread دیگر که قفل را نگه داشته دچار وحشت (<em>panic</em>) شود، شکست می‌خورد. در چنین حالتی، هیچ‌کس دیگر نمی‌تواند قفل را به دست آورد، بنابراین انتخاب کرده‌ایم که از <code>unwrap</code> استفاده کنیم و اگر در چنین وضعیتی قرار گرفتیم، این Thread نیز دچار وحشت شود.</p>
+<p>بعد از گرفتن قفل، می‌توانیم مقدار بازگردانده‌شده را، که در اینجا به نام <code>num</code> است، به عنوان یک مرجع قابل تغییر به داده داخل در نظر بگیریم. سیستم نوع تضمین می‌کند که قبل از استفاده از مقدار داخل <code>m</code> قفل را به دست آوریم. نوع <code>m</code> برابر با <code>Mutex&lt;i32&gt;</code> است، نه <code>i32</code>، بنابراین <em>باید</em> برای استفاده از مقدار <code>i32</code>، متد <code>lock</code> را فراخوانی کنیم. نمی‌توانیم فراموش کنیم؛ سیستم نوع اجازه دسترسی به مقدار داخلی <code>i32</code> را به ما نمی‌دهد.</p>
+<p>همان‌طور که احتمالاً حدس می‌زنید، <code>Mutex&lt;T&gt;</code> یک اشاره‌گر هوشمند است. دقیق‌تر، فراخوانی <code>lock</code> یک اشاره‌گر هوشمند به نام <code>MutexGuard</code> را بازمی‌گرداند، که در یک <code>LockResult</code> بسته‌بندی شده است و آن را با فراخوانی <code>unwrap</code> مدیریت کردیم. اشاره‌گر هوشمند <code>MutexGuard</code> ویژگی <code>Deref</code> را پیاده‌سازی می‌کند تا به داده داخلی ما اشاره کند. همچنین، این اشاره‌گر هوشمند یک پیاده‌سازی از <code>Drop</code> دارد که به‌طور خودکار قفل را زمانی که یک <code>MutexGuard</code> از محدوده خارج می‌شود، آزاد می‌کند، که این اتفاق در انتهای محدوده داخلی رخ می‌دهد. در نتیجه، خطر فراموش کردن آزاد کردن قفل و جلوگیری از استفاده دیگر Threadها از Mutex وجود ندارد، زیرا آزادسازی قفل به صورت خودکار انجام می‌شود.</p>
+<p>پس از drop کردن قفل، می‌توانیم مقدار mutex را چاپ کنیم و ببینیم که توانستیم <code>i32</code> درونی را به <code>6</code> تغییر دهیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="sharing-a-mutext-between-multiple-threads"></a></p>
+<h4 id="shared-access-to-mutext"><a class="header" href="#shared-access-to-mutext">اشتراک‌گذاری یک <code>Mutex&lt;T&gt;</code> بین چندین Thread</a></h4>
+<p>حالا، بیایید تلاش کنیم یک مقدار را بین چندین Thread با استفاده از <code>Mutex&lt;T&gt;</code> به اشتراک بگذاریم. ما ۱۰ Thread ایجاد خواهیم کرد و هرکدام مقدار شمارنده را ۱ واحد افزایش می‌دهند، بنابراین شمارنده از ۰ به ۱۰ می‌رسد. مثال بعدی در لیست ۱۶-۱۳ دارای خطای کامپایل خواهد بود، و از آن خطا برای یادگیری بیشتر در مورد استفاده از <code>Mutex&lt;T&gt;</code> و اینکه چگونه Rust به ما کمک می‌کند از آن به درستی استفاده کنیم، استفاده خواهیم کرد.</p>
+<figure class="listing" id="listing-16-13">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">use std::sync::Mutex;
+use std::thread;
+
+fn main() {
+    let counter = Mutex::new(0);
+    let mut handles = vec![];
+
+    for _ in 0..10 {
+        let handle = thread::spawn(move || {
+            let mut num = counter.lock().unwrap();
+
+            *num += 1;
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    println!("Result: {}", *counter.lock().unwrap());
+}</code></pre>
+<figcaption><a href="#listing-16-13">لیست ۱۶-۱۳</a>: ده نخ که هر کدام مقدار شمارنده محافظت‌شده توسط یک &lt;code&gt;&lt;/x-listing&gt;Mutex&lt;T&gt;&lt;/code&gt; را افزایش می‌دهند</figcaption>
+</figure>
+<p>ما یک متغیر <code>counter</code> ایجاد می‌کنیم تا یک مقدار <code>i32</code> را در یک <code>Mutex&lt;T&gt;</code> نگه دارد، همان‌طور که در لیست ۱۶-۱۲ انجام دادیم. سپس، با تکرار روی یک بازه عددی، ۱۰ Thread ایجاد می‌کنیم. از <code>thread::spawn</code> استفاده می‌کنیم و به تمام Threadها یک Closure یکسان می‌دهیم: یک Closure که متغیر <code>counter</code> را به Thread منتقل می‌کند، قفل <code>Mutex&lt;T&gt;</code> را با فراخوانی متد <code>lock</code> به دست می‌آورد، و سپس ۱ واحد به مقدار داخل Mutex اضافه می‌کند. وقتی یک Thread اجرای Closure خود را تمام می‌کند، <code>num</code> از محدوده خارج شده و قفل را آزاد می‌کند تا Thread دیگری بتواند آن را به دست آورد.</p>
+<p>در Thread اصلی، تمام handleهای join را جمع‌آوری می‌کنیم. سپس، همان‌طور که در لیست ۱۶-۲ انجام دادیم، متد <code>join</code> را روی هر handle فراخوانی می‌کنیم تا مطمئن شویم تمام Threadها تمام شده‌اند. در آن نقطه، Thread اصلی قفل را به دست می‌آورد و نتیجه این برنامه را چاپ می‌کند.</p>
+<p>ما اشاره کردیم که این مثال کامپایل نخواهد شد. حالا بیایید ببینیم چرا!</p>
+<pre><code class="language-console">$ cargo run
+   Compiling shared-state v0.1.0 (file:///projects/shared-state)
+error[E0382]: borrow of moved value: `counter`
+  --&gt; src/main.rs:21:29
+   |
+ 5 |     let counter = Mutex::new(0);
+   |         ------- move occurs because `counter` has type `std::sync::Mutex&lt;i32&gt;`, which does not implement the `Copy` trait
+...
+ 8 |     for _ in 0..10 {
+   |     -------------- inside of this loop
+ 9 |         let handle = thread::spawn(move || {
+   |                                    ------- value moved into closure here, in previous iteration of loop
+...
+21 |     println!("Result: {}", *counter.lock().unwrap());
+   |                             ^^^^^^^ value borrowed here after move
+
+For more information about this error, try `rustc --explain E0382`.
+error: could not compile `shared-state` (bin "shared-state") due to 1 previous error
+</code></pre>
+<p>پیام خطا نشان می‌دهد که مقدار <code>counter</code> در تکرار قبلی حلقه منتقل شده است. Rust به ما می‌گوید که نمی‌توانیم مالکیت <code>counter</code> را به چندین Thread منتقل کنیم. بیایید این خطای کامپایلر را با استفاده از روش مالکیت چندگانه که در فصل ۱۵ بحث کردیم، برطرف کنیم.</p>
+<h4 id="multiple-ownership-with-multiple-threads"><a class="header" href="#multiple-ownership-with-multiple-threads">مالکیت چندگانه با چندین Thread</a></h4>
+<p>در فصل ۱۵، ما با استفاده از اشاره‌گر هوشمند <code>Rc&lt;T&gt;</code> برای ایجاد یک مقدار شمارش‌شده توسط مرجع (<em>reference-counted value</em>) به یک مقدار چندین مالک دادیم. بیایید همین کار را اینجا انجام دهیم و ببینیم چه اتفاقی می‌افتد. ما <code>Mutex&lt;T&gt;</code> را در <code>Rc&lt;T&gt;</code> بسته‌بندی می‌کنیم (همان‌طور که در لیست ۱۶-۱۴ نشان داده شده است) و قبل از انتقال مالکیت به Thread، <code>Rc&lt;T&gt;</code> را کلون می‌کنیم.</p>
+<figure class="listing" id="listing-16-14">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">use std::rc::Rc;
+use std::sync::Mutex;
+use std::thread;
+
+fn main() {
+    let counter = Rc::new(Mutex::new(0));
+    let mut handles = vec![];
+
+    for _ in 0..10 {
+        let counter = Rc::clone(&amp;counter);
+        let handle = thread::spawn(move || {
+            let mut num = counter.lock().unwrap();
+
+            *num += 1;
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    println!("Result: {}", *counter.lock().unwrap());
+}</code></pre>
+<figcaption><a href="#listing-16-14">لیست ۱۶-۱۴</a>: تلاش برای استفاده از &lt;code&gt;&lt;/x-listing&gt;Rc&lt;T&gt;&lt;/code&gt; برای اجازه مالکیت چندگانه &lt;code&gt;Mutex&lt;T&gt;&lt;/code&gt; توسط چندین Thread</figcaption>
+</figure>
+<p>دوباره کامپایل می‌کنیم و… خطاهای متفاوتی دریافت می‌کنیم! کامپایلر چیزهای زیادی به ما یاد می‌دهد.</p>
+<pre><code class="language-console">$ cargo run
+   Compiling shared-state v0.1.0 (file:///projects/shared-state)
+error[E0277]: `Rc&lt;std::sync::Mutex&lt;i32&gt;&gt;` cannot be sent between threads safely
+  --&gt; src/main.rs:11:36
+   |
+11 |           let handle = thread::spawn(move || {
+   |                        ------------- ^------
+   |                        |             |
+   |  ______________________|_____________within this `{closure@src/main.rs:11:36: 11:43}`
+   | |                      |
+   | |                      required by a bound introduced by this call
+12 | |             let mut num = counter.lock().unwrap();
+13 | |
+14 | |             *num += 1;
+15 | |         });
+   | |_________^ `Rc&lt;std::sync::Mutex&lt;i32&gt;&gt;` cannot be sent between threads safely
+   |
+   = help: within `{closure@src/main.rs:11:36: 11:43}`, the trait `Send` is not implemented for `Rc&lt;std::sync::Mutex&lt;i32&gt;&gt;`
+note: required because it's used within this closure
+  --&gt; src/main.rs:11:36
+   |
+11 |         let handle = thread::spawn(move || {
+   |                                    ^^^^^^^
+note: required by a bound in `spawn`
+  --&gt; /rustc/88d9e12ae178fab0fb5cc050a94da85685d449ea/library/std/src/thread/functions.rs:125:0
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `shared-state` (bin "shared-state") due to 1 previous error
+</code></pre>
+<p>وای، این پیام خطا واقعاً پرحرف است! بخش مهم آن می‌گوید: <code>`Rc&lt;Mutex&lt;i32&gt;&gt;` cannot be sent between threads safely</code>. کامپایلر دلیلش را هم بیان می‌کند: <code>the trait `Send` is not implemented for `Rc&lt;Mutex&lt;i32&gt;&gt;`</code>. در بخش بعد دربارهٔ <code>Send</code> صحبت می‌کنیم؛ یکی از Traitهایی که تضمین می‌کنند نوع‌های مورد استفاده همراه Threadها برای محیط همزمان مناسب‌اند.</p>
+<p>متأسفانه اشتراک‌گذاری <code>Rc&lt;T&gt;</code> میان Threadها ایمن نیست. وقتی <code>Rc&lt;T&gt;</code> شمارش مرجع را مدیریت می‌کند، به‌ازای هر فراخوانی <code>clone</code> شمارنده را افزایش و هنگام حذف هر clone آن را کاهش می‌دهد؛ اما از سازوکار همزمانی‌ای استفاده نمی‌کند که جلوی قطع‌شدن تغییر شمارنده به‌دست Thread دیگر را بگیرد. نتیجه ممکن است شمارش اشتباه باشد: باگ ظریفی که می‌تواند به نشت حافظه یا حذف زودهنگام مقدار منجر شود. به نوعی شبیه <code>Rc&lt;T&gt;</code> نیاز داریم که شمارش مرجع را به‌شکلی ایمن برای Thread تغییر دهد.</p>
+<h4 id="atomic-reference-counting-with-arct"><a class="header" href="#atomic-reference-counting-with-arct">شمارش اتمی مرجع با <code>Arc&lt;T&gt;</code></a></h4>
+<p>خوشبختانه <code>Arc&lt;T&gt;</code> نوعی مانند <code>Rc&lt;T&gt;</code> است که استفاده از آن در محیط همزمان ایمن است. حرف <em>a</em> از <em>atomic</em> می‌آید؛ یعنی این نوع مرجع‌ها را به‌صورت اتمی می‌شمارد. عملیات اتمی گونهٔ دیگری از سازوکارهای همزمانی است که اینجا با جزئیات بررسی نمی‌کنیم؛ برای اطلاعات بیشتر مستندات <a href="https://doc.rust-lang.org/std/sync/atomic/index.html"><code>std::sync::atomic</code></a><!-- ignore --> را ببینید. فعلاً کافی است بدانید نوع‌های اتمی مانند نوع‌های ابتدایی عمل می‌کنند، اما اشتراک‌گذاری آن‌ها میان Threadها ایمن است.</p>
+<p>شاید بپرسید چرا همهٔ نوع‌های ابتدایی اتمی نیستند و چرا نوع‌های کتابخانهٔ استاندارد به‌طور پیش‌فرض از <code>Arc&lt;T&gt;</code> استفاده نمی‌کنند. ایمنی Thread هزینهٔ کارایی دارد و بهتر است تنها هنگام نیاز آن را بپردازیم. اگر عملیات فقط در یک Thread انجام شود، نبود تضمین‌های اتمی می‌تواند برنامه را سریع‌تر کند.</p>
+<p>به نمونه برگردیم: APIهای <code>Arc&lt;T&gt;</code> و <code>Rc&lt;T&gt;</code> یکسان‌اند، پس با تغییر خط <code>use</code> و فراخوانی‌های <code>new</code> و <code>clone</code> برنامه را اصلاح می‌کنیم. کد فهرست ۱۶-۱۵ سرانجام کامپایل و اجرا می‌شود.</p>
+<figure class="listing" id="listing-16-15">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">use std::sync::{Arc, Mutex};
+use std::thread;
+
+fn main() {
+    let counter = Arc::new(Mutex::new(0));
+    let mut handles = vec![];
+
+    for _ in 0..10 {
+        let counter = Arc::clone(&amp;counter);
+        let handle = thread::spawn(move || {
+            let mut num = counter.lock().unwrap();
+
+            *num += 1;
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    println!("Result: {}", *counter.lock().unwrap());
+}</code></pre>
+<figcaption><a href="#listing-16-15">لیست ۱۶-۱۵</a>: استفاده از &lt;code&gt;&lt;/x-listing&gt;Arc&lt;T&gt;&lt;/code&gt; برای پوشاندن &lt;code&gt;Mutex&lt;T&gt;&lt;/code&gt; و اشتراک مالکیت میان چند Thread</figcaption>
+</figure>
+<p>این کد خروجی زیر را چاپ خواهد کرد:</p>
+<!-- Not extracting output because changes to this output aren't significant;
+the changes are likely to be due to the threads running differently rather than
+changes in the compiler -->
+<pre><code class="language-text">Result: 10
+</code></pre>
+<p>ما موفق شدیم! شمارنده را از ۰ به ۱۰ افزایش دادیم که ممکن است خیلی چشمگیر به نظر نرسد، اما چیزهای زیادی درباره <code>Mutex&lt;T&gt;</code> و ایمنی Thread یاد گرفتیم. همچنین می‌توانید از ساختار این برنامه برای انجام عملیات پیچیده‌تری به‌جز افزایش یک شمارنده استفاده کنید. با استفاده از این استراتژی، می‌توانید یک محاسبه را به بخش‌های مستقل تقسیم کنید، این بخش‌ها را بین Threadها تقسیم کنید، و سپس از یک <code>Mutex&lt;T&gt;</code> استفاده کنید تا هر Thread نتیجه نهایی را با بخش مربوط به خودش به‌روزرسانی کند.</p>
+<p>توجه داشته باشید که اگر در حال انجام عملیات عددی ساده هستید، نوع‌های ساده‌تری نسبت به <code>Mutex&lt;T&gt;</code> در ماژول <a href="https://doc.rust-lang.org/std/sync/atomic/index.html"><code>std::sync::atomic</code> از کتابخانه استاندارد</a><!-- ignore --> ارائه شده‌اند. این نوع‌ها دسترسی اتمی، ایمن و همزمان به نوع‌های ابتدایی فراهم می‌کنند. ما برای این مثال از <code>Mutex&lt;T&gt;</code> با یک نوع ابتدایی استفاده کردیم تا بتوانیم بر نحوه کار <code>Mutex&lt;T&gt;</code> تمرکز کنیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="similarities-between-refcelltrct-and-mutextarct"></a></p>
+<h3 id="comparing-refcelltrct-and-mutextarct"><a class="header" href="#comparing-refcelltrct-and-mutextarct">شباهت‌های بین <code>RefCell&lt;T&gt;</code>/<code>Rc&lt;T&gt;</code> و <code>Mutex&lt;T&gt;</code>/<code>Arc&lt;T&gt;</code></a></h3>
+<p>ممکن است متوجه شده باشید که <code>counter</code> تغییرناپذیر است، اما توانستیم یک مرجع قابل تغییر به مقدار داخل آن بگیریم؛ این بدان معناست که <code>Mutex&lt;T&gt;</code> قابلیت تغییر داخلی (<em>interior mutability</em>) را فراهم می‌کند، همان‌طور که خانواده <code>Cell</code> این کار را می‌کنند. به همان شکلی که در فصل ۱۵ از <code>RefCell&lt;T&gt;</code> برای اجازه تغییر محتوا درون یک <code>Rc&lt;T&gt;</code> استفاده کردیم، از <code>Mutex&lt;T&gt;</code> برای تغییر محتوا درون یک <code>Arc&lt;T&gt;</code> استفاده می‌کنیم.</p>
+<p>نکته دیگری که باید توجه کنید این است که Rust نمی‌تواند شما را از تمام انواع خطاهای منطقی هنگام استفاده از <code>Mutex&lt;T&gt;</code> محافظت کند. به یاد بیاورید که در فصل ۱۵ استفاده از <code>Rc&lt;T&gt;</code> با خطر ایجاد چرخه‌های مرجع همراه بود، جایی که دو مقدار <code>Rc&lt;T&gt;</code> به یکدیگر ارجاع می‌دادند و باعث نشت حافظه می‌شدند. به‌طور مشابه، <code>Mutex&lt;T&gt;</code> با خطر ایجاد <em>بن‌بست</em> (<em>deadlock</em>) همراه است. این وضعیت زمانی رخ می‌دهد که یک عملیات نیاز به قفل کردن دو منبع دارد و دو Thread هر کدام یکی از قفل‌ها را به دست آورده‌اند و باعث می‌شوند که برای همیشه منتظر یکدیگر بمانند. اگر به بن‌بست علاقه دارید، سعی کنید یک برنامه Rust ایجاد کنید که دچار بن‌بست شود؛ سپس استراتژی‌های کاهش بن‌بست برای Mutexها در هر زبانی را تحقیق کنید و آن‌ها را در Rust پیاده‌سازی کنید. مستندات API کتابخانه استاندارد برای <code>Mutex&lt;T&gt;</code> و <code>MutexGuard</code> اطلاعات مفیدی ارائه می‌دهد.</p>
+<p>ما این فصل را با صحبت درباره ویژگی‌های <code>Send</code> و <code>Sync</code> و نحوه استفاده از آن‌ها با نوع‌های سفارشی تکمیل خواهیم کرد.</p><nav class="page-nav"><a href="ch16-02-message-passing.html">→ انتقال داده بین نخ‌ها با ارسال پیام</a><a href="ch16-04-extensible-concurrency-sync-and-send.html">همروندی توسعه‌پذیر با Send و Sync ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

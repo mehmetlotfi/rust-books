@@ -1,0 +1,255 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>کنترل نحوهٔ اجرای آزمون‌ها — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch11-02-running-tests"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="controlling-how-tests-are-run"><a class="header" href="#controlling-how-tests-are-run">کنترل نحوه اجرای تست‌ها</a></h2>
+<p>دقیقاً همانطور که <code>cargo run</code> کد شما را کامپایل کرده و باینری حاصل را اجرا می‌کند، <code>cargo test</code> کد شما را در حالت تست کامپایل کرده و باینری تست حاصل را اجرا می‌کند. رفتار پیش‌فرض باینری تولیدشده توسط <code>cargo test</code> این است که تمام تست‌ها را به صورت موازی اجرا کرده و خروجی تولید شده در طول اجرای تست‌ها را ضبط کند. این کار از نمایش خروجی جلوگیری کرده و خواندن خروجی مرتبط با نتایج تست را آسان‌تر می‌کند. با این حال، می‌توانید با مشخص کردن گزینه‌های خط فرمان این رفتار پیش‌فرض را تغییر دهید.</p>
+<p>برخی گزینه‌های خط فرمان به <code>cargo test</code> می‌روند و برخی دیگر به باینری تست حاصل ارسال می‌شوند. برای جدا کردن این دو نوع آرگومان، آرگومان‌هایی که به <code>cargo test</code> می‌روند را ذکر کنید و سپس جداکننده <code>--</code> و آرگومان‌هایی که به باینری تست می‌روند را بیاورید. اجرای <code>cargo test --help</code> گزینه‌هایی را نمایش می‌دهد که می‌توانید با <code>cargo test</code> استفاده کنید، و اجرای <code>cargo test -- --help</code> گزینه‌هایی را که می‌توانید پس از جداکننده استفاده کنید نمایش می‌دهد. این گزینه‌ها همچنین در <a href="../rustc/tests/index.html">بخش “تست‌ها”</a> از <em>کتاب <code>rustc</code></em> مستند شده‌اند.</p>
+<h3 id="running-tests-in-parallel-or-consecutively"><a class="header" href="#running-tests-in-parallel-or-consecutively">اجرای تست‌ها به صورت موازی یا متوالی</a></h3>
+<p>وقتی چندین تست را اجرا می‌کنید، به طور پیش‌فرض این تست‌ها به صورت موازی با استفاده از نخ‌ها (threads) اجرا می‌شوند، به این معنی که سریع‌تر به پایان می‌رسند و بازخورد سریع‌تری دریافت می‌کنید. از آنجا که تست‌ها به صورت هم‌زمان اجرا می‌شوند، باید اطمینان حاصل کنید که تست‌های شما به یکدیگر یا به هیچ حالت مشترکی، از جمله یک محیط مشترک مانند دایرکتوری کاری جاری یا متغیرهای محیطی، وابسته نیستند.</p>
+<p>برای مثال، فرض کنید هر یک از تست‌های شما کدی را اجرا می‌کند که یک فایل به نام <em>test-output.txt</em> روی دیسک ایجاد کرده و داده‌هایی در آن فایل می‌نویسد. سپس هر تست داده‌های موجود در آن فایل را خوانده و تأیید می‌کند که فایل شامل یک مقدار خاص است، که در هر تست متفاوت است. چون تست‌ها به طور هم‌زمان اجرا می‌شوند، ممکن است یک تست فایل را در زمانی که تست دیگری در حال نوشتن و خواندن فایل است، بازنویسی کند. در این صورت، تست دوم شکست خواهد خورد، نه به این دلیل که کد اشتباه است بلکه به این دلیل که تست‌ها در هنگام اجرای موازی با یکدیگر تداخل پیدا کرده‌اند. یک راه‌حل این است که مطمئن شوید هر تست به یک فایل متفاوت می‌نویسد؛ راه‌حل دیگر این است که تست‌ها را یکی یکی اجرا کنید.</p>
+<p>اگر نمی‌خواهید تست‌ها به صورت موازی اجرا شوند یا اگر می‌خواهید کنترل بیشتری بر تعداد نخ‌های استفاده‌شده داشته باشید، می‌توانید فلگ <code>--test-threads</code> و تعداد نخ‌هایی که می‌خواهید استفاده کنید را به باینری تست ارسال کنید. به مثال زیر توجه کنید:</p>
+<pre><code class="language-console">$ cargo test -- --test-threads=1
+</code></pre>
+<p>ما تعداد نخ‌های تست را به <code>1</code> تنظیم کردیم، به برنامه می‌گوییم از هیچ موازی‌سازی استفاده نکند. اجرای تست‌ها با یک نخ بیشتر از اجرای آن‌ها به صورت موازی طول می‌کشد، اما تست‌ها در صورتی که حالت مشترکی داشته باشند با یکدیگر تداخل پیدا نمی‌کنند.</p>
+<h3 id="showing-function-output"><a class="header" href="#showing-function-output">نمایش خروجی توابع</a></h3>
+<p>به طور پیش‌فرض، اگر یک تست پاس شود، کتابخانه تست Rust هر چیزی که به خروجی استاندارد چاپ شده را ضبط می‌کند. برای مثال، اگر در یک تست از <code>println!</code> استفاده کنیم و تست پاس شود، خروجی <code>println!</code> را در ترمینال نخواهیم دید؛ فقط خطی که نشان می‌دهد تست پاس شده است را خواهیم دید. اگر یک تست شکست بخورد، هر چیزی که به خروجی استاندارد چاپ شده باشد را همراه با پیام شکست خواهیم دید.</p>
+<p>برای مثال، لیست ۱۱-۱۰ یک تابع ساده دارد که مقدار پارامتر خود را چاپ کرده و مقدار ۱۰ را بازمی‌گرداند، همچنین یک تست که پاس می‌شود و یک تست که شکست می‌خورد.</p>
+<figure class="listing" id="listing-11-10">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust panics noplayground">fn prints_and_returns_10(a: i32) -&gt; i32 {
+    println!("I got the value {a}");
+    10
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn this_test_will_pass() {
+        let value = prints_and_returns_10(4);
+        assert_eq!(value, 10);
+    }
+
+    #[test]
+    fn this_test_will_fail() {
+        let value = prints_and_returns_10(8);
+        assert_eq!(value, 5);
+    }
+}</code></pre>
+<figcaption><a href="#listing-11-10">لیست ۱۱-۱۰</a>: تست‌هایی برای یک تابع که از &lt;code&gt;&lt;/x-listing&gt;println!&lt;/code&gt; استفاده می‌کند</figcaption>
+</figure>
+<p>وقتی این تست‌ها را با <code>cargo test</code> اجرا می‌کنیم، خروجی زیر را خواهیم دید:</p>
+<pre><code class="language-console">$ cargo test
+   Compiling silly-function v0.1.0 (file:///projects/silly-function)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.58s
+     Running unittests src/lib.rs (target/debug/deps/silly_function-160869f38cff9166)
+
+running 2 tests
+test tests::this_test_will_fail ... FAILED
+test tests::this_test_will_pass ... ok
+
+failures:
+
+---- tests::this_test_will_fail stdout ----
+I got the value 8
+
+thread 'tests::this_test_will_fail' (6019863) panicked at src/lib.rs:19:9:
+assertion `left == right` failed
+  left: 10
+ right: 5
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::this_test_will_fail
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`
+</code></pre>
+<p>توجه کنید که در هیچ جای این خروجی <code>I got the value 4</code> که هنگام اجرای تست پاس‌شده چاپ می‌شود، نمی‌بینیم. این خروجی ضبط شده است. خروجی تست شکست‌خورده، <code>I got the value 8</code>، در بخش خلاصه خروجی تست ظاهر می‌شود که علت شکست تست را نیز نشان می‌دهد.</p>
+<p>اگر بخواهیم مقادیر چاپ‌شده برای تست‌های پاس‌شده را نیز ببینیم، می‌توانیم به Rust بگوییم که خروجی تست‌های موفق را با استفاده از <code>--show-output</code> نیز نمایش دهد:</p>
+<pre><code class="language-console">$ cargo test -- --show-output
+</code></pre>
+<p>وقتی تست‌های لیست ۱۱-۱۰ را دوباره با فلگ <code>--show-output</code> اجرا می‌کنیم، خروجی زیر را خواهیم دید:</p>
+<pre><code class="language-console">$ cargo test -- --show-output
+   Compiling silly-function v0.1.0 (file:///projects/silly-function)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.60s
+     Running unittests src/lib.rs (target/debug/deps/silly_function-160869f38cff9166)
+
+running 2 tests
+test tests::this_test_will_fail ... FAILED
+test tests::this_test_will_pass ... ok
+
+successes:
+
+---- tests::this_test_will_pass stdout ----
+I got the value 4
+
+
+successes:
+    tests::this_test_will_pass
+
+failures:
+
+---- tests::this_test_will_fail stdout ----
+I got the value 8
+
+thread 'tests::this_test_will_fail' (6022313) panicked at src/lib.rs:19:9:
+assertion `left == right` failed
+  left: 10
+ right: 5
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::this_test_will_fail
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`
+</code></pre>
+<h3 id="running-a-subset-of-tests-by-name"><a class="header" href="#running-a-subset-of-tests-by-name">اجرای زیرمجموعه‌ای از تست‌ها با نام</a></h3>
+<p>گاهی اوقات، اجرای یک مجموعه کامل از تست‌ها می‌تواند زمان زیادی ببرد. اگر در حال کار روی کدی در یک بخش خاص هستید، ممکن است بخواهید فقط تست‌های مربوط به آن کد را اجرا کنید. می‌توانید با پاس دادن نام یا نام‌های تست‌هایی که می‌خواهید اجرا کنید به <code>cargo test</code>، انتخاب کنید که کدام تست‌ها اجرا شوند.</p>
+<p>برای نشان دادن نحوه اجرای یک زیرمجموعه از تست‌ها، ابتدا سه تست برای تابع <code>add_two</code> خود ایجاد می‌کنیم، همانطور که در لیست ۱۱-۱۱ نشان داده شده است، و انتخاب می‌کنیم کدام‌یک را اجرا کنیم.</p>
+<figure class="listing" id="listing-11-11">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">pub fn add_two(a: u64) -&gt; u64 {
+    a + 2
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_two_and_two() {
+        let result = add_two(2);
+        assert_eq!(result, 4);
+    }
+
+    #[test]
+    fn add_three_and_two() {
+        let result = add_two(3);
+        assert_eq!(result, 5);
+    }
+
+    #[test]
+    fn one_hundred() {
+        let result = add_two(100);
+        assert_eq!(result, 102);
+    }
+}</code></pre>
+<figcaption><a href="#listing-11-11">لیست ۱۱-۱۱</a>: سه تست با سه نام مختلف</figcaption>
+</figure>
+<p>اگر تست‌ها را بدون پاس دادن هیچ آرگومانی اجرا کنیم، همانطور که قبلاً دیدیم، تمام تست‌ها به صورت موازی اجرا می‌شوند:</p>
+<pre><code class="language-console">$ cargo test
+   Compiling adder v0.1.0 (file:///projects/adder)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.62s
+     Running unittests src/lib.rs (target/debug/deps/adder-92948b65e88960b4)
+
+running 3 tests
+test tests::add_three_and_two ... ok
+test tests::add_two_and_two ... ok
+test tests::one_hundred ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests adder
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+</code></pre>
+<h4 id="running-single-tests"><a class="header" href="#running-single-tests">اجرای تست‌های منفرد</a></h4>
+<p>می‌توانیم نام هر تابع تست را به <code>cargo test</code> پاس دهیم تا فقط همان تست اجرا شود:</p>
+<pre><code class="language-console">$ cargo test one_hundred
+   Compiling adder v0.1.0 (file:///projects/adder)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.69s
+     Running unittests src/lib.rs (target/debug/deps/adder-92948b65e88960b4)
+
+running 1 test
+test tests::one_hundred ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+</code></pre>
+<p>فقط تستی با نام <code>one_hundred</code> اجرا شد؛ دو تست دیگر با این نام مطابقت نداشتند. خروجی تست به ما اطلاع می‌دهد که تست‌های بیشتری وجود داشته‌اند که اجرا نشده‌اند و در انتها <code>2 filtered out</code> را نمایش می‌دهد.</p>
+<p>نمی‌توانیم به این روش نام چندین تست را مشخص کنیم؛ فقط اولین مقداری که به <code>cargo test</code> داده می‌شود استفاده خواهد شد. اما راهی برای اجرای چندین تست وجود دارد.</p>
+<h4 id="filtering-to-run-multiple-tests"><a class="header" href="#filtering-to-run-multiple-tests">فیلتر کردن برای اجرای چندین تست</a></h4>
+<p>می‌توانیم بخشی از یک نام تست را مشخص کنیم، و هر تستی که نامش با آن مقدار مطابقت داشته باشد اجرا خواهد شد. برای مثال، چون دو تا از نام‌های تست‌های ما شامل <code>add</code> هستند، می‌توانیم آن دو را با اجرای <code>cargo test add</code> اجرا کنیم:</p>
+<pre><code class="language-console">$ cargo test add
+   Compiling adder v0.1.0 (file:///projects/adder)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.61s
+     Running unittests src/lib.rs (target/debug/deps/adder-92948b65e88960b4)
+
+running 2 tests
+test tests::add_three_and_two ... ok
+test tests::add_two_and_two ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+</code></pre>
+<p>این فرمان تمام تست‌هایی که <code>add</code> در نامشان دارند را اجرا کرد و تستی با نام <code>one_hundred</code> را فیلتر کرد. همچنین توجه داشته باشید که ماژولی که یک تست در آن ظاهر می‌شود بخشی از نام تست می‌شود، بنابراین می‌توانیم تمام تست‌های یک ماژول را با فیلتر کردن روی نام ماژول اجرا کنیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="ignoring-some-tests-unless-specifically-requested"></a></p>
+<h3 id="ignoring-tests-unless-specifically-requested"><a class="header" href="#ignoring-tests-unless-specifically-requested">نادیده گرفتن برخی تست‌ها مگر اینکه صریحاً درخواست شوند</a></h3>
+<p>گاهی اوقات چند تست خاص می‌توانند بسیار وقت‌گیر باشند، بنابراین ممکن است بخواهید آن‌ها را در اکثر اجراهای <code>cargo test</code> حذف کنید. به جای لیست کردن تمام تست‌هایی که می‌خواهید اجرا کنید، می‌توانید تست‌های وقت‌گیر را با استفاده از ویژگی <code>ignore</code> حاشیه‌نویسی کنید تا آن‌ها را حذف کنید، همانطور که در اینجا نشان داده شده است:</p>
+<p><span class="filename">نام فایل: src/lib.rs</span></p>
+<pre><code class="language-rust noplayground"><span class="boring">pub fn add(left: u64, right: u64) -&gt; u64 {
+</span><span class="boring">    left + right
+</span><span class="boring">}
+</span><span class="boring">
+</span>#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        let result = add(2, 2);
+        assert_eq!(result, 4);
+    }
+
+    #[test]
+    #[ignore]
+    fn expensive_test() {
+        // code that takes an hour to run
+    }
+}</code></pre>
+<p>بعد از <code>#[test]</code>، خط <code>#[ignore]</code> را به تستی که می‌خواهیم حذف کنیم اضافه می‌کنیم. حالا وقتی تست‌های خود را اجرا می‌کنیم، <code>it_works</code> اجرا می‌شود، اما <code>expensive_test</code> اجرا نمی‌شود:</p>
+<pre><code class="language-console">$ cargo test
+   Compiling adder v0.1.0 (file:///projects/adder)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.60s
+     Running unittests src/lib.rs (target/debug/deps/adder-92948b65e88960b4)
+
+running 2 tests
+test tests::expensive_test ... ignored
+test tests::it_works ... ok
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests adder
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+</code></pre>
+<p>تابع <code>expensive_test</code> به عنوان <code>ignored</code> فهرست شده است. اگر بخواهیم فقط تست‌های نادیده‌گرفته‌شده را اجرا کنیم، می‌توانیم از <code>cargo test -- --ignored</code> استفاده کنیم:</p>
+<pre><code class="language-console">$ cargo test -- --ignored
+   Compiling adder v0.1.0 (file:///projects/adder)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.61s
+     Running unittests src/lib.rs (target/debug/deps/adder-92948b65e88960b4)
+
+running 1 test
+test tests::expensive_test ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+   Doc-tests adder
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+</code></pre>
+<p>با کنترل اینکه کدام تست‌ها اجرا می‌شوند، می‌توانید مطمئن شوید که نتایج <code>cargo test</code> شما به سرعت بازگردانده می‌شوند. وقتی در نقطه‌ای هستید که منطقی است نتایج تست‌های <code>ignored</code> را بررسی کنید و زمان برای انتظار نتایج دارید، می‌توانید به جای آن <code>cargo test -- --ignored</code> را اجرا کنید. اگر می‌خواهید تمام تست‌ها را اجرا کنید، چه نادیده‌گرفته‌شده و چه نشده، می‌توانید <code>cargo test -- --include-ignored</code> را اجرا کنید.</p><nav class="page-nav"><a href="ch11-01-writing-tests.html">→ نحوهٔ نوشتن آزمون‌ها</a><a href="ch11-03-test-organization.html">سازمان‌دهی آزمون‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

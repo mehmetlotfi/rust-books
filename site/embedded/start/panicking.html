@@ -1,0 +1,52 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>Panicking — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="start/panicking"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="panicking"><a class="header" href="#panicking">Panic</a></h1>
+<p>panic بخش اصلی زبان Rust است. عملیات داخلی مانند اندیس‌گذاری در زمان اجرا برای ایمنی حافظه بررسی می‌شوند. وقتی اندیس‌گذاری خارج از محدوده انجام شود، به panic می‌انجامد.</p>
+<p>در کتابخانهٔ استاندارد، panic رفتار تعریف‌شده‌ای دارد: پشتهٔ نخی را که panic کرده است باز می‌کند (unwind)، مگر این‌که کاربر انتخاب کرده باشد برنامه هنگام panic متوقف (abort) شود.</p>
+<p>اما در برنامه‌های بدون کتابخانهٔ استاندارد، رفتار panic تعریف‌نشده رها شده است. با تعریف یک تابع <code>#[panic_handler]</code> می‌توان رفتاری را برگزید. این تابع باید دقیقاً <em>یک بار</em> در گراف وابستگی برنامه ظاهر شود و باید امضای زیر را داشته باشد: <code>fn(&amp;PanicInfo) -&gt; !</code>، که در آن <a href="https://doc.rust-lang.org/core/panic/struct.PanicInfo.html"><code>PanicInfo</code></a> ساختاری (struct) است شامل اطلاعاتی دربارهٔ محل وقوع panic.</p>
+<p>با توجه به این‌که سیستم‌های توکار از سیستم‌های رو به کاربر تا سیستم‌های حیاتی از نظر ایمنی (که نباید از کار بیفتند) را شامل می‌شوند، رفتار panicی وجود ندارد که برای همه مناسب باشد، اما رفتارهای رایج بسیاری هست. این رفتارهای رایج در crateهایی بسته‌بندی شده‌اند که تابع <code>#[panic_handler]</code> را تعریف می‌کنند. چند نمونه:</p>
+<ul>
+<li><a href="https://crates.io/crates/panic-abort"><code>panic-abort</code></a>. panic باعث می‌شود دستور abort اجرا شود.</li>
+<li><a href="https://crates.io/crates/panic-halt"><code>panic-halt</code></a>. panic باعث می‌شود برنامه، یا نخ جاری، با ورود به یک حلقهٔ بی‌نهایت متوقف شود.</li>
+<li><a href="https://crates.io/crates/panic-itm"><code>panic-itm</code></a>. پیام panic با ITM، یک دستگاه جانبی مختص ARM Cortex-M، ثبت می‌شود.</li>
+<li><a href="https://crates.io/crates/panic-semihosting"><code>panic-semihosting</code></a>. پیام panic با تکنیک semihosting روی میزبان ثبت می‌شود.</li>
+</ul>
+<p>با جست‌وجوی کلیدواژهٔ <a href="https://crates.io/keywords/panic-handler"><code>panic-handler</code></a> در crates.io ممکن است crateهای بیشتری هم پیدا کنید.</p>
+<p>یک برنامه تنها با پیوند دادن به crate متناظر می‌تواند یکی از این رفتارها را برگزیند. این‌که رفتار panic در سورس برنامه به‌صورت یک خط کد بیان می‌شود، نه‌تنها به‌عنوان مستندات مفید است، بلکه می‌توان از آن برای تغییر رفتار panic بر اساس پروفایل کامپایل هم استفاده کرد. برای مثال:</p>
+<pre><code class="language-rust ignore">#![no_main]
+#![no_std]
+
+// dev profile: easier to debug panics; can put a breakpoint on `rust_begin_unwind`
+#[cfg(debug_assertions)]
+use panic_halt as _;
+
+// release profile: minimize the binary size of the application
+#[cfg(not(debug_assertions))]
+use panic_abort as _;
+
+// ..</code></pre>
+<p>در این مثال، وقتی با پروفایل dev ساخته شود (<code>cargo build</code>)، crate به crate با نام <code>panic-halt</code> لینک می‌شود، اما وقتی با پروفایل release ساخته شود (<code>cargo build --release</code>)، به crate با نام <code>panic-abort</code> لینک می‌شود.</p>
+<blockquote>
+<p>شکل <code>use panic_abort as _;</code> از دستور <code>use</code> برای این به کار می‌رود که مطمئن شویم panic handler مربوط به <code>panic_abort</code> در فایل اجرایی نهایی ما گنجانده می‌شود، و در عین حال به کامپایلر روشن کنیم که صراحتاً از هیچ چیزی در این crate استفاده نخواهیم کرد. بدون تغییر نام با <code>as _</code>، کامپایلر هشدار می‌دهد که یک import استفاده‌نشده داریم. گاهی ممکن است به‌جای آن <code>extern crate panic_abort</code> را ببینید، که سبکی قدیمی‌تر است و پیش از ویرایش ۲۰۱۸ Rust استفاده می‌شد و اکنون باید فقط برای crateهای «sysroot» (آن‌هایی که همراه خود Rust توزیع می‌شوند) مانند <code>proc_macro</code>، <code>alloc</code>، <code>std</code> و <code>test</code> به کار رود.</p>
+</blockquote>
+<h2 id="an-example"><a class="header" href="#an-example">یک مثال</a></h2>
+<p>این هم مثالی که سعی می‌کند به عنصری فراتر از طول یک آرایه دسترسی بدهد. این عملیات به panic می‌انجامد.</p>
+<pre><code class="language-rust ignore">#![no_main]
+#![no_std]
+
+use panic_semihosting as _;
+
+use cortex_m_rt::entry;
+
+#[entry]
+fn main() -&gt; ! {
+    let xs = [0, 1, 2];
+    let i = xs.len();
+    let _y = xs[i]; // out of bounds access
+
+    loop {}
+}</code></pre>
+<p>این مثال رفتار <code>panic-semihosting</code> را برگزیده است که پیام panic را با semihosting روی کنسول میزبان چاپ می‌کند.</p>
+<pre><code class="language-text">$ cargo run
+     Running `qemu-system-arm -cpu cortex-m3 -machine lm3s6965evb (..)
+panicked at 'index out of bounds: the len is 3 but the index is 4', src/main.rs:12:13
+</code></pre>
+<p>می‌توانید رفتار را به <code>panic-halt</code> تغییر دهید و تأیید کنید که در آن حالت هیچ پیامی چاپ نمی‌شود.</p><nav class="page-nav"><a href="../../embedded/start/semihosting.html">→ Semihosting</a><a href="../../embedded/start/exceptions.html">استثناها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

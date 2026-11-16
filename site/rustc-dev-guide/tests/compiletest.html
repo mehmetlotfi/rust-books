@@ -1,0 +1,706 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>Compiletest — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tests/compiletest"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="compiletest"><a class="header" href="#compiletest">Compiletest</a></h1>
+<h2 id="introduction"><a class="header" href="#introduction">Introduction</a></h2>
+<p><code>compiletest</code> ابزار اصلی اجرای تست (test harness) در مجموعهٔ تست Rust است.
+به نویسندگان تست اجازه می‌دهد تعداد زیادی تست را سازمان‌دهی کنند (کامپایلر Rust هزاران تست دارد)،
+اجرای کارآمد تست‌ها (اجرای موازی پشتیبانی می‌شود)،
+و به نویسندهٔ تست اجازه می‌دهد رفتار و نتایج مورد انتظار هر دو حالت تست‌های
+جداگانه و گروهی را پیکربندی کند.</p>
+<blockquote>
+<p><strong>نکته برای کاربران macOS</strong></p>
+<p>برای کاربران macOS، <code>SIP</code> (System Integrity Protection) <a href="https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/.E2.9C.94.20Is.20there.20any.20performance.20issue.20for.20MacOS.3F">ممکن است به‌طور مداوم فایل دودویی کامپایل‌شده را
+با ارسال درخواست‌های شبکه به Apple بررسی کند</a>، پس ممکن است
+هنگام اجرای تست‌ها افت شدید عملکرد ببینید.</p>
+<p>می‌توانید با تنظیم این گزینه‌ها آن را حل کنید: <code>Privacy &amp; Security -&gt; Developer Tools -&gt; Add Terminal (Or VsCode, etc.)</code>.</p>
+</blockquote>
+<p><code>compiletest</code> ممکن است کد تست را برای موفقیت/شکست در زمان کامپایل یا زمان اجرا بررسی کند.</p>
+<p>تست‌ها معمولاً به‌صورت فایل منبع Rust با annotationهایی در کامنت‌ها
+پیش از و/یا درون کد تست سازمان‌دهی می‌شوند.
+این کامنت‌ها به <code>compiletest</code> می‌گویند آیا و چگونه تست را اجرا کند،
+چه رفتاری انتظار دارد و موارد بیشتر.
+برای جزئیات بیشتر دربارهٔ این annotationها <a href="directives.html">directiveها</a> و مستندات مجموعهٔ تست در ادامه را ببینید.</p>
+<p>برای آموزش ساخت یک تست جدید و توصیه‌هایی دربارهٔ نوشتن تست خوب به فصل‌های <a href="adding.html">افزودن تست‌های جدید</a> و <a href="best-practices.html">بهترین روش‌ها</a>
+و برای نحوهٔ اجرای مجموعهٔ تست به فصل <a href="running.html">اجرای تست‌ها</a> نگاه کنید.</p>
+<p>آرگومان‌ها را می‌توان با <code>--test-args</code> یا با قرار‌دادن آن‌ها پس از <code>--</code> به compiletest داد، مثلاً</p>
+<ul>
+<li><code>x test --test-args --force-rerun</code></li>
+<li><code>x test -- --force-rerun</code></li>
+</ul>
+<p>علاوه بر این، bootstrap چند آرگومان رایج را مستقیماً می‌پذیرد، مثلاً</p>
+<p><code>x test --no-capture --force-rerun --run --pass</code>.</p>
+<p>خود compiletest سعی می‌کند وقتی آرتیفکت‌های درگیر (عمدتاً کامپایلر)
+تغییر نکرده‌اند تست‌ها را اجرا نکند.
+می‌توانید از <code>x test --test-args --force-rerun</code> برای اجرای دوباره یک تست حتی وقتی هیچ ورودی تغییر نکرده استفاده کنید.</p>
+<h2 id="test-suites"><a class="header" href="#test-suites">Test suites</a></h2>
+<p>همهٔ تست‌ها در پوشهٔ <a href="https://github.com/rust-lang/rust/blob/HEAD/tests"><code>tests</code></a> هستند.
+تست‌ها در «مجموعه‌ها» (suites) سازمان‌دهی شده‌اند، که هر مجموعه در زیرپوشهٔ جداگانه‌ای است.
+هر مجموعهٔ تست کمی متفاوت رفتار می‌کند،
+با رفتار کامپایلر و بررسی‌های درستی متفاوت.
+برای مثال، پوشهٔ <a href="https://github.com/rust-lang/rust/tree/7b42543/tests/incremental"><code>tests/incremental</code></a> شامل تست‌های کامپایل افزایشی است.
+مجموعه‌های مختلف در
+<a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/compiletest/src/common.rs"><code>src/tools/compiletest/src/common.rs</code></a> در اعلان <code>pub enum Mode</code> تعریف شده‌اند.</p>
+<p>مجموعه‌های تست زیر در دسترس‌اند، با پیوند برای اطلاعات بیشتر:</p>
+<h3 id="compiler-specific-test-suites"><a class="header" href="#compiler-specific-test-suites">Compiler-specific test suites</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Test suite</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="ui.html"><code>ui</code></a></td><td>snapshotهای stdout/stderr حاصل از کامپایل و/یا اجرای فایل اجرایی حاصل را بررسی می‌کند</td></tr>
+<tr><td><code>ui-fulldeps</code></td><td>تست‌های <code>ui</code> که به یک ساخت قابل‌لینک از <code>rustc</code> نیاز دارند (مثلاً با <code>extern crate rustc_span;</code> یا به‌عنوان plugin)</td></tr>
+<tr><td><a href="#pretty-printer-tests"><code>pretty</code></a></td><td>Check pretty printing</td></tr>
+<tr><td><a href="#incremental-tests"><code>incremental</code></a></td><td>رفتار کامپایل افزایشی را بررسی می‌کند</td></tr>
+<tr><td><a href="#debuginfo-tests"><code>debuginfo</code></a></td><td>تولید debuginfo را با اجرای دیباگرها بررسی می‌کند</td></tr>
+<tr><td><a href="#codegen-tests"><code>codegen-*</code></a></td><td>Check code generation</td></tr>
+<tr><td><a href="#codegen-units-tests"><code>codegen-units</code></a></td><td>افراز واحدهای تولید کد (codegen unit) را بررسی می‌کند</td></tr>
+<tr><td><a href="#assembly-tests"><code>assembly</code></a></td><td>Check assembly output</td></tr>
+<tr><td><a href="#mir-opt-tests"><code>mir-opt</code></a></td><td>تولید و بهینه‌سازی‌های MIR را بررسی می‌کند</td></tr>
+<tr><td><a href="#coverage-tests"><code>coverage</code></a></td><td>Check coverage instrumentation</td></tr>
+<tr><td><a href="#coverage-tests"><code>coverage-run-rustdoc</code></a></td><td>تست‌های <code>coverage</code> که doctestهای instrument‌شده را هم اجرا می‌کنند</td></tr>
+<tr><td><a href="#crash-tests"><code>crashes</code></a></td><td>بررسی می‌کند کامپایلر روی ورودی‌های مشخص ICE/panic/crash می‌دهد تا رفع‌های تصادفی را بگیرد</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="general-purpose-test-suite"><a class="header" href="#general-purpose-test-suite">مجموعهٔ تست همه‌منظوره</a></h3>
+<p><a href="#run-make-tests"><code>run-make</code></a> تست‌های همه‌منظوره با استفاده از برنامه‌های Rust هستند.</p>
+<h3 id="the-build-std-test-suite"><a class="header" href="#the-build-std-test-suite">مجموعهٔ تست build-std</a></h3>
+<p><a href="#build-std-tests"><code>build-std</code></a> بررسی می‌کند -Zbuild-std کار می‌کند.</p>
+<h3 id="rustdoc-test-suites"><a class="header" href="#rustdoc-test-suites">Rustdoc test suites</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Test suite</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="../rustdoc-internals/rustdoc-html-test-suite.html"><code>rustdoc-html</code></a></td><td>خروجی HTML در <code>rustdoc</code> را بررسی می‌کند</td></tr>
+<tr><td><a href="../rustdoc-internals/rustdoc-gui-test-suite.html"><code>rustdoc-gui</code></a></td><td>GUI در <code>rustdoc</code> را با مرورگر وب بررسی می‌کند</td></tr>
+<tr><td><a href="../rustdoc-internals/search.html#testing-the-search-engine"><code>rustdoc-js</code></a></td><td>موتور جست‌وجو و فهرست <code>rustdoc</code> را بررسی می‌کند</td></tr>
+<tr><td><a href="../rustdoc-internals/search.html#testing-the-search-engine"><code>rustdoc-js-std</code></a></td><td>موتور جست‌وجو و فهرست <code>rustdoc</code> را روی مستندات کتابخانهٔ استاندارد بررسی می‌کند</td></tr>
+<tr><td><a href="../rustdoc-internals/rustdoc-json-test-suite.html"><code>rustdoc-json</code></a></td><td>خروجی JSON در <code>rustdoc</code> را بررسی می‌کند</td></tr>
+<tr><td><code>rustdoc-ui</code></td><td>خروجی ترمینال <code>rustdoc</code> را بررسی می‌کند (<a href="ui.html">این را هم ببینید</a>)</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>ui/rustdoc/</code> هم چند تست مخصوص rustdoc دارد.
+این تست‌ها تضمین می‌کنند برخی lintهایی که هنگام اجرای rustdoc صادر می‌شوند
+هنگام اجرای rustc هم اجرا شوند.</p>
+<p><code>run-make/rustdoc/</code> شامل تست‌های run-make مربوط به rustdoc است.</p>
+<h3 id="pretty-printer-tests"><a class="header" href="#pretty-printer-tests">Pretty-printer tests</a></h3>
+<p>تست‌های <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/pretty"><code>tests/pretty</code></a> قابلیت «pretty-printing» در <code>rustc</code> را می‌آزمایند.
+گزینهٔ خط فرمان <code>-Z unpretty</code> در <code>rustc</code> باعث می‌شود
+منبع ورودی را به قالب‌های مختلف ترجمه کند، مثل منبع Rust پس از گسترش ماکرو.</p>
+<p>تست‌های pretty-printer چند <a href="directives.html">directive</a> دارند که در ادامه شرح داده شده‌اند.
+این دستورها می‌توانند رفتار تست را به‌طور قابل‌توجهی تغییر دهند،
+اما رفتار پیش‌فرض بدون هیچ دستوری این است:</p>
+<ol>
+<li><code>rustc -Zunpretty=normal</code> را روی فایل منبع اجرا می‌کند.</li>
+<li><code>rustc -Zunpretty=normal</code> را روی خروجی گام قبل اجرا می‌کند.</li>
+<li>خروجی دو گام قبل باید یکسان باشد.</li>
+<li><code>rustc -Zno-codegen</code> را روی خروجی اجرا می‌کند تا مطمئن شود می‌تواند type check شود
+(مشابه <code>cargo check</code>).</li>
+</ol>
+<p>اگر هر یک از دستورهای بالا شکست بخورد، تست شکست می‌خورد.</p>
+<p>directiveهای تست‌های pretty-printing این‌ها هستند:</p>
+<ul>
+<li><code>pretty-mode</code> حالتی را که تست‌های pretty-print باید در آن اجرا شوند مشخص می‌کند (یعنی
+آرگومان <code>-Zunpretty</code>).
+اگر مشخص نشود پیش‌فرض <code>normal</code> است.</li>
+<li><code>pretty-compare-only</code> باعث می‌شود یک تست pretty فقط خروجی pretty-print شده را مقایسه کند
+(پس از گام ۳ بالا متوقف می‌شود).
+سعی نمی‌کند خروجی گسترش‌یافته را برای type check کامپایل کند.
+این برای حالت pretty-mode‌ای لازم است که به Rust معتبر گسترش نمی‌یابد،
+یا برای موقعیت‌های دیگری که خروجی گسترش‌یافته قابل‌کامپایل نیست.</li>
+<li><code>pp-exact</code> برای تضمین اینکه تست pretty-print خروجی مشخصی بدهد به‌کار می‌رود.
+اگر بدون مقدار مشخص شود،
+یعنی خروجی pretty-print باید با منبع اصلی مطابقت کند.
+اگر با مقدار مشخص شود، مثل <code>//@ pp-exact:foo.pp</code>،
+تضمین می‌کند خروجی pretty-print شده با محتوای فایل داده‌شده مطابقت دارد.
+در غیر این صورت، اگر <code>pp-exact</code> مشخص نشده باشد،
+خروجی pretty-print شده یک بار دیگر pretty-print می‌شود،
+و خروجی دو دور pretty-printing مقایسه می‌شود تا تضمین شود
+خروجی pretty-print شده به حالت پایدار همگرا می‌شود.</li>
+</ul>
+<h3 id="incremental-tests"><a class="header" href="#incremental-tests">Incremental tests</a></h3>
+<p>تست‌های <a href="https://github.com/rust-lang/rust/tree/7b42543/tests/incremental"><code>tests/incremental</code></a> کامپایل افزایشی را می‌آزمایند.
+آن‌ها از <a href="#revisions">directive با نام <code>revisions</code></a> استفاده می‌کنند تا به compiletest بگویند کامپایلر را در
+یک سری گام اجرا کند.</p>
+<p>Compiletest با یک پوشهٔ خالی و پرچم <code>-C incremental</code> شروع می‌کند، و
+سپس کامپایلر را برای هر revision اجرا می‌کند و نتایج افزایشی گام‌های قبل را دوباره به‌کار می‌برد.</p>
+<p>نام هر revision باید با یکی از این‌ها شروع شود:</p>
+<ul>
+<li><code>cpass</code> - تست باید با موفقیت کامپایل شود (بررسی ساخت، بدون codegen)</li>
+<li><code>bfail</code> — تست باید در کامپایل شکست بخورد (ساخت کامل، با codegen)</li>
+<li><code>bpass</code> — تست باید با موفقیت کامپایل شود (ساخت کامل، با codegen)</li>
+<li><code>rpass</code> — تست باید با موفقیت کامپایل و اجرا شود</li>
+</ul>
+<p>برای یکتا‌کردن revisionها، باید پسوندی مثل <code>rpass1</code> و <code>rpass2</code> اضافه کنید.</p>
+<p>برای شبیه‌سازی تغییر منبع،
+compiletest یک پرچم <code>--cfg</code> با نام revision فعلی هم می‌دهد.</p>
+<p>برای مثال این دو بار اجرا می‌شود و تغییر یک تابع را شبیه‌سازی می‌کند:</p>
+<pre><code class="language-rust ignore">//@ revisions: rpass1 rpass2
+
+#[cfg(rpass1)]
+fn foo() {
+    println!("one");
+}
+
+#[cfg(rpass2)]
+fn foo() {
+    println!("two");
+}
+
+fn main() { foo(); }</code></pre>
+<p>تست‌های افزایشی از directive با نام <code>forbid-output</code> پشتیبانی می‌کنند تا مشخص کنند یک
+زیررشتهٔ مشخص نباید هیچ‌جای خروجی کامپایلر ظاهر شود.
+این می‌تواند برای تضمین ظاهرنشدن برخی خطاها مفید باشد، اما می‌تواند شکننده باشد چون پیام‌های خطا
+با گذر زمان تغییر می‌کنند، و ممکن است تست دیگر چیز درست را بررسی نکند اما همچنان بگذرد.</p>
+<p>تست‌های افزایشی ممکن است از attribute با نام <code>#[rustc_clean(...)]</code> استفاده کنند.
+این attribute اثر انگشت جلسهٔ کامپایل فعلی را با جلسهٔ قبلی مقایسه می‌کند.
+اولین revision هرگز نباید attribute فعال <code>rustc_clean</code> داشته باشد،
+چون همیشه dirty خواهد بود.</p>
+<p>در حالت پیش‌فرض، تضمین می‌کند اثر انگشت‌ها باید یکسان باشند.
+این attribute آرگومان‌های زیر را می‌گیرد:</p>
+<ul>
+<li><code>cfg="&lt;cond&gt;"</code> — شرط cfg با نام <code>&lt;cond&gt;</code> را بررسی می‌کند،
+و بررسی را فقط وقتی اجرا می‌کند که شرط پیکربندی true باشد.
+از آن می‌توان برای اجرای attribute با نام <code>rustc_clean</code> فقط در یک revision مشخص استفاده کرد.</li>
+<li><code>except="&lt;query1&gt;,&lt;query2&gt;,..."</code> — تضمین می‌کند نتایج کوئری‌های فهرست‌شده باید متفاوت باشند،
+نه یکسان.</li>
+<li><code>loaded_from_disk="&lt;query1&gt;,&lt;query2&gt;,..."</code> — تضمین می‌کند نتایج کوئری‌های فهرست‌شده
+واقعاً از دیسک بارگذاری شده‌اند (نه فقط سبز علامت‌گذاری شده‌اند).
+این می‌تواند برای اطمینان از اینکه تست واقعاً منطق deserialization
+برای نتیجهٔ یک کوئری مشخص را می‌آزماید مفید باشد.
+می‌توان آن را با <code>except</code> ترکیب کرد.</li>
+</ul>
+<p>مثال ساده‌ای از تستی که از <code>rustc_clean</code> استفاده می‌کند <a href="https://github.com/rust-lang/rust/blob/646a3f8c15baefb98dc6e0c1c1ba3356db702d2a/tests/incremental/hello_world.rs">تست hello_world</a> است.</p>
+<h3 id="debuginfo-tests"><a class="header" href="#debuginfo-tests">Debuginfo tests</a></h3>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>از <a href="https://github.com/rust-lang/rust/pull/159455">#159455</a> به بعد این تست‌ها
+اختیاری (opt-in) شدند. برای زمینهٔ بیشتر ببینید:
+<a href="https://github.com/rust-lang/compiler-team/issues/1012">پایدارسازی وضعیت مجموعهٔ تست debuginfo</a></p>
+</blockquote>
+<p>تست‌های <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/debuginfo"><code>tests/debuginfo</code></a> بررسی می‌کنند debuginfo چگونه توسط دیباگرهای پشتیبانی‌شده تفسیر می‌شود،
+و تأیید می‌کنند visualizerهای ما همچنان مطابق انتظار کار می‌کنند.
+یک برنامه می‌سازند، دیباگر را راه‌اندازی می‌کنند و دستورهایی به دیباگر می‌دهند.
+یک تست واحد می‌تواند با cdb، gdb و lldb کار کند.</p>
+<p>بیشتر تست‌ها باید directive با نام <code>//@ compile-flags: -g</code> یا چیزی مشابه آن را داشته باشند تا debuginfo مناسب تولید شود.</p>
+<p>برای تنظیم breakpoint روی یک خط، کامنت <code>// #break</code> را به آن خط اضافه کنید.</p>
+<p>تست‌های debuginfo شامل مجموعه‌ای از دستورهای دیباگر به‌علاوهٔ
+خطوط «check» هستند که خروجی مورد انتظار از دیباگر را مشخص می‌کنند.</p>
+<p>دستورها کامنت‌هایی به شکل <code>//@ $DEBUGGER-command:$COMMAND</code> هستند که در آن
+<code>$DEBUGGER</code> دیباگر مورد استفاده و <code>$COMMAND</code> دستور دیباگر برای اجراست.</p>
+<p>مقادیر debugger می‌توانند این‌ها باشند:</p>
+<ul>
+<li><code>cdb</code></li>
+<li><code>gdb</code></li>
+<li><code>lldb</code></li>
+</ul>
+<p>دستور بررسی خروجی به شکل <code>//@ $DEBUGGER-check:$OUTPUT</code> است
+که در آن <code>$OUTPUT</code> خروجی مورد انتظار است.</p>
+<p>برای مثال، موارد زیر تست را می‌سازند، دیباگر را شروع می‌کنند، breakpoint تنظیم می‌کنند،
+برنامه را اجرا می‌کنند، مقداری را بررسی می‌کنند و آنچه دیباگر چاپ می‌کند را می‌سنجند:</p>
+<pre><code class="language-rust ignore">//@ compile-flags: -g
+
+//@ lldb-command: run
+//@ lldb-command: print foo
+//@ lldb-check: $0 = 123
+
+fn main() {
+    let foo = 123;
+    b(); // #break
+}
+
+fn b() {}</code></pre>
+<p>علاوه بر این، یک دستور ویژه به نام <code>//@ $DEBUGGER-repr:$VAR_NAME</code> هست که برای تأیید
+متغیرها (و visualizerهایشان) با جزئیات بیشتر از آنچه با مقایسهٔ ساده رشته‌ها ممکن است طراحی شده است.
+این directive تا جای ممکن بر <code>-command</code>/<code>-check</code> ترجیح دارد.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>در زمان نگارش (ژوئیهٔ 2026) این دستور به LLDB محدود است و پیاده‌سازی آن برای
+GDB به‌زودی می‌آید. برنامهٔ قطعی برای انتقال این منطق به CDB وجود ندارد.</p>
+</blockquote>
+<p>این دستور در عمل به این بسط داده می‌شود:</p>
+<pre><code>//@ $DEBUGGER-command:repr $VAR_NAME
+//@ $DEBUGGER-check:$VAR_NAME ok
+</code></pre>
+<p>دستور <code>repr $VAR_NAME</code> توسط منطق ویژه‌ای رهگیری می‌شود که از API دیباگرها برای بررسی
+داده‌هایی استفاده می‌کند که در خروجی چاپ‌شدهٔ متغیر منعکس نمی‌شوند.
+متغیر در حافظه با داده‌های ورودی ذخیره‌شده در
+<code>tests/debuginfo/&lt;test_name&gt;/input/&lt;debugger&gt;_input/&lt;target_group&gt;.json</code> مقایسه می‌شود و
+هنگام شکست پیام‌های خطای مفصل می‌دهد.</p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>directiveهای <code>-repr</code> با گزینهٔ <code>--bless</code> <strong>سازگارند</strong>، برخلاف <code>-command</code>/<code>-check</code>.
+عمل <code>--bless</code> روی فایلی با دستورهای <code>-repr</code> به‌طور خودکار فایل داده‌های ورودی
+هدف مناسب را می‌سازد/به‌روز می‌کند.</p>
+</blockquote>
+<p>جزئیات پیاده‌سازی این دستور بیشتر در
+<a href="../debuginfo/testing.html">بخش تست در فصل Debug Info</a> شرح داده شده است.</p>
+<p><a href="directives.html">directiveهای</a> زیر برای غیرفعال‌کردن یک تست بر اساس
+دیباگری که فعلاً استفاده می‌شود در دسترس‌اند:</p>
+<ul>
+<li><code>min-cdb-version: 10.0.18317.1001</code> — اگر نسخهٔ cdb پایین‌تر از نسخهٔ داده‌شده باشد تست را نادیده می‌گیرد</li>
+<li><code>min-gdb-version: 8.2</code> — اگر نسخهٔ gdb پایین‌تر از نسخهٔ داده‌شده باشد تست را نادیده می‌گیرد</li>
+<li><code>ignore-gdb-version: 9.2</code> — اگر نسخهٔ gdb برابر نسخهٔ داده‌شده باشد تست را نادیده می‌گیرد</li>
+<li><code>ignore-gdb-version: 7.11.90 - 8.0.9</code> — اگر نسخهٔ
+gdb در یک بازه (شامل دو سر) باشد تست را نادیده می‌گیرد</li>
+<li><code>min-apple-lldb-version: 1703.0.236.21</code>/<code>min-llvm-lldb-version: 21.1.0</code> — اگر
+نسخهٔ lldb پایین‌تر از نسخهٔ داده‌شده باشد تست را نادیده می‌گیرد.
+نکته: fork شرکت Apple از LLDB (که با Xcode توزیع می‌شود) از طرح نسخه‌گذاری متفاوتی استفاده می‌کند که به‌آسانی
+به شمارهٔ نسخه‌های LLDB در LLVM نگاشت نمی‌شود.
+به همین دلیل، دروازه‌های نسخه بر اساس تأمین‌کننده مشخص می‌شوند.
+اطلاعات بیشتر دربارهٔ بررسی دستی هم‌ارزی نسخه‌ها <a href="../debuginfo/testing.html#lldb-versioning">اینجا</a> موجود است</li>
+<li><code>rust-lldb</code> — اگر lldb افزونهٔ Rust را نداشته باشد تست را نادیده می‌گیرد.
+نکته: نسخهٔ «Rust» از LLDB دیگر وجود ندارد، پس این همیشه نادیده گرفته می‌شود.
+احتمالاً باید حذف شود.</li>
+</ul>
+<p>با دادن گزینهٔ <code>--debugger</code> به compiletest،
+می‌توانید یک دیباگر مشخص را برای اجرای تست‌ها تعیین کنید.
+برای مثال، <code>./x test tests/debuginfo -- --debugger gdb</code> فقط دستورهای GDB را تست می‌کند.</p>
+<blockquote>
+<p><strong>نکته دربارهٔ اجرای محلی تست‌های debuginfo در lldb با توزیع از پیش ساخته‌شدهٔ lldb</strong></p>
+<p>اگر می‌خواهید تست‌های debuginfo در lldb را به‌صورت محلی اجرا کنید، فعلاً در ویندوز
+لازم است:</p>
+<h1 id="lldb-21"><a class="header" href="#lldb-21">LLDB 21</a></h1>
+<ul>
+<li>Python 3.10 را نصب کرده باشید.</li>
+<li><code>python310.dll</code> در متغیر محیطی <code>PATH</code> شما در دسترس باشد. این فایل
+توسط نصب‌کنندهٔ استاندارد Python از <code>python.org</code> ارائه نمی‌شود؛
+باید آن را دستی به <code>PATH</code> اضافه کنید.</li>
+</ul>
+<h1 id="lldb-22"><a class="header" href="#lldb-22">LLDB 22</a></h1>
+<ul>
+<li>Python 3.11 را نصب کرده باشید.</li>
+<li><code>python311.dll</code> در <code>PATH</code> شما در دسترس باشد.</li>
+<li>توصیه می‌شود نصب Python را از طریق <code>pymanager</code> بگیرید،
+که اسکریپت‌های نصب بعدی برای کمک به پیکربندی <code>PATH</code> دارد.</li>
+</ul>
+<p>در غیر این صورت تست‌های debuginfo در lldb می‌توانند به شکل‌های مرموزی crash کنند.</p>
+</blockquote>
+<blockquote>
+<p><strong>نکته دربارهٔ دریافت <code>cdb.exe</code> در Windows 11</strong></p>
+<p><code>cdb.exe</code> همراه با «Windows 11 SDK» مناسب دریافت می‌شود که بخشی از
+پروفایل workload با نام «Desktop Development with C++» در نصب‌کنندهٔ Visual Studio است
+(مثلاً نصب‌کنندهٔ Visual Studio 2022).</p>
+<p><strong>اما</strong> این به‌تنهایی به‌طور پیش‌فرض کافی نیست. اگر به <code>cdb.exe</code> نیاز دارید،
+باید به Installed Apps بروید، جدیدترین «Windows Software Development
+Kit» را بیابید (و بله، ممکن است همچنان <code>Windows 10.0.22161.3233</code> بنویسد، حتی اگر سیستم‌عامل
+Windows 11 نامیده می‌شود). سپس باید روی «Modify» -&gt; «Change» کلیک کنید و
+«Debugging Tools for Windows» را انتخاب کنید تا <code>cdb.exe</code> را دریافت کنید.</p>
+</blockquote>
+<h3 id="codegen-tests"><a class="header" href="#codegen-tests">Codegen tests</a></h3>
+<p>تست‌های <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/codegen-llvm"><code>tests/codegen-llvm</code></a> تولید کد LLVM را می‌آزمایند.
+آن‌ها تست را با پرچم <code>--emit=llvm-ir</code> کامپایل می‌کنند تا LLVM IR تولید شود.
+سپس ابزار <a href="https://llvm.org/docs/CommandGuide/FileCheck.html">FileCheck</a> در LLVM را اجرا می‌کنند.
+تست با کامنت‌های مختلف <code>// CHECK</code> annotate می‌شود تا کد تولیدشده بررسی شود.
+برای آموزش و اطلاعات بیشتر مستندات <a href="https://llvm.org/docs/CommandGuide/FileCheck.html">FileCheck</a> را ببینید.</p>
+<p>برای مجموعهٔ مشابهی از تست‌ها <a href="#assembly-tests">تست‌های assembly</a> را هم ببینید.</p>
+<p>به‌طور پیش‌فرض،
+تست‌های codegen <code>//@ needs-target-std</code> را <em>ضمنی</em> دارند (یعنی هدف باید از std پشتیبانی کند)،
+<em>مگر اینکه</em> attribute با نام <code>#![no_std]</code>/<code>#![no_core]</code> در منبع تست مشخص شده باشد.
+می‌توانید این رفتار را بازنویسی کنید و صراحتاً
+<code>//@ needs-target-std</code> را بنویسید تا تست فقط وقتی هدف از std پشتیبانی می‌کند اجرا شود،
+حتی اگر تست <code>#![no_std]</code>/<code>#![no_core]</code> باشد.</p>
+<p>اگر باید با تست‌های cross-compile از نوع <code>#![no_std]</code> کار کنید،
+فصل <a href="./minicore.html"><code>minicore</code> test auxiliary</a> را ببینید.</p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>چند مورد از این تست‌ها از <a href="./directives.html#controlling-when-tests-are-run"><code>ignore-std-debug-assertions</code> directive</a> استفاده می‌کنند.
+اگر <code>rust.debug-assertions-std</code> در <code>bootstrap.toml</code> روی <code>true</code> تنظیم شده باشد
+(از جمله به‌طور تعدّی از طریق <code>rust.debug</code> یا <code>rust.debug-assertions</code>)،
+اجرا نخواهند شد!</p>
+</blockquote>
+<h3 id="assembly-tests"><a class="header" href="#assembly-tests">Assembly tests</a></h3>
+<p>تست‌های <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/assembly-llvm"><code>tests/assembly-llvm</code></a> خروجی assembly در LLVM را می‌آزمایند.
+آن‌ها تست را با پرچم <code>--emit asm</code> کامپایل می‌کنند تا فایل <code>.s</code> با خروجی assembly تولید شود.
+سپس ابزار <a href="https://llvm.org/docs/CommandGuide/FileCheck.html">FileCheck</a> در LLVM را اجرا می‌کنند.</p>
+<p>هر تست باید با directive با نام <code>//@ assembly-output:</code> و مقدار
+<code>emit-asm</code> یا <code>ptx-linker</code> annotate شود تا نوع خروجی assembly مشخص شود.</p>
+<p>سپس باید با کامنت‌های مختلف <code>// CHECK</code> annotate شوند تا خروجی assembly بررسی شود.
+برای آموزش و اطلاعات بیشتر مستندات <a href="https://llvm.org/docs/CommandGuide/FileCheck.html">FileCheck</a> را ببینید.</p>
+<p>برای مجموعهٔ مشابهی از تست‌ها <a href="#codegen-tests">تست‌های codegen</a> را هم ببینید.</p>
+<p>اگر باید با تست‌های cross-compile از نوع <code>#![no_std]</code> کار کنید،
+فصل <a href="./minicore.html"><code>minicore</code> test auxiliary</a> را ببینید.</p>
+<h3 id="codegen-units-tests"><a class="header" href="#codegen-units-tests">Codegen-units tests</a></h3>
+<p>تست‌های <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/codegen-units"><code>tests/codegen-units</code></a> جمع‌کنندهٔ
+<a href="../backend/monomorph.html">monomorphization</a> و افراز CGU را می‌آزمایند.</p>
+<p>این تست‌ها با اجرای <code>rustc</code> با پرچمی برای چاپ نتیجهٔ گذر جمع‌آوری
+monomorphization، یعنی <code>-Zprint-mono-items</code>، کار می‌کنند، و سپس annotationهای ویژه در فایل
+برای مقایسه با آن به‌کار می‌روند.</p>
+<p>سپس تست باید با کامنت‌هایی به شکل <code>//~ MONO_ITEM name</code> annotate شود که در آن <code>name</code> رشتهٔ monomorphize‌شده‌ای است که rustc چاپ می‌کند، مثل <code>fn &lt;u32 as Trait&gt;::foo</code>.</p>
+<p>برای بررسی افراز CGU، کامنتی به شکل <code>//~ MONO_ITEM name @@ cgu</code>
+که در آن <code>cgu</code> فهرستی از نام CGUها با فاصله و اطلاعات linkage در قلاب است.
+برای مثال: <code>//~ MONO_ITEM static function::FOO @@ statics[Internal]</code></p>
+<h3 id="mir-opt-tests"><a class="header" href="#mir-opt-tests">Mir-opt tests</a></h3>
+<p>تست‌های <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/mir-opt"><code>tests/mir-opt</code></a> بخش‌هایی از MIR تولیدشده را بررسی می‌کنند تا مطمئن شوند
+درست تولید شده و بهینه‌سازی‌های مورد انتظار را انجام می‌دهد.
+برای اطلاعات بیشتر فصل <a href="../mir/optimizations.html">بهینه‌سازی‌های MIR</a> را ببینید.</p>
+<p>Compiletest تست را با چند پرچم می‌سازد تا خروجی MIR را dump کند و
+خط مبنایی برای بهینه‌سازی‌ها تعیین کند:</p>
+<ul>
+<li><code>-Copt-level=1</code></li>
+<li><code>-Zdump-mir=all</code></li>
+<li><code>-Zmir-opt-level=4</code></li>
+<li><code>-Zvalidate-mir</code></li>
+<li><code>-Zdump-mir-exclude-pass-number</code></li>
+</ul>
+<p>تست باید با کامنت‌های <code>// EMIT_MIR</code> annotate شود که فایل‌هایی را مشخص می‌کنند
+که خروجی MIR مورد انتظار را در بر دارند.
+می‌توانید از <code>x test --bless</code> برای ساخت فایل‌های اولیهٔ مورد انتظار استفاده کنید.</p>
+<p>کامنت <code>EMIT_MIR</code> چند شکل می‌تواند داشته باشد:</p>
+<ul>
+<li>
+<p><code>// EMIT_MIR $MIR_PATH.mir</code> — این بررسی می‌کند نام فایل داده‌شده با
+خروجی دقیق dump مربوط به MIR مطابقت داشته باشد.
+برای مثال،
+<code>my_test.main.SimplifyCfg-elaborate-drops.after.mir</code> آن فایل را از
+پوشهٔ تست بارگذاری می‌کند و با dump حاصل از rustc مقایسه می‌کند.</p>
+<p>بررسی فایل «after» (که پس از بهینه‌سازی است) وقتی مفید است که
+به حالت نهایی پس از یک بهینه‌سازی علاقه‌مندید.
+برخی موارد نادر ممکن است برای کامل‌بودن بخواهند از فایل «before» استفاده کنند.</p>
+</li>
+<li>
+<p><code>// EMIT_MIR $MIR_PATH.diff</code> — که در آن <code>$MIR_PATH</code> نام فایل dump مربوط به MIR است،
+مثل <code>my_test_name.my_function.EarlyOtherwiseBranch</code>.
+Compiletest فایل‌های <code>.before.mir</code> و <code>.after.mir</code> را diff می‌کند،
+و خروجی diff را با فایل <code>.diff</code> مورد انتظار از کامنت <code>EMIT_MIR</code> مقایسه می‌کند.</p>
+<p>این وقتی مفید است که می‌خواهید ببینید یک بهینه‌سازی MIR را چگونه تغییر می‌دهد.</p>
+</li>
+<li>
+<p><code>// EMIT_MIR $MIR_PATH.dot</code> — هنگام استفاده از پرچم‌های مشخصی که داده‌های اضافی
+MIR را dump می‌کنند (مثلاً <code>-Z dump-mir-graphviz</code> برای تولید فایل‌های <code>.dot</code>)، این
+بررسی می‌کند خروجی با فایل داده‌شده مطابقت دارد.</p>
+</li>
+</ul>
+<p>به‌طور پیش‌فرض هدف‌های ۳۲ بیتی و ۶۴ بیتی از فایل‌های dump یکسانی استفاده می‌کنند، که
+در حضور اشاره‌گرها در ثابت‌ها یا چیزهای دیگر وابسته به پهنای بیت می‌تواند مشکل‌ساز باشد.
+در آن صورت می‌توانید <code>// EMIT_MIR_FOR_EACH_BIT_WIDTH</code> را به تست خود اضافه کنید،
+که باعث می‌شود فایل‌های جداگانه برای سیستم‌های ۳۲ بیتی و ۶۴ بیتی تولید شود.</p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>چند مورد از این تست‌ها از <a href="./directives.html#controlling-when-tests-are-run"><code>ignore-std-debug-assertions</code> directive</a> استفاده می‌کنند.
+اگر <code>rust.debug-assertions-std</code> در <code>bootstrap.toml</code> روی <code>true</code> تنظیم شده باشد
+(از جمله به‌طور تعدّی از طریق <code>rust.debug</code> یا <code>rust.debug-assertions</code>)،
+اجرا نخواهند شد!</p>
+</blockquote>
+<h3 id="run-make-tests"><a class="header" href="#run-make-tests"><code>run-make</code> tests</a></h3>
+<p>تست‌های <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/run-make"><code>tests/run-make</code></a> و <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/run-make-cargo"><code>tests/run-make-cargo</code></a> تست‌های همه‌منظوره
+با استفاده از <em>دستورپخت‌های (recipes)</em> Rust هستند، که برنامه‌های کوچکی (<code>rmake.rs</code>) هستند و اجازهٔ
+کد دلخواه Rust مثل فراخوانی <code>rustc</code> را می‌دهند، و کتابخانهٔ <a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/run-make-support"><code>run_make_support</code></a> از آن‌ها پشتیبانی می‌کند.
+استفاده از recipeهای Rust نهایت انعطاف را فراهم می‌کند.</p>
+<p>اگر مجموعهٔ تست دیگری بهتر نیازهای شما را برآورده نمی‌کند باید از تست‌های <code>run-make</code> استفاده شود.</p>
+<p>مجموعهٔ تست <code>run-make-cargo</code> علاوه بر آن یک <code>cargo</code> درون‌درختی هم می‌سازد تا از
+مواردی پشتیبانی کند که نیاز به تست <code>cargo</code> درون‌درختی همراه با <code>rustc</code> درون‌درختی دارند.
+مجموعهٔ تست <code>run-make</code> به <code>cargo</code> درون‌درختی دسترسی ندارد (پس می‌تواند
+مجموعهٔ تست سریع‌تری برای تکرار باشد).</p>
+<h3 id="build-std-tests"><a class="header" href="#build-std-tests"><code>build-std</code> tests</a></h3>
+<p>تست‌های <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/build-std"><code>tests/build-std</code></a> بررسی می‌کنند <code>-Zbuild-std</code> کار می‌کند.
+این فعلاً فقط یک مجموعهٔ تست run-make با یک recipe است.
+recipe موارد تست را تولید و آن‌ها را به‌صورت موازی اجرا می‌کند.</p>
+<h4 id="using-rust-recipes"><a class="header" href="#using-rust-recipes">استفاده از recipeهای Rust</a></h4>
+<p>هر تست باید در پوشهٔ جداگانه‌ای با برنامهٔ Rust با نام <code>rmake.rs</code> باشد،
+که <em>recipe</em> نامیده می‌شود. recipe توسط compiletest با کتابخانهٔ <code>run_make_support</code> لینک‌شده کامپایل و اجرا می‌شود.</p>
+<p>اگر به ابزارها یا قابلیت‌های جدید نیاز دارید،
+گسترش و بهبود کتابخانهٔ <a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/run-make-support"><code>run_make_support</code></a> را در نظر بگیرید.</p>
+<p>directiveهای compiletest مثل <code>//@ only-&lt;target&gt;</code> یا <code>//@ ignore-&lt;target&gt;</code> در
+<code>rmake.rs</code> پشتیبانی می‌شوند، مثل تست‌های UI.
+اما revisionها یا ساخت auxiliary با directiveها فعلاً پشتیبانی نمی‌شوند.</p>
+<p><code>rmake.rs</code> و <code>run-make-support</code> نباید <em>هیچ</em> قابلیت nightly/ناپایداری را به‌کار ببرند،
+چون باید توسط rustc مرحلهٔ stage 0 قابل‌کامپایل باشند که ممکن است beta یا حتی stable باشد.</p>
+<p>به‌طور پیش‌فرض، تست‌های run-make هر دستور زیرفرایند و stdout/stderr آن را چاپ می‌کنند.
+هنگام اجرا با <code>--no-capture</code> روی مجموعه‌های تست <code>panic=abort</code> (مثل <code>cg_clif</code>)،
+این می‌تواند ترمینال را سیل‌زده کند.
+با حذف <code>--verbose-run-make-subprocess-output</code>
+این خروجی برای تست‌های موفق سرکوب می‌شود — تست‌های شکست‌خورده همیشه چاپ می‌کنند:</p>
+<pre><code class="language-bash">./x test tests/run-make --no-capture --verbose-run-make-subprocess-output=false
+</code></pre>
+<h4 id="quickly-check-if-rmakers-tests-can-be-compiled"><a class="header" href="#quickly-check-if-rmakers-tests-can-be-compiled">بررسی سریع اینکه تست‌های <code>rmake.rs</code> قابل‌کامپایل‌اند</a></h4>
+<p>می‌توانید بدون ساخت rustc مرحلهٔ stage1، سریعاً بررسی کنید تست‌های <code>rmake.rs</code> قابل‌کامپایل‌اند،
+با اجبار کامپایل <code>rmake.rs</code> توسط کامپایلر stage0:</p>
+<pre><code class="language-bash">$ COMPILETEST_FORCE_STAGE0=1 x test --stage 0 tests/run-make/&lt;test-name&gt;
+</code></pre>
+<p>البته برخی تست‌ها به این شکل با موفقیت <em>اجرا</em> نخواهند شد.</p>
+<h4 id="using-rust-analyzer-with-rmakers"><a class="header" href="#using-rust-analyzer-with-rmakers">استفاده از rust-analyzer با <code>rmake.rs</code></a></h4>
+<p>مثل برنامه‌های تست دیگر،
+اسکریپت‌های <code>rmake.rs</code> که در تست‌های run-make استفاده می‌شوند به‌طور پیش‌فرض یکپارچگی با rust-analyzer ندارند.</p>
+<p>برای دور‌زدن این هنگام کار روی یک تست مشخص،
+موقتاً یک فایل <code>Cargo.toml</code> در پوشهٔ تست بسازید
+(مثلاً <code>tests/run-make/sysroot-crates-are-unstable/Cargo.toml</code>)
+با این محتوا:</p>
+<div class="warning">
+<p>مراقب باشید این <code>Cargo.toml</code> یا <code>Cargo.lock</code> آن را به PR واقعی خود اضافه نکنید!</p>
+</div>
+
+<pre><code class="language-toml"># Convince cargo that this isn't part of an enclosing workspace.
+[workspace]
+
+[package]
+name = "rmake"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+run_make_support = { path = "../../../src/tools/run-make-support" }
+
+[[bin]]
+name = "rmake"
+path = "rmake.rs"
+</code></pre>
+<p>سپس ورودی متناظر را به <code>"rust-analyzer.linkedProjects"</code> اضافه کنید
+(مثلاً در <code>.vscode/settings.json</code>):</p>
+<pre><code class="language-json">"rust-analyzer.linkedProjects": [
+  "tests/run-make/sysroot-crates-are-unstable/Cargo.toml"
+],
+</code></pre>
+<h3 id="coverage-tests"><a class="header" href="#coverage-tests">Coverage tests</a></h3>
+<p>تست‌های <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/coverage"><code>tests/coverage</code></a> بین چند حالت تست که پوشش (coverage) instrumentation را
+به شکل‌های مختلف می‌آزمایند مشترک‌اند.
+اجرای مجموعهٔ تست <code>coverage</code>
+به‌طور خودکار هر تست را در همهٔ حالت‌های مختلف coverage اجرا می‌کند.</p>
+<p>هر حالت یک نام مستعار هم دارد تا تست‌های coverage را فقط در همان حالت اجرا کند:</p>
+<pre><code class="language-bash">./x test coverage # runs all of tests/coverage in all coverage modes
+./x test tests/coverage # same as above
+
+./x test tests/coverage/if.rs # runs the specified test in all coverage modes
+
+./x test coverage-map # runs all of tests/coverage in "coverage-map" mode only
+./x test coverage-run # runs all of tests/coverage in "coverage-run" mode only
+
+./x test coverage-map -- tests/coverage/if.rs # runs the specified test in "coverage-map" mode only
+</code></pre>
+<p>اگر به دلیلی نباید یک تست مشخص در یکی از حالت‌های تست coverage اجرا شود،
+از directiveهای <code>//@ ignore-coverage-map</code> یا <code>//@ ignore-coverage-run</code> استفاده کنید.</p>
+<h4 id="coverage-map-suite"><a class="header" href="#coverage-map-suite"><code>coverage-map</code> suite</a></h4>
+<p>در حالت <code>coverage-map</code>، این تست‌ها نگاشت‌های بین نواحی کد منبع
+و شمارنده‌های coverage را که LLVM تولید می‌کند تأیید می‌کنند.
+آن‌ها تست را با <code>--emit llvm-ir</code> کامپایل می‌کنند، سپس از یک ابزار سفارشی (<a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/coverage-dump"><code>src/tools/coverage-dump</code></a>) برای
+استخراج و pretty-print نگاشت‌های coverage جاسازی‌شده در IR استفاده می‌کنند.
+این تست‌ها به runtime مربوط به profiler نیاز ندارند،
+پس در jobهای CI مربوط به PR اجرا می‌شوند و اجرا/bless محلی آن‌ها آسان است.</p>
+<p>این تست‌های نگاشت coverage می‌توانند به تغییرات در lowering یا بهینه‌سازی‌های MIR حساس باشند،
+و نگاشت‌هایی تولید کنند که متفاوت‌اند اما گزارش‌های coverage یکسانی می‌دهند.</p>
+<p>به‌عنوان قاعدهٔ سرانگشتی، هر PRای که کد مخصوص coverage را تغییر نمی‌دهد
+<strong>آزاد است</strong> تست‌های <code>coverage-map</code> را در صورت لزوم دوباره bless کند، بدون
+نگرانی دربارهٔ تغییرات واقعی، مادامی که تست‌های <code>coverage-run</code> همچنان بگذرند.</p>
+<h4 id="coverage-run-suite"><a class="header" href="#coverage-run-suite"><code>coverage-run</code> suite</a></h4>
+<p>در حالت <code>coverage-run</code>، این تست‌ها یک تست سرتاسری از گزارش‌دهی coverage انجام می‌دهند.
+یک برنامهٔ تست را با instrumentation مربوط به coverage کامپایل می‌کنند،
+آن برنامه را اجرا می‌کنند تا داده‌های خام coverage تولید شود،
+و سپس از ابزارهای LLVM برای پردازش آن داده‌ها به گزارش coverage خوانا برای انسان استفاده می‌کنند.</p>
+<p>فایل‌های دودویی instrument‌شده باید با runtime مربوط به profiler در LLVM لینک شوند،
+پس تست‌های <code>coverage-run</code> <strong>به‌طور خودکار رد می‌شوند</strong> مگر اینکه runtime مربوط به profiler
+در <code>bootstrap.toml</code> فعال شده باشد:</p>
+<pre><code class="language-toml">build.profiler = true
+</code></pre>
+<p>این همچنین یعنی معمولاً در jobهای CI مربوط به PR اجرا نمی‌شوند،
+هرچند به‌عنوان بخشی از مجموعهٔ کامل jobهای CI که برای merge به‌کار می‌روند اجرا می‌شوند.</p>
+<h4 id="coverage-run-rustdoc-suite"><a class="header" href="#coverage-run-rustdoc-suite"><code>coverage-run-rustdoc</code> suite</a></h4>
+<p>تست‌های <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/coverage-run-rustdoc"><code>tests/coverage-run-rustdoc</code></a> هم doctestهای instrument‌شده را اجرا می‌کنند و
+آن‌ها را در گزارش coverage می‌گنجانند.
+این از لزوم ساخت rustdoc هنگام اجرای فقط مجموعهٔ اصلی <code>coverage</code> جلوگیری می‌کند.</p>
+<h3 id="crash-tests"><a class="header" href="#crash-tests">Crash tests</a></h3>
+<p><a href="https://github.com/rust-lang/rust/tree/HEAD/tests/crashes"><code>tests/crashes</code></a> مجموعه‌ای از تست‌هاست که انتظار می‌رود باعث ICE، panic یا crash دیگری در کامپایلر شوند، تا
+رفع‌های تصادفی پیگیری شوند.
+پیش‌تر این کار در <a href="https://github.com/rust-lang/glacier">https://github.com/rust-lang/glacier</a> انجام می‌شد اما
+انجام آن درون مجموعهٔ تست rust-lang/rust راحت‌تر است.</p>
+<p>ضروری است که یک تست در این مجموعه باعث شود rustc ICE دهد، panic کند یا به شکل دیگری crash کند.
+تست «می‌گذرد» اگر rustc با کد خروجی غیر از 1 یا 0 خارج شود.</p>
+<p>اگر می‌خواهید stdout/stderr مفصل ببینید، باید
+<code>COMPILETEST_VERBOSE_CRASHES=1</code> را تنظیم کنید، مثلاً</p>
+<pre><code class="language-bash">$ COMPILETEST_VERBOSE_CRASHES=1 ./x test tests/crashes/999999.rs --stage 1
+</code></pre>
+<p>هر کسی می‌تواند <a href="https://github.com/rust-lang/rust/issues?q=is%3Aissue+state%3Aopen+label%3AI-ICE%2CI-crash+label%3AT-compiler+label%3AS-has-mcve+-label%3AS-bug-has-test">crashهای «بدون‌پیگیری»</a> را از issue tracker اضافه کند.
+قویاً توصیه می‌شود تست‌های چند issue در یک PR گنجانده شوند.
+وقتی این کار را می‌کنید، شمارهٔ هر issue باید در نام فایل (<code>12345.rs</code>
+کافی است) و همچنین درون فایل با directive با نام <code>//@ known-bug: #12345</code> ذکر شود.
+لطفاً پس از merge شدن PR، issueهای مرتبط را با <code>S-bug-has-test</code> <a href="https://forge.rust-lang.org/release/issue-triaging.html#applying-and-removing-labels">برچسب‌گذاری</a> کنید.</p>
+<p>اگر اتفاقاً یکی از crashها را رفع کردید،
+لطفاً آن را به زیرپوشهٔ مناسبی در <code>tests/ui</code> منتقل کنید و نام معناداری به آن بدهید.
+لطفاً در بالای فایل یک doc comment اضافه کنید که توضیح دهد چرا این تست وجود دارد.
+بهتر از آن این است که بتوانید به‌اختصار توضیح دهید مثال پیش‌تر چگونه rustc را crash می‌داد،
+و چه کاری برای رفع آن انجام شد.</p>
+<p>Adding</p>
+<pre><code class="language-text">Fixes #NNNNN
+Fixes #MMMMM
+</code></pre>
+<p>به توضیحات pull request شما باعث می‌شود تیکت‌های متناظر هنگام merge به‌طور خودکار بسته شوند.</p>
+<p>ابتدا مطمئن شوید رفع شما واقعاً علت ریشه‌ای issue را رفع می‌کند نه فقط زیرمجموعه‌ای از آن را.
+شمارهٔ issueها را می‌توان در نام فایل یا directive با نام <code>//@ known-bug</code> درون فایل تست یافت.</p>
+<h2 id="building-auxiliary-crates"><a class="header" href="#building-auxiliary-crates">Building auxiliary crates</a></h2>
+<p>رایج است که برخی تست‌ها به crateهای کمکی (auxiliary) اضافی برای کامپایل نیاز دارند.
+چند <a href="directives.html">directive</a> برای کمک به این کار هست:</p>
+<ul>
+<li><code>aux-build</code></li>
+<li><code>aux-crate</code></li>
+<li><code>aux-bin</code></li>
+<li><code>aux-codegen-backend</code></li>
+<li><code>proc-macro</code></li>
+</ul>
+<p><code>aux-build</code> یک crate جداگانه را از فایل منبع نام‌برده می‌سازد.
+فایل منبع باید در پوشه‌ای به نام <code>auxiliary</code> کنار فایل تست باشد.</p>
+<pre><code class="language-rust ignore">//@ aux-build: my-helper.rs
+
+extern crate my_helper;
+// ... You can use my_helper.</code></pre>
+<p>crate کمکی در صورت امکان به‌صورت dylib ساخته می‌شود (مگر روی پلتفرمی که
+از آن‌ها پشتیبانی نمی‌کند، یا سرایند <code>no-prefer-dynamic</code> در فایل aux مشخص شده باشد).
+پرچم <code>-L</code> برای پیدا‌کردن crateهای خارجی به‌کار می‌رود.</p>
+<p><code>aux-crate</code> بسیار شبیه <code>aux-build</code> است.
+اما از پرچم <code>--extern</code> استفاده می‌کند
+تا به crate خارجی لینک کند و crate را به‌عنوان extern prelude در دسترس قرار دهد.
+این به شما اجازه می‌دهد نحو اضافی پرچم <code>--extern</code> را مشخص کنید،
+مثل تغییر نام یک وابستگی.
+برای مثال، <code>//@ aux-crate: foo=bar.rs</code>
+<code>auxiliary/bar.rs</code> را کامپایل می‌کند و آن را با نام <code>foo</code> درون تست در دسترس قرار می‌دهد.
+این شبیه تغییر نام وابستگی در Cargo است.
+همچنین می‌توان <a href="https://github.com/rust-lang/rust/issues/98405">modifierهای <code>--extern</code></a> را مشخص کرد.
+برای مثال، <code>//@ aux-crate: noprelude:foo=bar.rs</code>.</p>
+<p><code>aux-bin</code> شبیه <code>aux-build</code> است اما به‌جای کتابخانه یک فایل دودویی می‌سازد.
+فایل دودویی نسبت به پوشهٔ کاری تست در <code>auxiliary/bin</code> در دسترس خواهد بود.</p>
+<p><code>aux-codegen-backend</code> شبیه <code>aux-build</code> است،
+اما dylib کامپایل‌شده را هنگام ساخت فایل اصلی به <code>-Zcodegen-backend</code> می‌دهد.
+این فقط برای تست‌های <code>tests/ui-fulldeps</code> کار می‌کند، چون نیاز به استفاده از crateهای کامپایلر دارد.</p>
+<h3 id="auxiliary-proc-macro"><a class="header" href="#auxiliary-proc-macro">Auxiliary proc-macro</a></h3>
+<p>اگر وابستگی proc-macro می‌خواهید، می‌توانید از directive با نام <code>proc-macro</code>
+استفاده کنید. این directive درست مثل <code>aux-build</code> رفتار می‌کند، یعنی باید
+فایل کمکی تست proc-macro را زیر پوشه‌ای به نام <code>auxiliary</code> در
+همان پوشهٔ والد فایل تست اصلی قرار دهید.
+اما در مقایسه با <code>aux-build</code> برای فایل کمکی تست proc-macro چهار
+رفتار از پیش تنظیم‌شدهٔ اضافی هم دارد:</p>
+<ol>
+<li>فایل تست کمکی با <code>--crate-type proc-macro</code> ساخته می‌شود.</li>
+<li>فایل تست کمکی بدون <code>-C prefer-dynamic</code> ساخته می‌شود، یعنی سعی نمی‌کند
+برای crate کمکی dylib تولید کند.</li>
+<li>crate کمکی از طریق extern prelude با
+<code>--extern &lt;aux_crate_name&gt;</code> در دسترس فایل تست قرار می‌گیرد.
+توجه کنید که چون تست‌های UI پیش‌فرضاً edition 2015 دارند،
+همچنان باید <code>extern &lt;aux_crate_name&gt;</code> را مشخص کنید، مگر اینکه فایل تست اصلی
+از editionای 2018 یا جدیدتر استفاده کند، اگر می‌خواهید نام crate کمکی را در یک <code>use</code> import
+به‌کار ببرید.</li>
+<li>crate با نام <code>proc_macro</code> به‌عنوان ماژول extern prelude در دسترس قرار می‌گیرد.
+همان تمایز edition 2015 در برابر editionهای جدیدتر برای <code>extern proc_macro;</code> صادق است.</li>
+</ol>
+<p>برای مثال ممکن است تستی به نام <code>tests/ui/cat/meow.rs</code> و فایل کمکی proc-macro
+به نام <code>tests/ui/cat/auxiliary/whiskers.rs</code> داشته باشید:</p>
+<pre><code class="language-text">tests/ui/cat/
+    meow.rs                 # main test file
+    auxiliary/whiskers.rs   # auxiliary
+</code></pre>
+<pre><code class="language-rs">// tests/ui/cat/meow.rs
+
+//@ proc-macro: whiskers.rs
+
+extern crate whiskers; // needed as ui test defaults to edition 2015
+
+fn main() {
+  whiskers::identity!();
+}
+</code></pre>
+<pre><code class="language-rs">// tests/ui/cat/auxiliary/whiskers.rs
+
+extern crate proc_macro;
+use proc_macro::*;
+
+#[proc_macro]
+pub fn identity(ts: TokenStream) -&gt; TokenStream {
+    ts
+}
+</code></pre>
+<blockquote>
+<p><strong>نکته:</strong> سرایند <code>proc-macro</code> فعلاً با سرایند
+<code>build-aux-doc</code> در تست‌های rustdoc کار نمی‌کند. در آن صورت باید از
+سرایند <code>aux-build</code> استفاده کنید، و در proc-macro از <code>#![crate_type="proc_macro"]</code> و سرایندهای <code>//@ force-host</code> و <code>//@ no-prefer-dynamic</code> استفاده کنید.</p>
+</blockquote>
+<h2 id="revisions"><a class="header" href="#revisions">Revisions</a></h2>
+<p>revisionها اجازه می‌دهند یک فایل تست برای چند تست به‌کار رود.
+این کار با افزودن directive ویژه در بالای فایل انجام می‌شود:</p>
+<pre><code class="language-rust ignore">//@ revisions: foo bar baz</code></pre>
+<p>این باعث می‌شود تست سه بار کامپایل (و تست) شود: یک بار با <code>--cfg foo</code>،
+یک بار با <code>--cfg bar</code>، و یک بار با <code>--cfg baz</code>.
+بنابراین می‌توانید درون تست از <code>#[cfg(foo)]</code> و مانند آن برای تنظیم هر یک از این نتایج استفاده کنید.</p>
+<p>همچنین می‌توانید directiveها و پیام‌های خطای مورد انتظار را برای یک revision مشخص سفارشی کنید.
+برای این کار، <code>[revision-name]</code> را بعد از <code>//@</code> برای directiveها، و
+بعد از <code>//</code> برای annotationهای خطای UI اضافه کنید، به این شکل:</p>
+<pre><code class="language-rust ignore">// A flag to pass in only for cfg `foo`:
+//@[foo]compile-flags: -Z verbose-internals
+
+#[cfg(foo)]
+fn test_foo() {
+    let x: usize = 32_u32; //[foo]~ ERROR mismatched types
+}</code></pre>
+<p>چند revision را می‌توان در فهرستی با ویرگول مشخص کرد، مثل <code>//[foo,bar,baz]~^</code>.</p>
+<p>در مجموعه‌های تستی که از ابزار <a href="https://llvm.org/docs/CommandGuide/FileCheck.html">FileCheck</a> در LLVM استفاده می‌کنند،
+نام revision فعلی هم به‌عنوان پیشوند اضافی برای directiveهای FileCheck ثبت می‌شود:</p>
+<pre><code class="language-rust ignore">//@ revisions: NORMAL COVERAGE
+//@[COVERAGE] compile-flags: -Cinstrument-coverage
+//@[COVERAGE] needs-profiler-runtime
+
+// COVERAGE:   @__llvm_coverage_mapping
+// NORMAL-NOT: @__llvm_coverage_mapping
+
+// CHECK: main
+fn main() {}</code></pre>
+<p>توجه کنید همهٔ directiveها وقتی برای یک revision سفارشی شوند معنا ندارند.
+برای مثال، directiveهای <code>ignore-test</code> (و همهٔ directiveهای «ignore») فعلاً
+فقط به کل تست اعمال می‌شوند، نه به revisionهای مشخص.
+تنها directiveهایی که قرار است واقعاً هنگام سفارشی‌شدن برای یک revision کار کنند
+الگوهای خطا و پرچم‌های کامپایلر هستند.</p>
+<!-- date-check Feb 2026 -->
+<blockquote>
+<p>توجه کنید این مجموعه‌های تست از revision پشتیبانی نمی‌کنند:</p>
+<ul>
+<li><code>codegen-units</code></li>
+<li><code>run-make</code></li>
+<li><code>rustdoc-html</code></li>
+<li><code>rustdoc-json</code></li>
+</ul>
+</blockquote>
+<h3 id="ignoring-unused-revision-names"><a class="header" href="#ignoring-unused-revision-names">نادیده‌گرفتن نام‌های revisionِ استفاده‌نشده</a></h3>
+<p>معمولاً نام‌های revision که در directiveها و annotationهای خطای دیگر ذکر می‌شوند
+باید با revision واقعی‌ای که در directive با نام <code>revisions</code> اعلام شده متناظر باشند.
+این توسط بررسی <code>./x test tidy</code> اعمال می‌شود.</p>
+<p>اگر نام یک revision به دلیلی باید موقتاً از فهرست revisionها حذف شود،
+می‌توان بررسی بالا را با افزودن نام revision به سرایند
+<code>//@ unused-revision-names:</code> سرکوب کرد.</p>
+<p>مشخص‌کردن نام استفاده‌نشدهٔ <code>*</code> (یعنی <code>//@ unused-revision-names: *</code>)
+اجازه می‌دهد هر نام revisionِ استفاده‌نشده ذکر شود.</p>
+<h2 id="compare-modes"><a class="header" href="#compare-modes">Compare modes</a></h2>
+<p>Compiletest را می‌توان در حالت‌های مختلف اجرا کرد که <em>حالت‌های مقایسه (compare modes)</em> نام دارند،
+و می‌توان از آن‌ها برای مقایسهٔ رفتار همهٔ تست‌ها با پرچم‌های مختلف کامپایلر استفاده کرد.
+این می‌تواند به برجسته‌کردن تفاوت‌هایی که با پرچم‌های مشخص ممکن است ظاهر شوند کمک کند،
+و مشکلات احتمالی را بررسی کند.</p>
+<p>برای اجرای تست‌ها در حالت متفاوت، باید پرچم خط فرمان <code>--compare-mode</code> را بدهید:</p>
+<pre><code class="language-bash">./x test tests/ui --compare-mode=next-solver
+</code></pre>
+<p>حالت‌های مقایسهٔ ممکن این‌ها هستند:</p>
+<ul>
+<li><code>polonius</code> — با Polonius و <code>-Zpolonius=next</code> اجرا می‌کند.</li>
+<li><code>next-solver</code> — با trait solver بعدی و <code>-Znext-solver</code> اجرا می‌کند.</li>
+<li><code>next-solver-coherence</code> — coherence را با trait solver بعدی و <code>-Znext-solver=coherence</code> اجرا می‌کند.</li>
+<li><code>split-dwarf</code> — با split-DWARF باز (unpacked) و <code>-Csplit-debuginfo=unpacked</code> اجرا می‌کند.</li>
+<li><code>split-dwarf-single</code> — با split-DWARF بسته‌بندی‌شده (packed) و <code>-Csplit-debuginfo=packed</code> اجرا می‌کند.</li>
+</ul>
+<p>برای اطلاعات بیشتر دربارهٔ اینکه تست‌های UI چگونه از خروجی متفاوت برای حالت‌های مختلف پشتیبانی می‌کنند، <a href="ui.html#compare-modes">حالت‌های مقایسهٔ UI</a> را ببینید.</p>
+<p>در CI، حالت‌های مقایسه فقط در یک builder لینوکس و فقط با تنظیمات زیر به‌کار می‌روند:</p>
+<ul>
+<li><code>tests/debuginfo</code>: از حالت <code>split-dwarf</code> استفاده می‌کند.
+این کمک می‌کند هنگام فعال‌کردن split-DWARF هیچ‌کدام از تست‌های debuginfo تحت‌تأثیر قرار نگیرند.</li>
+</ul>
+<p>توجه کنید حالت‌های مقایسه جدا از <a href="#revisions">revisionها</a> هستند.
+هنگام اجرای <code>./x test tests/ui</code> همهٔ revisionها تست می‌شوند،
+اما حالت‌های مقایسه باید به‌صورت دستی و جداگانه با پرچم <code>--compare-mode</code> اجرا شوند.</p>
+<h2 id="parallel-frontend"><a class="header" href="#parallel-frontend">Parallel frontend</a></h2>
+<p>Compiletest را می‌توان با پرچم <code>--parallel-frontend-threads</code> برای اجرای کامپایلر در حالت موازی اجرا کرد.
+از این می‌توان برای بررسی اینکه کامپایلر در حالت موازی همان خروجی حالت غیرموازی را تولید می‌کند،
+و برای بررسی مشکلات احتمالی در حالت موازی استفاده کرد.</p>
+<p>برای اجرای تست‌ها در حالت موازی، باید پرچم خط فرمان <code>--parallel-frontend-threads</code> را بدهید:</p>
+<pre><code class="language-bash">./x test tests/ui -- --parallel-frontend-threads=N --iteration-count=M
+</code></pre>
+<p>که در آن <code>N</code> تعداد threadها برای frontend موازی است،
+و <code>M</code> تعداد دفعاتی است که هر تست در حالت موازی اجرا می‌شود (تا احتمال گرفتن هر نوع عدم‌قطعیت بیشتر شود).</p>
+<p>همچنین هنگام اجرا با <code>--parallel-frontend-threads</code>،
+directive با نام <code>compare-output-by-lines</code> برای همهٔ تست‌ها ضمنی خواهد بود،
+چون خروجی frontend موازی از نظر ترتیب خطوط می‌تواند غیرقطعی باشد.</p>
+<p>frontend موازی فعلاً فقط در تست‌های UI در دسترس است،
+و در مجموعه‌های تست دیگر پشتیبانی نمی‌شود.</p><nav class="page-nav"><a href="best-practices.html">→ بهترین روش‌ها</a><a href="ui.html">آزمون‌های UI ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,101 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>نمایش‌دهنده‌های دیباگر — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="debuginfo/debugger-visualizers"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="debugger-visualizers"><a class="header" href="#debugger-visualizers">بصری‌سازهای دیباگر (Debugger visualizers)</a></h1>
+<p>این‌ها معمولاً آخرین گام پیش از نمایش اطلاعات توسط دیباگر هستند، اما نتایج ممکن است
+از طریق یک debug adapter مانند API دیباگر یک IDE عبور داده شوند.</p>
+<p>اصطلاح «Visualizer» تا حدی نادرست انتخاب شده است.
+هدف واقعی فقط زیباسازی خروجی نیست، بلکه
+فراهم کردن رابطی است که کاربر بتواند با آن تعامل کند و تا حد ممکن مفید باشد.
+در بسیاری از موارد،
+این یعنی بازسازی نوع اصلی تا حد امکان نزدیک به بازنمایی Rust آن،
+اما نه همیشه.</p>
+<p>رابط visualizer امکان تولید «فرزندان مصنوعی (synthetic children)» را می‌دهد – فیلدهایی که در
+اطلاعات دیباگ وجود ندارند، اما می‌توان آن‌ها را از ناورداهای زبان و خود نوع استخراج کرد.
+یک مثال ساده این است که به کاربر اجازه داده شود با عناصر یک <code>Vec&lt;T&gt;</code> تعامل کند،
+نه فقط با اشاره‌گر heap از نوع <code>*mut u8</code> و طول و ظرفیت آن.</p>
+<h2 id="rust-lldb-rust-gdb-and-rust-windbgcmd"><a class="header" href="#rust-lldb-rust-gdb-and-rust-windbgcmd"><code>rust-lldb</code>, <code>rust-gdb</code>, and <code>rust-windbg.cmd</code></a></h2>
+<p>این اسکریپت‌های پشتیبان همراه toolchainهای Rust توزیع می‌شوند.
+آن‌ها دیباگر مناسب و
+اسکریپت‌های visualizer مربوط به toolchain را پیدا می‌کنند، سپس دیباگر را با آرگومان‌های مناسب اجرا می‌کنند تا
+اسکریپت‌های visualizer پیش از اجرا یا متصل شدن به برنامهٔ تحت دیباگ (debuggee) بارگذاری شوند.</p>
+<h2 id="debugger_visualizer"><a class="header" href="#debugger_visualizer"><code>#![debugger_visualizer]</code></a></h2>
+<p><a href="../../reference/attributes/debugger.html#the-debugger_visualizer-attribute">این attribute</a> به نویسندگان کتابخانه‌های Rust اجازه می‌دهد چاپگرهای زیبا (pretty printer) را برای
+نوع‌های خود درون خود کتابخانه بگنجانند.
+این pretty printerها قالبی مشابه visualizerهای معمول دارند،
+اما مستقیماً در باینری کامپایل‌شده تعبیه می‌شوند.
+این اسکریپت‌ها به‌طور خودکار توسط دیباگر بارگذاری می‌شوند و تجربه‌ای یکپارچه برای کاربران فراهم می‌کنند.
+این attribute در حال حاضر برای اسکریپت‌های GDB و natvis کار می‌کند.</p>
+<p>اسکریپت‌های پایتون GDB در بخش <code>.debug_gdb_scripts</code> باینری تعبیه می‌شوند (<a href="https://sourceware.org/gdb/current/onlinedocs/gdb.html/dotdebug_005fgdb_005fscripts-section.html">اطلاعات بیشتر</a>).
+Rustc این کار را در <a href="https://github.com/rust-lang/rust/blob/main/compiler/rustc_codegen_llvm/src/debuginfo/gdb.rs"><code>rustc_codegen_llvm/src/debuginfo/gdb.rs</code></a> انجام می‌دهد.</p>
+<p>فایل‌های Natvis را می‌توان با <a href="https://learn.microsoft.com/en-us/cpp/build/reference/natvis-add-natvis-to-pdb?view=msvc-170">گزینهٔ linker ‏<code>/NATVIS</code></a> در اطلاعات دیباگ PDB تعبیه کرد،
+و هنگامی که یک نوع در حال تعیین visualizer مناسب است <a href="https://learn.microsoft.com/en-us/visualstudio/debugger/create-custom-views-of-native-objects?view=visualstudio#BKMK_natvis_location">بالاترین اولویت</a> را دارند.
+فایل‌های مشخص‌شده توسط attribute در
+<a href="https://github.com/rust-lang/rust/blob/e0e204f3e97ad5f79524b9c259dc38df606ed82c/compiler/rustc_codegen_ssa/src/lib.rs#L212"><code>CrateInfo::natvis_debugger_visualizers</code></a> گردآوری می‌شوند و سپس به‌عنوان آرگومان‌های linker در
+<a href="https://github.com/rust-lang/rust/blob/main/compiler/rustc_codegen_ssa/src/back/linker.rs#L1106"><code>rustc_codegen_ssa/src/back/linker.rs</code></a> اضافه می‌شوند.</p>
+<p>LLDB در حال حاضر پشتیبانی نمی‌شود، اما چند روش وجود دارد که بالقوه می‌توانند در آینده
+پشتیبانی از آن را ممکن کنند.
+به‌طور رسمی، روش موردنظر از طریق یک <a href="https://lldb.llvm.org/resources/formatterbytecode.html">formatter bytecode</a> است.
+این برای ارائهٔ تجربه‌ای قابل‌مقایسه با GDB ساخته شد،
+اما بدون نگرانی‌های ایمنی مرتبط با تعبیهٔ یک اسکریپت کامل Python.
+opcodeها محدودند، اما با <code>SBValue</code> و <code>SBType</code>
+تقریباً به همان شیوهٔ اسکریپت‌های visualizer پایتون کار می‌کند.
+پیاده‌سازی این روش مستلزم نوشتن نوعی DSL/کامپایلر کوچک است.</p>
+<p>به‌عنوان جایگزین، شاید بتوان راهبرد GDB را به‌طور کامل کپی کرد: ساخت یک بخش اختصاصی در
+باینری و تعبیهٔ یک اسکریپت پایتون در آن.
+LLDB آن را به‌طور خودکار بارگذاری نمی‌کند، اما API پایتون اجازه
+می‌دهد به <a href="https://lldb.llvm.org/python_api/lldb.SBSection.html#sbsection">بخش‌های خام اطلاعات دیباگ</a> دسترسی داشته باشیم.
+با این کار شاید بتوان اسکریپت پایتون را از بخش اختصاصی ما استخراج کرد
+و سپس هنگام راه‌اندازی اسکریپت‌های visualizer مربوط به Rust آن را بارگذاری کرد.</p>
+<h2 id="performance"><a class="header" href="#performance">کارایی</a></h2>
+<p>پیش از پرداختن به خود visualizerها، مهم است توجه کنیم که این‌ها بخشی از
+یک سامانهٔ حساس به کارایی‌اند.
+لطفاً از لحن غیررسمی بگذرید، اما: اگر مجبور شوم زمان
+قابل‌توجهی را صرف دیباگ کنم، کلافه می‌شوم.
+اگر مجبور شوم <em>منتظر دیباگرم بمانم</em>، به‌شدت عصبانی می‌شوم.</p>
+<p>هر میلی‌ثانیه‌ای که در این visualizerها صرف شود یک میلی‌ثانیه تأخیر بیشتر برای دیدن خروجی توسط کاربر است.
+این می‌تواند به‌ویژه برای قاب‌های پشتهٔ بزرگی که انواع کانتینر فراوان یا بزرگ دارند دردناک باشد.
+GUIهای دیباگر مانند VSCode کل قاب پشته را یک‌جا درخواست می‌کنند و این می‌تواند به
+تأخیرهایی در حد ده‌ها ثانیه (یا حتی چند دقیقه) پیش از امکان تعامل با هر متغیر
+قاب بینجامد.</p>
+<p>گرایشی وجود دارد که از ایدهٔ بهینه‌سازی کد پایتون سر باز بزنند، اما واقعاً می‌تواند تأثیر
+قابل‌توجهی داشته باشد.
+به یاد داشته باشید، کامپایلری وجود ندارد که به سریع ماندن کد کمک کند.
+حتی تبدیل‌های ساده هم برای شما انجام نمی‌شوند.
+یافتن نکات کارایی پایتون در میان
+همهٔ هیاهوی کسانی که توصیه می‌کنند زحمت بهینه‌سازی پایتون را نکشید دشوار است، پس این‌ها چند نکته است که باید
+به یاد داشته باشید و به این اسکریپت‌ها مربوط می‌شود:</p>
+<ul>
+<li>همه‌چیز حافظه تخصیص می‌دهد، حتی <code>int</code></li>
+<li>در صورت امکان از tuple استفاده کنید.
+<code>list</code> عملاً معادل <code>Vec&lt;Box&lt;[Any]&gt;&gt;</code> است، در حالی که tupleها معادل <code>Box&lt;[Any]&gt;</code> هستند.
+آن‌ها یک لایهٔ غیرمستقیم‌گری (indirection) کمتر دارند، ظرفیت اضافه نگه نمی‌دارند و نمی‌توانند رشد یا کوچک شوند،
+که در بسیاری از موارد می‌تواند مزیت باشد.
+مزیت دیگر این است که پایتون تخصیص‌های زیربنایی همهٔ tupleها تا اندازهٔ ۲۰ را
+کش و بازیافت می‌کند.</li>
+<li>regexها کندند و هر جا دستکاری ساده رشته کافی است باید از آن‌ها پرهیز کرد</li>
+<li>رشته‌ها تغییرناپذیرند، بنابراین بسیاری از عملیات رشته‌ای به‌طور ضمنی محتوا را کپی می‌کنند.</li>
+<li>هنگام الحاق فهرست‌های بزرگی از رشته‌ها، <code>"".join(iterable_of_strings)</code> معمولاً سریع‌ترین
+راه است.</li>
+<li>f-stringها عموماً سریع‌ترین راه برای تبدیل‌های کوچک و ساده رشته‌ای مانند
+احاطه کردن یک رشته با پرانتز هستند.</li>
+<li>خودِ عمل فراخوانی تابع تا حدی کند است (حتی اگر تابع کاملاً خالی باشد).
+اگر بخش کد بسیار داغ (hot) است، inline کردن دستی تابع را در نظر بگیرید.</li>
+<li>دسترسی به متغیر محلی به‌طور قابل‌توجهی سریع‌تر از دسترسی به توابع سراسری و توکار است</li>
+<li>دسترسی به عضو/متد از طریق عملگر <code>.</code> هم کند است؛ برای پرهیز از این هزینه، مقادیر عمیقاً تودرتو را
+دوباره به متغیرهای محلی تخصیص دهید (مثلاً <code>h = a.b.c.d.e.f.g.h</code>).</li>
+<li>دسترسی به متدها و فیلدهای ارثی حدود ۲ برابر کندتر از متدها و فیلدهای کلاس پایه است.
+تا حد امکان از وراثت پرهیز کنید.</li>
+<li>هر جا ممکن است از <a href="https://wiki.python.org/moin/UsingSlots"><code>__slots__</code></a> استفاده کنید.
+<code>__slots__</code> راهی است
+برای اعلام به پایتون که فیلدهای کلاس شما تغییر نخواهند کرد و دسترسی به فیلد را
+به‌طور محسوسی سریع می‌کند.
+این کار مستلزم آن است که فیلدهایتان را از پیش نام ببرید و در
+<code>__init__</code> مقداردهی کنید، اما بهایی اندک در برابر مزایای آن است.</li>
+<li>دستورهای match و if..elif..else به هیچ شکلی بهینه نمی‌شوند.
+شرط‌ها به ترتیب و یکی‌یکی بررسی می‌شوند.
+در صورت امکان از جایگزینی مانند dictionary dispatch یا جدول مقادیر استفاده کنید</li>
+<li>در صورت امکان تنبلانه (lazy) محاسبه کنید</li>
+<li>list comprehensionها معمولاً از حلقه‌ها سریع‌ترند؛ generator comprehensionها کمی کندتر
+از list comprehensionها هستند، اما حافظهٔ کمتری مصرف می‌کنند.
+می‌توانید comprehensionها را معادل <code>iter.map()</code> در Rust بدانید.
+list comprehensionها عملاً در پایان <code>collect::&lt;Vec&lt;_&gt;&gt;</code> را فراخوانی می‌کنند، در حالی که
+generator comprehensionها چنین نمی‌کنند.</li>
+</ul><nav class="page-nav"><a href="gdb-internals.html">→ درونیات GDB (ناقص)</a><a href="lldb-visualizers.html">LLDB - ارائه‌دهنده‌های Python ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

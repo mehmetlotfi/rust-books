@@ -1,0 +1,47 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0492 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0492"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>تلاش شده است ثابتی که دارای تغییرپذیری درونی (interior mutability) است قرض گرفته شود.</p>
+<p>نمونه کد دارای خطا:</p>
+<pre><code class="language-compile_fail E0492">use std::sync::atomic::AtomicUsize;
+
+const A: AtomicUsize = AtomicUsize::new(0);
+const B: &amp;'static AtomicUsize = &amp;A;
+// error: cannot borrow a constant which may contain interior mutability,
+//        create a static instead
+</code></pre>
+<p>یک <code>const</code> نشان‌دهندهٔ مقداری ثابت است که هرگز نباید تغییر کند. اگر از ثابت یک ارجاع <code>&amp;</code> گرفته شود، در واقع اشاره‌گری به یک مکان حافظه که مقدار را نگه می‌دارد گرفته شده است. معمولاً این کار کاملاً مشکلی ندارد: بیشتر مقادیر را نمی‌توان از طریق اشاره‌گر مشترک <code>&amp;</code> تغییر داد، اما تغییرپذیری درونی این امکان را فراهم می‌کند. یعنی ممکن است یک مقدار ثابت تغییر کند. از سوی دیگر، <code>static</code> صراحتاً یک مکان حافظهٔ واحد است که می‌توان آن را به دلخواه تغییر داد.</p>
+<p>بنابراین برای رفع این خطا، از staticهایی که <code>Sync</code> هستند استفاده کنید:</p>
+<pre><code>use std::sync::atomic::AtomicUsize;
+
+static A: AtomicUsize = AtomicUsize::new(0);
+static B: &amp;'static AtomicUsize = &amp;A; // ok!
+</code></pre>
+<p>این خطا را هنگام استفاده از نوع‌های سلولی (cell) نیز ممکن است ببینید:</p>
+<pre><code class="language-compile_fail E0492">use std::cell::Cell;
+
+const A: Cell&lt;usize&gt; = Cell::new(1);
+const B: &amp;Cell&lt;usize&gt; = &amp;A;
+// error: cannot borrow a constant which may contain interior mutability,
+//        create a static instead
+
+// or:
+struct C { a: Cell&lt;usize&gt; }
+
+const D: C = C { a: Cell::new(1) };
+const E: &amp;Cell&lt;usize&gt; = &amp;D.a; // error
+
+// or:
+const F: &amp;C = &amp;D; // error
+</code></pre>
+<p>دلیل این است که نوع‌های سلولی عملیاتی انجام می‌دهند که ایمن در برابر نخ‌ها (thread-safe) نیست. به همین دلیل، آن‌ها Sync را پیاده‌سازی نمی‌کنند و در نتیجه نمی‌توان آن‌ها را در staticها قرار داد.</p>
+<p>با این حال، اگر باز هم می‌خواهید از این نوع‌ها استفاده کنید، می‌توانید این کار را با یک wrapper ناایمن (unsafe) انجام دهید:</p>
+<pre><code>use std::cell::Cell;
+
+struct NotThreadSafe&lt;T&gt; {
+    value: Cell&lt;T&gt;,
+}
+
+unsafe impl&lt;T&gt; Sync for NotThreadSafe&lt;T&gt; {}
+
+static A: NotThreadSafe&lt;usize&gt; = NotThreadSafe { value : Cell::new(1) };
+static B: &amp;'static NotThreadSafe&lt;usize&gt; = &amp;A; // ok!
+</code></pre>
+<p>به یاد داشته باشید که این راه‌حل unsafe است! باید خودتان مطمئن شوید که دسترسی‌ها به سلول همگام‌سازی شده‌اند.</p><nav class="page-nav"><a href="../errors/E0491.html">→ E0491</a><a href="../errors/E0493.html">E0493 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,170 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>افزودن آزمون‌های جدید — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tests/adding"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="adding-new-tests"><a class="header" href="#adding-new-tests">Adding new tests</a></h1>
+<p><strong>به‌طور کلی انتظار داریم هر PR که یک باگ در rustc را رفع می‌کند همراه با یک تست رگرسیون از نوعی باشد.</strong> این تست باید در <code>main</code> شکست بخورد اما
+پس از PR بگذرد.
+این تست‌ها واقعاً برای جلوگیری از تکرار
+اشتباهات گذشته مفیدند.</p>
+<p>اولین کار تصمیم‌گیری دربارهٔ نوع تستی است که باید اضافه شود.
+این به ماهیت تغییر و آنچه می‌خواهید بیازمایید بستگی دارد.
+چند رهنمود تقریبی:</p>
+<ul>
+<li>The majority of compiler tests are done with <a href="compiletest.html">compiletest</a>.
+<ul>
+<li>بیشتر تست‌های compiletest تست‌های <a href="ui.html">UI</a> در پوشهٔ <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/ui/"><code>tests/ui</code></a> هستند.</li>
+</ul>
+</li>
+<li>Changes to the standard library are usually tested within the standard library
+itself.
+<ul>
+<li>بیشتر تست‌های کتابخانهٔ استاندارد به‌صورت doctest نوشته می‌شوند،
+که رفتار معمول API را نشان می‌دهند و می‌آزمایند.</li>
+<li><a href="intro.html#package-tests">تست‌های واحد</a> اضافی باید در
+<code>library/${crate}/tests</code> قرار بگیرند (که در آن <code>${crate}</code> معمولاً <code>std</code> است).</li>
+<li>Tests for the <code>alloc</code> or <code>core</code> crates must go in separate crates: <code>alloctests</code> or <code>coretests</code> respectively.
+<ul>
+<li>نکته: هنگام افزودن تست‌های واحد برای قابلیت‌های ناپایدار، اعلان <code>#![feature(...)]</code>
+باید به <code>library/${crate}tests/tests/lib.rs</code> اضافه شود، نه به
+<code>library/${crate}tests/lib.rs</code>.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>اگر کد بخشی از یک سیستم ایزوله است و خروجی کامپایلر را تست نمی‌کنید،
+استفاده از <a href="intro.html#package-tests">تست واحد یا یکپارچگی</a> را در نظر بگیرید.</li>
+<li>نیاز به اجرای rustdoc دارید؟
+تست <code>rustdoc</code> یا <code>rustdoc-ui</code> را ترجیح دهید.
+گاهی <code>rustdoc-js</code> هم لازم می‌شود.</li>
+<li>Other compiletest test suites are generally used for special purposes:
+<ul>
+<li>نیاز به اجرای gdb یا lldb دارید؟
+از مجموعهٔ تست <code>debuginfo</code> استفاده کنید.</li>
+<li>نیاز به بررسی LLVM IR یا MIR IR دارید؟
+از مجموعه‌های تست <code>codegen</code> یا <code>mir-opt</code> استفاده کنید.</li>
+<li>Need to inspect the resulting binary in some way?
+Or if all the other test suites are too limited for your purposes?
+Then use <code>run-make</code>.
+<ul>
+<li>اگر باید <code>cargo</code> درون‌درختی را همراه با <code>rustc</code> درون‌درختی بیازمایید، از <code>run-make-cargo</code> استفاده کنید.</li>
+</ul>
+</li>
+<li>برای مجموعه‌های تست تخصصی‌تر فصل <a href="compiletest.html">compiletest</a> را ببینید.</li>
+</ul>
+</li>
+</ul>
+<p>پس از تصمیم دربارهٔ نوع تستی که باید اضافه شود، برای راهنمایی در نوشتن تست‌هایی که کار با آن‌ها آسان است و در برابر زمان مقاومت می‌کنند (یعنی اگر تستی چند سال بعد شکست بخورد یا نیاز به تغییر داشته باشد، چگونه می‌توانیم کار را برایشان آسان‌تر کنیم؟)، <a href="best-practices.html">بهترین روش‌ها</a> را ببینید.</p>
+<h2 id="ui-test-walkthrough"><a class="header" href="#ui-test-walkthrough">UI test walkthrough</a></h2>
+<p>در ادامه راهنمای پایه‌ای برای ساخت یک <a href="ui.html">تست UI</a> آمده است که یکی از
+رایج‌ترین تست‌های کامپایلر است.
+در این آموزش تستی برای یک پیام خطای async اضافه می‌کنیم.</p>
+<h3 id="step-1-add-a-test-file"><a class="header" href="#step-1-add-a-test-file">گام ۱: یک فایل تست اضافه کنید</a></h3>
+<p>اولین گام ساخت یک فایل منبع Rust در جایی درون درخت <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/ui/"><code>tests/ui</code></a> است.
+هنگام ساخت یک تست، تمام تلاش‌تان را بکنید تا مکان و نام خوبی پیدا کنید (برای اطلاعات بیشتر
+<a href="ui.html#test-organization">سازمان‌دهی تست‌ها</a> را ببینید).
+از آنجا که نام‌گذاری سخت‌ترین بخش توسعه است، از اینجا به بعد همه‌چیز سرازیری است!</p>
+<p>بیایید تست async خود را در <code>tests/ui/async-await/await-without-async.rs</code> قرار دهیم:</p>
+<pre><code class="language-rust ignore">// Provide diagnostics when the user writes `await` in a non-`async` function.
+//@ edition:2018
+
+async fn foo() {}
+
+fn bar() {
+    foo().await
+}
+
+fn main() {}</code></pre>
+<p>چند نکته دربارهٔ تست ما:</p>
+<ul>
+<li>بالای فایل باید یک کامنت کوتاه شروع شود که <a href="#explanatory_comment">توضیح می‌دهد تست برای چیست</a>.</li>
+<li>کامنت <code>//@ edition:2018</code> یک <a href="directives.html">directive</a> نامیده می‌شود که
+به compiletest دستور می‌دهد تست را چگونه بسازد.
+در اینجا باید
+edition را تنظیم کنیم تا <code>async</code> کار کند (پیش‌فرض edition 2015 است).</li>
+<li>پس از آن منبع تست می‌آید.
+سعی کنید مختصر و مفید باشد.
+اگر می‌خواهید یک مثال را از گزارش باگ کمینه کنید ممکن است کمی تلاش لازم باشد.</li>
+<li>این تست را با یک تابع خالی <code>fn main</code> تمام می‌کنیم.
+دلیلش این است که پیش‌فرض تست‌های UI نوع crate از نوع <code>bin</code> است، و نمی‌خواهیم خطای «main not found»
+در تست‌مان باشد.
+راه دیگر این است که <code>#![crate_type="lib"]</code> را اضافه کنید.</li>
+</ul>
+<h3 id="step-2-generate-the-expected-output"><a class="header" href="#step-2-generate-the-expected-output">گام ۲: خروجی مورد انتظار را تولید کنید</a></h3>
+<p>گام بعدی ساخت snapshotهای خروجی مورد انتظار از کامپایلر است.
+این کار با گزینهٔ <code>--bless</code> انجام می‌شود:</p>
+<pre><code class="language-sh">./x test tests/ui/async-await/await-without-async.rs --bless
+</code></pre>
+<p>این کامپایلر را می‌سازد (اگر قبلاً ساخته نشده باشد)، تست را کامپایل می‌کند و خروجی کامپایلر را در فایلی به نام
+<code>tests/ui/async-await/await-without-async.stderr</code> قرار می‌دهد.</p>
+<p>اما این گام شکست می‌خورد!
+باید یک پیام خطا ببینید، چیزی شبیه این:</p>
+<blockquote>
+<p>error: /rust/tests/ui/async-await/await-without-async.rs:7: unexpected
+error: ‘7:10: 7:16: <code>await</code> is only allowed inside <code>async</code> functions and
+blocks E0728’</p>
+</blockquote>
+<p>دلیلش این است که stderr شامل خطاهایی است که با annotationهای خطا در فایل منبع مطابقت داده نشده‌اند.</p>
+<h3 id="step-3-add-error-annotations"><a class="header" href="#step-3-add-error-annotations">گام ۳: annotationهای خطا را اضافه کنید</a></h3>
+<p>هر خطا باید با یک کامنت در منبع که متن خطا را دارد annotate شود.
+در این مورد می‌توانیم کامنت زیر را به فایل تست اضافه کنیم:</p>
+<pre><code class="language-rust ignore">fn bar() {
+    foo().await
+    //~^ ERROR `await` is only allowed inside `async` functions and blocks
+}</code></pre>
+<p>کامنت با نماد <code>//~^</code> (شبیه خط موجی و علامت caret) به compiletest می‌گوید خطا به خط <em>قبلی</em> تعلق دارد
+(جزئیات بیشتر در بخش <a href="ui.html#error-annotations">annotationهای خطا</a>).</p>
+<p>آن را ذخیره کنید و تست را دوباره اجرا کنید:</p>
+<pre><code class="language-sh">./x test tests/ui/async-await/await-without-async.rs
+</code></pre>
+<p>حالا باید بگذرد، آفرین!</p>
+<h3 id="step-4-review-the-output"><a class="header" href="#step-4-review-the-output">گام ۴: خروجی را بازبینی کنید</a></h3>
+<p>تا حدی در ارتباط با گام قبلی، باید فایل <code>.stderr</code> ساخته‌شده را بررسی کنید تا ببینید آیا آن‌طور که انتظار دارید به نظر می‌رسد.
+اگر پیام تشخیصی جدیدی اضافه می‌کنید،
+اکنون زمان خوبی است که خوانایی کلی پیام را هم بررسی کنید،
+به‌ویژه برای افرادی که تازه با Rust آشنا شده‌اند.</p>
+<p>فایل نمونهٔ ما <code>tests/ui/async-await/await-without-async.stderr</code> باید
+این‌طور به نظر برسد:</p>
+<pre><code class="language-text">error[E0728]: `await` is only allowed inside `async` functions and blocks
+  --&gt; $DIR/await-without-async.rs:7:10
+   |
+LL | fn bar() {
+   |    --- this is not `async`
+LL |     foo().await
+   |          ^^^^^^ only allowed inside `async` functions and blocks
+
+error: aborting due to previous error
+
+For more information about this error, try `rustc --explain E0728`.
+</code></pre>
+<p>ممکن است متوجه شوید برخی چیزها کمی با خروجی معمول کامپایلر متفاوت‌اند.</p>
+<ul>
+<li><code>$DIR</code> اطلاعات مسیر را که بین سیستم‌ها فرق می‌کند حذف می‌کند.</li>
+<li>مقادیر <code>LL</code> جای شمارهٔ خطوط را می‌گیرند.
+این کمک می‌کند تغییرات کوچک در منبع باعث diffهای بزرگ نشوند.
+برای اطلاعات بیشتر بخش <a href="ui.html#normalization">نرمال‌سازی</a> را ببینید.</li>
+</ul>
+<p>در حوالی این مرحله ممکن است لازم باشد چند بار گام‌های آخر را تکرار کنید
+تا تست را تنظیم کنید، دوباره bless کنید و خروجی را دوباره بازبینی کنید.</p>
+<h3 id="step-5-check-other-tests"><a class="header" href="#step-5-check-other-tests">گام ۵: تست‌های دیگر را بررسی کنید</a></h3>
+<p>گاهی هنگام افزودن یا تغییر یک پیام تشخیصی، این بر تست‌های دیگر در مجموعهٔ تست اثر می‌گذارد.
+گام آخر پیش از ارسال PR بررسی این است که
+آیا چیز دیگری را تحت‌تأثیر قرار داده‌اید.
+اجرای مجموعهٔ UI معمولاً شروع خوبی است:</p>
+<pre><code class="language-sh">./x test tests/ui
+</code></pre>
+<p>اگر تست‌های دیگر شروع به شکست‌خوردن کنند، ممکن است لازم باشد بررسی کنید چه چیزی تغییر کرده و
+آیا خروجی جدید منطقی است.</p>
+<p>ممکن است لازم شود خروجی را با پرچم <code>--bless</code> دوباره bless کنید.</p>
+<p><a id="explanatory_comment"></a></p>
+<h2 id="comment-explaining-what-the-test-is-about"><a class="header" href="#comment-explaining-what-the-test-is-about">کامنت توضیح‌دهندهٔ موضوع تست</a></h2>
+<p>اولین کامنت یک فایل تست باید <strong>هدف تست را خلاصه کند</strong> و
+آنچه را دربارهٔ آن مهم است برجسته کند.
+اگر شمارهٔ issueای با تست مرتبط است، شمارهٔ issue را بیاورید.</p>
+<p>این کامنت لازم نیست بسیار مفصل باشد.
+فقط چیزی شبیه این شاید کافی باشد:
+«تست رگرسیون برای #18060: بازوهای match به ترتیب نادرست تطبیق داده می‌شدند».</p>
+<p>این کامنت‌ها بعدها وقتی تست شما می‌شکند برای دیگران بسیار مفیدند، چون
+اغلب می‌توانند مشکل را برجسته کنند.
+همچنین اگر به دلیلی
+نیاز به بازآرایی تست‌ها باشد مفیدند، چون به دیگران می‌گویند کدام بخش‌های
+تست مهم بوده‌اند.
+اغلب یک تست باید بازنویسی شود چون دیگر
+آنچه را باید می‌آزمود نمی‌آزماید، و آن‌گاه مفید است بدانیم دقیقاً <em>قرار بود</em>
+چه چیزی را بیازماید.</p><nav class="page-nav"><a href="ci.html">→ آزمون با CI</a><a href="best-practices.html">بهترین روش‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

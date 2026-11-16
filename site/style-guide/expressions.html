@@ -1,0 +1,588 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>عبارت‌ها — راهنمای سبک Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="expressions"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="index.html" style="color:inherit;text-decoration:none">راهنمای سبک Rust</a><small class="en-title" dir="ltr">Rust Style Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="expressions"><a class="header" href="#expressions">عبارت‌ها</a></h1>
+<h2 id="blocks"><a class="header" href="#blocks">بلوک‌ها</a></h2>
+<p>یک عبارت بلوکی باید بعد از <code>{</code> اولیه و قبل از <code>}</code> پایانی یک خط جدید داشته باشد، مگر این‌که طبق یکی از قواعد دیگر بتواند در یک خط نوشته شود.</p>
+<p>کلیدواژه‌ای که قبل از بلوک می‌آید (مانند <code>unsafe</code> یا <code>async</code>) باید در همان خط آکولاد بازکننده باشد، با یک فاصلهٔ واحد بین کلیدواژه و آکولاد بازکننده. محتوای بلوک را تورفتگی دهید.</p>
+<pre><code class="language-rust">fn block_as_stmt() {
+    a_call();
+
+    {
+        a_call_inside_a_block();
+
+        // a comment in a block
+        the_value
+    }
+}
+
+fn block_as_expr() {
+    let foo = {
+        a_call_inside_a_block();
+
+        // a comment in a block
+        the_value
+    };
+}
+
+fn unsafe_block_as_stmt() {
+    a_call();
+
+    unsafe {
+        a_call_inside_a_block();
+
+        // a comment in a block
+        the_value
+    }
+}</code></pre>
+<p>اگر بلوکی ویژگی (attribute) دارد، آن را در خط جداگانه‌ای قبل از بلوک بنویسید:</p>
+<pre><code class="language-rust">fn block_as_stmt() {
+    #[an_attribute]
+    {
+        #![an_inner_attribute]
+
+        // a comment in a block
+        the_value
+    }
+}</code></pre>
+<p>از نوشتن کامنت در همان خط هیچ‌کدام از آکولادها پرهیز کنید.</p>
+<p>بلوک خالی را به‌صورت <code>{}</code> بنویسید.</p>
+<p>یک بلوک را در یک خط بنویسید اگر:</p>
+<ul>
+<li>در موقعیت عبارت (نه موقعیت دستور) استفاده شده باشد، یا بلوک <code>unsafe</code> در موقعیت دستور باشد،</li>
+<li>شامل یک عبارت تک‌خطی و بدون دستور باشد، و</li>
+<li>هیچ کامنتی نداشته باشد.</li>
+</ul>
+<p>برای بلوک تک‌خطی، بعد از آکولاد بازکننده و قبل از آکولاد بسته فاصله بگذارید.</p>
+<p>مثال‌ها:</p>
+<pre><code class="language-rust">fn main() {
+    // Single line
+    let _ = { a_call() };
+    let _ = unsafe { a_call() };
+
+    // Not allowed on one line
+    // Statement position.
+    {
+        a_call()
+    }
+
+    // Contains a statement
+    let _ = {
+        a_call();
+    };
+    unsafe {
+        a_call();
+    }
+
+    // Contains a comment
+    let _ = {
+        // A comment
+    };
+    let _ = {
+        // A comment
+        a_call()
+    };
+
+    // Multiple lines
+    let _ = {
+        a_call();
+        another_call()
+    };
+    let _ = {
+        a_call(
+            an_argument,
+            another_arg,
+        )
+    };
+}</code></pre>
+<h2 id="closures"><a class="header" href="#closures">Closureها</a></h2>
+<p>قبل از اولین <code>|</code> فاصلهٔ اضافی نگذارید (مگر این‌که closure با کلیدواژه‌ای مانند <code>move</code> شروع شود)؛ بین دومین <code>|</code> و عبارت closure یک فاصله بگذارید. بین <code>|</code>ها از نحو تعریف تابع استفاده کنید، ولی هر جا ممکن است نوع‌ها را حذف کنید.</p>
+<p>در صورت امکان، closureها را بدون <code>{}</code> اطرافشان بنویسید. در صورتی <code>{}</code> اضافه کنید که نوع بازگشتی دارید، دستور (statement) وجود دارد، داخل closure کامنت هست، یا عبارت بدنه یک عبارت کنترل جریان است که چند خط را در بر می‌گیرد. اگر از آکولاد استفاده می‌کنید، قواعد بالا برای بلوک‌ها را رعایت کنید. مثال‌ها:</p>
+<pre><code class="language-rust">|arg1, arg2| expr
+
+move |arg1: i32, arg2: i32| -&gt; i32 {
+    expr1;
+    expr2
+}
+
+|| Foo {
+    field1,
+    field2: 0,
+}
+
+|| {
+    if true {
+        blah
+    } else {
+        boo
+    }
+}
+
+|x| unsafe {
+    expr
+}</code></pre>
+<h2 id="struct-literals"><a class="header" href="#struct-literals">لیترال‌های struct</a></h2>
+<p>اگر یک لیترال struct <em>کوچک</em> است، آن را در یک خط قالب‌بندی کنید و کاما انتهایی نگذارید. اگر کوچک نیست، آن را در چند خط تقسیم کنید، هر فیلد را در خط جداگانه‌ای با تورفتگی بلوکی بنویسید و کاما انتهایی بگذارید.</p>
+<p>برای هر ورودی <code>field: value</code> فقط بعد از دونقطه فاصله بگذارید.</p>
+<p>قبل از آکولاد بازکننده فاصله بگذارید. در شکل تک‌خطی، بعد از آکولاد بازکننده و قبل از آکولاد بسته فاصله بگذارید.</p>
+<pre><code class="language-rust">Foo { field1, field2: 0 }
+let f = Foo {
+    field1,
+    field2: an_expr,
+};</code></pre>
+<p>به‌روزرسانی رکورد تابعی (functional record update) مانند یک فیلد رفتار می‌شود، ولی هرگز نباید کاما انتهایی داشته باشد. بعد از <code>..</code> فاصله نگذارید.</p>
+<pre><code class="language-rust">let f = Foo {
+    field1,
+    ..an_expr
+};</code></pre>
+<h2 id="unit-literals"><a class="header" href="#unit-literals">لیترال‌های یکه (unit)</a></h2>
+<p>هرگز بین پرانتز بازکننده و بسته‌کنندهٔ لیترال یکه <code>()</code> خط نشکنید. این حتی وقتی صدق می‌کند که پرانتز بسته از عرض بیشینهٔ خط بگذرد.</p>
+<h2 id="tuple-literals"><a class="header" href="#tuple-literals">لیترال‌های تاپل</a></h2>
+<p>در صورت امکان از شکل تک‌خطی استفاده کنید. بین پرانتز بازکننده و عنصر اول، و بین آخرین عنصر و پرانتز بسته فاصله نگذارید. عناصر را با کاما و یک فاصله جدا کنید.</p>
+<p>اگر شکل تک‌خطی ممکن نیست، تاپل را در چند خط بنویسید؛ هر عنصر را در خط جداگانه‌ای با تورفتگی بلوکی قرار دهید و کاما انتهایی بگذارید.</p>
+<pre><code class="language-rust">(a, b, c)
+
+let x = (
+    a_long_expr,
+    another_very_long_expr,
+);</code></pre>
+<h2 id="tuple-struct-literals"><a class="header" href="#tuple-struct-literals">لیترال‌های struct تاپلی</a></h2>
+<p>بین شناسه و پرانتز بازکننده فاصله نگذارید. در غیر این صورت از قواعد لیترال‌های تاپل پیروی کنید:</p>
+<pre><code class="language-rust">Foo(a, b, c)
+
+let x = Foo(
+    a_long_expr,
+    another_very_long_expr,
+);</code></pre>
+<h2 id="enum-literals"><a class="header" href="#enum-literals">لیترال‌های enum</a></h2>
+<p>قواعد قالب‌بندی لیترال‌های مختلف struct را دنبال کنید. ترجیح دهید نام enum را به‌عنوان نام واجد شرایط (qualifying name) به کار ببرید، مگر این‌که enum در prelude باشد:</p>
+<pre><code class="language-rust">Foo::Bar(a, b)
+Foo::Baz {
+    field1,
+    field2: 1001,
+}
+Ok(an_expr)</code></pre>
+<h2 id="array-literals"><a class="header" href="#array-literals">لیترال‌های آرایه</a></h2>
+<p>لیترال‌های کوچک آرایه را در یک خط بنویسید. بین کروشهٔ بازکننده و عنصر اول، و بین آخرین عنصر و کروشهٔ بسته فاصله نگذارید. عناصر را با کاما و یک فاصله جدا کنید.</p>
+<p>اگر از مقداردهی تکراری (repeating initializer) استفاده می‌کنید، فقط بعد از سمی‌کالن فاصله بگذارید.</p>
+<p>همین قواعد را برای <code>vec!</code> یا ماکروهای مشابه آرایه هم اعمال کنید؛ برای این ماکروها همیشه از کروشه استفاده کنید. مثال‌ها:</p>
+<pre><code class="language-rust">fn main() {
+    let x = [1, 2, 3];
+    let y = vec![a, b, c, d];
+    let a = [42; 10];
+}</code></pre>
+<p>برای آرایه‌هایی که باید در چند خط شکسته شوند، اگر از مقداردهی تکراری استفاده می‌کنید، بعد از <code>;</code> بشکنید، نه قبل از آن. در غیر این صورت قواعد فراخوانی توابع را دنبال کنید. در هر حال محتوای مقداردهنده را با تورفتگی بلوکی بنویسید و بعد از کروشهٔ بازکننده و قبل از کروشهٔ بسته خط بشکنید:</p>
+<pre><code class="language-rust">fn main() {
+    [
+        a_long_expression();
+        1234567890
+    ]
+    let x = [
+        an_expression,
+        another_expression,
+        a_third_expression,
+    ];
+}</code></pre>
+<h2 id="array-accesses-indexing-and-slicing"><a class="header" href="#array-accesses-indexing-and-slicing">دسترسی به اندیس‌ها، indexing و slicing</a></h2>
+<p>اطراف کروشه‌ها فاصله نگذارید. تا جای ممکن خط نشکنید. هرگز بین عبارت هدف و کروشهٔ بازکننده خط نشکنید. اگر عبارت اندیس باید در خط بعدی بیاید، یا خودش چند خط است، عبارت اندیس را با تورفتگی بلوکی بنویسید و بعد از کروشهٔ بازکننده و قبل از کروشهٔ بسته خط بشکنید.</p>
+<p>مثال‌ها:</p>
+<pre><code class="language-rust">fn main() {
+    foo[42];
+    &amp;foo[..10];
+    bar[0..100];
+    foo[4 + 5 / bar];
+    a_long_target[
+        a_long_indexing_expression
+    ];
+}</code></pre>
+<h2 id="unary-operations"><a class="header" href="#unary-operations">عملگرهای یکانی (unary)</a></h2>
+<p>بین یک عملگر یکانی و عملوندش فاصله نگذارید (یعنی <code>!x</code> درست است، نه <code>! x</code>). اما بعد از <code>&amp;mut</code> باید فاصله باشد. از شکستن خط بین عملگر یکانی و عملوندش پرهیز کنید.</p>
+<h2 id="binary-operations"><a class="header" href="#binary-operations">عملگرهای دودویی (binary)</a></h2>
+<p>اطراف عملگرهای دودویی فاصله بگذارید (یعنی <code>x + 1</code>، نه <code>x+1</code>)؛ این شامل <code>=</code> و عملگرهای انتساب دیگر مانند <code>+=</code> یا <code>*=</code> هم می‌شود.</p>
+<p>برای عملگرهای مقایسه، چون برای <code>T op U</code> پیاده‌سازی <code>&amp;T op &amp;U</code> هم وجود دارد: اگر <code>t: &amp;T</code> و <code>u: U</code> داریم، <code>*t op u</code> را به <code>t op &amp;u</code> ترجیح دهید. به‌طور کلی در عبارت‌ها، جز در صورت ضرورت (مثلاً برای پرهیز از یک عملیات بسیار پرهزینه)، dereference کردن را به گرفتن ارجاع ترجیح دهید.</p>
+<p>از پرانتز به‌طور آزادانه استفاده کنید و صرفاً به‌خاطر اولویت آن‌ها را حذف نکنید. ابزارها نباید پرانتز را خودکار اضافه یا حذف کنند. برای نشان دادن اولویت از فاصله استفاده نکنید.</p>
+<p>اگر خط شکسته می‌شود، هر خط بعدی را با تورفتگی بلوکی بنویسید. برای عملگرهای انتساب، بعد از عملگر بشکنید؛ برای سایر عملگرها، عملگر را در خط بعدی قرار دهید. هر زیرعبارت را در خط جداگانه‌ای بگذارید:</p>
+<pre><code class="language-rust">foo_bar
+    + bar
+    + baz
+    + qux
+    + whatever</code></pre>
+<p>ترجیح دهید خط را در یک عملگر انتساب (<code>=</code> یا <code>+=</code> و غیره) بشکنید تا در سایر عملگرهای دودویی.</p>
+<h3 id="casts-as"><a class="header" href="#casts-as">کست‌ها (<code>as</code>)</a></h3>
+<p>کست‌های <code>as</code> را مانند یک عملگر دودویی قالب‌بندی کنید. یعنی همیشه اطراف <code>as</code> فاصله بگذارید، و اگر خط را می‌شکنید، قبل از <code>as</code> بشکنید (هرگز بعد از آن) و خط بعدی را با تورفتگی بلوکی بنویسید. نوع سمت راست را طبق قواعد نوع‌ها قالب‌بندی کنید.</p>
+<p>با این حال، برخلاف سایر عملگرهای دودویی، اگر زنجیره‌ای از کست‌های <code>as</code> نیاز به شکستن خط دارد و شکستن قبل از اولین <code>as</code> کافی است تا بقیه در خط بعد جا شوند، قبل از <code>as</code>های بعدی نشکنید؛ بلکه همهٔ نوع‌ها را در همان خط نگه دارید:</p>
+<pre><code class="language-rust">let cstr = very_long_expression()
+    as *const str as *const [u8] as *const std::os::raw::c_char;</code></pre>
+<p>اگر خط بعدی هنوز به شکستن نیاز دارد، قبل از هر <code>as</code> بشکنید و تورفتگی بلوکی بدهید، همان‌طور که برای سایر عملگرهای دودویی انجام می‌دهید.</p>
+<h2 id="control-flow"><a class="header" href="#control-flow">کنترل جریان</a></h2>
+<p>برای عبارت‌های <code>if</code> و <code>while</code> پرانتز اضافی نگذارید.</p>
+<pre><code class="language-rust">if true {
+}</code></pre>
+<p>بهتر از کد زیر است:</p>
+<pre><code class="language-rust">if (true) {
+}</code></pre>
+<p>است. اما اگر پرانتز به فهم یک عبارت حسابی یا منطقی کمک می‌کند، می‌توانید آن را بگذارید (<code>(x * 15) + (y * 20)</code> اشکالی ندارد).</p>
+<h2 id="function-calls"><a class="header" href="#function-calls">فراخوانی توابع</a></h2>
+<p>بین نام تابع و پرانتز بازکننده فاصله نگذارید.</p>
+<p>بین یک آرگومان و کاما‌ی که بعد از آن می‌آید فاصله نگذارید.</p>
+<p>بین یک آرگومان و کاما‌ی که قبل از آن می‌آید فاصله بگذارید.</p>
+<p>ترجیح دهید در عبارت فراخوانشونده (callee) خط نشکنید.</p>
+<p>برای فراخوانی تابع بدون آرگومان (مانند <code>func()</code>) هرگز داخل پرانتزها خط نشکنید و بین پرانتزها فاصله نگذارید. همیشه فراخوانی بدون آرگومان را تک‌خطی بنویسید، نه چندخطی. این حتی وقتی صدق می‌کند که پرانتز بسته از عرض بیشینه بگذرد.</p>
+<h3 id="single-line-calls"><a class="header" href="#single-line-calls">فراخوانی‌های تک‌خطی</a></h3>
+<p>بین نام تابع و پرانتز بازکننده، بین پرانتز بازکننده و اولین آرگومان، و بین آخرین آرگومان و پرانتز بسته فاصله نگذارید.</p>
+<p>بعد از آخرین آرگومان کاما نگذارید.</p>
+<pre><code class="language-rust">foo(x, y, z)</code></pre>
+<h3 id="multi-line-calls"><a class="header" href="#multi-line-calls">فراخوانی‌های چندخطی</a></h3>
+<p>اگر فراخوانی تابع <em>کوچک</em> نیست، یا از عرض بیشینه بیشتر می‌شود، یا هر آرگومان یا فراخوانشونده چندخطی است، فراخوانی را در چند خط بنویسید. در این حالت، هر آرگومان را در خط جداگانه‌ای با تورفتگی بلوکی قرار دهید، بعد از پرانتز بازکننده و قبل از پرانتز بسته خط بشکنید، و کاما انتهایی بگذارید:</p>
+<pre><code class="language-rust">a_function_call(
+    arg1,
+    a_nested_call(a, b),
+)</code></pre>
+<h2 id="method-calls"><a class="header" href="#method-calls">فراخوانی متدها</a></h2>
+<p>قواعد فراخوانی توابع را دنبال کنید.</p>
+<p>اطراف <code>.</code> فاصله نگذارید.</p>
+<pre><code class="language-rust">x.foo().bar().baz(x, y, z);</code></pre>
+<h2 id="macro-uses"><a class="header" href="#macro-uses">استفاده از ماکروها</a></h2>
+<p>اگر یک ماکرو را می‌توان مانند سازه‌های دیگر تجزیه کرد، آن را مانند همان سازه‌ها قالب‌بندی کنید. برای مثال، فراخوانی ماکروی <code>foo!(a, b, c)</code> را می‌توان (با نادیده گرفتن <code>!</code>) مانند یک فراخوانی تابع تجزیه کرد، پس با قواعد فراخوانی توابع قالب‌بندی می‌شود.</p>
+<p>راهنمای سبک قالب‌بندی مشخصی برای ماکروهای خاصِ موجود در زبان یا کتابخانهٔ استاندارد تعریف می‌کند. این راهنما قالب‌بندی هیچ ماکرو شخص ثالثی را تعریف نمی‌کند، حتی اگر شبیه ماکروهای زبان یا کتابخانهٔ استاندارد باشد.</p>
+<h3 id="format-string-macros"><a class="header" href="#format-string-macros">ماکروهای رشتهٔ قالب (format string)</a></h3>
+<p>برای ماکروهایی که یک رشتهٔ قالب می‌گیرند: اگر همهٔ آرگومان‌های دیگر <em>کوچک</em> هستند، آرگومان‌های قبل از رشتهٔ قالب را اگر جا شوند در یک خط بنویسید، و آرگومان‌های بعد از رشتهٔ قالب را اگر جا شوند در یک خط بنویسید، و خود رشتهٔ قالب در خط جداگانه‌ای باشد. اگر آرگومان‌ها کوچک نیستند یا جا نمی‌شوند، هر کدام را مانند یک تابع در خط جداگانه‌ای بگذارید. برای نمونه:</p>
+<pre><code class="language-rust">println!(
+    "Hello {} and {}",
+    name1, name2,
+);
+
+assert_eq!(
+    x, y,
+    "x and y were not equal, see {}",
+    reason,
+);</code></pre>
+<h2 id="chains-of-fields-and-method-calls"><a class="header" href="#chains-of-fields-and-method-calls">زنجیره‌های فیلد و فراخوانی متد</a></h2>
+<p>زنجیره دنباله‌ای از دسترسی به فیلد، فراخوانی متد و/یا استفاده از عملگر پرس‌وجو <code>?</code> است. مثلاً <code>a.b.c().d</code> یا <code>foo?.bar().baz?</code>.</p>
+<p>اگر زنجیره «کوچک» است و امکانش هست، آن را در یک خط بنویسید. اگر در چند خط می‌نویسید، هر دسترسی به فیلد یا فراخوانی متد را در خط جداگانه‌ای قرار دهید، و خط‌شکنی را قبل از <code>.</code> و بعد از هر <code>?</code> بگذارید. خط‌های بعدی را با تورفتگی بلوکی بنویسید:</p>
+<pre><code class="language-rust">let foo = bar
+    .baz?
+    .qux();</code></pre>
+<p>اگر طول آخرین خط عنصر اول به‌علاوهٔ تورفتگی آن کمتر یا برابر تورفتگی خط دوم است، و اگر در یک خط جا می‌شوند، خط اول و دوم را ترکیب کنید. این قاعده را به‌صورت بازگشتی اعمال کنید:</p>
+<pre><code class="language-rust">x.baz?
+    .qux()
+
+x.y.z
+    .qux()
+
+let foo = x
+    .baz?
+    .qux();
+
+foo(
+    expr1,
+    expr2,
+).baz?
+    .qux();</code></pre>
+<h3 id="multi-line-elements"><a class="header" href="#multi-line-elements">عناصر چندخطی</a></h3>
+<p>اگر هر عنصری از زنجیره در چند خط نوشته شده، آن عنصر و همهٔ عناصر بعدی‌اش را در خط‌های جداگانه بنویسید.</p>
+<pre><code class="language-rust">a.b.c()?
+    .foo(
+        an_expr,
+        another_expr,
+    )
+    .bar
+    .baz</code></pre>
+<p>توجه کنید که در مثال بالا، به‌خاطر زنجیره و فراخوانی تابع، تورفتگی بلوکی وجود دارد.</p>
+<p>ترجیح دهید کل زنجیره با سبک چندخطی نوشته شود و هر عنصر در یک خط باشد، نه این‌که برخی عناصر چندخطی و برخی تک‌خطی باشند. برای نمونه:</p>
+<pre><code class="language-rust">// Better
+self.pre_comment
+    .as_ref()
+    .map_or(false, |comment| comment.starts_with("//"))
+
+// Worse
+self.pre_comment.as_ref().map_or(
+    false,
+    |comment| comment.starts_with("//"),
+)</code></pre>
+<h2 id="control-flow-expressions"><a class="header" href="#control-flow-expressions">عبارت‌های کنترل جریان</a></h2>
+<p>این بخش <code>for</code> و <code>loop</code> و همچنین <code>if</code> و <code>while</code> با زیرعبارت‌هایشان را پوشش می‌دهد. این شامل عبارت‌هایی با یک زیرعبارت <code>let</code> (یعنی <code>if let</code> و <code>while let</code>) و همچنین let-chainها می‌شود: عبارت‌هایی با یک یا چند زیرعبارت <code>let</code> و یک یا چند شرط بولی (مانند <code>if a &amp;&amp; let Some(b) = c</code>).</p>
+<p>کلیدواژه، هر بند اولیه و آکولاد بازکنندهٔ بلوک را، اگر جا شوند، در یک خط قرار دهید. قواعد معمول <a href="#blocks">قالب‌بندی بلوک</a> را روی بلوک اعمال کنید.</p>
+<p>اگر بخش <code>else</code> وجود دارد، آکولاد بسته، <code>else</code>، هر بند بعدی و آکولاد بازکننده را در یک خط قرار دهید، با یک فاصلهٔ واحد قبل و بعد از کلیدواژهٔ <code>else</code>:</p>
+<pre><code class="language-rust">if ... {
+    ...
+} else {
+    ...
+}
+
+if let ... {
+    ...
+} else if ... {
+    ...
+} else {
+    ...
+}</code></pre>
+<p>اگر خط کنترل باید شکسته شود، برای هر زیرعبارت <code>let</code> در یک <code>if</code> یا <code>while</code> که جا نمی‌شود ترجیح دهید بعد از <code>=</code> بشکنید، و در یک <code>for</code> قبل از <code>in</code> بشکنید؛ خط بعدی باید با تورفتگی بلوکی باشد. اگر خط کنترل به هر دلیلی شکسته شود، آکولاد بازکننده باید در خط جداگانه‌ای و بدون تورفتگی باشد. مثال‌ها:</p>
+<pre><code class="language-rust">while let Some(foo)
+    = a_long_expression
+{
+    ...
+}
+
+for foo
+    in a_long_expression
+{
+    ...
+}
+
+if a_long_expression
+    &amp;&amp; another_long_expression
+    || a_third_long_expression
+{
+    ...
+}
+
+if let Some(a) = b
+    &amp;&amp; another_long_expression
+    &amp;&amp; a_third_long_expression
+{
+    // ...
+}
+
+if let Some(relatively_long_thing)
+    = a_long_expression
+    &amp;&amp; another_long_expression
+    &amp;&amp; a_third_long_expression
+{
+    // ...
+}
+
+if some_expr
+    &amp;&amp; another_long_expression
+    &amp;&amp; let Some(relatively_long_thing) =
+        a_long_long_long_long_long_long_really_reallllllllllyyyyyyy_long_expression
+    &amp;&amp; a_third_long_expression
+{
+    // ...
+}</code></pre>
+<p>خط کنترل یک let-chain مجاز است در یک خط نوشته شود، به شرطی که فقط از دو بند تشکیل شده باشد؛ بند اول (عملوند سمت چپ) یک لیترال یا <code>ident</code> باشد (که می‌تواند قبل از آن هر تعداد عملگر یکانی پیشوندی بیاید)، و بند دوم (عملوند سمت راست) یک بند <code>let</code> تک‌خطی باشد. در غیر این صورت، خط کنترل باید طبق قواعد بالا شکسته و قالب‌بندی شود. برای نمونه:</p>
+<pre><code class="language-rust">if a &amp;&amp; let Some(b) = foo() {
+    // ...
+}
+
+if true &amp;&amp; let Some(b) = foo() {
+    // ...
+}
+
+let operator = if !from_hir_call &amp;&amp; let Some(p) = parent {
+    // ...
+};
+
+if let Some(b) = foo()
+    &amp;&amp; a
+{
+    // ..
+}
+
+if foo()
+    &amp;&amp; let Some(b) = bar
+{
+    // ...
+}
+
+if gen_pos != GenericArgPosition::Type
+    &amp;&amp; let Some(b) = gen_args.bindings.first()
+{
+    // ..
+}</code></pre>
+<p>جایی که بند اولیه در چند خط است و با یک یا چند پرانتز بسته، کروشهٔ بسته یا آکولاد بسته تمام می‌شود، و در آن خط چیز دیگری نیست، و آن خط بیشتر از تورفتگی خط اول عبارت کنترل جریان تورفتگی ندارد، آکولاد بازکنندهٔ بلوک را با یک فاصله در همان خط قرار دهید. برای نمونه:</p>
+<pre><code class="language-rust">if !self.config.file_lines().intersects(
+    &amp;self.codemap.lookup_line_range(
+        stmt.span,
+    ),
+) {  // Opening brace on same line as initial clause.
+    ...
+}</code></pre>
+<h3 id="single-line-if-else"><a class="header" href="#single-line-if-else"><code>if else</code> تک‌خطی</a></h3>
+<p>یک <code>if else</code> یا <code>if let else</code> را اگر در بافت عبارت است (یعنی دستور مستقل نیست)، یک بند <code>else</code> دارد و <em>کوچک</em> است، در یک خط قرار دهید:</p>
+<pre><code class="language-rust">let y = if x { 0 } else { 1 };
+
+// Examples that must be multi-line.
+let y = if something_very_long {
+    not_small
+} else {
+    also_not_small
+};
+
+if x {
+    0
+} else {
+    1
+}</code></pre>
+<h2 id="match"><a class="header" href="#match">Match</a></h2>
+<p>ترجیح دهید در عبارت جداکننده (discriminant) خط نشکنید. همیشه بعد از آکولاد بازکننده و قبل از آکولاد بسته خط بشکنید. بازوهای match را یک‌بار تورفتگی بلوکی دهید:</p>
+<pre><code class="language-rust">match foo {
+    // arms
+}
+
+let x = match foo.bar.baz() {
+    // arms
+};</code></pre>
+<p>برای یک بازوی match فقط در صورتی کاما انتهایی بگذارید که از بلوک استفاده نکرده باشد.</p>
+<p>هرگز الگوی یک بازوی match را با <code>|</code> شروع نکنید:</p>
+<pre><code class="language-rust">match foo {
+    // Don't do this.
+    | foo =&gt; bar,
+    // Or this.
+    | a_very_long_pattern
+    | another_pattern
+    | yet_another_pattern
+    | a_fourth_pattern =&gt; {
+        ...
+    }
+}</code></pre>
+<p>ترجیح دهید:</p>
+<pre><code class="language-rust">match foo {
+    foo =&gt; bar,
+    a_very_long_pattern
+    | another_pattern
+    | yet_another_pattern
+    | a_fourth_pattern =&gt; {
+        ...
+    }
+}</code></pre>
+<p>از شکستن سمت چپ (قبل از <code>=&gt;</code>) یک بازوی match تا جای ممکن پرهیز کنید. اگر سمت راست بازو در همان خط سمت چپ می‌ماند، هرگز از بلوک استفاده نکنید (مگر بلوک خالی باشد).</p>
+<p>اگر سمت راست از چند دستور تشکیل شده، یا کامنت خطی دارد، یا شروع آن در همان خط سمت چپ جا نمی‌شود، از بلوک استفاده کنید. بلوکی که شامل یک فراخوانی ماکروی تکی است را تخت نکنید، چون ممکن است گسترش آن یک سمی‌کالن انتهایی داشته باشد.</p>
+<p>بدنهٔ بازوی بلوکی را با تورفتگی بلوکی بنویسید.</p>
+<p>مثال‌ها:</p>
+<pre><code class="language-rust">match foo {
+    foo =&gt; bar,
+    a_very_long_pattern | another_pattern if an_expression() =&gt; {
+        no_room_for_this_expression()
+    }
+    foo =&gt; {
+        // A comment.
+        an_expression()
+    }
+    foo =&gt; {
+        let a = statement();
+        an_expression()
+    }
+    bar =&gt; {}
+    // Trailing comma on last item.
+    foo =&gt; bar,
+    baz =&gt; qux!(),
+    lorem =&gt; {
+        ipsum!()
+    }
+}</code></pre>
+<p>اگر بدنه یک عبارت تکی بدون کامنت خطی و غیرکنترل‌جریانی است، آن را در همان خط سمت چپ شروع کنید. اگر نه، باید در بلوک باشد. مثال:</p>
+<pre><code class="language-rust">match foo {
+    // A combinable expression.
+    foo =&gt; a_function_call(another_call(
+        argument1,
+        argument2,
+    )),
+    // A non-combinable expression
+    bar =&gt; {
+        a_function_call(
+            another_call(
+                argument1,
+                argument2,
+            ),
+            another_argument,
+        )
+    }
+}</code></pre>
+<h3 id="line-breaking"><a class="header" href="#line-breaking">شکستن خط</a></h3>
+<p>اگر استفاده از شکل بلوکی در سمت راست بازوی match امکان می‌دهد از شکستن سمت چپ اجتناب شود، این کار را بکنید:</p>
+<pre><code class="language-rust">    // Assuming the following line does not fit in the max width
+    a_very_long_pattern | another_pattern =&gt; ALongStructName {
+        ...
+    },
+    // Prefer this
+    a_very_long_pattern | another_pattern =&gt; {
+        ALongStructName {
+            ...
+        }
+    }
+    // To splitting the pattern.</code></pre>
+<p>هرگز بعد از <code>=&gt;</code> بدون استفاده از شکل بلوکی بدنه نشکنید.</p>
+<p>اگر سمت چپ باید شکسته شود و یک بند <code>if</code> وجود دارد، قبل از <code>if</code> بشکنید و تورفتگی بلوکی بدهید. در این حالت همیشه از بدنهٔ بلوکی استفاده کنید و بدنه را در خط جدید شروع کنید:</p>
+<pre><code class="language-rust">    a_very_long_pattern | another_pattern
+        if expr =&gt;
+    {
+        ...
+    }</code></pre>
+<p>اگر الگو باید شکسته شود، هر بند الگو را در خط جداگانه‌ای و بدون تورفتگی اضافی قرار دهید، و قبل از <code>|</code> بشکنید. اگر بند <code>if</code> وجود دارد، از شکل بالا استفاده کنید:</p>
+<pre><code class="language-rust">    a_very_long_pattern
+    | another_pattern
+    | yet_another_pattern
+    | a_forth_pattern =&gt; {
+        ...
+    }
+    a_very_long_pattern
+    | another_pattern
+    | yet_another_pattern
+    | a_forth_pattern
+        if expr =&gt;
+    {
+        ...
+    }</code></pre>
+<p>اگر الگو چندخطی است و خط آخرش از تورفتگی کمتر است، بند <code>if</code> را در خط جدید قرار ندهید. مثلاً:</p>
+<pre><code class="language-rust">    Token::Dimension {
+         value,
+         ref unit,
+         ..
+    } if num_context.is_ok(context.parsing_mode, value) =&gt; {
+        ...
+    }</code></pre>
+<p>اگر هر بند در یک الگو <em>کوچک</em> است، ولی کل الگو در یک خط جا نمی‌شود، الگو را در چند خط قرار دهید و تا جای ممکن بندها را در هر خط جای دهید. باز هم قبل از <code>|</code> بشکنید:</p>
+<pre><code class="language-rust">    foo | bar | baz
+    | qux =&gt; {
+        ...
+    }</code></pre>
+<p>ما یک بند الگو را <em>کوچک</em> تعریف می‌کنیم اگر در یک خط جا شود و با گرامر «کوچک» زیر مطابقت داشته باشد:</p>
+<pre><code>small:
+    - small_no_tuple
+    - unary tuple constructor: `(` small_no_tuple `,` `)`
+    - `&amp;` small
+
+small_no_tuple:
+    - single token
+    - `&amp;` small_no_tuple
+</code></pre>
+<p>مثلاً <code>&amp;&amp;Some(foo)</code> مطابقت دارد، ولی <code>Foo(4, Bar)</code> ندارد.</p>
+<h2 id="combinable-expressions"><a class="header" href="#combinable-expressions">عبارت‌های ترکیب‌پذیر</a></h2>
+<p>اگر یک فراخوانی تابع یک آرگومان دارد و آن آرگومان در چند خط با تورفتگی بلوکی نوشته شده، فراخوانی بیرونی را مانند یک فراخوانی تک‌خطی قالب‌بندی کنید، به شرطی که نتیجه جا شود. همین رفتار ترکیبی را برای هر عبارت مشابه که فهرستی از زیرعبارت‌ها در پرانتز و با تورفتگی بلوکی دارد اعمال کنید (مثلاً ماکروها یا لیترال‌های struct تاپلی). برای نمونه:</p>
+<pre><code class="language-rust">foo(bar(
+    an_expr,
+    another_expr,
+))
+
+let x = foo(Bar {
+    field: whatever,
+});
+
+foo(|param| {
+    action();
+    foo(param)
+})
+
+let x = combinable([
+    an_expr,
+    another_expr,
+]);
+
+let arr = [combinable(
+    an_expr,
+    another_expr,
+)];</code></pre>
+<p>این رفتار را به‌صورت بازگشتی اعمال کنید.</p>
+<p>برای تابعی با چند آرگومان، اگر آخرین آرگومان یک closure چندخطی با بلوک صریح است، هیچ آرگومان closure دیگری نیست، و همهٔ آرگومان‌ها و خط اول closure در یک خط جا می‌شوند، از همان رفتار ترکیبی استفاده کنید:</p>
+<pre><code class="language-rust">foo(first_arg, x, |param| {
+    action();
+    foo(param)
+})</code></pre>
+<h2 id="ranges"><a class="header" href="#ranges">بازه‌ها (ranges)</a></h2>
+<p>در بازه‌ها فاصله نگذارید، مثلاً <code>0..10</code>، <code>x..=y</code>، <code>..x.len()</code>، <code>foo..</code>.</p>
+<p>وقتی بازه‌ای هم کران پایین و هم کران بالا دارد و خط باید داخل بازه شکسته شود، قبل از عملگر بازه بشکنید و خط دوم را با تورفتگی بلوکی بنویسید:</p>
+<pre><code class="language-rust">a_long_expression
+    ..another_long_expression</code></pre>
+<p>برای نشان دادن اولویت، اگر یکی از کران‌ها عبارت مرکب است، دور آن پرانتز بگذارید، مثلاً <code>..(x + 1)</code>، <code>(x.f)..(x.f.len())</code> یا <code>0..(x - 10)</code>.</p>
+<h2 id="hexadecimal-literals"><a class="header" href="#hexadecimal-literals">لیترال‌های هگزادسیمال</a></h2>
+<p>لیترال‌های هگزادسیمال ممکن است حروف بزرگ یا کوچک داشته باشند، ولی نباید در یک لیترال با هم ترکیب شوند. پروژه‌ها باید برای همهٔ لیترال‌ها از یک حالت استفاده کنند، ولی ما برای حروف کوچک یا بزرگ توصیه‌ای نداریم.</p>
+<h2 id="patterns"><a class="header" href="#patterns">الگوها (patterns)</a></h2>
+<p>الگوها را مانند عبارت‌های متناظرشان قالب‌بندی کنید. برای قالب‌بندی بیشتر الگوها در بازوهای match، بخش مربوط به <code>match</code> را ببینید.</p><nav class="page-nav"><a href="statements.html">→ دستورها</a><a href="types.html">نوع‌ها و کران‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../style-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

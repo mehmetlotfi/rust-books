@@ -1,0 +1,214 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>استفاده از شیء صفت برای انتزاع رفتار مشترک — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch18-02-trait-objects"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><!-- Old headings. Do not remove or links may break. -->
+<p><a id="using-trait-objects-that-allow-for-values-of-different-types"></a></p>
+<h2 id="using-trait-objects-to-abstract-over-shared-behavior"><a class="header" href="#using-trait-objects-to-abstract-over-shared-behavior">استفاده از اشیاء صفت برای مقادیر با انواع مختلف</a></h2>
+<p>در فصل 8، اشاره کردیم که یکی از محدودیت‌های وکتورها این است که می‌توانند فقط عناصر یک نوع را ذخیره کنند. در لیستینگ 8-9، راه‌حلی ایجاد کردیم که در آن یک enum به نام <code>SpreadsheetCell</code> تعریف کردیم که انواع مختلفی مانند اعداد صحیح، اعداد اعشاری و متن را در خود جای می‌داد. این به ما اجازه می‌داد داده‌های مختلفی را در هر سلول ذخیره کنیم و همچنان یک وکتور داشته باشیم که نمایانگر یک ردیف از سلول‌ها باشد. این راه‌حل زمانی مناسب است که آیتم‌های قابل تعویض ما مجموعه‌ای ثابت از انواع باشد که هنگام کامپایل کد می‌دانیم.</p>
+<p>با این حال، گاهی اوقات می‌خواهیم کاربران کتابخانه ما بتوانند مجموعه‌ای از انواع معتبر در یک وضعیت خاص را گسترش دهند. برای نشان دادن نحوه انجام این کار، یک ابزار رابط کاربری گرافیکی (GUI) نمونه ایجاد می‌کنیم که از طریق یک لیست از آیتم‌ها تکرار می‌کند و متدی به نام <code>draw</code> را برای هر آیتم فراخوانی می‌کند تا آن را روی صفحه رسم کند—یک تکنیک رایج برای ابزارهای GUI. یک crate کتابخانه‌ای به نام <code>gui</code> ایجاد می‌کنیم که ساختار یک کتابخانه GUI را شامل می‌شود. این crate ممکن است شامل برخی انواع باشد که افراد از آن‌ها استفاده کنند، مانند <code>Button</code> یا <code>TextField</code>. علاوه بر این، کاربران <code>gui</code> می‌خواهند انواع خود را که می‌توانند رسم شوند ایجاد کنند: برای مثال، یک برنامه‌نویس ممکن است یک <code>Image</code> اضافه کند و دیگری ممکن است یک <code>SelectBox</code> اضافه کند.</p>
+<p>ما برای این مثال یک کتابخانه GUI کامل پیاده‌سازی نخواهیم کرد، اما نشان خواهیم داد که قطعات چگونه به هم متصل می‌شوند. هنگام نوشتن این کتابخانه، نمی‌توانیم تمام انواعی که برنامه‌نویسان دیگر ممکن است بخواهند ایجاد کنند را بدانیم و تعریف کنیم. اما می‌دانیم که <code>gui</code> باید مقادیر زیادی از انواع مختلف را پیگیری کند و باید متدی به نام <code>draw</code> را برای هر یک از این مقادیر با نوع متفاوت فراخوانی کند. نیازی به دانستن دقیق آنچه هنگام فراخوانی متد <code>draw</code> اتفاق می‌افتد نداریم، فقط اینکه مقدار باید این متد را داشته باشد.</p>
+<p>برای انجام این کار در یک زبان با وراثت، ممکن است یک کلاس به نام <code>Component</code> تعریف کنیم که یک متد به نام <code>draw</code> داشته باشد. سایر کلاس‌ها، مانند <code>Button</code>، <code>Image</code> و <code>SelectBox</code>، از <code>Component</code> ارث می‌برند و به این ترتیب متد <code>draw</code> را به ارث می‌برند. آن‌ها می‌توانند متد <code>draw</code> را بازنویسی کنند تا رفتار سفارشی خود را تعریف کنند، اما فریم‌ورک می‌تواند تمام این انواع را به گونه‌ای مدیریت کند که گویی نمونه‌هایی از <code>Component</code> هستند و متد <code>draw</code> را روی آن‌ها فراخوانی کند. اما چون Rust وراثت ندارد، باید راه دیگری برای ساختاردهی کتابخانه <code>gui</code> پیدا کنیم تا به کاربران اجازه دهد آن را با انواع جدید گسترش دهند.</p>
+<h3 id="defining-a-trait-for-common-behavior"><a class="header" href="#defining-a-trait-for-common-behavior">تعریف یک صفت برای رفتار مشترک</a></h3>
+<p>برای پیاده‌سازی رفتاری که می‌خواهیم <code>gui</code> داشته باشد، یک صفت به نام <code>Draw</code> تعریف می‌کنیم که یک متد به نام <code>draw</code> خواهد داشت. سپس می‌توانیم یک وکتور تعریف کنیم که یک <em>شیء صفت</em> را بگیرد. یک شیء صفت به یک نمونه از یک نوع که صفت مشخصی را پیاده‌سازی کرده اشاره می‌کند و همچنین یک جدول برای جستجوی متدهای صفت روی آن نوع در زمان اجرا را شامل می‌شود. برای ایجاد یک شیء صفت، باید نوع اشاره‌گر (Pointer) (مانند یک ارجاع <code>&amp;</code> یا یک اشاره‌گر (Pointer) هوشمند <code>Box&lt;T&gt;</code>)، کلمه کلیدی <code>dyn</code> و سپس صفت مربوطه را مشخص کنیم. (در فصل 20، بخش <a href="ch20-03-advanced-types.html#dynamically-sized-types-and-the-sized-trait">“انواع با اندازه پویا و صفت <code>Sized</code>”</a><!-- ignore --> دلیل اینکه اشیاء صفت باید از یک اشاره‌گر (Pointer) استفاده کنند را توضیح خواهیم داد.) می‌توانیم از اشیاء صفت به جای یک نوع جنریک یا نوع مشخص استفاده کنیم. هر جا که از یک شیء صفت استفاده کنیم، سیستم نوع Rust در زمان کامپایل تضمین می‌کند که هر مقداری که در آن زمینه استفاده شود، صفت شیء صفت را پیاده‌سازی می‌کند. بنابراین نیازی به دانستن تمام انواع ممکن در زمان کامپایل نداریم.</p>
+<p>اشاره کردیم که در Rust از استفاده از اصطلاح “اشیاء” برای structها و enumها اجتناب می‌کنیم تا آن‌ها را از اشیاء سایر زبان‌ها متمایز کنیم. در یک struct یا enum، داده‌ها در فیلدهای struct و رفتار در بلوک‌های <code>impl</code> جدا شده‌اند، در حالی که در سایر زبان‌ها داده‌ها و رفتار معمولاً در یک مفهوم واحد به نام شیء ترکیب می‌شوند. اما اشیاء صفت در Rust بیشتر شبیه اشیاء در سایر زبان‌ها هستند، زیرا داده‌ها و رفتار را ترکیب می‌کنند. با این حال، اشیاء صفت از اشیاء سنتی متفاوت هستند زیرا نمی‌توان داده‌ای به یک شیء صفت اضافه کرد. اشیاء صفت به اندازه اشیاء در سایر زبان‌ها عمومی نیستند: هدف خاص آن‌ها فراهم کردن انتزاع در رفتار مشترک است.</p>
+<p>لیستینگ 18-3 نشان می‌دهد چگونه می‌توان یک صفت به نام <code>Draw</code> با یک متد به نام <code>draw</code> تعریف کرد:</p>
+<figure class="listing" id="listing-18-3">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">pub trait Draw {
+    fn draw(&amp;self);
+}</code></pre>
+<figcaption><a href="#listing-18-3">لیست ۱۸-۳</a>: Definition of the &lt;code&gt;&lt;/x-listing&gt;Draw&lt;/code&gt; trait</figcaption>
+</figure>
+<p>این نحو باید از بحث‌های ما در فصل 10 در مورد نحوه تعریف صفات آشنا باشد. حالا به نحو جدیدی می‌رسیم: لیستینگ 18-4 یک ساختار به نام <code>Screen</code> را تعریف می‌کند که یک بردار به نام <code>components</code> دارد. این بردار از نوع <code>Box&lt;dyn Draw&gt;</code> است، که یک شیء صفت است؛ این به‌عنوان جایگزینی برای هر نوع داخل یک <code>Box</code> که صفت <code>Draw</code> را پیاده‌سازی کرده عمل می‌کند.</p>
+<figure class="listing" id="listing-18-4">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">pub trait Draw {
+</span><span class="boring">    fn draw(&amp;self);
+</span><span class="boring">}
+</span><span class="boring">
+</span>pub struct Screen {
+    pub components: Vec&lt;Box&lt;dyn Draw&gt;&gt;,
+}</code></pre>
+<figcaption><a href="#listing-18-4">لیست ۱۸-۴</a>: تعریف ساختار &lt;code&gt;&lt;/x-listing&gt;Screen&lt;/code&gt; با یک فیلد &lt;code&gt;components&lt;/code&gt; که یک بردار از اشیاء صفت را نگه می‌دارد که صفت &lt;code&gt;Draw&lt;/code&gt; را پیاده‌سازی کرده‌اند</figcaption>
+</figure>
+<p>روی ساختار <code>Screen</code>، متدی به نام <code>run</code> تعریف می‌کنیم که متد <code>draw</code> را روی هر یک از <code>components</code> خود فراخوانی می‌کند، همان‌طور که در لیستینگ 18-5 نشان داده شده است:</p>
+<figure class="listing" id="listing-18-5">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">pub trait Draw {
+</span><span class="boring">    fn draw(&amp;self);
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct Screen {
+</span><span class="boring">    pub components: Vec&lt;Box&lt;dyn Draw&gt;&gt;,
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Screen {
+    pub fn run(&amp;self) {
+        for component in self.components.iter() {
+            component.draw();
+        }
+    }
+}</code></pre>
+<figcaption><a href="#listing-18-5">لیست ۱۸-۵</a>: متد &lt;code&gt;&lt;/x-listing&gt;run&lt;/code&gt; روی &lt;code&gt;Screen&lt;/code&gt; که متد &lt;code&gt;draw&lt;/code&gt; را روی هر کامپوننت فراخوانی می‌کند</figcaption>
+</figure>
+<p>این روش متفاوت از تعریف ساختاری است که از یک پارامتر نوع جنریک با محدودیت‌های صفت استفاده می‌کند. یک پارامتر نوع جنریک فقط می‌تواند یک نوع مشخص را در هر زمان جایگزین کند، در حالی که اشیاء صفت به ما اجازه می‌دهند چندین نوع مشخص را در زمان اجرا به جای اشیاء صفت قرار دهیم. برای مثال، می‌توانستیم ساختار <code>Screen</code> را با استفاده از یک نوع جنریک و یک محدودیت صفت به صورت لیستینگ 18-6 تعریف کنیم:</p>
+<figure class="listing" id="listing-18-6">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">pub trait Draw {
+</span><span class="boring">    fn draw(&amp;self);
+</span><span class="boring">}
+</span><span class="boring">
+</span>pub struct Screen&lt;T: Draw&gt; {
+    pub components: Vec&lt;T&gt;,
+}
+
+impl&lt;T&gt; Screen&lt;T&gt;
+where
+    T: Draw,
+{
+    pub fn run(&amp;self) {
+        for component in self.components.iter() {
+            component.draw();
+        }
+    }
+}</code></pre>
+<figcaption><a href="#listing-18-6">لیست ۱۸-۶</a>: یک پیاده‌سازی جایگزین برای ساختار &lt;code&gt;&lt;/x-listing&gt;Screen&lt;/code&gt; و متد &lt;code&gt;run&lt;/code&gt; آن با استفاده از جنریک‌ها و محدودیت‌های صفت</figcaption>
+</figure>
+<p>این روش ما را محدود به یک نمونه <code>Screen</code> می‌کند که لیستی از کامپوننت‌ها همه از نوع <code>Button</code> یا همه از نوع <code>TextField</code> داشته باشد. اگر فقط مجموعه‌های همگن داشته باشید، استفاده از جنریک‌ها و محدودیت‌های صفت ترجیح داده می‌شود زیرا این تعاریف در زمان کامپایل با استفاده از انواع مشخص مونومورفیزه می‌شوند.</p>
+<p>از طرف دیگر، با استفاده از روش مبتنی بر اشیاء صفت، یک نمونه <code>Screen</code> می‌تواند یک <code>Vec&lt;T&gt;</code> داشته باشد که شامل یک <code>Box&lt;Button&gt;</code> و همچنین یک <code>Box&lt;TextField&gt;</code> باشد. بیایید ببینیم که چگونه این کار می‌کند، سپس درباره پیامدهای عملکرد در زمان اجرا صحبت کنیم.</p>
+<h3 id="implementing-the-trait"><a class="header" href="#implementing-the-trait">پیاده‌سازی صفت</a></h3>
+<p>حالا برخی از انواعی که صفت <code>Draw</code> را پیاده‌سازی می‌کنند اضافه می‌کنیم. نوع <code>Button</code> را ارائه می‌دهیم. دوباره، پیاده‌سازی یک کتابخانه GUI کامل فراتر از محدوده این کتاب است، بنابراین متد <code>draw</code> هیچ پیاده‌سازی مفیدی در بدنه خود نخواهد داشت. برای تصور اینکه پیاده‌سازی ممکن است چگونه باشد، یک ساختار <code>Button</code> ممکن است فیلدهایی برای <code>width</code>، <code>height</code> و <code>label</code> داشته باشد، همان‌طور که در لیستینگ 18-7 نشان داده شده است:</p>
+<figure class="listing" id="listing-18-7">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground"><span class="boring">pub trait Draw {
+</span><span class="boring">    fn draw(&amp;self);
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub struct Screen {
+</span><span class="boring">    pub components: Vec&lt;Box&lt;dyn Draw&gt;&gt;,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Screen {
+</span><span class="boring">    pub fn run(&amp;self) {
+</span><span class="boring">        for component in self.components.iter() {
+</span><span class="boring">            component.draw();
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>pub struct Button {
+    pub width: u32,
+    pub height: u32,
+    pub label: String,
+}
+
+impl Draw for Button {
+    fn draw(&amp;self) {
+        // code to actually draw a button
+    }
+}</code></pre>
+<figcaption><a href="#listing-18-7">لیست ۱۸-۷</a>: یک ساختار &lt;code&gt;&lt;/x-listing&gt;Button&lt;/code&gt; که صفت &lt;code&gt;Draw&lt;/code&gt; را پیاده‌سازی می‌کند</figcaption>
+</figure>
+<p>فیلدهای <code>width</code>، <code>height</code> و <code>label</code> در <code>Button</code> با فیلدهای کامپوننت‌های دیگر متفاوت خواهند بود. برای مثال، یک نوع <code>TextField</code> ممکن است همان فیلدها به‌علاوه یک فیلد <code>placeholder</code> داشته باشد. هر یک از انواعی که می‌خواهیم روی صفحه رسم شوند، صفت <code>Draw</code> را پیاده‌سازی می‌کنند اما از کد متفاوتی در متد <code>draw</code> برای تعریف نحوه رسم آن نوع خاص استفاده می‌کنند، همان‌طور که در اینجا برای <code>Button</code> آمده است (بدون کد GUI واقعی، همان‌طور که ذکر شد). نوع <code>Button</code>، برای مثال، ممکن است یک بلوک <code>impl</code> اضافی شامل متدهایی مرتبط با آنچه هنگام کلیک کاربر روی دکمه اتفاق می‌افتد داشته باشد. این نوع متدها برای انواعی مانند <code>TextField</code> اعمال نمی‌شوند.</p>
+<p>اگر کسی که از کتابخانه‌ی ما استفاده می‌کند بخواهد یک ساختار <code>SelectBox</code> تعریف کند که شامل فیلدهای <code>width</code>، <code>height</code> و <code>options</code> باشد، او همچنین باید <code>trait</code> <code>Draw</code> را برای نوع <code>SelectBox</code> پیاده‌سازی کند، همان‌طور که در لیستینگ 18-8 نشان داده شده است.</p>
+<figure class="listing" id="listing-18-8">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore">use gui::Draw;
+
+struct SelectBox {
+    width: u32,
+    height: u32,
+    options: Vec&lt;String&gt;,
+}
+
+impl Draw for SelectBox {
+    fn draw(&amp;self) {
+        // code to actually draw a select box
+    }
+}
+<span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+<figcaption><a href="#listing-18-8">لیست ۱۸-۸</a>: یک crate دیگر که از &lt;code&gt;&lt;/x-listing&gt;gui&lt;/code&gt; استفاده می‌کند و صفت &lt;code&gt;Draw&lt;/code&gt; را روی یک ساختار &lt;code&gt;SelectBox&lt;/code&gt; پیاده‌سازی می‌کند</figcaption>
+</figure>
+<p>اکنون کاربر کتابخانه ما می‌تواند تابع <code>main</code> خود را بنویسد تا یک نمونه <code>Screen</code> ایجاد کند. به نمونه <code>Screen</code>، آن‌ها می‌توانند یک <code>SelectBox</code> و یک <code>Button</code> اضافه کنند، با قرار دادن هر یک در یک <code>Box&lt;T&gt;</code> تا به یک شیء صفت تبدیل شوند. سپس می‌توانند متد <code>run</code> را روی نمونه <code>Screen</code> فراخوانی کنند، که متد <code>draw</code> را روی هر یک از کامپوننت‌ها فراخوانی می‌کند. لیستینگ 18-9 این پیاده‌سازی را نشان می‌دهد:</p>
+<figure class="listing" id="listing-18-9">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">use gui::Draw;
+</span><span class="boring">
+</span><span class="boring">struct SelectBox {
+</span><span class="boring">    width: u32,
+</span><span class="boring">    height: u32,
+</span><span class="boring">    options: Vec&lt;String&gt;,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Draw for SelectBox {
+</span><span class="boring">    fn draw(&amp;self) {
+</span><span class="boring">        // code to actually draw a select box
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>use gui::{Button, Screen};
+
+fn main() {
+    let screen = Screen {
+        components: vec![
+            Box::new(SelectBox {
+                width: 75,
+                height: 10,
+                options: vec![
+                    String::from("Yes"),
+                    String::from("Maybe"),
+                    String::from("No"),
+                ],
+            }),
+            Box::new(Button {
+                width: 50,
+                height: 10,
+                label: String::from("OK"),
+            }),
+        ],
+    };
+
+    screen.run();
+}</code></pre>
+<figcaption><a href="#listing-18-9">لیست ۱۸-۹</a>: استفاده از اشیاء صفت برای ذخیره مقادیری با انواع مختلف که یک صفت یکسان را پیاده‌سازی می‌کنند</figcaption>
+</figure>
+<p>وقتی کتابخانه را نوشتیم، نمی‌دانستیم که کسی ممکن است نوع <code>SelectBox</code> را اضافه کند، اما پیاده‌سازی <code>Screen</code> ما توانست روی نوع جدید عمل کند و آن را رسم کند زیرا <code>SelectBox</code> صفت <code>Draw</code> را پیاده‌سازی کرده است، که به این معناست که متد <code>draw</code> را پیاده‌سازی کرده است.</p>
+<p>این مفهوم—فقط به پیام‌هایی که یک مقدار به آن‌ها پاسخ می‌دهد اهمیت داده می‌شود، نه نوع دقیق مقدار—مشابه مفهوم <em>duck typing</em> در زبان‌های با نوع‌دهی پویا است: اگر مانند اردک حرکت می‌کند و مانند اردک صدا می‌کند، پس حتماً یک اردک است! در پیاده‌سازی متد <code>run</code> روی <code>Screen</code> در لیستینگ 18-5، <code>run</code> نیازی ندارد بداند نوع دقیق هر کامپوننت چیست. نیازی ندارد بررسی کند که آیا یک کامپوننت نمونه‌ای از <code>Button</code> یا <code>SelectBox</code> است؛ فقط متد <code>draw</code> را روی کامپوننت فراخوانی می‌کند. با مشخص کردن <code>Box&lt;dyn Draw&gt;</code> به‌عنوان نوع مقادیر در بردار <code>components</code>، ما تعریف کرده‌ایم که <code>Screen</code> به مقادیری نیاز دارد که بتوانیم متد <code>draw</code> را روی آن‌ها فراخوانی کنیم.</p>
+<p>مزیت استفاده از اشیاء صفت و سیستم نوع Rust برای نوشتن کدی مشابه با duck typing این است که هرگز نیازی به بررسی نداریم که آیا یک مقدار متدی خاص را در زمان اجرا پیاده‌سازی کرده است یا خیر، یا نگران خطاهایی باشیم اگر یک مقدار متدی را پیاده‌سازی نکرده اما ما آن را فراخوانی کنیم. Rust کد ما را کامپایل نمی‌کند اگر مقادیر صفاتی را که اشیاء صفت نیاز دارند پیاده‌سازی نکنند.</p>
+<p>برای مثال، لیستینگ 18-10 نشان می‌دهد چه اتفاقی می‌افتد اگر بخواهیم یک <code>Screen</code> با یک <code>String</code> به‌عنوان یک کامپوننت ایجاد کنیم:</p>
+<figure class="listing" id="listing-18-10">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">use gui::Screen;
+
+fn main() {
+    let screen = Screen {
+        components: vec![Box::new(String::from("Hi"))],
+    };
+
+    screen.run();
+}</code></pre>
+<figcaption><a href="#listing-18-10">لیست ۱۸-۱۰</a>: تلاش برای استفاده از نوعی که صفت شیء صفت را پیاده‌سازی نکرده است</figcaption>
+</figure>
+<p>ما این خطا را دریافت خواهیم کرد زیرا <code>String</code> صفت <code>Draw</code> را پیاده‌سازی نکرده است:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling gui v0.1.0 (file:///projects/gui)
+error[E0277]: the trait bound `String: Draw` is not satisfied
+  --&gt; src/main.rs:5:26
+   |
+ 5 |         components: vec![Box::new(String::from("Hi"))],
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Draw` is not implemented for `String`
+   |
+help: the trait `Draw` is implemented for `Button`
+  --&gt; src/lib.rs:23:1
+   |
+23 | impl Draw for Button {
+   | ^^^^^^^^^^^^^^^^^^^^
+   = note: required for the cast from `Box&lt;String&gt;` to `Box&lt;dyn Draw&gt;`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `gui` (bin "gui") due to 1 previous error
+</code></pre>
+<p>این خطا به ما اطلاع می‌دهد که یا چیزی را به <code>Screen</code> پاس داده‌ایم که منظورمان نبوده و باید نوع متفاوتی پاس دهیم، یا باید <code>trait</code> <code>Draw</code> را برای نوع <code>String</code> پیاده‌سازی کنیم تا <code>Screen</code> بتواند متد <code>draw</code> را روی آن فراخوانی کند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="trait-objects-perform-dynamic-dispatch"></a></p>
+<h3 id="performing-dynamic-dispatch"><a class="header" href="#performing-dynamic-dispatch">اشیاء صفت اجرای Dispatch پویا را انجام می‌دهند</a></h3>
+<p>در بخش <a href="ch10-01-syntax.html#performance-of-code-using-generics">«کارایی کدی که از Genericها استفاده می‌کند»</a><!-- ignore --> در فصل ۱۰، درباره‌ی فرآیند مونومورفیزاسیون (monomorphization) که توسط کامپایلر روی genericها انجام می‌شود صحبت کردیم: کامپایلر پیاده‌سازی‌های غیر generic از توابع و متدها را برای هر نوع مشخصی که به‌جای پارامتر generic استفاده می‌کنیم تولید می‌کند. کدی که در نتیجه‌ی مونومورفیزاسیون به‌دست می‌آید از <em>ارسال ایستا</em> (static dispatch) استفاده می‌کند، به این معنا که کامپایلر در زمان کامپایل می‌داند کدام متد را فراخوانی می‌کنید. این در مقابل <em>ارسال پویا</em> (dynamic dispatch) است، که در آن کامپایلر نمی‌تواند در زمان کامپایل تشخیص دهد کدام متد فراخوانی خواهد شد. در حالت ارسال پویا، کامپایلر کدی تولید می‌کند که در زمان اجرا تشخیص می‌دهد کدام متد را باید فراخوانی کند.</p>
+<p>وقتی از trait objectها استفاده می‌کنیم، Rust باید از ارسال پویا (dynamic dispatch) استفاده کند. کامپایلر همهٔ انواعی را که ممکن است با کدی که از trait objectها استفاده می‌کند به کار روند نمی‌شناسد، پس نمی‌داند کدام متدِ پیاده‌سازی‌شده روی کدام نوع را فراخوانی کند. در عوض، در زمان اجرا، Rust از اشاره‌گرهای درون trait object استفاده می‌کند تا بداند کدام متد را فراخوانی کند. این جست‌وجو هزینه‌ای در زمان اجرا دارد که در ارسال ایستا (static dispatch) پیش نمی‌آید. ارسال پویا همچنین مانع از آن می‌شود که کامپایلر بتواند کد یک متد را inline کند، که این خود جلوی برخی بهینه‌سازی‌ها را می‌گیرد، و Rust قوانینی دربارهٔ این‌که کجا می‌توانید و کجا نمی‌توانید از ارسال پویا استفاده کنید دارد، که <em>dyn compatibility</em> نامیده می‌شود. این قوانین از حوصلهٔ این بحث خارج‌اند، اما می‌توانید دربارهٔ آن‌ها <a href="../reference/items/traits.html#dyn-compatibility">در مرجع (reference)</a><!-- ignore --> بیشتر بخوانید. با این حال، در کدی که در لیستینگ ۱۸-۵ نوشتیم و توانستیم در لیستینگ ۱۸-۹ پشتیبانی کنیم، انعطاف‌پذیری بیشتری به دست آوردیم؛ بنابراین این یک بده‌بستان است که باید در نظر گرفته شود.</p><nav class="page-nav"><a href="ch18-01-what-is-oo.html">→ ویژگی‌های زبان‌های شیءگرا</a><a href="ch18-03-oo-design-patterns.html">پیاده‌سازی یک الگوی طراحی شیءگرا ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

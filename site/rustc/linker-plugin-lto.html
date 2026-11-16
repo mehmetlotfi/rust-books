@@ -1,0 +1,180 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>LTO مبتنی بر افزونهٔ پیونددهنده — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="linker-plugin-lto"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="linker-plugin-based-lto"><a class="header" href="#linker-plugin-based-lto">LTO مبتنی بر افزونهٔ لینکر</a></h1>
+<p>پرچم <code>-C linker-plugin-lto</code> اجازه می‌دهد بهینه‌سازی LTO به مرحلهٔ واقعی لینک‌کردن موکول شود. این کار به نوبهٔ خود امکان انجام بهینه‌سازی‌های بین‌رویه‌ای (interprocedural) را در مرز زبان‌های برنامه‌نویسی فراهم می‌کند، به شرط آنکه همهٔ فایل‌های شیء (object file) که لینک می‌شوند توسط زنجیره‌ابزارهای مبتنی بر LLVM و با <strong>همان</strong> حالت LTO ساخته شده باشند: یا thin LTO یا fat LTO. نمونه‌های آن لینک‌کردن کد Rust با کد C/C++ کامپایل‌شده توسط Clang و کد Fortran کامپایل‌شده توسط LLVM Flang است.</p>
+<h2 id="usage"><a class="header" href="#usage">نحوهٔ استفاده</a></h2>
+<p>دو حالت اصلی برای استفاده از LTO مبتنی بر افزونهٔ لینکر وجود دارد:</p>
+<ul>
+<li>کامپایل یک <code>staticlib</code> در Rust که به‌عنوان وابستگی با C ABI استفاده می‌شود</li>
+<li>کامپایل یک فایل باینری Rust که در آن <code>rustc</code> لینکر را فراخوانی می‌کند</li>
+</ul>
+<p>در هر دو حالت، کد Rust باید با <code>-C linker-plugin-lto</code> کامپایل شود. این پرچم به‌طور پیش‌فرض thin LTO را فعال می‌کند، بنابراین هر کد زبان سازگار دیگر نیز باید در حالت thin LTO کامپایل شود. برای استفاده از fat LTO با LTO مبتنی بر افزونهٔ لینکر، کامپایلر <code>rustc</code> پرچم اضافی <code>-C lto=fat</code> را لازم دارد و زبان سازگار نیز باید به همین ترتیب در حالت fat LTO کامپایل شود. توجه کنید که زبان سازگار باید با زیرساخت LLVM کامپایل شود (جزئیات بیشتر را در <a href="#toolchain-compatibility">سازگاری زنجیره‌ابزار</a> ببینید).</p>
+<p>جدول زیر خلاصه می‌کند که چگونه می‌توان thin LTO و fat LTO را در کامپایلرهای مختلف فعال کرد:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">کامپایلر</th><th style="text-align: right">Thin LTO</th><th style="text-align: right">Fat LTO</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left">rustc</td><td style="text-align: right">-Clto=thin</td><td style="text-align: right">-Clto=fat</td></tr>
+<tr><td style="text-align: left">clang</td><td style="text-align: right">-flto=thin</td><td style="text-align: right">-flto=full</td></tr>
+<tr><td style="text-align: left">clang++</td><td style="text-align: right">-flto=thin</td><td style="text-align: right">-flto=full</td></tr>
+<tr><td style="text-align: left">flang</td><td style="text-align: right">-flto=thin (در دست توسعه)</td><td style="text-align: right">-flto=full</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="rust-staticlib-as-dependency-in-cc-program"><a class="header" href="#rust-staticlib-as-dependency-in-cc-program"><code>staticlib</code> در Rust به‌عنوان وابستگی در برنامهٔ C/C++</a></h3>
+<p>در این حالت کامپایلر Rust فقط باید مطمئن شود که فایل‌های شیء داخل <code>staticlib</code> در قالب درست هستند. برای لینک‌کردن، باید از لینکری با افزونهٔ LLVM استفاده شود (مثلاً LLD).</p>
+<p>استفادهٔ مستقیم از <code>rustc</code>:</p>
+<pre><code class="language-bash"># Compile the Rust staticlib
+rustc --crate-type=staticlib -Clinker-plugin-lto -Copt-level=2 ./lib.rs
+# Compile the C code with `-flto=thin`
+clang -c -O2 -flto=thin -o cmain.o ./cmain.c
+# Link everything, making sure that we use an appropriate linker
+clang -flto=thin -fuse-ld=lld -L . -l"name-of-your-rust-lib" -o main -O2 ./cmain.o
+</code></pre>
+<p>استفاده از <code>cargo</code>:</p>
+<pre><code class="language-bash"># Compile the Rust staticlib
+RUSTFLAGS="-Clinker-plugin-lto" cargo build --release
+# Compile the C code with `-flto=thin`
+clang -c -O2 -flto=thin -o cmain.o ./cmain.c
+# Link everything, making sure that we use an appropriate linker
+clang -flto=thin -fuse-ld=lld -L . -l"name-of-your-rust-lib" -o main -O2 ./cmain.o
+</code></pre>
+<h3 id="cc-code-as-a-dependency-in-rust"><a class="header" href="#cc-code-as-a-dependency-in-rust">کد C/C++ به‌عنوان وابستگی در Rust</a></h3>
+<p>در این حالت لینکر توسط <code>rustc</code> فراخوانی می‌شود. در اینجا نیز باید مطمئن شویم که از لینکر مناسب استفاده می‌شود.</p>
+<p>استفادهٔ مستقیم از <code>rustc</code>:</p>
+<pre><code class="language-bash"># Compile C code with `-flto=thin`
+clang ./clib.c -flto=thin -c -o ./clib.o -O2
+# Create a static library from the C code
+ar crus ./libxyz.a ./clib.o
+
+# Invoke `rustc` with the additional arguments
+rustc -Clinker-plugin-lto -L. -Copt-level=2 -Clinker=clang -Clink-arg=-fuse-ld=lld ./main.rs
+</code></pre>
+<p>استفادهٔ مستقیم از <code>cargo</code>:</p>
+<pre><code class="language-bash"># Compile C code with `-flto=thin`
+clang ./clib.c -flto=thin -c -o ./clib.o -O2
+# Create a static library from the C code
+ar crus ./libxyz.a ./clib.o
+
+# Set the linking arguments via RUSTFLAGS
+RUSTFLAGS="-Clinker-plugin-lto -Clinker=clang -Clink-arg=-fuse-ld=lld" cargo build --release
+</code></pre>
+<h3 id="fortran-code-as-a-dependency-in-rust"><a class="header" href="#fortran-code-as-a-dependency-in-rust">کد Fortran به‌عنوان وابستگی در Rust</a></h3>
+<p>کد Rust را می‌توان با کد Fortran که توسط <code>flang</code> در LLVM کامپایل شده است نیز لینک کرد. مثال‌های زیر استفاده از fat LTO را نشان می‌دهند، زیرا <code>flang</code> در LLVM برای thin LTO هنوز در وضعیت WIP (در دست توسعه) است. همین رویکرد را می‌توان برای کامپایل کد C و C++ با fat LTO نیز به کار برد.</p>
+<p>استفادهٔ مستقیم از <code>rustc</code>:</p>
+<pre><code class="language-bash"># Compile Fortran code with `-flto=full`
+flang ./ftnlib.f90 -flto=full -c -o ./ftnlib.f90.o -O3
+# Create a static library from the Fortran code
+ar crus ./libftn.a ./ftnlib.f90.o
+
+# Invoke `rustc` with the additional arguments, `-Clto=fat` is mandatory
+rustc -Clinker-plugin-lto -Clto=fat -Clink-arg=path/to/libftn.a -Copt-level=3 -Clinker=flang -C default-linker-libraries=yes -Clink-arg=-fuse-ld=lld ./main.rs
+</code></pre>
+<p>استفادهٔ مستقیم از <code>cargo</code>:</p>
+<pre><code class="language-bash"># Compile Fortran code with `-flto=full`
+flang ./ftnlib.f90 -flto=full -c -o ./ftnlib.f90.o -O3
+# Create a static library from the Fortran code
+ar crus ./libftn.a ./ftnlib.f90.o
+
+# Set the linking arguments via RUSTFLAGS, `-Clto=fat` is mandatory
+RUSTFLAGS="-Clinker-plugin-lto -Clto=fat -Clink-arg=path/to/libftn.a -Clinker=flang -C default-linker-libraries=yes -Clink-arg=-fuse-ld=lld" cargo build --release
+</code></pre>
+<p>توجه کنید که <code>flang</code> در LLVM را می‌توان از نسخهٔ flang 21.1.8 به بعد به‌عنوان درایور لینکر (linker driver) به کار برد. اگر زمان‌اجرای Fortran لازم نباشد، می‌توان گزینهٔ <code>-C default-linker-libraries=yes</code> را حذف کرد؛ با این حال، بیشتر کدهای Fortran به این زمان‌اجرا وابسته‌اند، بنابراین فعال‌کردن کتابخانه‌های پیش‌فرض لینکر معمولاً ضروری است.</p>
+<h3 id="explicitly-specifying-the-linker-plugin-to-be-used-by-rustc"><a class="header" href="#explicitly-specifying-the-linker-plugin-to-be-used-by-rustc">مشخص‌کردن صریح افزونهٔ لینکر برای استفاده توسط <code>rustc</code></a></h3>
+<p>اگر بخواهید از لینکری غیر از LLD استفاده کنید، باید افزونهٔ لینکر LLVM را صریحاً مشخص کنید. در غیر این صورت لینکر نمی‌تواند فایل‌های شیء را بخواند. مسیر افزونه به‌عنوان آرگومان به گزینهٔ <code>-Clinker-plugin-lto</code> داده می‌شود:</p>
+<pre><code class="language-bash">rustc -Clinker-plugin-lto="/path/to/LLVMgold.so" -L. -Copt-level=2 ./main.rs
+</code></pre>
+<h3 id="usage-with-clang-cl-and-x86_64-pc-windows-msvc"><a class="header" href="#usage-with-clang-cl-and-x86_64-pc-windows-msvc">استفاده با clang-cl و x86_64-pc-windows-msvc</a></h3>
+<p>LTO میان زبان‌ها را می‌توان با هدف x86_64-pc-windows-msvc به کار برد، اما این کار مستلزم استفاده از کامپایلر clang-cl به‌جای cl.exe از MSVC است که همراه Visual Studio Build Tools می‌آید، و لینک‌کردن با lld-link. هم clang-cl و هم lld-link را می‌توان از <a href="https://releases.llvm.org/download.html">صفحهٔ دانلود LLVM</a> دریافت کرد. توجه کنید که بیشتر crate‌های موجود در اکوسیستم احتمالاً فرض می‌کنند که در صورت استفاده از این هدف، شما از cl.exe استفاده می‌کنید، و برخی چیزها، مانند vcpkg، <a href="https://github.com/microsoft/vcpkg/issues/2087">با clang-cl چندان خوب کار نمی‌کنند</a>.</p>
+<p>باید مطمئن شوید که نسخهٔ اصلی LLVM در Rust شما با نسخهٔ ابزارهای LLVM نصب‌شده مطابقت دارد، وگرنه احتمالاً با خطاهای لینکر روبه‌رو می‌شوید:</p>
+<pre><code class="language-bat">rustc -V --verbose
+clang-cl --version
+</code></pre>
+<p>اگر proc-macro‌ها را کامپایل می‌کنید، این خطا را دریافت خواهید کرد:</p>
+<pre><code class="language-bash">error: Linker plugin based LTO is not supported together with `-C prefer-dynamic` when
+targeting Windows-like targets
+</code></pre>
+<p>این مشکل با تعیین صریح هدف برطرف می‌شود، برای مثال <code>cargo build --target x86_64-pc-windows-msvc</code> بدون <code>--target</code> صریح، پرچم‌ها به همهٔ فراخوانی‌های کامپایلر (از جمله build script‌ها و proc-macro‌ها) داده می‌شوند؛ <a href="../cargo/reference/config.html#buildrustflags">مستندات cargo دربارهٔ rustflags</a> را ببینید.</p>
+<p>اگر وابستگی‌هایی دارید که از crate با نام <code>cc</code> استفاده می‌کنند، باید این متغیرهای محیطی را تنظیم کنید:</p>
+<pre><code class="language-bat">set CC=clang-cl
+set CXX=clang-cl
+set CFLAGS=/clang:-flto=thin /clang:-fuse-ld=lld-link
+set CXXFLAGS=/clang:-flto=thin /clang:-fuse-ld=lld-link
+REM Needed because msvc's lib.exe crashes on LLVM LTO .obj files
+set AR=llvm-lib
+</code></pre>
+<p>اگر با تنظیم <code>linker = "lld-link.exe"</code> در پیکربندی cargo خود، lld-link را به‌عنوان لینکر مشخص می‌کنید، ممکن است با برخی crate‌ها که کد را با فراخوانی‌های جداگانهٔ cargo کامپایل می‌کنند به مشکل بخورید. باید بتوانید با تنظیم <code>-Clinker=lld-link</code> در RUSTFLAGS از این مشکل عبور کنید</p>
+<h2 id="toolchain-compatibility"><a class="header" href="#toolchain-compatibility">سازگاری زنجیره‌ابزار</a></h2>
+<!-- NOTE: to update the below table, you can use this Python script:
+
+```python
+from collections import defaultdict
+import subprocess
+import sys
+
+def minor_version(version):
+    return int(version.split('.')[1])
+
+INSTALL_TOOLCHAIN = ["rustup", "toolchain", "install", "--profile", "minimal"]
+subprocess.run(INSTALL_TOOLCHAIN + ["nightly"])
+
+LOWER_BOUND = 91
+NIGHTLY_VERSION = minor_version(subprocess.run(
+    ["rustc", "+nightly", "--version"],
+    capture_output=True,
+    text=True).stdout)
+
+def llvm_version(toolchain):
+    version_text = subprocess.run(
+        ["rustc", "+{}".format(toolchain), "-Vv"],
+        capture_output=True,
+        text=True).stdout
+    return int(version_text.split("LLVM")[1].split(':')[1].split('.')[0])
+
+version_map = defaultdict(lambda: [])
+for version in range(LOWER_BOUND, NIGHTLY_VERSION - 1):
+    toolchain = "1.{}.0".format(version)
+    print("Checking", toolchain, file=sys.stderr)
+    subprocess.run(
+        INSTALL_TOOLCHAIN + ["--no-self-update", toolchain],
+        capture_output=True)
+    version_map[llvm_version(toolchain)].append(version)
+
+print("| Rust Version | Clang Version |")
+print("|--------------|---------------|")
+for clang, rust in sorted(version_map.items()):
+    if len(rust) > 1:
+        rust_range = "1.{} - 1.{}".format(rust[0], rust[-1])
+    else:
+        rust_range = "1.{}       ".format(rust[0])
+    print("| {}  |      {}       |".format(rust_range, clang))
+```
+
+-->
+<p>برای اینکه این نوع LTO کار کند، افزونهٔ لینکر LLVM باید بتواند bitcode مربوط به LLVM را که <code>rustc</code> و کامپایلرهای همهٔ زبان‌های سازگار تولید می‌کنند پردازش کند. یک قاعدهٔ سرانگشتی خوب این است که از افزونهٔ لینکر LLVM با نسخه‌ای استفاده شود که دست‌کم به‌اندازهٔ جدیدترین کامپایلر درگیر، جدید باشد.</p>
+<p>بهترین نتایج با استفاده از <code>rustc</code> و کامپایلرهای LLVM به‌دست می‌آید که بر پایهٔ دقیقاً همان نسخهٔ LLVM باشند. می‌توان از <code>rustc -vV</code> برای مشاهدهٔ LLVM مورد استفادهٔ یک نسخهٔ مشخص از <code>rustc</code> بهره برد. توجه کنید که شمارهٔ نسخه‌ای که در اینجا نشان داده می‌شود فقط یک تخمین است، زیرا Rust گاهی از بازبینی‌های ناپایدار LLVM استفاده می‌کند. با این حال، این تخمین معمولاً قابل اتکاست.</p>
+<p>جدول زیر ترکیب‌های شناخته‌شدهٔ مناسب از نسخه‌های زنجیره‌ابزار را نشان می‌دهد.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>نسخهٔ Rust</th><th>نسخهٔ Clang</th></tr>
+</thead>
+<tbody>
+<tr><td>1.34 - 1.37</td><td>8</td></tr>
+<tr><td>1.38 - 1.44</td><td>9</td></tr>
+<tr><td>1.45 - 1.46</td><td>10</td></tr>
+<tr><td>1.47 - 1.51</td><td>11</td></tr>
+<tr><td>1.52 - 1.55</td><td>12</td></tr>
+<tr><td>1.56 - 1.59</td><td>13</td></tr>
+<tr><td>1.60 - 1.64</td><td>14</td></tr>
+<tr><td>1.65 - 1.69</td><td>15</td></tr>
+<tr><td>1.70 - 1.72</td><td>16</td></tr>
+<tr><td>1.73 - 1.77</td><td>17</td></tr>
+<tr><td>1.78 - 1.81</td><td>18</td></tr>
+<tr><td>1.82 - 1.86</td><td>19</td></tr>
+<tr><td>1.87 - 1.90</td><td>20</td></tr>
+<tr><td>1.91 - 1.94</td><td>21</td></tr>
+</tbody>
+</table>
+</div>
+<p>توجه کنید که سیاست سازگاری این قابلیت ممکن است در آینده تغییر کند.</p><nav class="page-nav"><a href="instrument-coverage.html">→ پوشش کد مبتنی بر ابزارگذاری</a><a href="check-cfg.html">بررسی پیکربندی‌های شرطی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

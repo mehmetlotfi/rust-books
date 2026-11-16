@@ -1,0 +1,104 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>تک‌نمونه‌ها — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="peripherals/singletons"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="singletons"><a class="header" href="#singletons">singleton‌ها</a></h1>
+<blockquote>
+<p>در مهندسی نرم‌افزار، الگوی singleton یک الگوی طراحی نرم‌افزار است که نمونه‌سازی از یک کلاس را به یک شیء محدود می‌کند.</p>
+<p><em>ویکی‌پدیا: <a href="https://en.wikipedia.org/wiki/Singleton_pattern">الگوی Singleton</a></em></p>
+</blockquote>
+<h2 id="but-why-cant-we-just-use-global-variables"><a class="header" href="#but-why-cant-we-just-use-global-variables">اما چرا نمی‌توانیم فقط از متغیر(های) سراسری استفاده کنیم؟</a></h2>
+<p>می‌توانیم همه‌چیز را به‌صورت یک static عمومی تعریف کنیم، مثل این:</p>
+<pre><code class="language-rust ignore">static mut THE_SERIAL_PORT: SerialPort = SerialPort;
+
+fn main() {
+    let _ = unsafe {
+        THE_SERIAL_PORT.read_speed();
+    };
+}</code></pre>
+<p>اما این کار چند مشکل دارد. این یک متغیر سراسری تغییرپذیر است و در Rust تعامل با این نوع متغیرها همیشه unsafe است. این متغیرها همچنین در سراسر برنامهٔ شما قابل مشاهده‌اند، یعنی بررسی‌گر قرض (borrow checker) نمی‌تواند در ردیابی ارجاع‌ها و مالکیت این متغیرها به شما کمک کند.</p>
+<h2 id="how-do-we-do-this-in-rust"><a class="header" href="#how-do-we-do-this-in-rust">در Rust چگونه این کار را انجام دهیم؟</a></h2>
+<p>به‌جای اینکه دستگاه جانبی را فقط یک متغیر سراسری کنیم، می‌توانیم ساختاری بسازیم، که در اینجا <code>PERIPHERALS</code> نام دارد و برای هر یک از دستگاه‌های جانبی ما یک <code>Option&lt;T&gt;</code> در خود دارد.</p>
+<pre><code class="language-rust ignore">struct Peripherals {
+    serial: Option&lt;SerialPort&gt;,
+}
+impl Peripherals {
+    fn take_serial(&amp;mut self) -&gt; SerialPort {
+        let p = replace(&amp;mut self.serial, None);
+        p.unwrap()
+    }
+}
+static mut PERIPHERALS: Peripherals = Peripherals {
+    serial: Some(SerialPort),
+};</code></pre>
+<p>این ساختار به ما امکان می‌دهد یک نمونهٔ منفرد از دستگاه جانبی را به دست آوریم. اگر بخواهیم <code>take_serial()</code> را بیش از یک بار فراخوانی کنیم، کد ما panic می‌کند!</p>
+<pre><code class="language-rust ignore">fn main() {
+    let serial_1 = unsafe { PERIPHERALS.take_serial() };
+    // This panics!
+    // let serial_2 = unsafe { PERIPHERALS.take_serial() };
+}</code></pre>
+<p>اگرچه تعامل با این ساختار <code>unsafe</code> است، اما وقتی <code>SerialPort</code> درون آن را به دست آوردیم، دیگر نیازی به استفاده از <code>unsafe</code> یا ساختار <code>PERIPHERALS</code> نداریم.</p>
+<p>این رویکرد سربار اندکی در زمان اجرا دارد، چون باید ساختار <code>SerialPort</code> را در یک option بپیچیم و یک بار هم <code>take_serial()</code> را فراخوانی کنیم؛ اما همین هزینهٔ اندکِ اولیه به ما اجازه می‌دهد در بقیهٔ برنامه از بررسی‌گر قرض بهره ببریم.</p>
+<h2 id="existing-library-support"><a class="header" href="#existing-library-support">پشتیبانی کتابخانه‌های موجود</a></h2>
+<p>اگرچه در بالا ساختار <code>Peripherals</code> خودمان را ساختیم، لازم نیست در کد خودتان این کار را بکنید. crate با نام <code>cortex_m</code> ماکرویی به نام <code>singleton!()</code> دارد که این کار را برای شما انجام می‌دهد.</p>
+<pre><code class="language-rust ignore">use cortex_m::singleton;
+
+fn main() {
+    // OK if `main` is executed only once
+    let x: &amp;'static mut bool =
+        singleton!(: bool = false).unwrap();
+}</code></pre>
+<p><a href="https://docs.rs/cortex-m/latest/cortex_m/macro.singleton.html">مستندات cortex_m</a></p>
+<p>علاوه بر این، اگر از <a href="https://github.com/rtic-rs/cortex-m-rtic"><code>cortex-m-rtic</code></a> استفاده کنید، کل فرایند تعریف و به دست آوردن این دستگاه‌های جانبی برای شما انتزاعی می‌شود و در عوض ساختاری به نام <code>Peripherals</code> در اختیارتان قرار می‌گیرد که نسخهٔ غیر-<code>Option&lt;T&gt;</code> همهٔ آیتم‌هایی را که تعریف می‌کنید در خود دارد.</p>
+<pre><code class="language-rust ignore">// cortex-m-rtic v0.5.x
+#[rtic::app(device = lm3s6965, peripherals = true)]
+const APP: () = {
+    #[init]
+    fn init(cx: init::Context) {
+        static mut X: u32 = 0;
+         
+        // Cortex-M peripherals
+        let core: cortex_m::Peripherals = cx.core;
+        
+        // Device specific peripherals
+        let device: lm3s6965::Peripherals = cx.device;
+    }
+}</code></pre>
+<h2 id="but-why"><a class="header" href="#but-why">اما چرا؟</a></h2>
+<p>اما این singleton‌ها چطور تفاوتی محسوس در طرز کار کد Rust ما ایجاد می‌کنند؟</p>
+<pre><code class="language-rust ignore">impl SerialPort {
+    const SER_PORT_SPEED_REG: *mut u32 = 0x4000_1000 as _;
+
+    fn read_speed(
+        &amp;self // &lt;------ This is really, really important
+    ) -&gt; u32 {
+        unsafe {
+            ptr::read_volatile(Self::SER_PORT_SPEED_REG)
+        }
+    }
+}</code></pre>
+<p>دو عامل مهم در کار است:</p>
+<ul>
+<li>چون از singleton استفاده می‌کنیم، تنها یک راه یا یک مکان برای به دست آوردن ساختار <code>SerialPort</code> وجود دارد</li>
+<li>برای فراخوانی متد <code>read_speed()</code> باید مالک ساختار <code>SerialPort</code> باشیم یا ارجاعی به آن داشته باشیم</li>
+</ul>
+<p>کنار هم قرار گرفتن این دو عامل یعنی فقط وقتی می‌توانیم به سخت‌افزار دسترسی پیدا کنیم که بررسی‌گر قرض را به‌درستی راضی کرده باشیم؛ یعنی در هیچ نقطه‌ای چند ارجاع تغییرپذیر به یک سخت‌افزار واحد نداریم!</p>
+<pre><code class="language-rust ignore">fn main() {
+    // missing reference to `self`! Won't work.
+    // SerialPort::read_speed();
+
+    let serial_1 = unsafe { PERIPHERALS.take_serial() };
+
+    // you can only read what you have access to
+    let _ = serial_1.read_speed();
+}</code></pre>
+<h2 id="treat-your-hardware-like-data"><a class="header" href="#treat-your-hardware-like-data">با سخت‌افزارتان مثل داده رفتار کنید</a></h2>
+<p>علاوه بر این، چون برخی ارجاع‌ها تغییرپذیرند و برخی تغییرناپذیر، می‌توان دید که یک تابع یا متد بالقوه می‌تواند وضعیت سخت‌افزار را تغییر دهد یا نه. برای مثال،</p>
+<p>این تابع مجاز است تنظیمات سخت‌افزار را تغییر دهد:</p>
+<pre><code class="language-rust ignore">fn setup_spi_port(
+    spi: &amp;mut SpiPort,
+    cs_pin: &amp;mut GpioPin
+) -&gt; Result&lt;()&gt; {
+    // ...
+}</code></pre>
+<p>این یکی مجاز نیست:</p>
+<pre><code class="language-rust ignore">fn read_button(gpio: &amp;GpioPin) -&gt; bool {
+    // ...
+}</code></pre>
+<p>این کار به ما امکان می‌دهد اعمال کنیم که کد باید یا نباید در سخت‌افزار تغییر ایجاد کند، آن هم در <strong>زمان کامپایل</strong> و نه در زمان اجرا. یادآوری می‌کنیم که این روش عموماً فقط در سطح یک برنامه کار می‌کند، اما در سیستم‌های bare metal نرم‌افزار ما در یک برنامهٔ واحد کامپایل می‌شود، پس معمولاً این یک محدودیت نیست.</p><nav class="page-nav"><a href="../../embedded/peripherals/borrowck.html">→ بررسی‌گر قرض</a><a href="../../embedded/static-guarantees/index.html">تضمین‌های ایستا ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

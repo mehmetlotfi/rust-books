@@ -1,0 +1,90 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>arbitrary-self-types — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/arbitrary-self-types"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="arbitrary_self_types"><a class="header" href="#arbitrary_self_types"><code>arbitrary_self_types</code></a></h1>
+<p>issue ردیابی این قابلیت: <a href="https://github.com/rust-lang/rust/issues/44874">#44874</a></p>
+<hr>
+<p>اجازه می‌دهد هر نوعی که <code>core::ops::Receiver&lt;Target=T&gt;</code> را پیاده‌سازی می‌کند، به‌عنوان نوعِ <code>self</code> در متدی که به <code>T</code> تعلق دارد به کار رود.</p>
+<p>برای مثال،</p>
+<pre><code class="language-rust">#![feature(arbitrary_self_types)]
+
+struct A;
+
+impl A {
+    fn f(self: SmartPtr&lt;Self&gt;) -&gt; i32 { 1 }  // note self type
+}
+
+struct SmartPtr&lt;T&gt;(T);
+
+impl&lt;T&gt; core::ops::Receiver for SmartPtr&lt;T&gt; {
+    type Target = T;
+}
+
+fn main() {
+    let smart_ptr = SmartPtr(A);
+    assert_eq!(smart_ptr.f(), 1);
+}</code></pre>
+<p>صفت <code>Receiver</code> یک پیاده‌سازی فراگیر (blanket) برای همهٔ <code>T: Deref</code> دارد، بنابراین در واقع چیزهایی از این دست هم کار می‌کنند:</p>
+<pre><code class="language-rust">#![feature(arbitrary_self_types)]
+
+use std::rc::Rc;
+
+struct A;
+
+impl A {
+    fn f(self: Rc&lt;Self&gt;) -&gt; i32 { 1 } // Rc implements Deref
+}
+
+fn main() {
+    let smart_ptr = Rc::new(A);
+    assert_eq!(smart_ptr.f(), 1);
+}</code></pre>
+<p>جالب اینکه این کد حتی بدون قابلیت <code>arbitrary_self_types</code> هم کار می‌کند</p>
+<ul>
+<li>اما دلیلش این است که برخی نوع‌ها، از جمله <code>Rc</code>، در عمل به‌صورت ثابت در کامپایلر تعریف شده‌اند. (عبارت «تعریف ثابت» کاملاً دقیق نیست؛ آن‌ها از یک lang-item به نام <code>LegacyReceiver</code> استفاده می‌کنند تا این ویژگی خاص بودنشان را نشان دهند.) با قابلیت <code>arbitrary_self_types</code>، این خاص بودن از میان می‌رود و اشاره‌گرهای هوشمند سفارشی هم می‌توانند به همان قابلیت برسند.</li>
+</ul>
+<h2 id="changes-to-method-lookup"><a class="header" href="#changes-to-method-lookup">تغییرات در جست‌وجوی متد</a></h2>
+<p>جست‌وجوی متد پیش‌تر به این صورت کار می‌کرد که زنجیرهٔ <code>Deref</code> را گام‌به‌گام طی می‌کرد و سپس فهرست گام‌های حاصل را به دو شکل متفاوت به کار می‌برد:</p>
+<ul>
+<li>برای شناسایی نوع‌هایی که ممکن است از طریق بلوک‌های <code>impl</code> خود (متدهای ذاتی یا inherent) یا از طریق صفت‌ها متد فراهم کنند</li>
+<li>برای شناسایی نوع‌هایی که گیرندهٔ متد (<code>a</code> در مثال‌های بالا) می‌تواند به آن‌ها تبدیل شود.</li>
+</ul>
+<p>با این قابلیت، این فهرست‌ها به‌جای آن از طی کردن زنجیرهٔ <code>Receiver</code> ساخته می‌شوند. با این حال، یادداشتی نگه داشته می‌شود که نشان می‌دهد آیا آن نوع از طریق زنجیرهٔ <code>Deref</code> هم قابل دسترسی است یا نه.</p>
+<p>زنجیرهٔ کامل (از طریق گام‌های <code>Receiver</code>) برای هدف نخست (شناسایی بلوک‌های <code>impl</code> و صفت‌های مرتبط) به کار می‌رود؛ در حالی که فهرست کوتاه‌تر (قابل دسترسی از طریق <code>Deref</code>) برای هدف دوم استفاده می‌شود. دلیل این است که برای تبدیل هدف متد (<code>a</code> در <code>a.b()</code>) به نوع self، Rust ممکن است نیاز داشته باشد بتواند از <code>Deref::deref</code> استفاده کند. بنابراین تبدیل نوع‌ها فقط تا انتهای زنجیرهٔ <code>Deref</code> پیش می‌رود، در حالی که زنجیرهٔ طولانی‌تر <code>Receiver</code> را می‌توان برای کاوش جاهای بیشتری به کار برد که متدهای مفید ممکن است در آن‌ها باشند.</p>
+<h2 id="types-suitable-for-use-as-smart-pointers"><a class="header" href="#types-suitable-for-use-as-smart-pointers">نوع‌های مناسب برای استفاده به‌عنوان اشاره‌گر هوشمند</a></h2>
+<p>این قابلیت امکان ساخت اشاره‌گرهای هوشمند سفارشی را فراهم می‌کند - مثلاً معادل خودتان برای <code>Rc</code> یا <code>Box</code> با هر قابلیتی که بخواهید. این اشاره‌گرهای هوشمند می‌توانند یا <code>Deref</code> را پیاده‌سازی کنند (اگر ساختن ارجاع به شیء مورد اشاره (referent) ایمن باشد) یا <code>Receiver</code> را (اگر ایمن نباشد).</p>
+<p>در هر صورت، نوع‌های اشاره‌گر هوشمند باید عمدتاً <em>از داشتن متد پرهیز کنند</em>. فراخوانی متد روی یک اشاره‌گر هوشمند باعث ابهام می‌شود که قصدتان متدی روی خود اشاره‌گر است یا روی شیء مورد اشاره.</p>
+<p>بنابراین بهترین روش این است که قابلیت‌های اشاره‌گر هوشمند را به‌جای متد در تابع‌های وابسته (associated function) قرار دهید - این همان کاری است که در همهٔ نوع‌های اشاره‌گر هوشمند کتابخانهٔ استاندارد Rust که <code>Receiver</code> را پیاده‌سازی می‌کنند انجام شده است.</p>
+<p>اگر تصمیم بگیرید به نوع اشاره‌گر هوشمند خود متدی اضافه کنید، کاربرانتان ممکن است با خطاهای ناشی از deshadowing روبه‌رو شوند، که در بخش بعدی توضیح داده شده است.</p>
+<h2 id="avoiding-shadowing"><a class="header" href="#avoiding-shadowing">پرهیز از سایه‌اندازی (shadowing)</a></h2>
+<p>چه با این قابلیت و چه بدون آن، Rust وقتی دو متد کاندیدا پیدا کند خطا صادر می‌کند، مانند این مثال:</p>
+<pre><code class="language-rust compile_fail">use std::pin::Pin;
+use std::pin::pin;
+
+struct A;
+
+impl A {
+    fn get_ref(self: Pin&lt;&amp;A&gt;) {}
+}
+
+fn main() {
+    let pinned_a: Pin&lt;&amp;A&gt; = pin!(A).as_ref();
+    let pinned_a: Pin&lt;&amp;A&gt; = pinned_a.as_ref();
+    pinned_a.get_ref(); // error[E0034]: multiple applicable items in scope
+}</code></pre>
+<p>(به همین دلیل اشاره‌گرهای هوشمند Rust عمدتاً با دقت طراحی شده‌اند تا اصلاً متد نداشته باشند، و نباید در آینده متد جدیدی به آن‌ها اضافه شود.)</p>
+<p>با <code>arbitrary_self_types</code>، مراقبیم که چند نوع دیگر از تعارض را هم تشخیص دهیم:</p>
+<pre><code class="language-rust compile_fail">#![feature(arbitrary_self_types)]
+
+use std::pin::Pin;
+use std::pin::pin;
+
+struct A;
+
+impl A {
+    fn get_ref(self: &amp;Pin&lt;&amp;A&gt;) {}  // note &amp;Pin
+}
+
+fn main() {
+    let pinned_a: Pin&lt;&amp;mut A&gt; = pin!(A);
+    let pinned_a: Pin&lt;&amp;A&gt; = pinned_a.as_ref();
+    pinned_a.get_ref();
+}</code></pre>
+<p>هدف این است که جلوی موردی گرفته شود که نوع درونی (شیء مورد اشاره) متدی با نامی مشخص دارد که اشاره‌گر هوشمند را به‌صورت ارجاع می‌گیرد، و سپس پیاده‌ساز اشاره‌گر هوشمند متد مشابهی اضافه می‌کند که self را به‌صورت مقدار می‌گیرد. همان‌طور که در بخش قبل گفته شد، گزینهٔ ایمن این است که اصلاً به اشاره‌گرهای هوشمند متد اضافه نکنید؛ آن‌وقت این خطاها رخ نمی‌دهند.</p><nav class="page-nav"><a href="../../unstable/language-features/arbitrary-self-types-pointers.html">→ arbitrary-self-types-pointers</a><a href="../../unstable/language-features/asm-experimental-arch.html">asm-experimental-arch ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

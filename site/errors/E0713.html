@@ -1,0 +1,23 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0713 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0713"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>این خطا زمانی رخ می‌دهد که تلاش شود حالتی فراتر از پایان طول عمر نوعی که صفت <code>Drop</code> را پیاده‌سازی می‌کند قرض گرفته شود.</p>
+<p>نمونه کد خطادار:</p>
+<pre><code class="language-compile_fail E0713">pub struct S&lt;'a&gt; { data: &amp;'a mut String }
+
+impl&lt;'a&gt; Drop for S&lt;'a&gt; {
+    fn drop(&amp;mut self) { self.data.push_str("being dropped"); }
+}
+
+fn demo&lt;'a&gt;(s: S&lt;'a&gt;) -&gt; &amp;'a mut String { let p = &amp;mut *s.data; p }
+</code></pre>
+<p>در اینجا <code>demo</code> تلاش می‌کند داده‌ی رشته‌ای را که درون آرگومان <code>s</code> نگه‌داری می‌شود قرض بگیرد و سپس آن قرض را برگرداند. اما <code>S</code> به‌گونه‌ای تعریف شده که <code>Drop</code> را پیاده‌سازی می‌کند.</p>
+<p>ساختارهایی که صفت <code>Drop</code> را پیاده‌سازی می‌کنند یک destructor ضمنی دارند که هنگام خارج شدن از محدوده (scope) فراخوانی می‌شود. این destructor هنگام اجرا دسترسی انحصاری به فیلدهای ساختار دارد.</p>
+<p>این یعنی وقتی <code>s</code> به پایان <code>demo</code> می‌رسد، destructor آن دسترسی انحصاری به داده‌ی رشته‌ایِ قرض‌گرفته‌شده با <code>&amp;mut</code> پیدا می‌کند. اجازه دادن به اینکه قرض دیگری از همان داده‌ی رشته‌ای (<code>p</code>) فراتر از drop شدن <code>s</code> وجود داشته باشد، نقض این اصل است که قرض‌های <code>&amp;mut</code> دسترسی انحصاری و بدون alias به داده‌ی ارجاع‌شده‌ی خود دارند.</p>
+<p>این خطا را می‌توان با تغییر <code>demo</code> رفع کرد، به‌طوری که destructor در زمانی که داده‌ی رشته‌ای قرض گرفته شده اجرا نشود؛ برای مثال با دریافت <code>S</code> به‌صورت ارجاع:</p>
+<pre><code>pub struct S&lt;'a&gt; { data: &amp;'a mut String }
+
+impl&lt;'a&gt; Drop for S&lt;'a&gt; {
+    fn drop(&amp;mut self) { self.data.push_str("being dropped"); }
+}
+
+fn demo&lt;'a&gt;(s: &amp;'a mut S&lt;'a&gt;) -&gt; &amp;'a mut String { let p = &amp;mut *(*s).data; p }
+</code></pre>
+<p>توجه کنید که این روش به یک ارجاع به S با طول عمر <code>'a</code> نیاز دارد. هیچ چیز کوتاه‌تر از <code>'a</code> کافی نیست: طول عمر کوتاه‌تر به این معنا خواهد بود که پس از پایان اجرای <code>demo</code>، چیز دیگری (مانند destructor!) می‌تواند پس از پایان آن طول عمر کوتاه‌تر به <code>s.data</code> دسترسی پیدا کند، که دوباره دسترسی انحصاریِ قرض <code>&amp;mut</code> را نقض می‌کند.</p><nav class="page-nav"><a href="../errors/E0712.html">→ E0712</a><a href="../errors/E0714.html">E0714 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

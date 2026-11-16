@@ -1,0 +1,164 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>تولید کد مستقل از بک‌اند — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="backend/backend-agnostic"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="backend-agnostic-codegen"><a class="header" href="#backend-agnostic-codegen">تولید کد مستقل از بک‌اند</a></h1>
+<p><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_codegen_ssa/index.html"><code>rustc_codegen_ssa</code></a> یک رابط انتزاعی برای پیاده‌سازی توسط همهٔ بک‌اندها فراهم می‌کند،
+یعنی LLVM، <a href="https://github.com/rust-lang/rustc_codegen_cranelift">Cranelift</a> و <a href="https://github.com/rust-lang/rustc_codegen_gcc">GCC</a>.</p>
+<p>در ادامه اطلاعات پیش‌زمینه‌ای دربارهٔ بازسازی‌ای آمده است که این رابط انتزاعی را پدید آورد.</p>
+<h2 id="refactoring-of-rustc_codegen_llvm"><a class="header" href="#refactoring-of-rustc_codegen_llvm">بازسازی <code>rustc_codegen_llvm</code></a></h2>
+<p>نوشتهٔ Denis Merigoux، ۲۳ اکتبر ۲۰۱۸</p>
+<h3 id="state-of-the-code-before-the-refactoring"><a class="header" href="#state-of-the-code-before-the-refactoring">وضعیت کد پیش از بازسازی</a></h3>
+<p>تمام کدِ مربوط به کامپایل MIR به LLVM IR درون crate مربوط به <code>rustc_codegen_llvm</code> قرار داشت.
+تفکیک مهم‌ترین عناصر آن به این صورت است:</p>
+<ul>
+<li>پوشهٔ <code>back</code> (۷٬۸۰۰ خط کد یا LOC) سازوکارهای ساخت فایل‌های شیء و آرشیوهای گوناگون را از طریق LLVM پیاده‌سازی می‌کند،
+و همچنین سازوکارهای ارتباطی برای تولید کد موازی را؛</li>
+<li>پوشهٔ <code>debuginfo</code> (۳٬۲۰۰ LOC) شامل تمام کدی است که اطلاعات اشکال‌زدایی را به LLVM منتقل می‌کند؛</li>
+<li>پوشهٔ <code>llvm</code> (۲٬۲۰۰ LOC) رابط FFI لازم برای ارتباط با
+LLVM از طریق API زبان C++ را تعریف می‌کند؛</li>
+<li>پوشهٔ <code>mir</code> (۴٬۳۰۰ LOC) پایین‌آوردن واقعی MIR به LLVM IR را پیاده‌سازی می‌کند؛</li>
+<li>فایل <code>base.rs</code> (۱٬۳۰۰ LOC) شامل برخی توابع کمکی و همچنین
+کد سطح بالایی است که تولید کد را آغاز می‌کند و کار را توزیع می‌کند.</li>
+<li>فایل <code>builder.rs</code> (۱٬۲۰۰ LOC) شامل همهٔ توابعی است که
+دستورهای منفرد LLVM IR را درون یک بلوک پایه تولید می‌کنند؛</li>
+<li>فایل <code>common.rs</code> (۴۵۰ LOC) شامل توابع کمکی گوناگون و همهٔ
+توابعی است که مقادیر ایستای LLVM را تولید می‌کنند؛</li>
+<li>فایل <code>type_.rs</code> (۳۰۰ LOC) بیشتر ترجمه‌های نوع به LLVM IR را تعریف می‌کند.</li>
+</ul>
+<p>هدف از این بازسازی آن است که در درون این crate، کدی که
+مختص LLVM است از کدی که می‌تواند برای دیگر بک‌اندهای rustc دوباره استفاده شود جدا شود.
+برای مثال،
+پوشهٔ <code>mir</code> تقریباً به‌طور کامل مختص بک‌اند است،
+اما به‌شدت به بخش‌های دیگر crate وابسته است.
+این جداسازی نباید منطق کد را تغییر دهد
+و نباید بر کارایی آن اثر بگذارد.</p>
+<p>به همین دلایل، فرایند جداسازی شامل دو دگرگونی است که
+باید همزمان انجام شوند تا کد حاصل کامپایل شود:</p>
+<ol>
+<li>همهٔ نوع‌های مختص LLVM در امضای توابع و تعریف ساختارها
+با جنریک‌ها جایگزین شوند</li>
+<li>همهٔ توابعی که FFI مربوط به LLVM را فراخوانی می‌کنند در مجموعه‌ای از صفت‌ها (trait) محصور شوند
+که رابط میان کد مستقل از بک‌اند و بک‌اند را تعریف می‌کنند</li>
+</ol>
+<p>در حالی که کد مختص LLVM در <code>rustc_codegen_llvm</code> باقی می‌ماند، همهٔ صفت‌های جدید
+و کد مستقل از بک‌اند به <code>rustc_codegen_ssa</code> منتقل خواهند شد (پیشنهاد این نام از @eddyb بود).</p>
+<h3 id="generic-types-and-structures"><a class="header" href="#generic-types-and-structures">نوع‌ها و ساختارهای جنریک</a></h3>
+<p>@irinagpopa شروع به پارامتری‌کردن نوع‌های <code>rustc_codegen_llvm</code> با یک
+نوع جنریک <code>Value</code> کرد که در LLVM با یک ارجاع <code>&amp;'ll Value</code> پیاده‌سازی می‌شود.
+این کار به همهٔ ساختارهای درون پوشهٔ <code>mir</code> و جاهای دیگر گسترش یافته است،
+و همچنین به نوع‌های <code>BasicBlock</code> و <code>Type</code> در LLVM.</p>
+<p>دو ساختار مهم‌تر برای تولید کد LLVM، <code>CodegenCx</code> و <code>Builder</code> هستند.
+این‌ها با چندین پارامتر طول عمر و نوع <code>Value</code> پارامتری شده‌اند.</p>
+<pre><code class="language-rust ignore">struct CodegenCx&lt;'ll, 'tcx&gt; {
+  /* ... */
+}
+
+struct Builder&lt;'a, 'll, 'tcx&gt; {
+  cx: &amp;'a CodegenCx&lt;'ll, 'tcx&gt;,
+  /* ... */
+}</code></pre>
+<p><code>CodegenCx</code> برای کامپایل یک codegen-unit به کار می‌رود که می‌تواند شامل چندین
+تابع باشد، در حالی که <code>Builder</code> برای کامپایل یک بلوک پایه ساخته می‌شود.</p>
+<p>کد موجود در <code>rustc_codegen_llvm</code> باید با چندین پارامتر طول عمر صریح سروکار داشته باشد
+که با موارد زیر متناظرند:</p>
+<ul>
+<li><code>'tcx</code> بلندترین طول عمر است و با <code>TyCtxt</code> اصلی متناظر است
+که اطلاعات برنامه را در بر دارد؛</li>
+<li><code>'a</code> یک ارجاع کوتاه‌عمر به یک <code>CodegenCx</code> یا شیء دیگری درون یک ساختار است؛</li>
+<li><code>'ll</code> طول عمر ارجاع‌ها به اشیای LLVM مانند <code>Value</code> یا <code>Type</code> است.</li>
+</ul>
+<p>هرچند هم‌اکنون پارامترهای طول عمر زیادی در کد وجود دارد، جنریک‌کردن آن
+موقعیت‌هایی را آشکار کرد که در آن‌ها بررسی‌کنندهٔ قرض تنها به‌دلیل
+ماهیت ویژهٔ اشیای LLVM که دستکاری می‌شوند (اشاره‌گرهای extern هستند) کد را می‌پذیرفت.
+برای مثال، باید یک پارامتر طول عمر اضافی به
+<code>LocalAnalyser</code> در <code>analyse.rs</code> افزوده می‌شد که به این تعریف انجامید:</p>
+<pre><code class="language-rust ignore">struct LocalAnalyzer&lt;'mir, 'a, 'tcx&gt; {
+  /* ... */
+}</code></pre>
+<p>با این حال، دو ساختار مهم‌تر،
+یعنی <code>CodegenCx</code> و <code>Builder</code>،
+در کد مستقل از بک‌اند تعریف نشده‌اند.
+در واقع محتوای آن‌ها به‌شدت مختص بک‌اند است،
+و منطقی‌تر است که تعریف آن‌ها به پیاده‌ساز بک‌اند واگذار شود
+تا اینکه تنها یک نقطهٔ باریک از طریق یک فیلد جنریک برای زمینهٔ (context) بک‌اند اجازه داده شود.</p>
+<h3 id="traits-and-interface"><a class="header" href="#traits-and-interface">صفت‌ها و رابط</a></h3>
+<p>چون <code>CodegenCx</code> و <code>Builder</code> باید توسط بک‌اند تعریف شوند، آن‌ها
+ساختارهایی خواهند بود که همهٔ صفت‌هایی را که رابط بک‌اند را تعریف می‌کنند پیاده‌سازی می‌کنند.
+این صفت‌ها در پوشهٔ <code>rustc_codegen_ssa/traits</code> تعریف شده‌اند و همهٔ
+کد مستقل از بک‌اند با آن‌ها پارامتری می‌شود.
+برای مثال، توضیح می‌دهیم که یک تابع در <code>base.rs</code> چگونه پارامتری شده است:</p>
+<pre><code class="language-rust ignore">pub fn codegen_instance&lt;'a, 'tcx, Bx: BuilderMethods&lt;'a, 'tcx&gt;&gt;(
+    cx: &amp;'a Bx::CodegenCx,
+    instance: Instance&lt;'tcx&gt;
+) {
+    /* ... */
+}</code></pre>
+<p>در این امضا، دو پارامتر طول عمری را که پیشتر توضیح داده شد داریم، و
+نوع اصلی <code>Bx</code> که صفت <code>BuilderMethods</code> را برآورده می‌کند و متناظر است
+با رابطی که ساختار <code>Builder</code> برآورده می‌کند.
+<code>BuilderMethods</code> یک نوع وابسته، یعنی <code>Bx::CodegenCx</code>، تعریف می‌کند
+که خودش صفت‌های <code>CodegenMethods</code> را که ساختار <code>CodegenCx</code> پیاده‌سازی می‌کند
+برآورده می‌سازد.</p>
+<p>در سمت صفت، در اینجا مثالی با بخشی از تعریف
+<code>BuilderMethods</code> در <code>traits/builder.rs</code> آمده است:</p>
+<pre><code class="language-rust ignore">pub trait BuilderMethods&lt;'a, 'tcx&gt;:
+    HasCodegen&lt;'tcx&gt;
+    + DebugInfoBuilderMethods&lt;'tcx&gt;
+    + ArgTypeMethods&lt;'tcx&gt;
+    + AbiBuilderMethods&lt;'tcx&gt;
+    + IntrinsicCallMethods&lt;'tcx&gt;
+    + AsmBuilderMethods&lt;'tcx&gt;
+{
+    fn new_block&lt;'b&gt;(
+        cx: &amp;'a Self::CodegenCx,
+        llfn: Self::Function,
+        name: &amp;'b str
+    ) -&gt; Self;
+    /* ... */
+    fn cond_br(
+        &amp;mut self,
+        cond: Self::Value,
+        then_llbb: Self::BasicBlock,
+        else_llbb: Self::BasicBlock,
+    );
+    /* ... */
+}</code></pre>
+<p>سرانجام، یک ساختار اصلی که صفت <code>ExtraBackendMethods</code> را پیاده‌سازی می‌کند
+برای توابع سطح بالای هدایت‌کنندهٔ تولید کد، مانند <code>codegen_crate</code> در <code>base.rs</code>، به کار می‌رود.
+برای LLVM، این ساختار <code>LlvmCodegenBackend</code> تهی است.
+<code>ExtraBackendMethods</code> باید توسط همان ساختاری پیاده‌سازی شود که
+<code>CodegenBackend</code> تعریف‌شده در <code>rustc_codegen_ssa/src/traits/backend.rs</code> را پیاده‌سازی می‌کند.</p>
+<p>در جریان فرایند صفت‌سازی (traitification)، برخی توابع از
+متدهای یک ساختار محلی به متدهای <code>CodegenCx</code> یا <code>Builder</code> تبدیل شده‌اند و یک
+پارامتر <code>self</code> متناظر به آن‌ها افزوده شده است.
+در واقع LLVM اطلاعاتی را به‌صورت داخلی ذخیره می‌کند که هنگام فراخوانی از طریق API آن قابل دسترسی است.
+این اطلاعات در یک ساختار داده‌ای Rust که هنگام فراخوانی این متدها همراه آن‌ها منتقل شود
+ظاهر نمی‌شود.
+اما هنگام پیاده‌سازی یک بک‌اند Rust برای <code>rustc</code>، این متدها
+به اطلاعاتی از <code>CodegenCx</code> نیاز خواهند داشت، از این رو پارامتر اضافی
+(که در پیاده‌سازی LLVM از این صفت استفاده نمی‌شود) لازم است.</p>
+<h3 id="state-of-the-code-after-the-refactoring"><a class="header" href="#state-of-the-code-after-the-refactoring">وضعیت کد پس از بازسازی</a></h3>
+<p>این صفت‌ها API‌ای ارائه می‌دهند که بسیار شبیه API مربوط به LLVM است.
+این بهترین راه‌حل نیست، زیرا LLVM شیوهٔ بسیار ویژه‌ای برای انجام کارها دارد:
+هنگام افزودن بک‌اندی دیگر،
+ممکن است تعریف صفت‌ها برای ارائهٔ انعطاف بیشتر تغییر کند.</p>
+<p>با این حال، جداسازی کنونی میان کد مستقل از بک‌اند و کد مختص LLVM
+امکان استفادهٔ دوباره از بخش قابل‌توجهی از <code>rustc_codegen_llvm</code> قدیمی را فراهم کرده است.
+در اینجا تفکیک جدید LOC میان کد مستقل از بک‌اند (BA) و LLVM برای
+مهم‌ترین عناصر آمده است:</p>
+<ul>
+<li>پوشهٔ <code>back</code>: ۳٬۸۰۰ (BA) در برابر ۴٬۱۰۰ (LLVM)؛</li>
+<li>پوشهٔ <code>mir</code>: ۴٬۴۰۰ (BA) در برابر ۰ (LLVM)؛</li>
+<li><code>base.rs</code>: ۱٬۱۰۰ (BA) در برابر ۲۵۰ (LLVM)؛</li>
+<li><code>builder.rs</code>: ۱٬۴۰۰ (BA) در برابر ۰ (LLVM)؛</li>
+<li><code>common.rs</code>: ۳۵۰ (BA) در برابر ۳۵۰ (LLVM)؛</li>
+</ul>
+<p>پوشهٔ <code>debuginfo</code> تقریباً دست‌نخورده از این تقسیم بیرون آمده و مختص LLVM است.
+تنها قابلیت‌های سطح بالای آن صفت‌سازی شده‌اند.</p>
+<p>پوشهٔ جدید <code>traits</code> فقط برای تعریف صفت‌ها ۱۵۰۰ LOC دارد.
+در مجموع،
+کد قدیمی <code>rustc_codegen_llvm</code> با حجم ۲۷٬۰۰۰ LOC به
+<code>rustc_codegen_llvm</code> جدید با حجم ۱۸٬۵۰۰ LOC و <code>rustc_codegen_ssa</code> با حجم ۱۲٬۰۰۰ LOC تقسیم شده است.
+می‌توان گفت این بازسازی امکان استفادهٔ دوبارهٔ
+حدود ۱۰٬۰۰۰ LOC را فراهم کرد که در غیر این صورت باید میان
+بک‌اندهای گوناگون <code>rustc</code> تکرار می‌شد.</p>
+<p>نسخهٔ بازسازی‌شدهٔ بک‌اند <code>rustc</code> نه در مجموعه آزمون و نه در بنچمارک کارایی
+هیچ پسرفتی ایجاد نکرد، که با ماهیت بازسازی سازگار است؛ بازسازی‌ای که فقط
+از پارامتری‌سازی در زمان کامپایل استفاده کرد (بدون شیء صفت).</p><nav class="page-nav"><a href="debugging.html">→ اشکال‌زدایی LLVM</a><a href="implicit-caller-location.html">مکان فراخوانی ضمنی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

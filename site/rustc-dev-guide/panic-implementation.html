@@ -1,0 +1,89 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>پیاده‌سازی panic — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="panic-implementation"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="panicking-in-rust"><a class="header" href="#panicking-in-rust">Panic‌کردن در Rust</a></h1>
+<h2 id="step-1-invocation-of-the-panic-macro"><a class="header" href="#step-1-invocation-of-the-panic-macro">گام ۱: فراخوانی ماکروی <code>panic!</code>.</a></h2>
+<p>در واقع دو ماکروی panic هست - یکی در <code>core</code> و یکی در <code>std</code> تعریف شده.
+دلیلش این است که کد درون <code>core</code> هم می‌تواند panic کند.
+<code>core</code> پیش از <code>std</code> ساخته می‌شود،
+اما می‌خواهیم panicها در زمان اجرا از همان ماشین‌آلات استفاده کنند، چه از <code>core</code> بیایند چه از <code>std</code>.</p>
+<h3 id="core-definition-of-panic"><a class="header" href="#core-definition-of-panic">تعریف <code>panic!</code> در core</a></h3>
+<p>ماکروی <code>panic!</code> در <code>core</code> در نهایت فراخوانی زیر را انجام می‌دهد (در <a href="https://doc.rust-lang.org/core/panicking/index.html"><code>library/core/src/panicking.rs</code></a>):</p>
+<pre><code class="language-rust">// NOTE This function never crosses the FFI boundary; it's a Rust-to-Rust call
+extern "Rust" {
+    #[lang = "panic_impl"]
+    fn panic_impl(pi: &amp;PanicInfo&lt;'_&gt;) -&gt; !;
+}
+
+let pi = PanicInfo::new(
+    &amp;fmt,
+    Location::caller(),
+    /* can_unwind */ true,
+    /* force_no_backtrace */ false,
+);
+unsafe { panic_impl(&amp;pi) }</code></pre>
+<p>حل واقعی این از چند لایهٔ indirection می‌گذرد:</p>
+<ol>
+<li>
+<p>در <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_hir/src/weak_lang_items.rs"><code>compiler/rustc_hir/src/weak_lang_items.rs</code></a>، <code>panic_impl</code>
+به‌صورت «weak lang item» با نماد <code>rust_begin_unwind</code> اعلان شده است.
+این در <code>rustc_hir_analysis/src/collect.rs</code> برای تنظیم نام نماد واقعی به <code>rust_begin_unwind</code> به‌کار می‌رود.</p>
+<p>توجه کنید <code>panic_impl</code> در بلوک <code>extern "Rust"</code> اعلان شده،
+یعنی core سعی می‌کند نماد خارجی‌ای به نام <code>rust_begin_unwind</code> را فراخوانی کند
+(که در زمان لینک حل می‌شود)</p>
+</li>
+<li>
+<p>در <a href="https://github.com/rust-lang/rust/blob/HEAD/library/std/src/panicking.rs"><code>library/std/src/panicking.rs</code></a> این تعریف را داریم:</p>
+</li>
+</ol>
+<pre><code class="language-rust">/// Entry point of panics from the core crate (`panic_impl` lang item).
+#[cfg(not(any(test, doctest)))]
+#[panic_handler]
+pub fn panic_handler(info: &amp;core::panic::PanicInfo&lt;'_&gt;) -&gt; ! {
+    ...
+}</code></pre>
+<p>attribute ویژهٔ <code>panic_handler</code> از طریق <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_passes/lang_items/index.html"><code>compiler/rustc_passes/src/lang_items.rs</code></a> حل می‌شود.
+تابع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_passes/lang_items/fn.extract_ast.html"><code>extract_ast</code></a> attribute با نام <code>panic_handler</code> را به lang item با نام <code>panic_impl</code> تبدیل می‌کند.</p>
+<p>اکنون lang item متناظر <code>panic_handler</code> را در <code>std</code> داریم.
+این تابع همان فرایند تعریف <code>extern { fn panic_impl }</code> در <code>core</code> را طی می‌کند و در نهایت نام نماد <code>rust_begin_unwind</code> می‌گیرد.
+در زمان لینک، ارجاع نماد در <code>core</code> به تعریف در <code>std</code> حل می‌شود (تابعی که در منبع Rust <code>panic_handler</code> نام دارد).</p>
+<p>بنابراین جریان کنترل در زمان اجرا از core به std منتقل می‌شود.
+این اجازه می‌دهد panicهای <code>core</code> از همان زیرساختی که panicهای دیگر استفاده می‌کنند بگذرند (hookهای panic، unwinding و غیره)</p>
+<h3 id="std-implementation-of-panic"><a class="header" href="#std-implementation-of-panic">پیاده‌سازی <code>panic!</code> در std</a></h3>
+<p>اینجا جایی است که منطق واقعی مربوط به panic شروع می‌شود.
+در <a href="https://github.com/rust-lang/rust/blob/HEAD/library/std/src/panicking.rs"><code>library/std/src/panicking.rs</code></a>،
+کنترل به <code>panic_with_hook</code> می‌رسد.
+این متد مسئول فراخوانی hook سراسری panic و بررسی panicهای دوگانه است.
+در نهایت،
+<code>__rust_start_panic</code> را فراخوانی می‌کنیم که توسط runtime مربوط به panic ارائه می‌شود.</p>
+<p>فراخوانی <code>__rust_start_panic</code> بسیار عجیب است - به آن <code>*mut &amp;mut dyn PanicPayload</code> داده می‌شود که به <code>usize</code> تبدیل شده است.
+بیایید این نوع را تجزیه کنیم:</p>
+<ol>
+<li>
+<p><code>PanicPayload</code> یک trait داخلی است.
+برای <code>PanicPayload</code> پیاده‌سازی شده است
+(wrapperی دور نوع payload داده‌شده توسط کاربر) و متدی دارد به نام
+<code>fn take_box(&amp;mut self) -&gt; *mut (dyn Any + Send)</code>.
+این متد payload داده‌شده توسط کاربر (<code>T: Any + Send</code>) را می‌گیرد،
+آن را box می‌کند و box را به اشاره‌گر خام تبدیل می‌کند.</p>
+</li>
+<li>
+<p>وقتی <code>__rust_start_panic</code> را فراخوانی می‌کنیم، یک <code>&amp;mut dyn PanicPayload</code> داریم.
+اما این یک اشاره‌گر چاق (fat pointer) است (دو برابر اندازهٔ <code>usize</code>).
+برای دادن آن به runtime مربوط به panic از مرز FFI، یک ارجاع تغییرپذیر <em>به این ارجاع تغییرپذیر</em> (<code>&amp;mut &amp;mut dyn PanicPayload</code>) می‌گیریم و به اشاره‌گر خام (<code>*mut &amp;mut dyn PanicPayload</code>) تبدیل می‌کنیم.
+اشاره‌گر خام بیرونی اشاره‌گر باریک (thin) است، چون به نوع <code>Sized</code> (ارجاع تغییرپذیر) اشاره می‌کند.
+بنابراین می‌توانیم این اشاره‌گر باریک را به <code>usize</code> تبدیل کنیم، که برای دادن از مرز FFI مناسب است.</p>
+</li>
+</ol>
+<p>در نهایت، <code>__rust_start_panic</code> را با این <code>usize</code> فراخوانی می‌کنیم.
+اکنون وارد runtime مربوط به panic شده‌ایم.</p>
+<h2 id="step-2-the-panic-runtime"><a class="header" href="#step-2-the-panic-runtime">گام ۲: runtime مربوط به panic</a></h2>
+<p>Rust دو runtime برای panic فراهم می‌کند: <code>panic_abort</code> و <code>panic_unwind</code>.
+کاربر در زمان ساخت از طریق <code>Cargo.toml</code> بین آن‌ها انتخاب می‌کند</p>
+<p><code>panic_abort</code> بسیار ساده است: پیاده‌سازی <code>__rust_start_panic</code> آن فقط abort می‌کند، همان‌طور که انتظار دارید.</p>
+<p><code>panic_unwind</code> مورد جالب‌تر است.</p>
+<p>در پیاده‌سازی <code>__rust_start_panic</code>، <code>usize</code> را می‌گیریم، به <code>*mut &amp;mut dyn PanicPayload</code> برمی‌گردانیم، dereference می‌کنیم و <code>take_box</code> را روی <code>&amp;mut dyn PanicPayload</code> فراخوانی می‌کنیم.
+در این نقطه، اشاره‌گر خام به خود payload داریم (<code>*mut (dyn Send + Any)</code>): یعنی اشاره‌گر خام به مقدار واقعی‌ای که کاربر هنگام فراخوانی <code>panic!</code> داده است.</p>
+<p>در این نقطه کد مستقل از پلتفرم تمام می‌شود.
+اکنون به منطق unwinding مخصوص پلتفرم وارد می‌شویم (مثلاً <code>unwind</code>).
+این کد مسئول unwind کردن پشته است، اجرای هر «landing pad» مرتبط با هر فریم (فعلاً اجرای destructorها)، و انتقال کنترل به فریم <code>catch_unwind</code>.</p>
+<p>توجه کنید همهٔ panicها یا فرایند را abort می‌کنند یا توسط فراخوانی <code>catch_unwind</code> گرفته می‌شوند.
+به‌طور خاص، در <a href="https://github.com/rust-lang/rust/blob/HEAD/library/std/src/rt.rs">سرویس runtime</a> در std،
+فراخوانی تابع <code>main</code> داده‌شده توسط کاربر درون <code>catch_unwind</code> پیچیده شده است.</p><nav class="page-nav"><a href="test-implementation.html">→ `#[test]` implementation</a><a href="ast-validation.html">اعتبارسنجی AST ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

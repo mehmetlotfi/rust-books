@@ -1,0 +1,100 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>if let — Rust با مثال</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="flow_control/if_let"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../rbe/index.html" style="color:inherit;text-decoration:none">Rust با مثال</a><small class="en-title" dir="ltr">Rust By Example</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="if-let"><a class="header" href="#if-let">if let</a></h1>
+<p>در برخی کاربردهای تطبیق شمارش‌ها، استفاده از <code>match</code> دست‌وپاگیر است. برای نمونه:</p>
+<pre><code class="language-rust">// Make `optional` of type `Option&lt;i32&gt;`
+let optional = Some(7);
+
+match optional {
+    Some(i) =&gt; println!("This is a really long string and `{:?}`", i),
+    _ =&gt; {},
+    // ^ Required because `match` is exhaustive. Doesn't it seem
+    // like wasted space?
+};
+</code></pre>
+<p>در این وضعیت <code>if let</code> تمیزتر است و افزون بر آن اجازه می‌دهد حالت‌های مختلف شکست را مشخص کنیم:</p>
+<pre><code class="language-rust editable">fn main() {
+    // All have type `Option&lt;i32&gt;`
+    let number = Some(7);
+    let letter: Option&lt;i32&gt; = None;
+    let emoticon: Option&lt;i32&gt; = None;
+
+    // The `if let` construct reads: "if `let` destructures `number` into
+    // `Some(i)`, evaluate the block (`{}`).
+    if let Some(i) = number {
+        println!("Matched {:?}!", i);
+    }
+
+    // If you need to specify a failure, use an else:
+    if let Some(i) = letter {
+        println!("Matched {:?}!", i);
+    } else {
+        // Destructure failed. Change to the failure case.
+        println!("Didn't match a number. Let's go with a letter!");
+    }
+
+    // Provide an altered failing condition.
+    let i_like_letters = false;
+
+    if let Some(i) = emoticon {
+        println!("Matched {:?}!", i);
+    // Destructure failed. Evaluate an `else if` condition to see if the
+    // alternate failure branch should be taken:
+    } else if i_like_letters {
+        println!("Didn't match a number. Let's go with a letter!");
+    } else {
+        // The condition evaluated false. This branch is the default:
+        println!("I don't like letters. Let's go with an emoticon :)!");
+    }
+}</code></pre>
+<p>به همین شیوه می‌توان از <code>if let</code> برای تطبیق هر مقدار شمارشی استفاده کرد:</p>
+<pre><code class="language-rust editable">// Our example enum
+enum Foo {
+    Bar,
+    Baz,
+    Qux(u32)
+}
+
+fn main() {
+    // Create example variables
+    let a = Foo::Bar;
+    let b = Foo::Baz;
+    let c = Foo::Qux(100);
+
+    // Variable a matches Foo::Bar
+    if let Foo::Bar = a {
+        println!("a is foobar");
+    }
+
+    // Variable b does not match Foo::Bar
+    // So this will print nothing
+    if let Foo::Bar = b {
+        println!("b is foobar");
+    }
+
+    // Variable c matches Foo::Qux which has a value
+    // Similar to Some() in the previous example
+    if let Foo::Qux(value) = c {
+        println!("c is {}", value);
+    }
+
+    // Binding also works with `if let`
+    if let Foo::Qux(value @ 100) = c {
+        println!("c is one hundred");
+    }
+}</code></pre>
+<p>مزیت دیگر <code>if let</code> این است که می‌توان گونه‌های بدون پارامتر یک شمارش را نیز تطبیق داد؛ حتی اگر آن شمارش <code>PartialEq</code> را پیاده‌سازی یا derive نکرده باشد. در چنین حالتی <code>if Foo::Bar == a</code> کامپایل نمی‌شود، زیرا نمونه‌های شمارش را نمی‌توان با هم برابر دانست، اما <code>if let</code> همچنان کار می‌کند.</p>
+<p>یک چالش: مثال زیر را اصلاح کنید تا از <code>if let</code> استفاده کند:</p>
+<pre class="playground"><code class="language-rust editable ignore mdbook-runnable">// This enum purposely neither implements nor derives PartialEq.
+// That is why comparing Foo::Bar == a fails below.
+enum Foo {Bar}
+
+fn main() {
+    let a = Foo::Bar;
+
+    // Variable a matches Foo::Bar
+    if Foo::Bar == a {
+    // ^-- this causes a compile-time error. Use `if let` instead.
+        println!("a is foobar");
+    }
+}</code></pre>
+<h3 id="see-also"><a class="header" href="#see-also">بیشتر بخوانید</a></h3>
+<p><a href="../custom_types/enum.html"><code>enum</code></a>، <a href="../std/option.html"><code>Option</code></a> و <a href="https://github.com/rust-lang/rfcs/pull/160">RFC مربوطه</a></p><nav class="page-nav"><a href="../../rbe/flow_control/match/binding.html">→ اتصال</a><a href="../../rbe/flow_control/let_else.html">let-else ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rbe/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

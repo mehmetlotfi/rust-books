@@ -1,0 +1,75 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>بررسی نوع — کتاب Clippy</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="development/type_checking"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Clippy</a><small class="en-title" dir="ltr">The Clippy Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="type-checking"><a class="header" href="#type-checking">بررسی نوع</a></h1>
+<p>وقتی روی یک lint جدید کار می‌کنیم یا یک lint موجود را بهبود می‌دهیم، ممکن است به دلایل گوناگون بخواهیم نوع <code>Ty</code> یک عبارت <code>Expr</code> را به دست آوریم. این کار با استفاده از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/struct.LateContext.html"><code>LateContext</code></a> که برای <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.LateLintPass.html"><code>LateLintPass</code></a> در دسترس است انجام می‌شود.</p>
+<h2 id="latecontext-and-typeckresults"><a class="header" href="#latecontext-and-typeckresults"><code>LateContext</code> و <code>TypeckResults</code></a></h2>
+<p>زمینهٔ lint یعنی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/struct.LateContext.html"><code>LateContext</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TypeckResults.html"><code>TypeckResults</code></a> (که توسط <code>LateContext::typeck_results</code> برگردانده می‌شود) دو ساختار دادهٔ بسیار مفید در <code>LateLintPass</code> هستند. آن‌ها به ما اجازه می‌دهند به تعریف نوع‌ها و دیگر مراحل کامپایل مانند HIR برویم.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>توجه: مقدار بازگشتی <code>LateContext.typeck_results</code> از نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TypeckResults.html"><code>TypeckResults</code></a> است و در مرحلهٔ بررسی نوع ساخته می‌شود؛ شامل اطلاعات مفیدی مانند نوع عبارت‌ها، روش‌های تحلیل متدها و غیره است.</p>
+</blockquote>
+<p><code>TypeckResults</code> متدهای مفیدی مانند <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TypeckResults.html#method.expr_ty"><code>expr_ty</code></a> دارد که به ما امکان دسترسی به ساختار زیربنایی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html"><code>Ty</code></a> یک عبارت مشخص را می‌دهد.</p>
+<pre><code class="language-rust">pub fn expr_ty(&amp;self, expr: &amp;Expr&lt;'_&gt;) -&gt; Ty&lt;'tcx&gt;</code></pre>
+<p>به‌عنوان نکته‌ای جانبی، افزون بر <code>expr_ty</code>، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TypeckResults.html"><code>TypeckResults</code></a> متدی به نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/typeck_results/struct.TypeckResults.html#method.pat_ty"><code>pat_ty()</code></a> هم دارد که برای به دست آوردن نوع از یک الگو مفید است.</p>
+<h2 id="ty"><a class="header" href="#ty"><code>Ty</code></a></h2>
+<p>ساختار <code>Ty</code> اطلاعات نوع یک عبارت را در خود دارد. بیایید برای بررسی این ساختار نگاهی به ساختار <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html"><code>Ty</code></a> در <code>rustc_middle</code> بیندازیم:</p>
+<pre><code class="language-rust">pub struct Ty&lt;'tcx&gt;(Interned&lt;'tcx, WithStableHash&lt;TyS&lt;'tcx&gt;&gt;&gt;);</code></pre>
+<p>در نگاه اول، این ساختار بسیار رمزآلود به نظر می‌رسد. اما با دقت بیشتر می‌بینیم که این ساختار متدهای مفید فراوانی برای بررسی نوع دارد.</p>
+<p>برای مثال، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html#method.is_char"><code>is_char</code></a> بررسی می‌کند که آیا <code>Ty</code> داده‌شده با نوع ابتدایی نویسه مطابقت دارد.</p>
+<h3 id="is_-usage"><a class="header" href="#is_-usage">استفاده از <code>is_*</code></a></h3>
+<p>در برخی سناریوها، تنها کاری که لازم است بکنیم بررسی این است که <code>Ty</code> یک عبارت نوع مشخصی است، مثلاً نوع <code>char</code>، و می‌توانیم این‌گونه بنویسیم:</p>
+<pre><code class="language-rust">impl LateLintPass&lt;'_&gt; for MyStructLint {
+    fn check_expr(&amp;mut self, cx: &amp;LateContext&lt;'_&gt;, expr: &amp;Expr&lt;'_&gt;) {
+        // Get type of `expr`
+        let ty = cx.typeck_results().expr_ty(expr);
+
+        // Check if the `Ty` of this expression is of character type
+        if ty.is_char() {
+            println!("Our expression is a char!");
+        }
+    }
+}</code></pre>
+<p>افزون بر این، اگر <a href="https://github.com/rust-lang/rust/blob/d34f1f931489618efffc4007e6b6bdb9e10f6467/compiler/rustc_middle/src/ty/sty.rs#L1429-L1432">کد منبع</a> تابع <code>is_char</code> را بررسی کنیم، به چیز بسیار جالبی برمی‌خوریم:</p>
+<pre><code class="language-rust">#[inline]
+pub fn is_char(self) -&gt; bool {
+    matches!(self.kind(), Char)
+}</code></pre>
+<p>در واقع، همین الان متد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html#method.kind"><code>kind()</code></a> مربوط به <code>Ty</code> را کشف کردیم که <code>TyKind</code> مربوط به یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html"><code>Ty</code></a> را در اختیار ما می‌گذارد.</p>
+<h2 id="tykind"><a class="header" href="#tykind"><code>TyKind</code></a></h2>
+<p><code>TyKind</code> گونه‌های نوع‌ها را در سامانهٔ نوع Rust تعریف می‌کند. اگر نگاهی به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html">مستندات <code>TyKind</code></a> بیندازیم، می‌بینیم که یک شمارش با بیش از ۲۵ حالت است، شامل آیتم‌هایی مانند <code>Bool</code>، <code>Int</code>، <code>Ref</code> و غیره.</p>
+<h3 id="kind-usage"><a class="header" href="#kind-usage">استفاده از <code>kind</code></a></h3>
+<p><code>TyKind</code> مربوط به یک <code>Ty</code> با فراخوانی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html#method.kind">متد <code>Ty.kind()</code></a> برگردانده می‌شود. ما اغلب از این متد برای الگوسازی (pattern matching) در Clippy استفاده می‌کنیم.</p>
+<p>برای مثال، اگر بخواهیم یک <code>struct</code> را بررسی کنیم، می‌توانیم ببینیم که آیا <code>ty.kind</code> با یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_type_ir/ty_kind/enum.TyKind.html#variant.Adt"><code>Adt</code></a> (نوع داده‌ای جبری) مطابقت دارد و آیا <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/adt/struct.AdtDef.html"><code>AdtDef</code></a> آن یک ساختار است:</p>
+<pre><code class="language-rust">impl LateLintPass&lt;'_&gt; for MyStructLint {
+    fn check_expr(&amp;mut self, cx: &amp;LateContext&lt;'_&gt;, expr: &amp;Expr&lt;'_&gt;) {
+        // Get type of `expr`
+        let ty = cx.typeck_results().expr_ty(expr);
+        // Match its kind to enter the type
+        match ty.kind() {
+            ty::Adt(adt_def, _) if adt_def.is_struct() =&gt; println!("Our `expr` is a struct!"),
+            _ =&gt; ()
+        }
+    }
+}</code></pre>
+<h2 id="hirty-and-tyty"><a class="header" href="#hirty-and-tyty"><code>hir::Ty</code> و <code>ty::Ty</code></a></h2>
+<p>تا اینجا همیشه دربارهٔ <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html"><code>ty::Ty</code></a> صحبت کرده‌ایم و به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/struct.Ty.html"><code>hir::Ty</code></a> نپرداخته‌ایم، اما درک مورد دوم نیز مهم است.</p>
+<p><code>hir::Ty</code> نشان می‌دهد کاربر <em>چه</em> نوشته است، در حالی که <code>ty::Ty</code> نشان می‌دهد کامپایلر نوع را چگونه می‌بیند و اطلاعات بیشتری دارد. مثال:</p>
+<pre><code class="language-rust">fn foo(x: u32) -&gt; u32 { x }</code></pre>
+<p>در اینجا HIR نوع‌ها را بدون «فکر کردن» دربارهٔ آن‌ها می‌بیند؛ می‌داند که تابع یک <code>u32</code> می‌گیرد و یک <code>u32</code> برمی‌گرداند. تا جایی که به <code>hir::Ty</code> مربوط است، ممکن است این دو نوع متفاوت باشند. اما در سطح <code>ty::Ty</code>، کامپایلر می‌فهمد که آن‌ها یک نوع‌اند، همراه با جزئیات طول عمرها و غیره…</p>
+<p>برای رسیدن از <code>hir::Ty</code> به <code>ty::Ty</code>، می‌توانید بیرون از بدنه‌ها از تابع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_analysis/fn.lower_ty.html"><code>lower_ty</code></a> یا درون بدنه‌ها از متد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TypeckResults.html#method.node_type"><code>TypeckResults::node_type()</code></a> استفاده کنید.</p>
+<blockquote>
+<p><strong>هشدار</strong>: درون بدنه‌ها از <code>lower_ty</code> استفاده نکنید، زیرا ممکن است باعث ICE شود.</p>
+</blockquote>
+<h2 id="creating-types-programmatically"><a class="header" href="#creating-types-programmatically">ساخت نوع‌ها به‌صورت برنامه‌نویسی‌شده</a></h2>
+<p>یک مورد کاربرد رایج برای ساخت برنامه‌نویسی‌شدهٔ نوع‌ها، وقتی است که می‌خواهیم بررسی کنیم یک نوع صفتی را پیاده‌سازی می‌کند یا نه (نگاه کنید به <a href="trait_checking.html">بررسی صفت</a>).</p>
+<p>در اینجا مثالی از نحوهٔ ساخت یک <code>Ty</code> برای برشی از <code>u8</code> یعنی <code>[u8]</code> آمده است</p>
+<pre><code class="language-rust">use rustc_middle::ty::Ty;
+// assume we have access to a LateContext
+let ty = Ty::new_slice(cx.tcx, Ty::new_u8());</code></pre>
+<p>به‌طور کلی، ما به متدهای <code>Ty::new_*</code> تکیه می‌کنیم. این متدها بلوک‌های سازندهٔ پایه‌ای را تعریف می‌کنند که سامانهٔ نوع و سامانهٔ صفت برای تعریف و فهم کد نوشته‌شده به کار می‌برند.</p>
+<h2 id="useful-links"><a class="header" href="#useful-links">پیوندهای مفید</a></h2>
+<p>در ادامه چند پیوند مفید برای کاوش بیشتر مفاهیمی که در این فصل پوشش داده شد آمده است:</p>
+<ul>
+<li><a href="https://rustc-dev-guide.rust-lang.org/compiler-src.html#the-main-stages-of-compilation">مراحل کامپایل</a></li>
+<li><a href="https://rustc-dev-guide.rust-lang.org/diagnostics/diagnostic-items.html">Diagnostic itemها</a></li>
+<li><a href="https://rustc-dev-guide.rust-lang.org/hir-typeck/summary.html">بررسی نوع</a></li>
+<li><a href="https://rustc-dev-guide.rust-lang.org/ty.html">ماژول Ty</a></li>
+</ul><nav class="page-nav"><a href="emitting_lints.html">→ صدور lint</a><a href="trait_checking.html">بررسی صفت ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../clippy/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

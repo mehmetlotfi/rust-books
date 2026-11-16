@@ -1,0 +1,94 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>پوشش کد مبتنی بر منبع LLVM — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="llvm-coverage-instrumentation"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="llvm-source-based-code-coverage"><a class="header" href="#llvm-source-based-code-coverage">پوشش کد مبتنی بر منبع LLVM</a></h1>
+<p><code>rustc</code> از تحلیل دقیق پوشش کد و آزمون مبتنی بر منبع (source-based) پشتیبانی می‌کند
+که با یک گزینهٔ خط فرمان (<code>-C instrument-coverage</code>) فعال می‌شود و در زمان کامپایل، کتابخانه‌ها و فایل‌های دودویی Rust
+را با دستورها و داده‌های اضافی ابزارنگاری (instrument) می‌کند.</p>
+<p>ابزارنگاری پوشش، فراخوانی‌هایی به دستور ذاتی (intrinsic) LLVM با نام
+<a href="https://llvm.org/docs/LangRef.html#llvm-instrprof-increment-intrinsic"><code>llvm.instrprof.increment</code></a> را در شاخه‌های کد تزریق می‌کند
+(بر اساس یک تحلیل جریان کنترل مبتنی بر MIR)، و LLVM این‌ها را به
+دستورهایی تبدیل می‌کند که هنگام اجرا شمارنده‌های ایستا را افزایش می‌دهند.
+ابزارنگاری پوشش LLVM همچنین به یک <a href="https://llvm.org/docs/CoverageMappingFormat.html">نقشهٔ پوشش (Coverage Map)</a> نیاز دارد که فراداده‌های منبع را کدگذاری می‌کند
+و شناسه‌های شمارنده را – مستقیم و غیرمستقیم – به مکان‌های فایل (با
+خط و ستون آغاز و پایان) نگاشت می‌کند.</p>
+<p>کتابخانه‌های Rust، با یا بدون ابزارنگاری پوشش، می‌توانند به فایل‌های دودویی ابزارنگاری‌شده لینک شوند.
+وقتی برنامه اجرا می‌شود و به‌صورت تمیز پایان می‌یابد،
+کتابخانه‌های LLVM مقادیر نهایی شمارنده‌ها را در یک فایل می‌نویسند (<code>default.profraw</code> یا
+فایلی سفارشی که با متغیر محیطی <code>LLVM_PROFILE_FILE</code> تعیین می‌شود).</p>
+<p>توسعه‌دهندگان از ابزارهای موجود تحلیل پوشش LLVM برای رمزگشایی فایل‌های <code>.profraw</code>
+همراه با نقشه‌های پوشش متناظر (از فایل‌های دودویی منطبقی که آن‌ها را
+تولید کرده‌اند) استفاده می‌کنند و گزارش‌های گوناگونی برای تحلیل می‌سازند، برای مثال:</p>
+<img alt="تصویر نمونه‌ای از نتیجهٔ llvm-cov show برای تابع add_quoted_string" src="img/llvm-cov-show-01.png">
+<p>دستورالعمل‌ها و نمونه‌های دقیق در
+<a href="../rustc/instrument-coverage.html">کتاب rustc</a> مستند شده‌اند.</p>
+<h2 id="recommended-bootstraptoml-settings"><a class="header" href="#recommended-bootstraptoml-settings">تنظیمات پیشنهادی <code>bootstrap.toml</code></a></h2>
+<p>هنگام کار روی کد ابزارنگاری پوشش، معمولاً لازم است
+<strong>زمان اجرای profiler را فعال کنید</strong>؛ این کار با تنظیم <code>profiler = true</code> در <code>[build]</code> انجام می‌شود.
+این تنظیم به کامپایلر اجازه می‌دهد فایل‌های دودویی ابزارنگاری‌شده تولید کند و امکان
+اجرای مجموعه آزمون کامل پوشش را فراهم می‌کند.</p>
+<p>فعال کردن debug assertionها در کامپایلر و در LLVM توصیه می‌شود، اما اجباری نیست.</p>
+<pre><code class="language-toml"># Similar to the "compiler" profile, but also enables debug assertions in LLVM.
+# These assertions can detect malformed coverage mappings in some cases.
+profile = "codegen"
+
+# IMPORTANT: This tells the build system to build the LLVM profiler runtime.
+# Without it, the compiler can't produce coverage-instrumented binaries,
+# and many of the coverage tests will be skipped.
+build.profiler = true
+
+# Enable debug assertions in the compiler.
+rust.debug-assertions = true
+</code></pre>
+<h2 id="rust-symbol-mangling"><a class="header" href="#rust-symbol-mangling">name mangling نمادهای Rust</a></h2>
+<p><code>-C instrument-coverage</code> به‌طور خودکار name mangling نسخهٔ <code>v0</code> در Rust را فعال می‌کند
+(گویی کاربر گزینهٔ <code>-C symbol-mangling-version=v0</code> را هنگام فراخوانی
+<code>rustc</code> داده است) تا name mangling یکنواخت و برگشت‌پذیر تضمین شود.
+این کار دو مزیت مهم دارد:</p>
+<ol>
+<li>ابزارهای پوشش LLVM می‌توانند پوشش را در چندین اجرا تحلیل کنند، حتی با
+برخی تغییرات در کد منبع؛ بنابراین نام‌های mangle‌شده باید در کامپایل‌های مختلف یکسان باشند.</li>
+<li>گزارش‌های پوشش LLVM می‌توانند پوشش را به تفکیک تابع گزارش کنند و حتی
+شمارش پوشش هر نمونه‌سازی یکتای یک تابع جنریک را جدا می‌کنند،
+اگر با جایگزینی‌های نوعی گوناگون فراخوانی شده باشد.</li>
+</ol>
+<h2 id="the-llvm-profiler-runtime"><a class="header" href="#the-llvm-profiler-runtime">زمان اجرای profiler در LLVM</a></h2>
+<p>داده‌های پوشش فقط با اجرای برنامهٔ Rust اجرایی تولید می‌شوند.
+<code>rustc</code> فایل‌های دودویی ابزارنگاری‌شدهٔ پوشش را به‌صورت ایستا با کد زمان اجرای LLVM
+(<a href="https://github.com/llvm/llvm-project/tree/main/compiler-rt/lib/profile">compiler-rt</a>) لینک می‌کند که قلاب‌های برنامه
+(مانند قلاب <code>exit</code>) را برای نوشتن مقادیر شمارنده در فایل <code>.profraw</code> پیاده‌سازی می‌کند.</p>
+<p>در درخت سورس <code>rustc</code>،
+<code>library/profiler_builtins</code> کد <code>compiler-rt</code> مربوط به LLVM را در یک crate کتابخانه‌ای Rust بسته‌بندی می‌کند.
+توجه کنید که هنگام ساخت <code>rustc</code>،
+<code>profiler_builtins</code> فقط وقتی گنجانده می‌شود که <code>build.profiler = true</code> در <code>bootstrap.toml</code> تنظیم شده باشد.</p>
+<p>هنگام کامپایل با <code>-C instrument-coverage</code>،
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/creader/struct.CStore.html#method.postprocess"><code>CStore::postprocess()</code></a> <code>profiler_builtins</code> را به‌صورت پویا و با فراخوانی
+<code>inject_profiler_runtime()</code> بارگذاری می‌کند.</p>
+<h2 id="testing-coverage-instrumentation"><a class="header" href="#testing-coverage-instrumentation">آزمودن ابزارنگاری پوشش</a></h2>
+<p><a href="./tests/compiletest.html#coverage-tests">(مستندات compiletest را هم برای مجموعه آزمون <code>tests/coverage</code>
+ببینید.)</a></p>
+<p>ابزارنگاری پوشش در MIR با یک آزمون <code>mir-opt</code> اعتبارسنجی می‌شود:
+<a href="https://github.com/rust-lang/rust/blob/HEAD/tests/mir-opt/coverage/instrument_coverage.rs"><code>tests/mir-opt/coverage/instrument_coverage.rs</code></a>.</p>
+<p>ابزارنگاری پوشش در LLVM IR توسط مجموعه آزمون <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/coverage"><code>tests/coverage</code></a>
+در حالت <code>coverage-map</code> اعتبارسنجی می‌شود.
+این آزمون‌ها یک برنامهٔ آزمایشی را به اسمبلی LLVM IR کامپایل می‌کنند و سپس
+از ابزار <a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/coverage-dump"><code>src/tools/coverage-dump</code></a> برای استخراج و چاپ خوانا
+نقشه‌های پوششی که در فایل دودویی نهایی جاسازی می‌شدند استفاده می‌کنند.</p>
+<p>آزمون سرتاسری (end-to-end) ابزارنگاری پوشش و گزارش‌دهی پوشش
+توسط مجموعه آزمون <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/coverage"><code>tests/coverage</code></a> در حالت <code>coverage-run</code>،
+و توسط مجموعه آزمون <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/coverage-run-rustdoc"><code>tests/coverage-run-rustdoc</code></a> انجام می‌شود.
+این آزمون‌ها یک برنامهٔ آزمایشی را با ابزارنگاری پوشش کامپایل و اجرا می‌کنند، سپس از ابزارهای LLVM برای تبدیل داده‌های پوشش به
+یک گزارش پوشش قابل‌خواندن برای انسان استفاده می‌کنند.</p>
+<blockquote>
+<p>آزمون‌های حالت <code>coverage-run</code> یک دستورالعمل ضمنی <code>//@ needs-profiler-runtime</code>
+دارند، بنابراین اگر زمان اجرای profiler در <code>bootstrap.toml</code>
+فعال نشده باشد نادیده گرفته می‌شوند.</p>
+</blockquote>
+<p>در نهایت، آزمون <a href="https://github.com/rust-lang/rust/blob/HEAD/tests/codegen-llvm/instrument-coverage/testprog.rs"><code>tests/codegen-llvm/instrument-coverage/testprog.rs</code></a> یک برنامهٔ ساده Rust را
+با <code>-C instrument-coverage</code> کامپایل می‌کند و LLVM IR برنامهٔ کامپایل‌شده را با
+دستورهای LLVM IR و داده‌های ساختاریافتهٔ مورد انتظار برای یک برنامهٔ دارای پوشش مقایسه می‌کند،
+شامل بررسی‌های گوناگون برای فراداده‌های مرتبط با نقشهٔ پوشش و فراخوانی‌های intrinsic LLVM
+برای افزایش شمارنده‌های زمان اجرا.</p>
+<p>نتایج مورد انتظار آزمون‌های <code>coverage</code>، <code>coverage-run-rustdoc</code>
+و <code>mir-opt</code> را می‌توان با اجرای دستورهای زیر به‌روز کرد:</p>
+<pre><code class="language-shell">./x test coverage --bless
+./x test coverage-run-rustdoc --bless
+./x test tests/mir-opt --bless
+</code></pre><nav class="page-nav"><a href="profile-guided-optimization.html">→ بهینه‌سازی مبتنی بر پروفایل</a><a href="sanitizers.html">پشتیبانی از Sanitizerها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,58 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>احراز هویت رجیستری — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/registry-authentication"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="registry-authentication"><a class="header" href="#registry-authentication">احراز هویت رجیستری</a></h1>
+<p>Cargo با استفاده از credential providerها در رجیستری‌ها احراز هویت می‌کند. این credential providerها فایل‌های اجرایی خارجی یا providerهای داخلی هستند که Cargo برای ذخیره و بازیابی اعتبارنامه‌ها (credentials) از آن‌ها استفاده می‌کند.</p>
+<p>استفاده از رجیستری‌های جایگزین دارای احراز هویت <em>مستلزم</em> پیکربندی یک credential provider است تا از ذخیره شدن ناخواستهٔ اعتبارنامه‌های رمزنگاری‌نشده روی دیسک جلوگیری شود. به دلایل تاریخی، رجیستری‌های عمومی (بدون احراز هویت) به پیکربندی credential provider نیازی ندارند و اگر هیچ providerی پیکربندی نشده باشد، از provider با نام <code>cargo:token</code> استفاده می‌شود.</p>
+<p>Cargo همچنین شامل providerهای مخصوص هر پلتفرم است که از سیستم‌عامل برای ذخیرهٔ ایمن توکن‌ها استفاده می‌کنند. provider با نام <code>cargo:token</code> نیز گنجانده شده است که اعتبارنامه‌ها را به‌صورت متن ساده و رمزنگاری‌نشده در فایل <a href="config.html#credentials">credentials</a> ذخیره می‌کند.</p>
+<h2 id="recommended-configuration"><a class="header" href="#recommended-configuration">پیکربندی توصیه‌شده</a></h2>
+<p>توصیه می‌شود یک فهرست سراسری از credential providerها در <code>$CARGO_HOME/config.toml</code> پیکربندی شود که به‌طور پیش‌فرض در مسیر زیر است:</p>
+<ul>
+<li>Windows: <code>%USERPROFILE%\.cargo\config.toml</code></li>
+<li>Unix: <code>~/.cargo/config.toml</code></li>
+</ul>
+<p>این پیکربندی توصیه‌شده از provider سیستم‌عامل استفاده می‌کند و در صورت نبود آن به <code>cargo:token</code> برمی‌گردد تا در فایل <a href="config.html#credentials">credentials</a> یا متغیرهای محیطی Cargo جست‌وجو کند:</p>
+<pre><code class="language-toml"># ~/.cargo/config.toml
+[registry]
+global-credential-providers = ["cargo:token", "cargo:libsecret", "cargo:macos-keychain", "cargo:wincred"]
+</code></pre>
+<p><em>توجه کنید که ورودی‌های بعدی اولویت بالاتری دارند. برای جزئیات بیشتر، <a href="config.html#registryglobal-credential-providers"><code>registry.global-credential-providers</code></a> را ببینید.</em></p>
+<p>برخی رجیستری‌های خصوصی ممکن است یک credential provider مخصوص خود رجیستری را نیز توصیه کنند. برای دانستن اینکه آیا چنین است، مستندات رجیستری خود را بررسی کنید.</p>
+<h2 id="built-in-providers"><a class="header" href="#built-in-providers">providerهای داخلی</a></h2>
+<p>Cargo چند credential provider داخلی دارد. providerهای داخلیِ در دسترس ممکن است در نسخه‌های آیندهٔ Cargo تغییر کنند (هرچند در حال حاضر برنامه‌ای برای این کار وجود ندارد).</p>
+<h3 id="cargotoken"><a class="header" href="#cargotoken"><code>cargo:token</code></a></h3>
+<p>از فایل <a href="config.html#credentials">credentials</a> در Cargo برای ذخیرهٔ توکن‌ها به‌صورت متن ساده و رمزنگاری‌نشده استفاده می‌کند. هنگام بازیابی توکن‌ها، متغیر محیطی <code>CARGO_REGISTRIES_&lt;NAME&gt;_TOKEN</code> را بررسی می‌کند. اگر این credential provider فهرست نشده باشد، متغیرهای محیطی <code>*_TOKEN</code> کار نخواهند کرد.</p>
+<h3 id="cargowincred"><a class="header" href="#cargowincred"><code>cargo:wincred</code></a></h3>
+<p>از Windows Credential Manager برای ذخیرهٔ توکن‌ها استفاده می‌کند.</p>
+<p>اعتبارنامه‌ها با نام <code>cargo-registry:&lt;index-url&gt;</code> در Credential Manager و در بخش «Windows Credentials» ذخیره می‌شوند.</p>
+<h3 id="cargomacos-keychain"><a class="header" href="#cargomacos-keychain"><code>cargo:macos-keychain</code></a></h3>
+<p>از macOS Keychain برای ذخیرهٔ توکن‌ها استفاده می‌کند.</p>
+<p>برای مشاهدهٔ توکن‌های ذخیره‌شده می‌توان از برنامهٔ Keychain Access استفاده کرد.</p>
+<h3 id="cargolibsecret"><a class="header" href="#cargolibsecret"><code>cargo:libsecret</code></a></h3>
+<p>از <a href="https://wiki.gnome.org/Projects/Libsecret">libsecret</a> برای ذخیرهٔ توکن‌ها استفاده می‌کند.</p>
+<p>برای مشاهدهٔ توکن‌های ذخیره‌شده می‌توان از هر مدیر گذرواژه‌ای که از libsecret پشتیبانی می‌کند استفاده کرد. موارد زیر چند نمونه هستند (فهرست کامل نیست):</p>
+<ul>
+<li><a href="https://wiki.gnome.org/Projects/GnomeKeyring">GNOME Keyring</a></li>
+<li><a href="https://apps.kde.org/kwalletmanager5/">KDE Wallet Manager</a> (از KDE Frameworks 5.97.0 به بعد)</li>
+<li><a href="https://keepassxc.org/">KeePassXC</a> (از 2.5.0 به بعد)</li>
+</ul>
+<h3 id="cargotoken-from-stdout-command-args"><a class="header" href="#cargotoken-from-stdout-command-args"><code>cargo:token-from-stdout &lt;command&gt; &lt;args&gt;</code></a></h3>
+<p>یک زیرفرایند اجرا می‌کند که توکنی را روی stdout برمی‌گرداند. خطوط جدید حذف خواهند شد.</p>
+<ul>
+<li>فرایند، stdin و stderr کاربر را به ارث می‌برد.</li>
+<li>در صورت موفقیت باید با کد 0 خارج شود و در صورت خطا با کد غیرصفر.</li>
+<li><a href="../commands/cargo-login.html"><code>cargo login</code></a> و <a href="../commands/cargo-logout.html"><code>cargo logout</code></a> پشتیبانی نمی‌شوند و در صورت استفاده، خطا برمی‌گردانند.</li>
+</ul>
+<p>متغیرهای محیطی زیر برای دستور اجراشده فراهم خواهند شد:</p>
+<ul>
+<li><code>CARGO</code> — مسیر فایل باینری <code>cargo</code> که دستور را اجرا می‌کند.</li>
+<li><code>CARGO_REGISTRY_INDEX_URL</code> — URL ایندکس رجیستری.</li>
+<li><code>CARGO_REGISTRY_NAME_OPT</code> — نام اختیاری رجیستری. نباید به‌عنوان کلید جست‌وجو استفاده شود.</li>
+</ul>
+<p>آرگومان‌ها به زیردستور داده خواهند شد.</p>
+<h2 id="credential-plugins"><a class="header" href="#credential-plugins">افزونه‌های اعتبارنامه</a></h2>
+<p>برای افزونه‌های credential provider که از <a href="credential-provider-protocol.html">پروتکل credential provider</a> در Cargo پیروی می‌کنند، مقدار پیکربندی باید رشته‌ای باشد که مسیر فایل اجرایی را دارد (یا نام فایل اجرایی اگر در <code>PATH</code> باشد).</p>
+<p>برای مثال، برای نصب <a href="https://crates.io/crates/cargo-credential-1password">cargo-credential-1password</a> از crates.io این کارها را انجام دهید:</p>
+<p>provider را با <code>cargo install cargo-credential-1password</code> نصب کنید</p>
+<p>در پیکربندی، به <code>registry.global-credential-providers</code> اضافه کنید (یا آن را ایجاد کنید):</p>
+<pre><code class="language-toml">[registry]
+global-credential-providers = ["cargo:token", "cargo-credential-1password --account my.1password.com"]
+</code></pre>
+<p>مقادیر در <code>global-credential-providers</code> بر اساس فاصله به مسیر و آرگومان‌های خط فرمان تقسیم می‌شوند. برای تعریف یک credential provider سراسری که مسیر یا آرگومان‌هایش فاصله دارند، از <a href="config.html#credential-alias">جدول <code>[credential-alias]</code></a> استفاده کنید.</p><nav class="page-nav"><a href="registries.html">→ رجیستری‌ها</a><a href="credential-provider-protocol.html">پروتکل Credential Provider ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,590 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>بازسازی برای بهبود پیمانه‌ای بودن و مدیریت خطا — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch12-03-improving-error-handling-and-modularity"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="refactoring-to-improve-modularity-and-error-handling"><a class="header" href="#refactoring-to-improve-modularity-and-error-handling">بازسازی برای بهبود ماژولاریت و مدیریت خطا</a></h2>
+<p>برای بهترکردن برنامه، چهار مشکل مربوط به ساختار برنامه و شیوهٔ مدیریت خطاهای احتمالی را رفع می‌کنیم. نخست اینکه تابع <code>main</code> اکنون دو کار انجام می‌دهد: آرگومان‌ها را تجزیه می‌کند و فایل‌ها را می‌خواند. با رشد برنامه، تعداد وظایف جداگانه‌ای که <code>main</code> انجام می‌دهد بیشتر می‌شود. هرچه مسئولیت‌های یک تابع بیشتر شود، استدلال دربارهٔ آن، آزمودنش و تغییر آن بدون خراب‌کردن بخش‌های دیگر دشوارتر خواهد شد. بهتر است قابلیت‌ها را جدا کنیم تا هر تابع مسئول یک کار باشد.</p>
+<p>این مسئله با مشکل دوم نیز پیوند دارد: <code>query</code> و <code>file_path</code> متغیرهای پیکربندی برنامه‌اند، اما متغیرهایی مانند <code>contents</code> منطق برنامه را اجرا می‌کنند. هرچه <code>main</code> طولانی‌تر شود، متغیرهای بیشتری باید وارد محدوده کنیم و دنبال‌کردن هدف هرکدام دشوارتر می‌شود. بهتر است متغیرهای پیکربندی را در یک ساختار گروه‌بندی کنیم تا هدفشان روشن باشد.</p>
+<p>مشکل سوم این است که هنگام شکست خواندن فایل از <code>expect</code> برای چاپ خطا استفاده کرده‌ایم، اما پیام فقط می‌گوید <code>Should have been able to read the file</code>. خواندن فایل به دلایل مختلفی شکست می‌خورد؛ ممکن است فایل وجود نداشته باشد یا مجوز بازکردنش را نداشته باشیم. در وضعیت فعلی برای همهٔ حالت‌ها یک پیام یکسان چاپ می‌کنیم که اطلاعات مفیدی به کاربر نمی‌دهد.</p>
+<p>چهارم، برای مدیریت خطا از <code>expect</code> استفاده می‌کنیم و اگر کاربر برنامه را بدون آرگومان‌های کافی اجرا کند، خطای <code>index out of bounds</code> می‌گیرد که مشکل را روشن توضیح نمی‌دهد. بهتر است همهٔ کد مدیریت خطا در یک محل باشد تا نگهدارندگان آینده برای تغییر منطق خطا فقط همان‌جا را بررسی کنند. این تمرکز همچنین کمک می‌کند پیام‌هایی معنادار برای کاربران نهایی چاپ کنیم.</p>
+<p>بیایید با بازآرایی (refactor) پروژه‌مان این چهار مشکل را برطرف کنیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="separation-of-concerns-for-binary-projects"></a></p>
+<h3 id="separating-concerns-in-binary-projects"><a class="header" href="#separating-concerns-in-binary-projects">جداسازی مسئولیت‌ها در پروژه‌های باینری</a></h3>
+<p>مشکل سازمان‌دهیِ سپردن چند وظیفه به <code>main</code> در بسیاری از پروژه‌های باینری رایج است. ازاین‌رو جامعهٔ Rust برای جداکردن مسئولیت‌های برنامه وقتی <code>main</code> بزرگ می‌شود، راهنماهایی تدوین کرده است. این فرایند گام‌های زیر را دارد:</p>
+<ul>
+<li>برنامه را به فایل‌های <em>main.rs</em> و <em>lib.rs</em> تقسیم و منطق برنامه را به <em>lib.rs</em> منتقل کنید.</li>
+<li>تا زمانی که منطق تجزیهٔ خط فرمان کوچک است، می‌تواند در تابع <code>main</code> بماند.</li>
+<li>وقتی منطق تجزیهٔ خط فرمان پیچیده می‌شود، آن را از تابع <code>main</code> به توابع یا نوع‌های دیگر منتقل کنید.</li>
+</ul>
+<p>پس از این فرایند، مسئولیت‌های باقی‌مانده در <code>main</code> باید به موارد زیر محدود شوند:</p>
+<ul>
+<li>فراخوانی منطق تجزیهٔ خط فرمان با مقادیر آرگومان‌ها</li>
+<li>تنظیم سایر پیکربندی‌ها</li>
+<li>فراخوانی تابع <code>run</code> در <em>lib.rs</em></li>
+<li>مدیریت خطا در صورت بازگرداندن خطا از <code>run</code></li>
+</ul>
+<p>این الگو دربارهٔ تفکیک دغدغه‌هاست: <em>main.rs</em> اجرای برنامه را بر عهده دارد و <em>lib.rs</em> تمام منطق کار مورد نظر را. از آنجا که نمی‌توانید تابع <code>main</code> را مستقیماً آزمایش کنید، این ساختار به شما اجازه می‌دهد با بیرون بردن تمام منطق برنامه از تابع <code>main</code>، همهٔ آن را آزمایش کنید. کدی که در تابع <code>main</code> باقی می‌ماند آن‌قدر کوچک خواهد بود که بتوان درستی‌اش را با خواندن آن بررسی کرد. بیایید با پیروی از این فرایند برنامهٔ خود را بازنویسی کنیم.</p>
+<h4 id="extracting-the-argument-parser"><a class="header" href="#extracting-the-argument-parser">استخراج تجزیه‌کنندهٔ آرگومان‌ها</a></h4>
+<p>قابلیت تجزیهٔ آرگومان‌ها را در تابعی استخراج می‌کنیم که <code>main</code> آن را فراخوانی می‌کند تا برای انتقال منطق خط فرمان به <em>src/lib.rs</em> آماده شویم. فهرست ۱۲-۵ آغاز تازهٔ <code>main</code> را نشان می‌دهد که تابع جدید <code>parse_config</code> را فراخوانی می‌کند؛ فعلاً آن را در <em>src/main.rs</em> تعریف می‌کنیم.</p>
+<figure class="listing" id="listing-12-5">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">use std::env;
+</span><span class="boring">use std::fs;
+</span><span class="boring">
+</span>fn main() {
+    let args: Vec&lt;String&gt; = env::args().collect();
+
+    let (query, file_path) = parse_config(&amp;args);
+
+    // --snip--
+<span class="boring">
+</span><span class="boring">    println!("Searching for {query}");
+</span><span class="boring">    println!("In file {file_path}");
+</span><span class="boring">
+</span><span class="boring">    let contents = fs::read_to_string(file_path)
+</span><span class="boring">        .expect("Should have been able to read the file");
+</span><span class="boring">
+</span><span class="boring">    println!("With text:\n{contents}");
+</span>}
+
+fn parse_config(args: &amp;[String]) -&gt; (&amp;str, &amp;str) {
+    let query = &amp;args[1];
+    let file_path = &amp;args[2];
+
+    (query, file_path)
+}</code></pre>
+<figcaption><a href="#listing-12-5">لیست ۱۲-۵</a>: استخراج تابع &lt;code&gt;&lt;/x-listing&gt;parse_config&lt;/code&gt; از &lt;code&gt;main&lt;/code&gt;</figcaption>
+</figure>
+<p>ما همچنان آرگومان‌های خط فرمان را به یک بردار جمع‌آوری می‌کنیم، اما به جای اینکه مقدار آرگومان در اندیس (index)۱ را به متغیر <code>query</code> و مقدار آرگومان در اندیس (index)۲ را به متغیر <code>file_path</code> در تابع <code>main</code> اختصاص دهیم، کل بردار را به تابع <code>parse_config</code> ارسال می‌کنیم. تابع <code>parse_config</code> سپس منطق مشخص می‌کند که کدام آرگومان در کدام متغیر قرار می‌گیرد و مقادیر را به تابع <code>main</code> بازمی‌گرداند. ما همچنان متغیرهای <code>query</code> و <code>file_path</code> را در <code>main</code> ایجاد می‌کنیم، اما <code>main</code> دیگر مسئول تعیین ارتباط آرگومان‌های خط فرمان و متغیرها نیست.</p>
+<p>این تغییر ممکن است برای برنامه کوچک ما زیاده‌روی به نظر برسد، اما ما در حال بازسازی کد به صورت گام‌های کوچک و تدریجی هستیم. پس از اعمال این تغییر، دوباره برنامه را اجرا کنید تا اطمینان حاصل کنید که تجزیه آرگومان همچنان کار می‌کند. بررسی مداوم پیشرفت کد کمک می‌کند تا در صورت بروز مشکلات، علت آن‌ها را سریع‌تر شناسایی کنید.</p>
+<h4 id="grouping-configuration-values"><a class="header" href="#grouping-configuration-values">گروه‌بندی مقادیر پیکربندی</a></h4>
+<p>می‌توانیم یک گام کوچک دیگر برای بهبود بیشتر تابع <code>parse_config</code> برداریم. در حال حاضر، ما یک tuple بازمی‌گردانیم، اما بلافاصله آن tuple را به قسمت‌های جداگانه تقسیم می‌کنیم. این نشانه‌ای است که شاید هنوز انتزاع درستی نداریم.</p>
+<p>نشانه دیگری که نشان می‌دهد جا برای بهبود وجود دارد، قسمت <code>config</code> در <code>parse_config</code> است، که نشان می‌دهد دو مقداری که بازمی‌گردانیم به هم مرتبط هستند و هر دو بخشی از یک مقدار پیکربندی هستند. ما در حال حاضر این معنا را در ساختار داده‌ها به جز با گروه‌بندی دو مقدار در یک tuple منتقل نمی‌کنیم؛ در عوض، این دو مقدار را در یک struct قرار می‌دهیم و به هر یک از فیلدهای struct نامی معنادار می‌دهیم. انجام این کار درک نحوه ارتباط مقادیر مختلف و هدف آن‌ها را برای نگهداری‌کنندگان آینده این کد آسان‌تر می‌کند.</p>
+<p>لیست ۱۲-۶ بهبودهای تابع <code>parse_config</code> را نشان می‌دهد.</p>
+<figure class="listing" id="listing-12-6">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust should_panic noplayground"><span class="boring">use std::env;
+</span><span class="boring">use std::fs;
+</span><span class="boring">
+</span>fn main() {
+    let args: Vec&lt;String&gt; = env::args().collect();
+
+    let config = parse_config(&amp;args);
+
+    println!("Searching for {}", config.query);
+    println!("In file {}", config.file_path);
+
+    let contents = fs::read_to_string(config.file_path)
+        .expect("Should have been able to read the file");
+
+    // --snip--
+<span class="boring">
+</span><span class="boring">    println!("With text:\n{contents}");
+</span>}
+
+struct Config {
+    query: String,
+    file_path: String,
+}
+
+fn parse_config(args: &amp;[String]) -&gt; Config {
+    let query = args[1].clone();
+    let file_path = args[2].clone();
+
+    Config { query, file_path }
+}</code></pre>
+<figcaption><a href="#listing-12-6">لیست ۱۲-۶</a>: بازسازی &lt;code&gt;&lt;/x-listing&gt;parse_config&lt;/code&gt; برای بازگرداندن یک نمونه از struct &lt;code&gt;Config&lt;/code&gt;</figcaption>
+</figure>
+<p>یک struct به نام <code>Config</code> اضافه کرده‌ایم که فیلدهایی به نام <code>query</code> و <code>file_path</code> دارد. امضای <code>parse_config</code> اکنون نشان می‌دهد که یک مقدار <code>Config</code> برمی‌گرداند. در بدنهٔ <code>parse_config</code>، جایی که قبلاً slice‌های رشته‌ای را که به مقادیر <code>String</code> در <code>args</code> ارجاع می‌دادند برمی‌گرداندیم، اکنون <code>Config</code> را طوری تعریف می‌کنیم که مقادیر <code>String</code> دارای مالک را در خود داشته باشد. متغیر <code>args</code> در <code>main</code> مالک مقادیر آرگومان‌هاست و فقط به تابع <code>parse_config</code> اجازه می‌دهد آن‌ها را قرض بگیرد؛ یعنی اگر <code>Config</code> بخواهد مالکیت مقادیر <code>args</code> را بگیرد، قواعد قرض‌گیری Rust را نقض می‌کنیم.</p>
+<p>چندین روش برای مدیریت داده‌های <code>String</code> وجود دارد؛ ساده‌ترین و شاید ناکارآمدترین روش، فراخوانی متد <code>clone</code> روی مقادیر است. این کار یک کپی کامل از داده‌ها برای نمونه <code>Config</code> ایجاد می‌کند که مالک آن است. این روش زمان و حافظه بیشتری نسبت به ذخیره یک مرجع به داده‌ها نیاز دارد. با این حال، کپی کردن داده‌ها باعث می‌شود که کد ما بسیار ساده شود زیرا نیازی به مدیریت طول عمر مراجع نداریم؛ در این شرایط، از دست دادن کمی کارایی برای دستیابی به سادگی ارزشمند است.</p>
+<section class="note" aria-role="note">
+<h3 id="the-trade-offs-of-using-clone"><a class="header" href="#the-trade-offs-of-using-clone">هزینه‌ها و مزایای استفاده از <code>clone</code></a></h3>
+<p>در بین بسیاری از برنامه‌نویسان Rust، تمایلی به استفاده از <code>clone</code> برای رفع مشکلات مالکیت به دلیل هزینه اجرای آن وجود دارد. در <a href="ch13-00-functional-features.html">فصل ۱۳</a><!-- ignore -->، یاد خواهید گرفت که چگونه در این نوع موقعیت‌ها از روش‌های کارآمدتر استفاده کنید. اما در حال حاضر، کپی کردن چند رشته برای ادامه پیشرفت اشکالی ندارد زیرا این کپی‌ها فقط یک‌بار انجام می‌شوند و مسیر فایل و رشته جستجوی شما بسیار کوچک هستند. بهتر است یک برنامه کارا که کمی ناکارآمد است داشته باشید تا اینکه در اولین تلاش خود برای نوشتن کد، بهینه‌سازی بیش از حد انجام دهید. با تجربه بیشتر در Rust، شروع با راه‌حل کارآمدتر آسان‌تر خواهد بود، اما در حال حاضر استفاده از <code>clone</code> کاملاً قابل قبول است.</p>
+</section>
+<p>ما تابع <code>main</code> را به‌روزرسانی کردیم تا نمونه‌ای از <code>Config</code> که توسط <code>parse_config</code> بازگردانده می‌شود را در یک متغیر به نام <code>config</code> قرار دهد، و کدی که قبلاً از متغیرهای جداگانه <code>query</code> و <code>file_path</code> استفاده می‌کرد، اکنون از فیلدهای موجود در struct <code>Config</code> استفاده می‌کند.</p>
+<p>اکنون کد ما به‌وضوح نشان می‌دهد که <code>query</code> و <code>file_path</code> به هم مرتبط هستند و هدف آن‌ها تنظیم نحوه کار برنامه است. هر کدی که از این مقادیر استفاده می‌کند می‌داند که باید آن‌ها را در نمونه <code>config</code> در فیلدهایی که نام آن‌ها برای هدفشان انتخاب شده است، پیدا کند.</p>
+<h4 id="creating-a-constructor-for-config"><a class="header" href="#creating-a-constructor-for-config">ایجاد سازنده برای <code>Config</code></a></h4>
+<p>تا اینجا، منطق مسئول تجزیه آرگومان‌های خط فرمان را از <code>main</code> استخراج کرده و در تابع <code>parse_config</code> قرار داده‌ایم. این کار به ما کمک کرد ببینیم که مقادیر <code>query</code> و <code>file_path</code> به هم مرتبط هستند و این رابطه باید در کد ما منتقل شود. سپس یک struct به نام <code>Config</code> اضافه کردیم تا هدف مشترک <code>query</code> و <code>file_path</code> را نام‌گذاری کنیم و بتوانیم نام مقادیر را به‌عنوان فیلدهای struct از تابع <code>parse_config</code> بازگردانیم.</p>
+<p>حالا که هدف تابع <code>parse_config</code> ایجاد یک نمونه از <code>Config</code> است، می‌توانیم <code>parse_config</code> را از یک تابع معمولی به یک تابع با نام <code>new</code> تغییر دهیم که به struct <code>Config</code> مرتبط است. این تغییر کد را به‌صورت idiomatic‌تر می‌کند. ما می‌توانیم نمونه‌هایی از انواع موجود در کتابخانه استاندارد، مانند <code>String</code>، را با فراخوانی <code>String::new</code> ایجاد کنیم. به همین ترتیب، با تغییر <code>parse_config</code> به تابع <code>new</code> مرتبط با <code>Config</code>، می‌توانیم نمونه‌هایی از <code>Config</code> را با فراخوانی <code>Config::new</code> ایجاد کنیم. لیست ۱۲-۷ تغییرات لازم را نشان می‌دهد.</p>
+<figure class="listing" id="listing-12-7">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust should_panic noplayground"><span class="boring">use std::env;
+</span><span class="boring">use std::fs;
+</span><span class="boring">
+</span>fn main() {
+    let args: Vec&lt;String&gt; = env::args().collect();
+
+    let config = Config::new(&amp;args);
+<span class="boring">
+</span><span class="boring">    println!("Searching for {}", config.query);
+</span><span class="boring">    println!("In file {}", config.file_path);
+</span><span class="boring">
+</span><span class="boring">    let contents = fs::read_to_string(config.file_path)
+</span><span class="boring">        .expect("Should have been able to read the file");
+</span><span class="boring">
+</span><span class="boring">    println!("With text:\n{contents}");
+</span>
+    // --snip--
+}
+
+// --snip--
+
+<span class="boring">struct Config {
+</span><span class="boring">    query: String,
+</span><span class="boring">    file_path: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Config {
+    fn new(args: &amp;[String]) -&gt; Config {
+        let query = args[1].clone();
+        let file_path = args[2].clone();
+
+        Config { query, file_path }
+    }
+}</code></pre>
+<figcaption><a href="#listing-12-7">لیست ۱۲-۷</a>: تغییر &lt;code&gt;&lt;/x-listing&gt;parse_config&lt;/code&gt; به &lt;code&gt;Config::new&lt;/code&gt;</figcaption>
+</figure>
+<p>ما تابع <code>main</code> را که در آن <code>parse_config</code> را فراخوانی می‌کردیم به‌روزرسانی کرده‌ایم تا به‌جای آن <code>Config::new</code> را فراخوانی کند. نام <code>parse_config</code> را به <code>new</code> تغییر داده و آن را در یک بلوک <code>impl</code> قرار داده‌ایم که تابع <code>new</code> را به <code>Config</code> مرتبط می‌کند. کد را دوباره کامپایل کنید تا مطمئن شوید که کار می‌کند.</p>
+<h3 id="fixing-the-error-handling"><a class="header" href="#fixing-the-error-handling">رفع مشکلات مدیریت خطا</a></h3>
+<p>حالا روی رفع مشکلات مدیریت خطا کار می‌کنیم. به خاطر بیاورید که تلاش برای دسترسی به مقادیر موجود در بردار <code>args</code> در اندیس (index)۱ یا ۲ باعث می‌شود برنامه در صورت داشتن کمتر از سه آیتم، دچار وحشت شود. برنامه را بدون هیچ آرگومانی اجرا کنید؛ این حالت به شکل زیر خواهد بود:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling minigrep v0.1.0 (file:///projects/minigrep)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.0s
+     Running `target/debug/minigrep`
+
+thread 'main' (6023615) panicked at src/main.rs:27:21:
+index out of bounds: the len is 1 but the index is 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</code></pre>
+<p>خط <code>index out of bounds: the len is 1 but the index is 1</code> یک پیام خطا است که برای برنامه‌نویسان در نظر گرفته شده است. این پیام به کاربران نهایی کمکی نمی‌کند تا بفهمند باید چه کار کنند. حالا این مشکل را رفع می‌کنیم.</p>
+<h4 id="improving-the-error-message"><a class="header" href="#improving-the-error-message">بهبود پیام خطا</a></h4>
+<p>در لیست ۱۲-۸، یک بررسی در تابع <code>new</code> اضافه می‌کنیم که بررسی می‌کند آیا آرایه به‌اندازه کافی طولانی است تا بتوان به اندیس‌های ۱ و ۲ دسترسی داشت. اگر طول آرایه کافی نباشد، برنامه دچار وحشت می‌شود و یک پیام خطای بهتر نمایش می‌دهد.</p>
+<figure class="listing" id="listing-12-8">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">use std::env;
+</span><span class="boring">use std::fs;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let args: Vec&lt;String&gt; = env::args().collect();
+</span><span class="boring">
+</span><span class="boring">    let config = Config::new(&amp;args);
+</span><span class="boring">
+</span><span class="boring">    println!("Searching for {}", config.query);
+</span><span class="boring">    println!("In file {}", config.file_path);
+</span><span class="boring">
+</span><span class="boring">    let contents = fs::read_to_string(config.file_path)
+</span><span class="boring">        .expect("Should have been able to read the file");
+</span><span class="boring">
+</span><span class="boring">    println!("With text:\n{contents}");
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct Config {
+</span><span class="boring">    query: String,
+</span><span class="boring">    file_path: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Config {
+</span>    // --snip--
+    fn new(args: &amp;[String]) -&gt; Config {
+        if args.len() &lt; 3 {
+            panic!("not enough arguments");
+        }
+        // --snip--
+<span class="boring">
+</span><span class="boring">        let query = args[1].clone();
+</span><span class="boring">        let file_path = args[2].clone();
+</span><span class="boring">
+</span><span class="boring">        Config { query, file_path }
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-12-8">لیست ۱۲-۸</a>: افزودن بررسی برای تعداد آرگومان‌ها</figcaption>
+</figure>
+<p>این کد شبیه به <a href="ch09-03-to-panic-or-not-to-panic.html#creating-custom-types-for-validation">تابع <code>Guess::new</code> که در لیست ۹-۱۳ نوشتیم</a><!-- ignore --> است، جایی که وقتی آرگومان <code>value</code> خارج از محدوده مقادیر معتبر بود، <code>panic!</code> فراخوانی کردیم. به جای بررسی محدوده مقادیر، در اینجا بررسی می‌کنیم که طول <code>args</code> حداقل برابر با <code>3</code> باشد و بقیه تابع می‌تواند با فرض اینکه این شرط برقرار شده است، عمل کند. اگر <code>args</code> کمتر از سه آیتم داشته باشد، این شرط <code>true</code> خواهد بود و ما ماکرو <code>panic!</code> را برای خاتمه برنامه بلافاصله فراخوانی می‌کنیم.</p>
+<p>با این چند خط اضافی در <code>new</code>، بیایید دوباره برنامه را بدون هیچ آرگومانی اجرا کنیم تا ببینیم اکنون پیام خطا چگونه است:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling minigrep v0.1.0 (file:///projects/minigrep)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.0s
+     Running `target/debug/minigrep`
+
+thread 'main' (6023776) panicked at src/main.rs:26:13:
+not enough arguments
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</code></pre>
+<p>این خروجی بهتر است: اکنون یک پیام خطای منطقی داریم. با این حال، هنوز اطلاعات اضافی داریم که نمی‌خواهیم به کاربران خود ارائه دهیم. شاید تکنیکی که در لیست ۹-۱۳ استفاده کردیم بهترین گزینه برای اینجا نباشد: یک فراخوانی به <code>panic!</code> برای مشکل برنامه‌نویسی مناسب‌تر است تا یک مشکل استفاده، <a href="ch09-03-to-panic-or-not-to-panic.html#guidelines-for-error-handling">همان‌طور که در فصل ۹ بحث شد</a><!-- ignore -->. در عوض، از تکنیک دیگری که در فصل ۹ یاد گرفتید استفاده می‌کنیم—<a href="ch09-02-recoverable-errors-with-result.html">بازگرداندن یک <code>Result</code></a><!-- ignore --> که نشان‌دهنده موفقیت یا خطا است.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="returning-a-result-from-new-instead-of-calling-panic"></a></p>
+<h4 id="returning-a-result-instead-of-calling-panic"><a class="header" href="#returning-a-result-instead-of-calling-panic">بازگرداندن یک <code>Result</code> به جای فراخوانی <code>panic!</code></a></h4>
+<p>ما می‌توانیم به جای آن، یک مقدار <code>Result</code> بازگردانیم که در صورت موفقیت شامل یک نمونه از <code>Config</code> باشد و در صورت خطا مشکل را توصیف کند. همچنین قصد داریم نام تابع را از <code>new</code> به <code>build</code> تغییر دهیم زیرا بسیاری از برنامه‌نویسان انتظار دارند که توابع <code>new</code> هرگز شکست نخورند. وقتی <code>Config::build</code> با <code>main</code> ارتباط برقرار می‌کند، می‌توانیم از نوع <code>Result</code> برای اعلام مشکل استفاده کنیم. سپس می‌توانیم <code>main</code> را تغییر دهیم تا یک واریانت <code>Err</code> را به یک پیام خطای عملی‌تر برای کاربران خود تبدیل کنیم، بدون متن‌های اضافی مربوط به <code>thread 'main'</code> و <code>RUST_BACKTRACE</code> که یک فراخوانی به <code>panic!</code> ایجاد می‌کند.</p>
+<p>لیست ۱۲-۹ تغییراتی را که باید در مقدار بازگشتی تابع که اکنون آن را <code>Config::build</code> می‌نامیم و بدنه تابع برای بازگرداندن یک <code>Result</code> ایجاد کنیم، نشان می‌دهد. توجه داشته باشید که این کد تا زمانی که <code>main</code> را نیز به‌روزرسانی نکنیم کامپایل نمی‌شود، که این کار را در لیست بعدی انجام خواهیم داد.</p>
+<figure class="listing" id="listing-12-9">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">use std::env;
+</span><span class="boring">use std::fs;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let args: Vec&lt;String&gt; = env::args().collect();
+</span><span class="boring">
+</span><span class="boring">    let config = Config::new(&amp;args);
+</span><span class="boring">
+</span><span class="boring">    println!("Searching for {}", config.query);
+</span><span class="boring">    println!("In file {}", config.file_path);
+</span><span class="boring">
+</span><span class="boring">    let contents = fs::read_to_string(config.file_path)
+</span><span class="boring">        .expect("Should have been able to read the file");
+</span><span class="boring">
+</span><span class="boring">    println!("With text:\n{contents}");
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct Config {
+</span><span class="boring">    query: String,
+</span><span class="boring">    file_path: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Config {
+    fn build(args: &amp;[String]) -&gt; Result&lt;Config, &amp;'static str&gt; {
+        if args.len() &lt; 3 {
+            return Err("not enough arguments");
+        }
+
+        let query = args[1].clone();
+        let file_path = args[2].clone();
+
+        Ok(Config { query, file_path })
+    }
+}</code></pre>
+<figcaption><a href="#listing-12-9">لیست ۱۲-۹</a>: بازگرداندن یک &lt;code&gt;&lt;/x-listing&gt;Result&lt;/code&gt; از &lt;code&gt;Config::build&lt;/code&gt;</figcaption>
+</figure>
+<p>تابع <code>build</code> ما اکنون یک مقدار <code>Result</code> را بازمی‌گرداند که در صورت موفقیت شامل یک نمونه از <code>Config</code> و در صورت خطا یک مقدار رشته‌ای ثابت (<code>string literal</code>) است. مقادیر خطای ما همیشه رشته‌های ثابت با طول عمر <code>'static</code> خواهند بود.</p>
+<p>ما دو تغییر در بدنه تابع ایجاد کرده‌ایم: به جای فراخوانی <code>panic!</code> زمانی که کاربر آرگومان‌های کافی ارائه نمی‌دهد، اکنون یک مقدار <code>Err</code> بازمی‌گردانیم و مقدار بازگشتی <code>Config</code> را در یک <code>Ok</code> قرار داده‌ایم. این تغییرات باعث می‌شوند تابع با امضای نوع جدید خود سازگار باشد.</p>
+<p>بازگرداندن مقدار <code>Err</code> از <code>Config::build</code> به تابع <code>main</code> اجازه می‌دهد که مقدار <code>Result</code> بازگشتی از تابع <code>build</code> را مدیریت کرده و در صورت بروز خطا، فرآیند را به شکلی تمیزتر خاتمه دهد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="calling-confignew-and-handling-errors"></a></p>
+<h4 id="calling-configbuild-and-handling-errors"><a class="header" href="#calling-configbuild-and-handling-errors">فراخوانی <code>Config::build</code> و مدیریت خطاها</a></h4>
+<p>برای مدیریت حالت خطا و چاپ یک پیام دوستانه برای کاربر، باید تابع <code>main</code> را به‌روزرسانی کنیم تا مقدار <code>Result</code> بازگردانده‌شده توسط <code>Config::build</code> را مدیریت کند. این کار در لیست ۱۲-۱۰ نشان داده شده است. همچنین مسئولیت خاتمه دادن ابزار خط فرمان با کد خطای غیر صفر را از <code>panic!</code> گرفته و به صورت دستی پیاده‌سازی خواهیم کرد. کد خروجی غیر صفر به عنوان یک قرارداد برای اعلام وضعیت خطا به فرآیندی که برنامه ما را فراخوانده است، استفاده می‌شود.</p>
+<figure class="listing" id="listing-12-10">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">use std::env;
+</span><span class="boring">use std::fs;
+</span>use std::process;
+
+fn main() {
+    let args: Vec&lt;String&gt; = env::args().collect();
+
+    let config = Config::build(&amp;args).unwrap_or_else(|err| {
+        println!("Problem parsing arguments: {err}");
+        process::exit(1);
+    });
+
+    // --snip--
+<span class="boring">
+</span><span class="boring">    println!("Searching for {}", config.query);
+</span><span class="boring">    println!("In file {}", config.file_path);
+</span><span class="boring">
+</span><span class="boring">    let contents = fs::read_to_string(config.file_path)
+</span><span class="boring">        .expect("Should have been able to read the file");
+</span><span class="boring">
+</span><span class="boring">    println!("With text:\n{contents}");
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct Config {
+</span><span class="boring">    query: String,
+</span><span class="boring">    file_path: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Config {
+</span><span class="boring">    fn build(args: &amp;[String]) -&gt; Result&lt;Config, &amp;'static str&gt; {
+</span><span class="boring">        if args.len() &lt; 3 {
+</span><span class="boring">            return Err("not enough arguments");
+</span><span class="boring">        }
+</span><span class="boring">
+</span><span class="boring">        let query = args[1].clone();
+</span><span class="boring">        let file_path = args[2].clone();
+</span><span class="boring">
+</span><span class="boring">        Ok(Config { query, file_path })
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-12-10">لیست ۱۲-۱۰</a>: خروج با کد خطا در صورت شکست در ساخت یک &lt;code&gt;&lt;/x-listing&gt;Config&lt;/code&gt;</figcaption>
+</figure>
+<p>در این فهرست از متدی استفاده کرده‌ایم که هنوز به‌تفصیل بررسی نکرده‌ایم: <code>unwrap_or_else</code>، که کتابخانهٔ استاندارد آن را روی <code>Result&lt;T, E&gt;</code> تعریف کرده است. استفاده از <code>unwrap_or_else</code> به ما امکان می‌دهد مدیریت خطای سفارشی‌ای تعریف کنیم که از <code>panic!</code> استفاده نمی‌کند. اگر <code>Result</code> مقدار <code>Ok</code> باشد، رفتار این متد شبیه <code>unwrap</code> است: مقدار درونی‌ای را که <code>Ok</code> در بر گرفته برمی‌گرداند. اما اگر مقدار <code>Err</code> باشد، این متد کد درون closure را فراخوانی می‌کند؛ closure یک تابع ناشناس است که خودمان تعریف می‌کنیم و به‌عنوان آرگومان به <code>unwrap_or_else</code> می‌دهیم. closureها را در <a href="ch13-00-functional-features.html">فصل ۱۳</a><!-- ignore --> با جزئیات بیشتری بررسی می‌کنیم. فعلاً فقط کافی است بدانید که <code>unwrap_or_else</code> مقدار درونی <code>Err</code> را، که در این مورد رشتهٔ ایستای <code>"not enough arguments"</code> است که در فهرست ۱۲-۹ اضافه کردیم، از طریق آرگومان <code>err</code> که میان دو خط عمودی قرار دارد به closure ما می‌دهد. سپس کد درون closure می‌تواند هنگام اجرا از مقدار <code>err</code> استفاده کند.</p>
+<p>ما همچنین یک خط جدید <code>use</code> اضافه کرده‌ایم تا <code>process</code> را از کتابخانه استاندارد به محدوده بیاوریم. کدی که در حالت خطا اجرا می‌شود تنها شامل دو خط است: ابتدا مقدار <code>err</code> را چاپ می‌کنیم و سپس <code>process::exit</code> را فراخوانی می‌کنیم. تابع <code>process::exit</code> بلافاصله برنامه را متوقف کرده و عددی که به‌عنوان کد وضعیت خروج ارسال شده است را بازمی‌گرداند. این روش شبیه مدیریت مبتنی بر <code>panic!</code> است که در لیستینگ 12-8 استفاده کردیم، اما دیگر خروجی اضافی تولید نمی‌شود. حالا آن را آزمایش کنیم:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling minigrep v0.1.0 (file:///projects/minigrep)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.48s
+     Running `target/debug/minigrep`
+Problem parsing arguments: not enough arguments
+</code></pre>
+<p>عالی! این خروجی برای کاربران ما بسیار دوستانه‌تر است.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="extracting-logic-from-the-main-function"></a></p>
+<h3 id="extracting-logic-from-main"><a class="header" href="#extracting-logic-from-main">استخراج منطق از <code>main</code></a></h3>
+<p>اکنون که بازسازی تجزیهٔ پیکربندی تمام شده، به منطق برنامه می‌پردازیم. همان‌طور که در <a href="#separation-of-concerns-for-binary-projects">«جداسازی مسئولیت‌ها در پروژه‌های باینری»</a><!-- ignore --> گفتیم، تابعی به نام <code>run</code> استخراج می‌کنیم که تمام منطق فعلی <code>main</code>، به‌جز تنظیم پیکربندی و مدیریت خطا، را در خود دارد. در پایان، <code>main</code> کوتاه و با نگاه‌کردن قابل بررسی است و می‌توانیم برای بقیهٔ منطق آزمون بنویسیم.</p>
+<p>فهرست ۱۲-۱۱ تابع استخراج‌شدهٔ <code>run</code> را نشان می‌دهد. فعلاً فقط همین بهبود کوچک و تدریجی را انجام می‌دهیم و تابع هنوز در <em>src/main.rs</em> تعریف می‌شود.</p>
+<figure class="listing" id="listing-12-11">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">use std::env;
+</span><span class="boring">use std::fs;
+</span><span class="boring">use std::process;
+</span><span class="boring">
+</span>fn main() {
+    // --snip--
+
+<span class="boring">    let args: Vec&lt;String&gt; = env::args().collect();
+</span><span class="boring">
+</span><span class="boring">    let config = Config::build(&amp;args).unwrap_or_else(|err| {
+</span><span class="boring">        println!("Problem parsing arguments: {err}");
+</span><span class="boring">        process::exit(1);
+</span><span class="boring">    });
+</span><span class="boring">
+</span>    println!("Searching for {}", config.query);
+    println!("In file {}", config.file_path);
+
+    run(config);
+}
+
+fn run(config: Config) {
+    let contents = fs::read_to_string(config.file_path)
+        .expect("Should have been able to read the file");
+
+    println!("With text:\n{contents}");
+}
+
+// --snip--
+<span class="boring">
+</span><span class="boring">struct Config {
+</span><span class="boring">    query: String,
+</span><span class="boring">    file_path: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Config {
+</span><span class="boring">    fn build(args: &amp;[String]) -&gt; Result&lt;Config, &amp;'static str&gt; {
+</span><span class="boring">        if args.len() &lt; 3 {
+</span><span class="boring">            return Err("not enough arguments");
+</span><span class="boring">        }
+</span><span class="boring">
+</span><span class="boring">        let query = args[1].clone();
+</span><span class="boring">        let file_path = args[2].clone();
+</span><span class="boring">
+</span><span class="boring">        Ok(Config { query, file_path })
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-12-11">لیست ۱۲-۱۱</a>: استخراج تابع &lt;code&gt;&lt;/x-listing&gt;run&lt;/code&gt; از &lt;code&gt;main&lt;/code&gt;</figcaption>
+</figure>
+<p>تابع <code>run</code> اکنون شامل تمام منطق باقی‌مانده از <code>main</code> است، از خواندن فایل به بعد. تابع <code>run</code> نمونهٔ <code>Config</code> را به‌عنوان آرگومان می‌گیرد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="returning-errors-from-the-run-function"></a></p>
+<h4 id="returning-errors-from-run"><a class="header" href="#returning-errors-from-run">بازگرداندن خطاها از تابع <code>run</code></a></h4>
+<p>اکنون که منطق باقی‌مانده برنامه را در تابع <code>run</code> جدا کرده‌ایم، می‌توانیم مانند <code>Config::build</code> در لیستینگ 12-9، مدیریت خطا را بهبود بخشیم. به جای اجازه دادن به برنامه برای اجرای <code>panic</code> با فراخوانی <code>expect</code>، تابع <code>run</code> در صورت بروز مشکل یک <code>Result&lt;T, E&gt;</code> بازمی‌گرداند. این رویکرد به ما امکان می‌دهد منطق مرتبط با مدیریت خطا را به صورت کاربرپسندانه‌ای در تابع <code>main</code> متمرکز کنیم. تغییرات لازم برای امضا و بدنه تابع <code>run</code> در لیستینگ 12-12 نشان داده شده است:</p>
+<figure class="listing" id="listing-12-12">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">use std::env;
+</span><span class="boring">use std::fs;
+</span><span class="boring">use std::process;
+</span>use std::error::Error;
+
+// --snip--
+
+<span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let args: Vec&lt;String&gt; = env::args().collect();
+</span><span class="boring">
+</span><span class="boring">    let config = Config::build(&amp;args).unwrap_or_else(|err| {
+</span><span class="boring">        println!("Problem parsing arguments: {err}");
+</span><span class="boring">        process::exit(1);
+</span><span class="boring">    });
+</span><span class="boring">
+</span><span class="boring">    println!("Searching for {}", config.query);
+</span><span class="boring">    println!("In file {}", config.file_path);
+</span><span class="boring">
+</span><span class="boring">    run(config);
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn run(config: Config) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+    let contents = fs::read_to_string(config.file_path)?;
+
+    println!("With text:\n{contents}");
+
+    Ok(())
+}
+<span class="boring">
+</span><span class="boring">struct Config {
+</span><span class="boring">    query: String,
+</span><span class="boring">    file_path: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Config {
+</span><span class="boring">    fn build(args: &amp;[String]) -&gt; Result&lt;Config, &amp;'static str&gt; {
+</span><span class="boring">        if args.len() &lt; 3 {
+</span><span class="boring">            return Err("not enough arguments");
+</span><span class="boring">        }
+</span><span class="boring">
+</span><span class="boring">        let query = args[1].clone();
+</span><span class="boring">        let file_path = args[2].clone();
+</span><span class="boring">
+</span><span class="boring">        Ok(Config { query, file_path })
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-12-12">لیست ۱۲-۱۲</a>: تغییر تابع &lt;code&gt;&lt;/x-listing&gt;run&lt;/code&gt; برای بازگرداندن &lt;code&gt;Result&lt;/code&gt;</figcaption>
+</figure>
+<p>در اینجا سه تغییر مهم ایجاد کرده‌ایم. نخست، نوع بازگشتی تابع <code>run</code> را به <code>Result&lt;(), Box&lt;dyn Error&gt;&gt;</code> تغییر دادیم. این تابع قبلاً نوع واحد (unit) یعنی <code>()</code> را برمی‌گرداند و آن را به‌عنوان مقدار بازگشتی در حالت <code>Ok</code> حفظ می‌کنیم.</p>
+<p>برای نوع خطا از trait object به نام <code>Box&lt;dyn Error&gt;</code> استفاده کرده‌ایم (و <code>std::error::Error</code> را با یک دستور <code>use</code> در بالای فایل وارد دامنه کرده‌ایم). trait objectها را در <a href="ch18-00-oop.html">فصل ۱۸</a><!-- ignore --> بررسی می‌کنیم. فعلاً فقط بدانید که <code>Box&lt;dyn Error&gt;</code> یعنی تابع نوعی را برمی‌گرداند که trait به نام <code>Error</code> را پیاده‌سازی می‌کند، اما لازم نیست مشخص کنیم مقدار بازگشتی دقیقاً از چه نوعی خواهد بود. این به ما انعطاف می‌دهد تا در حالت‌های خطای مختلف، مقادیر خطایی را برگردانیم که ممکن است از انواع متفاوتی باشند. کلیدواژهٔ <code>dyn</code> مخفف <em>dynamic</em> (پویا) است.</p>
+<p>دوم، فراخوانی <code>expect</code> را به نفع عملگر <code>?</code> حذف کرده‌ایم، همان‌طور که در <a href="ch09-02-recoverable-errors-with-result.html#a-shortcut-for-propagating-errors-the--operator">فصل ۹</a><!-- ignore --> دربارهٔ آن صحبت کردیم. به‌جای <code>panic!</code> در صورت بروز خطا، <code>?</code> مقدار خطا را از تابع جاری برمی‌گرداند تا فراخواننده آن را مدیریت کند.</p>
+<p>سوم، تابع <code>run</code> اکنون در حالت موفقیت یک مقدار <code>Ok</code> برمی‌گرداند. نوع موفقیت تابع <code>run</code> را در امضا <code>()</code> تعریف کرده‌ایم، یعنی باید مقدار نوع واحد را درون مقدار <code>Ok</code> قرار دهیم. این نحو <code>Ok(())</code> ممکن است در ابتدا کمی عجیب به نظر برسد. اما استفاده از <code>()</code> به این شکل روش مرسوم برای نشان دادن این است که <code>run</code> را فقط به‌خاطر اثرهای جانبی‌اش فراخوانی می‌کنیم؛ مقداری برنمی‌گرداند که به آن نیاز داشته باشیم.</p>
+<p>وقتی این کد را اجرا کنید، کامپایل می‌شود اما یک هشدار نمایش می‌دهد:</p>
+<pre><code class="language-console">$ cargo run -- the poem.txt
+   Compiling minigrep v0.1.0 (file:///projects/minigrep)
+warning: unused `Result` that must be used
+  --&gt; src/main.rs:19:5
+   |
+19 |     run(config);
+   |     ^^^^^^^^^^^
+   |
+   = note: this `Result` may be an `Err` variant, which should be handled
+   = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+   |
+19 |     let _ = run(config);
+   |     +++++++
+
+warning: `minigrep` (bin "minigrep") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.71s
+     Running `target/debug/minigrep the poem.txt`
+Searching for the
+In file poem.txt
+With text:
+I'm nobody! Who are you?
+Are you nobody, too?
+Then there's a pair of us - don't tell!
+They'd banish us, you know.
+
+How dreary to be somebody!
+How public, like a frog
+To tell your name the livelong day
+To an admiring bog!
+
+</code></pre>
+<p>Rust به ما می‌گوید که کد ما مقدار <code>Result</code> را نادیده گرفته است و مقدار <code>Result</code> ممکن است نشان دهد که خطایی رخ داده است. اما ما بررسی نمی‌کنیم که خطایی رخ داده یا نه، و کامپایلر به ما یادآوری می‌کند که احتمالاً قصد داشتیم اینجا کدی برای مدیریت خطا داشته باشیم! بیایید همین حالا این مشکل را برطرف کنیم.</p>
+<h4 id="handling-errors-returned-from-run-in-main"><a class="header" href="#handling-errors-returned-from-run-in-main">مدیریت خطاهای بازگردانده‌شده از <code>run</code> در <code>main</code></a></h4>
+<p>ما خطاها را بررسی کرده و با استفاده از تکنیکی مشابه آنچه در <code>Config::build</code> در لیست ۱۲-۱۰ استفاده کردیم مدیریت می‌کنیم، اما با یک تفاوت کوچک:</p>
+<p><span class="filename">نام فایل: src/main.rs</span></p>
+<pre><code class="language-rust ignore"><span class="boring">use std::env;
+</span><span class="boring">use std::error::Error;
+</span><span class="boring">use std::fs;
+</span><span class="boring">use std::process;
+</span><span class="boring">
+</span>fn main() {
+    // --snip--
+
+<span class="boring">    let args: Vec&lt;String&gt; = env::args().collect();
+</span><span class="boring">
+</span><span class="boring">    let config = Config::build(&amp;args).unwrap_or_else(|err| {
+</span><span class="boring">        println!("Problem parsing arguments: {err}");
+</span><span class="boring">        process::exit(1);
+</span><span class="boring">    });
+</span><span class="boring">
+</span>    println!("Searching for {}", config.query);
+    println!("In file {}", config.file_path);
+
+    if let Err(e) = run(config) {
+        println!("Application error: {e}");
+        process::exit(1);
+    }
+}
+<span class="boring">
+</span><span class="boring">fn run(config: Config) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+</span><span class="boring">    let contents = fs::read_to_string(config.file_path)?;
+</span><span class="boring">
+</span><span class="boring">    println!("With text:\n{contents}");
+</span><span class="boring">
+</span><span class="boring">    Ok(())
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct Config {
+</span><span class="boring">    query: String,
+</span><span class="boring">    file_path: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Config {
+</span><span class="boring">    fn build(args: &amp;[String]) -&gt; Result&lt;Config, &amp;'static str&gt; {
+</span><span class="boring">        if args.len() &lt; 3 {
+</span><span class="boring">            return Err("not enough arguments");
+</span><span class="boring">        }
+</span><span class="boring">
+</span><span class="boring">        let query = args[1].clone();
+</span><span class="boring">        let file_path = args[2].clone();
+</span><span class="boring">
+</span><span class="boring">        Ok(Config { query, file_path })
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<p>ما به جای <code>unwrap_or_else</code> از <code>if let</code> استفاده می‌کنیم تا بررسی کنیم آیا <code>run</code> یک مقدار <code>Err</code> بازمی‌گرداند یا خیر و در صورت وقوع، <code>process::exit(1)</code> را فراخوانی کنیم. تابع <code>run</code> مقداری بازنمی‌گرداند که بخواهیم به همان شیوه‌ای که <code>Config::build</code> نمونه <code>Config</code> را بازمی‌گرداند آن را <code>unwrap</code> کنیم. از آنجایی که <code>run</code> در صورت موفقیت مقدار <code>()</code> بازمی‌گرداند، ما فقط به شناسایی یک خطا اهمیت می‌دهیم، بنابراین نیازی به <code>unwrap_or_else</code> برای بازگرداندن مقدار آن نداریم، که تنها <code>()</code> خواهد بود.</p>
+<p>بدنه‌های <code>if let</code> و <code>unwrap_or_else</code> در هر دو حالت یکسان هستند: ما خطا را چاپ کرده و خارج می‌شویم.</p>
+<h3 id="splitting-code-into-a-library-crate"><a class="header" href="#splitting-code-into-a-library-crate">تقسیم کد در یک crate کتابخانه‌ای</a></h3>
+<p>پروژهٔ <code>minigrep</code> تا اینجا خوب پیش رفته است! اکنون فایل <em>src/main.rs</em> را تقسیم می‌کنیم و بخشی از کد را در <em>src/lib.rs</em> قرار می‌دهیم. بدین ترتیب هم می‌توانیم کد را آزمایش کنیم و هم فایل <em>src/main.rs</em> مسئولیت‌های کمتری خواهد داشت.</p>
+<p>بیایید کدی را که مسئول جست‌وجوی متن است در <em>src/lib.rs</em> تعریف کنیم، نه در <em>src/main.rs</em>؛ این کار به ما (یا هر کس دیگری که از کتابخانهٔ <code>minigrep</code> ما استفاده می‌کند) اجازه می‌دهد تابع جست‌وجو را از زمینه‌های بیشتری نسبت به فایل اجرایی <code>minigrep</code> فراخوانی کنیم.</p>
+<p>نخست، بیایید امضای تابع <code>search</code> را در <em>src/lib.rs</em> همان‌طور که در فهرست ۱۲-۱۳ نشان داده شده تعریف کنیم، با بدنه‌ای که ماکروی <code>unimplemented!</code> را فراخوانی می‌کند. وقتی پیاده‌سازی را کامل کردیم، امضا را با جزئیات بیشتری توضیح می‌دهیم.</p>
+<figure class="listing" id="listing-12-13">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust ignore does_not_compile">pub fn search&lt;'a&gt;(query: &amp;str, contents: &amp;'a str) -&gt; Vec&lt;&amp;'a str&gt; {
+    unimplemented!();
+}</code></pre>
+<figcaption><a href="#listing-12-13">لیست ۱۲-۱۳</a>: انتقال &lt;code&gt;&lt;/x-listing&gt;Config&lt;/code&gt; و &lt;code&gt;run&lt;/code&gt; به <em>src/lib.rs</em></figcaption>
+</figure>
+<p>از کلیدواژهٔ <code>pub</code> روی تعریف تابع استفاده کرده‌ایم تا <code>search</code> را بخشی از API عمومی crate کتابخانه‌ای خود اعلام کنیم. اکنون یک crate کتابخانه‌ای داریم که می‌توانیم از crate اجرایی خود به آن دسترسی داشته باشیم و می‌توانیم آن را آزمایش کنیم!</p>
+<p>حالا باید کدی را که به <em>src/lib.rs</em> منتقل کردیم وارد حوزهٔ crate باینری در <em>src/main.rs</em> کنیم؛ همان‌گونه که در فهرست ۱۲-۱۴ آمده است.</p>
+<figure class="listing" id="listing-12-14">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore"><span class="boring">use std::env;
+</span><span class="boring">use std::error::Error;
+</span><span class="boring">use std::fs;
+</span><span class="boring">use std::process;
+</span><span class="boring">
+</span>// --snip--
+use minigrep::search;
+
+fn main() {
+    // --snip--
+<span class="boring">    let args: Vec&lt;String&gt; = env::args().collect();
+</span><span class="boring">
+</span><span class="boring">    let config = Config::build(&amp;args).unwrap_or_else(|err| {
+</span><span class="boring">        println!("Problem parsing arguments: {err}");
+</span><span class="boring">        process::exit(1);
+</span><span class="boring">    });
+</span><span class="boring">
+</span><span class="boring">    if let Err(e) = run(config) {
+</span><span class="boring">        println!("Application error: {e}");
+</span><span class="boring">        process::exit(1);
+</span><span class="boring">    }
+</span>}
+
+// --snip--
+
+<span class="boring">
+</span><span class="boring">struct Config {
+</span><span class="boring">    query: String,
+</span><span class="boring">    file_path: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl Config {
+</span><span class="boring">    fn build(args: &amp;[String]) -&gt; Result&lt;Config, &amp;'static str&gt; {
+</span><span class="boring">        if args.len() &lt; 3 {
+</span><span class="boring">            return Err("not enough arguments");
+</span><span class="boring">        }
+</span><span class="boring">
+</span><span class="boring">        let query = args[1].clone();
+</span><span class="boring">        let file_path = args[2].clone();
+</span><span class="boring">
+</span><span class="boring">        Ok(Config { query, file_path })
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn run(config: Config) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+    let contents = fs::read_to_string(config.file_path)?;
+
+    for line in search(&amp;config.query, &amp;contents) {
+        println!("{line}");
+    }
+
+    Ok(())
+}</code></pre>
+<figcaption><a href="#listing-12-14">لیست ۱۲-۱۴</a>: استفاده از crate کتابخانه‌ای &lt;code&gt;&lt;/x-listing&gt;minigrep&lt;/code&gt; در <em>src/main.rs</em></figcaption>
+</figure>
+<p>یک خط <code>use minigrep::search</code> اضافه می‌کنیم تا تابع <code>search</code> را از crate کتابخانه‌ای به دامنهٔ crate اجرایی بیاوریم. سپس در تابع <code>run</code>، به‌جای چاپ محتوای فایل، تابع <code>search</code> را فراخوانی می‌کنیم و مقدار <code>config.query</code> و <code>contents</code> را به‌عنوان آرگومان به آن می‌دهیم. سپس <code>run</code> با یک حلقهٔ <code>for</code> هر خطی را که <code>search</code> برگردانده و با پرس‌وجو تطابق داشته چاپ می‌کند. این زمان مناسبی هم هست که فراخوانی‌های <code>println!</code> را در تابع <code>main</code> که پرس‌وجو و مسیر فایل را نمایش می‌دادند حذف کنیم تا برنامه‌مان فقط نتایج جست‌وجو را چاپ کند (اگر خطایی رخ ندهد).</p>
+<p>توجه کنید که تابع جست‌وجو پیش از انجام هرگونه چاپ، همهٔ نتایج را در برداری که برمی‌گرداند جمع‌آوری می‌کند. این پیاده‌سازی ممکن است هنگام جست‌وجو در فایل‌های بزرگ در نمایش نتایج کند باشد، چون نتایج به‌محض پیدا شدن چاپ نمی‌شوند؛ در فصل ۱۳ دربارهٔ راهی ممکن برای رفع این مشکل با استفاده از تکرارگرها صحبت خواهیم کرد.</p>
+<p>وای! این یک کار سخت بود، اما ما خودمان را برای موفقیت در آینده آماده کردیم. اکنون مدیریت خطاها بسیار آسان‌تر شده است و کد ما ماژولارتر شده است. از اینجا به بعد تقریباً تمام کارهای ما در فایل <em>src/lib.rs</em> انجام خواهد شد.</p>
+<p>بیایید از این ماژولاریت جدید برای انجام کاری استفاده کنیم که با کد قبلی دشوار بود اما با کد جدید آسان است: نوشتن چند تست!</p><nav class="page-nav"><a href="ch12-02-reading-a-file.html">→ خواندن یک فایل</a><a href="ch12-04-testing-the-librarys-functionality.html">افزودن قابلیت با توسعهٔ آزمون‌محور ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

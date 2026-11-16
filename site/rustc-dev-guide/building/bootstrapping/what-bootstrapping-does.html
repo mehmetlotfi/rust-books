@@ -1,0 +1,187 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>Bootstrapping چه می‌کند — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="building/bootstrapping/what-bootstrapping-does"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="what-bootstrapping-does"><a class="header" href="#what-bootstrapping-does">Bootstrapping چه کار می‌کند</a></h1>
+<p>نکته: این مستندات بیشتر اطلاعاتی را پوشش می‌دهد که با کاربر سروکار دارد. برای مطالعه درباره درونیات bootstrap، <a href="https://github.com/rust-lang/rust/blob/HEAD/src/bootstrap/README.md">bootstrap/README.md</a> را ببینید.</p>
+<h2 id="stages-of-bootstrapping"><a class="header" href="#stages-of-bootstrapping">مرحله‌های bootstrapping</a></h2>
+<h3 id="overview"><a class="header" href="#overview">نمای کلی</a></h3>
+<ul>
+<li>Stage 0: کامپایلر و کتابخانه استاندارد از پیش کامپایل‌شده</li>
+<li>Stage 1: از کد فعلی، توسط یک کامپایلر قدیمی‌تر</li>
+<li>Stage 2: کامپایلر واقعاً فعلی</li>
+<li>Stage 3: آزمون یکسان بودن نتیجه</li>
+</ul>
+<p>کامپایل <code>rustc</code> در چند مرحله (stage) انجام می‌شود. این نموداری است که از <a href="https://www.youtube.com/watch?v=oUIjG-y4zaA">سخنرانی Jynn Nelson درباره bootstrapping</a> در RustConf 2022 اقتباس شده است و توضیح‌های دقیق‌تر در ادامه می‌آید.</p>
+<p>حرف‌های <code>A</code>، <code>B</code>، <code>C</code> و <code>D</code> ترتیب مرحله‌های bootstrapping را نشان می‌دهند. گره‌های <span style="background-color: lightblue; color: black">آبی</span> دانلود می‌شوند، گره‌های <span style="background-color: yellow; color: black">زرد</span> با کامپایلر <code>stage0</code> ساخته می‌شوند و گره‌های <span style="background-color: lightgreen; color: black">سبز</span> با کامپایلر <code>stage1</code> ساخته می‌شوند.</p>
+<pre><code class="language-mermaid">graph TD
+    s0c["stage0 compiler (1.86.0-beta.1)"]:::downloaded --&gt;|A| s0l("stage0 std (1.86.0-beta.1)"):::downloaded;
+    s0c &amp; s0l --- stepb[ ]:::empty;
+    stepb --&gt;|B| s0ca["stage0 compiler artifacts (1.87.0-dev)"]:::with-s0c;
+    s0ca --&gt;|copy| s1c["stage1 compiler (1.87.0-dev)"]:::with-s0c;
+    s1c --&gt;|C| s1l("stage1 std (1.87.0-dev)"):::with-s1c;
+    s1c &amp; s1l --- stepd[ ]:::empty;
+    stepd --&gt;|D| s1ca["stage1 compiler artifacts (1.87.0-dev)"]:::with-s1c;
+    s1ca --&gt;|copy| s2c["stage2 compiler"]:::with-s1c;
+
+    classDef empty width:0px,height:0px;
+    classDef downloaded fill: lightblue;
+    classDef with-s0c fill: yellow;
+    classDef with-s1c fill: lightgreen;
+</code></pre>
+<h3 id="stage-0-the-pre-compiled-compiler"><a class="header" href="#stage-0-the-pre-compiled-compiler">Stage 0: کامپایلر از پیش کامپایل‌شده</a></h3>
+<p>کامپایلر stage0 به‌طور پیش‌فرض همان کامپایلر <code>rustc</code> نسخه <em>beta</em> بسیار تازه و کتابخانه‌های پویای وابسته به آن است که bootstrap برایتان دانلود می‌کند. (همچنین می‌توانید در <code>bootstrap.toml</code> پیکربندی کنید تا stage0 چیز دیگری باشد.)</p>
+<p>کامپایلر stage0 از پیش کامپایل‌شده فقط برای کامپایل <code>src/bootstrap</code> و <code>compiler/rustc</code> با std از پیش کامپایل‌شده stage0 به کار می‌رود.</p>
+<p>توجه کنید که برای ساخت کامپایلر stage1 از کامپایلر و std از پیش کامپایل‌شده stage0 استفاده می‌کنیم. بنابراین برای استفاده از کامپایلری با std که تازه از روی درخت سورس ساخته شده است، باید کامپایلر stage2 را بسازید.</p>
+<p>در اینجا دو مفهوم در کار است: یک کامپایلر (با مجموعه وابستگی‌هایش) و کتابخانه‌های «هدف» یا «شیء» آن (<code>std</code> و <code>rustc</code>). هر دو مرحله‌بندی شده‌اند، اما به شیوه‌ای پلکانی و ناهمگام.</p>
+<h3 id="stage-1-from-current-code-by-an-earlier-compiler"><a class="header" href="#stage-1-from-current-code-by-an-earlier-compiler">Stage 1: از کد فعلی، توسط یک کامپایلر قدیمی‌تر</a></h3>
+<p>سپس کد منبع rustc با کامپایلر <code>stage0</code> کامپایل می‌شود تا کامپایلر <code>stage1</code> تولید شود.</p>
+<h3 id="stage-2-the-truly-current-compiler"><a class="header" href="#stage-2-the-truly-current-compiler">Stage 2: کامپایلر واقعاً فعلی</a></h3>
+<p>سپس کامپایلر را با استفاده از کامپایلر <code>stage1</code> و std درون‌درختی دوباره می‌سازیم تا کامپایلر <code>stage2</code> تولید شود.</p>
+<p>خود کامپایلر <code>stage1</code> با کامپایلر و std از پیش کامپایل‌شده <code>stage0</code> ساخته شده است و بنابراین از روی سورس موجود در پوشه کاری شما ساخته نشده است. این یعنی ABI تولیدشده توسط کامپایلر <code>stage0</code> ممکن است با ABIای که کامپایلر <code>stage1</code> تولید می‌کرد یکی نباشد، و این می‌تواند برای کتابخانه‌های پویا، آزمون‌ها و ابزارهایی که از <code>rustc_private</code> استفاده می‌کنند مشکل ایجاد کند.</p>
+<p>توجه کنید که crate با نام <code>proc_macro</code> با یک لایه FFI زبان <code>C</code> به نام <code>proc_macro::bridge</code> از این مشکل دوری می‌کند و به همین دلیل می‌توان آن را با <code>stage1</code> به کار برد.</p>
+<p>کامپایلر <code>stage2</code> همان است که با <code>rustup</code> و همه روش‌های نصب دیگر توزیع می‌شود. با این حال ساخت آن زمان بسیار زیادی می‌برد، زیرا باید ابتدا کامپایلر جدید را با یک کامپایلر قدیمی‌تر ساخت و سپس با آن کامپایلر جدید را با خودش ساخت.</p>
+<p>برای توسعه، معمولاً فقط می‌خواهید برای ساخت چیزها از پرچم <code>--stage 1</code> استفاده کنید. <a href="../how-to-build-and-run.html#building-the-compiler">ساخت کامپایلر</a> را ببینید.</p>
+<h3 id="stage-3-the-same-result-test"><a class="header" href="#stage-3-the-same-result-test">Stage 3: آزمون یکسان بودن نتیجه</a></h3>
+<p>Stage 3 اختیاری است. برای بررسی درستی کامپایلر جدیدمان می‌توانیم کتابخانه‌ها را با کامپایلر <code>stage2</code> بسازیم. نتیجه باید با قبل یکسان باشد، مگر اینکه چیزی خراب شده باشد.</p>
+<h3 id="building-the-stages"><a class="header" href="#building-the-stages">ساخت مرحله‌ها</a></h3>
+<p>اسکریپت <code>./x</code> می‌کوشد کمک‌رسان باشد و برای هر زیردستور مرحله‌ای را انتخاب کند که به احتمال زیاد منظور شماست. در اینجا چند دستور <code>x</code> با مرحله‌های پیش‌فرضشان آمده است:</p>
+<ul>
+<li><code>check</code>: <code>--stage 1</code></li>
+<li><code>clippy</code>: <code>--stage 1</code></li>
+<li><code>doc</code>: <code>--stage 1</code></li>
+<li><code>build</code>: <code>--stage 1</code></li>
+<li><code>test</code>: <code>--stage 1</code></li>
+<li><code>dist</code>: <code>--stage 2</code></li>
+<li><code>install</code>: <code>--stage 2</code></li>
+<li><code>bench</code>: <code>--stage 2</code></li>
+</ul>
+<p>همیشه می‌توانید با دادن صریح <code>--stage N</code> مرحله را تغییر دهید.</p>
+<p>برای اطلاعات بیشتر درباره مرحله‌ها، <a href="#understanding-stages-of-bootstrap">در ادامه ببینید</a>.</p>
+<h2 id="complications-of-bootstrapping"><a class="header" href="#complications-of-bootstrapping">پیچیدگی‌های bootstrapping</a></h2>
+<p>از آنجا که سیستم ساخت از کامپایلر beta فعلی برای ساخت کامپایلر bootstrapping مرحله <code>stage1</code> استفاده می‌کند، کد منبع کامپایلر نمی‌تواند از برخی قابلیت‌ها استفاده کند تا زمانی که به beta برسند (چون در غیر این صورت کامپایلر beta از آن‌ها پشتیبانی نمی‌کند). از طرف دیگر، برای <a href="../../appendix/glossary.html#intrinsic">intrinsicهای کامپایلر</a> و قابلیت‌های داخلی، استفاده از آن قابلیت‌ها <em>الزامی</em> است. افزون بر این، کامپایلر به‌شدت از قابلیت‌های <code>nightly</code> (<code>#![feature(...)]</code>) استفاده می‌کند. چگونه می‌توان این مشکل را حل کرد؟</p>
+<p>دو روش به کار می‌رود:</p>
+<ol>
+<li>سیستم ساخت هنگام ساخت با <code>stage0</code> گزینه <code>--cfg bootstrap</code> را تنظیم می‌کند، بنابراین می‌توانیم با <code>cfg(not(bootstrap))</code> فقط هنگام ساخت با <code>stage1</code> از قابلیت‌ها استفاده کنیم. تنظیم <code>--cfg bootstrap</code> به این شیوه برای قابلیت‌هایی به کار می‌رود که به‌تازگی پایدار (stable) شده‌اند و هنگام ساخت با <code>stage0</code> به <code>#![feature(...)]</code> نیاز دارند، اما برای <code>stage1</code> نیازی به آن نیست.</li>
+<li>سیستم ساخت <code>RUSTC_BOOTSTRAP=1</code> را تنظیم می‌کند. این متغیر ویژه یعنی <em>نقض تضمین‌های پایداری</em> Rust: استفاده از <code>#![feature(...)]</code> با کامپایلری که <code>nightly</code> نیست مجاز می‌شود. <em>تنظیم <code>RUSTC_BOOTSTRAP=1</code> هرگز نباید به کار رود، مگر هنگام bootstrap کردن خود کامپایلر.</em></li>
+</ol>
+<h2 id="understanding-stages-of-bootstrap"><a class="header" href="#understanding-stages-of-bootstrap">شناخت مرحله‌های bootstrap</a></h2>
+<h3 id="overview-1"><a class="header" href="#overview-1">نمای کلی</a></h3>
+<p>این بخش نگاهی دقیق به مرحله‌های جداگانه bootstrap است.</p>
+<p>قرارداد <code>./x</code> این است که:</p>
+<ul>
+<li>پرچم <code>--stage N</code> یعنی کامپایلر مرحله N (<code>stageN/rustc</code>) را اجرا کن.</li>
+<li>«artifact مرحله N» یک artifact ساخت است که توسط کامپایلر مرحله N <em>تولید</em> شده است.</li>
+<li>کامپایلر مرحله N+1 از <em>artifactهای</em> مرحله N مونتاژ می‌شود. این فرایند <em>uplifting</em> (ارتقا) نامیده می‌شود.</li>
+</ul>
+<h4 id="build-artifacts"><a class="header" href="#build-artifacts">artifactهای ساخت</a></h4>
+<p>هر چیزی که بتوانید با <code>./x</code> بسازید یک <em>artifact ساخت</em> است. artifactهای ساخت شامل موارد زیر هستند، اما به آن‌ها محدود نمی‌شوند:</p>
+<ul>
+<li>باینری‌ها، مانند <code>stage0-rustc/rustc-main</code></li>
+<li>شیءهای مشترک (shared object)، مانند <code>stage0-sysroot/rustlib/libstd-6fae108520cf72fe.so</code></li>
+<li>فایل‌های <a href="../../serialization.html">rlib</a>، مانند <code>stage0-sysroot/rustlib/libstd-6fae108520cf72fe.rlib</code></li>
+<li>فایل‌های HTML تولیدشده توسط rustdoc، مانند <code>doc/std</code></li>
+</ul>
+<h4 id="examples"><a class="header" href="#examples">نمونه‌ها</a></h4>
+<ul>
+<li><code>./x test tests/ui</code> یعنی کامپایلر <code>stage1</code> را بساز و <code>compiletest</code> را روی آن اجرا کن. اگر روی کامپایلر کار می‌کنید، معمولاً این همان دستور آزمونی است که می‌خواهید.</li>
+<li><code>./x test --stage 0 library/std</code> یعنی آزمون‌ها را روی کتابخانه استاندارد اجرا کن بدون اینکه <code>rustc</code> را از روی سورس بسازی («با <code>stage0</code> بساز، سپس artifactها را آزمون کن»). اگر روی کتابخانه استاندارد کار می‌کنید، معمولاً این همان دستور آزمونی است که می‌خواهید.</li>
+<li><code>./x build --stage 0</code> یعنی با <code>rustc</code> مرحله stage0 بساز.</li>
+<li><code>./x doc --stage 1</code> یعنی با <code>rustdoc</code> مرحله stage0 مستندسازی کن.</li>
+</ul>
+<h4 id="examples-of-what-not-to-do"><a class="header" href="#examples-of-what-not-to-do">نمونه‌هایی از کارهایی که <em>نباید</em> کرد</a></h4>
+<ul>
+<li><code>./x test --stage 0 tests/ui</code> مفید نیست: آزمون‌ها را روی کامپایلر <em>beta</em> اجرا می‌کند و <code>rustc</code> را از روی سورس نمی‌سازد. به جای آن از <code>test tests/ui</code> استفاده کنید که <code>stage1</code> را از روی سورس می‌سازد.</li>
+<li><code>./x test --stage 0 compiler/rustc</code> کامپایلر را می‌سازد اما هیچ آزمونی اجرا نمی‌کند: این دستور <code>cargo test -p rustc</code> را اجرا می‌کند، اما <code>cargo</code> آزمون‌های Rust را نمی‌شناسد. نباید نیازی به استفاده از آن داشته باشید؛ به جای آن از <code>test</code> (بدون آرگومان) استفاده کنید.</li>
+<li><code>./x build --stage 0 compiler/rustc</code> کامپایلر را می‌سازد، اما <code>libstd</code> و حتی <code>libcore</code> را نمی‌سازد. در بیشتر مواقع به جای آن <code>./x build library</code> را می‌خواهید که امکان کامپایل برنامه‌ها را بدون نیاز به تعریف lang itemها فراهم می‌کند.</li>
+</ul>
+<h3 id="building-vs-running"><a class="header" href="#building-vs-running">ساخت در برابر اجرا</a></h3>
+<p>به‌طور خلاصه، <em>stage 0 از کامپایلر <code>stage0</code> برای ساخت artifactهای <code>stage0</code> استفاده می‌کند که بعداً به عنوان کامپایلر stage1 ارتقا (uplift) داده می‌شوند</em>.</p>
+<p>در هر مرحله به جز 0، دو گام اصلی انجام می‌شود:</p>
+<ol>
+<li><code>std</code> توسط کامپایلر مرحله N کامپایل می‌شود.</li>
+<li>آن <code>std</code> به برنامه‌هایی که توسط کامپایلر مرحله N ساخته می‌شوند لینک می‌شود، از جمله artifactهای مرحله N (کامپایلر مرحله N+1).</li>
+</ol>
+<p>اگر artifactهای مرحله N را «فقط» برنامه‌ای دیگر بدانیم که با کامپایلر مرحله N می‌سازیم، این تا حدی شهودی است: <code>build --stage N compiler/rustc</code> در حال لینک کردن artifactهای مرحله N به <code>std</code> ساخته‌شده توسط کامپایلر مرحله N است.</p>
+<h3 id="stages-and-std"><a class="header" href="#stages-and-std">مرحله‌ها و <code>std</code></a></h3>
+<p>توجه کنید که در اینجا دو کتابخانه <code>std</code> در کار است:</p>
+<ol>
+<li>کتابخانه‌ای که به <code>stageN/rustc</code> <em>لینک</em> شده و توسط مرحله N-1 ساخته شده است (<code>std</code> مرحله N-1)</li>
+<li>کتابخانه‌ای که <em>برای کامپایل برنامه‌ها</em> با <code>stageN/rustc</code> به کار می‌رود و توسط مرحله N ساخته شده است (<code>std</code> مرحله N).</li>
+</ol>
+<p><code>std</code> مرحله N تقریباً برای هر کار مفیدی با کامپایلر مرحله N ضروری است. بدون آن فقط می‌توانید برنامه‌هایی با <code>#![no_core]</code> کامپایل کنید – که چندان مفید نیست!</p>
+<p>دلیل اینکه این دو باید متفاوت باشند آن است که لزوماً با ABI یکدیگر سازگار نیستند: ممکن است بهینه‌سازی‌های جدید چینش (layout)، تغییرات <code>MIR</code> یا تغییرات دیگر در فراداده Rust در <code>nightly</code> وجود داشته باشد که در beta نیست.</p>
+<p>اینجا همان جایی است که <code>--keep-stage 1 library/std</code> به کار می‌آید. از آنجا که بیشتر تغییرات کامپایلر در واقع ABI را عوض نمی‌کنند، وقتی یک <code>std</code> در <code>stage1</code> تولید کردید، احتمالاً می‌توانید آن را با کامپایلری دیگر دوباره استفاده کنید. اگر ABI تغییر نکرده باشد، همه چیز مرتب است؛ نیازی نیست زمان صرف کامپایل دوباره آن <code>std</code> شود. پرچم <code>--keep-stage</code> صرفاً به اسکریپت ساخت می‌گوید فرض کند کامپایل قبلی درست بوده است و آن artifactها را به جای مناسب کپی می‌کند و فراخوانی <code>cargo</code> را رد می‌کند.</p>
+<h3 id="cross-compiling-rustc"><a class="header" href="#cross-compiling-rustc">کامپایل متقاطع (cross-compile) برای rustc</a></h3>
+<p><em>کامپایل متقاطع</em> فرایند کامپایل کدی است که روی معماری دیگری اجرا خواهد شد. برای مثال ممکن است بخواهید با یک دستگاه x86 نسخه ARM از rustc را بسازید. ساخت <code>std</code> مرحله <code>stage2</code> هنگام کامپایل متقاطع متفاوت است.</p>
+<p>دلیلش این است که <code>./x</code> از این منطق پیروی می‌کند: اگر <code>HOST</code> و <code>TARGET</code> یکسان باشند، <code>std</code> مرحله <code>stage1</code> را برای <code>stage2</code> دوباره استفاده می‌کند! این کار ایمن است زیرا <code>std</code> مرحله <code>stage1</code> با کامپایلر <code>stage1</code> کامپایل شده است، یعنی کامپایلری که از کد منبعی استفاده می‌کند که اکنون checkout کرده‌اید. بنابراین باید با <code>std</code>ای که <code>stage2/rustc</code> کامپایل می‌کرد یکسان (و در نتیجه سازگار با ABI) باشد.</p>
+<p>اما هنگام کامپایل متقاطع، <code>std</code> مرحله <code>stage1</code> فقط روی میزبان (host) اجرا می‌شود. بنابراین کامپایلر <code>stage2</code> باید <code>std</code> را برای هدف دوباره کامپایل کند.</p>
+<p>(در جدول ببینید که <code>stage2</code> چگونه فقط <code>std</code> هدف‌های غیرمیزبان را می‌سازد).</p>
+<h3 id="what-is-a-sysroot"><a class="header" href="#what-is-a-sysroot">«sysroot» چیست؟</a></h3>
+<p>وقتی پروژه‌ای را با <code>cargo</code> می‌سازید، artifactهای ساخت وابستگی‌ها معمولاً در <code>target/debug/deps</code> ذخیره می‌شوند. این پوشه فقط وابستگی‌هایی را دارد که <code>cargo</code> از آن‌ها خبر دارد؛ به‌ویژه کتابخانه استاندارد در آن نیست. پس <code>std</code> یا <code>proc_macro</code> از کجا می‌آیند؟ از <strong>sysroot</strong> می‌آیند، ریشه‌ای برای تعدادی پوشه که کامپایلر در زمان اجرا artifactهای ساخت را از آن‌ها بارگذاری می‌کند. با این حال <code>sysroot</code> فقط کتابخانه استاندارد را ذخیره نمی‌کند - هر چیزی را در بر می‌گیرد که باید در زمان اجرا بارگذاری شود. از جمله (اما نه محدود به):</p>
+<ul>
+<li>کتابخانه‌های <code>libstd</code>/<code>libtest</code>/<code>libproc_macro</code>.</li>
+<li>خود crateهای کامپایلر، هنگام استفاده از <code>rustc_private</code>. در درون درخت سورس همیشه حاضرند؛ بیرون از آن باید <code>rustc-dev</code> را با <code>rustup</code> نصب کنید.</li>
+<li>فایل شیء مشترک <code>libLLVM.so</code> برای پروژه LLVM. در درون درخت سورس یا از روی سورس ساخته می‌شود یا از CI دانلود می‌شود؛ بیرون از آن باید <code>llvm-tools-preview</code> را با <code>rustup</code> نصب کنید.</li>
+</ul>
+<p>همه artifactهایی که تاکنون فهرست شدند وابستگی‌های زمان اجرای <em>کامپایلر</em> هستند. می‌توانید آن‌ها را با <code>rustc --print sysroot</code> ببینید:</p>
+<pre><code>$ ls $(rustc --print sysroot)/lib
+libchalk_derive-0685d79833dc9b2b.so  libstd-25c6acf8063a3802.so
+libLLVM-11-rust-1.50.0-nightly.so    libtest-57470d2aa8f7aa83.so
+librustc_driver-4f0cc9f50e53f0ba.so  libtracing_attributes-e4be92c35ab2a33b.so
+librustc_macros-5f0ec4a119c6ac86.so  rustlib
+</code></pre>
+<p>برای کتابخانه استاندارد هم وابستگی‌های زمان اجرا وجود دارد! این‌ها در <code>lib/rustlib/</code> هستند، نه مستقیماً در <code>lib/</code>.</p>
+<pre><code>$ ls $(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/lib | head -n 5
+libaddr2line-6c8e02b8fedc1e5f.rlib
+libadler-9ef2480568df55af.rlib
+liballoc-9c4002b5f79ba0e1.rlib
+libcfg_if-512eb53291f6de7e.rlib
+libcompiler_builtins-ef2408da76957905.rlib
+</code></pre>
+<p>پوشه <code>lib/rustlib/</code> شامل کتابخانه‌هایی مانند <code>hashbrown</code> و <code>cfg_if</code> است که بخشی از API عمومی کتابخانه استاندارد نیستند، اما برای پیاده‌سازی آن به کار می‌روند. همچنین <code>lib/rustlib/</code> بخشی از مسیر جست‌وجوی لینکرها است، اما <code>lib</code> هرگز بخشی از مسیر جست‌وجو نخواهد بود.</p>
+<h4 id="-z-force-unstable-if-unmarked"><a class="header" href="#-z-force-unstable-if-unmarked"><code>-Z force-unstable-if-unmarked</code></a></h4>
+<p>از آنجا که <code>lib/rustlib/</code> بخشی از مسیر جست‌وجو است، باید مراقب باشیم کدام crateها در آن گنجانده می‌شوند. به‌ویژه، همه crateها به جز کتابخانه استاندارد با پرچم <code>-Z force-unstable-if-unmarked</code> ساخته می‌شوند، که یعنی برای بارگذاری آن‌ها باید از <code>#![feature(rustc_private)]</code> استفاده کنید (برخلاف کتابخانه استاندارد که همیشه در دسترس است).</p>
+<p>پرچم <code>-Z force-unstable-if-unmarked</code> اهداف گوناگونی دارد تا به اطمینان از علامت‌گذاری درست crateهای <code>unstable</code> کمک کند. عمدتاً برای این معرفی شد که rustc و کتابخانه استاندارد بتوانند به crateهای دلخواه در crates.io که خودشان از <code>staged_api</code> استفاده نمی‌کنند لینک شوند. <code>rustc</code> نیز برای علامت‌گذاری همه crateهایش به عنوان <code>unstable</code> با feature با نام <code>rustc_private</code> به این پرچم متکی است تا لازم نباشد هر crate با دقت با <code>unstable</code> علامت‌گذاری شود.</p>
+<p>این پرچم به‌طور خودکار توسط اسکریپت‌های bootstrap روی همه <code>rustc</code> و کتابخانه استاندارد اعمال می‌شود. این لازم است زیرا کامپایلر و همه وابستگی‌هایش در <code>sysroot</code> برای همه کاربران ارسال می‌شوند.</p>
+<p>این پرچم اثرهای زیر را دارد:</p>
+<ul>
+<li>اگر crate خودش به عنوان <code>stable</code> یا <code>unstable</code> علامت‌گذاری نشده باشد، آن را با feature با نام <code>rustc_private</code> به عنوان «<code>unstable</code>» علامت‌گذاری می‌کند.</li>
+<li>به این crateها اجازه می‌دهد بدون نیاز به attribute به دیگر crateهای forced-unstable دسترسی داشته باشند. در حالت عادی یک crate برای استفاده از دیگر crateهای <code>unstable</code> به attribute با نام <code>#![feature(rustc_private)]</code> نیاز دارد. اما این کار برای یک crate از crates.io غیرممکن می‌کرد به وابستگی‌های خودش دسترسی داشته باشد، زیرا آن crate attribute با نام <code>feature(rustc_private)</code> ندارد، در حالی که <em>همه چیز</em> با <code>-Z force-unstable-if-unmarked</code> کامپایل می‌شود.</li>
+</ul>
+<p>کدی که از <code>-Z force-unstable-if-unmarked</code> استفاده نمی‌کند باید attribute سطح crate با نام <code>#![feature(rustc_private)]</code> را بگنجاند تا به این crateهای forced-unstable دسترسی یابد. این برای چیزهایی لازم است که به خود <code>rustc</code> لینک می‌شوند، مانند <code>Miri</code> یا <code>clippy</code>.</p>
+<p>بحث‌های بیشتر درباره sysrootها را می‌توانید در این‌ها بیابید:</p>
+<ul>
+<li><a href="https://github.com/rust-lang/rust/pull/76728">PR مربوط به rustdoc</a> که توضیح می‌دهد چرا برای وابستگی‌های بارگذاری‌شده از <code>sysroot</code> از <code>extern crate</code> استفاده می‌کند</li>
+<li><a href="https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/deps.20in.20sysroot/">بحث‌ها درباره sysroot در Zulip</a></li>
+<li><a href="https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp/topic/How.20to.20create.20an.20executable.20accessing.20.60rustc_private.60.3F">بحث‌ها درباره ساخت rustdoc بیرون از درخت سورس</a></li>
+</ul>
+<h2 id="passing-flags-to-commands-invoked-by-bootstrap"><a class="header" href="#passing-flags-to-commands-invoked-by-bootstrap">ارسال پرچم‌ها به دستورهای فراخوانی‌شده توسط <code>bootstrap</code></a></h2>
+<p><code>./x</code> امکان مناسبی دارد که اجازه می‌دهد هنگام bootstrap کردن، پرچم‌های مخصوص هر مرحله را به <code>rustc</code> و <code>cargo</code> بدهید. متغیر محیطی <code>RUSTFLAGS_BOOTSTRAP</code> به عنوان <code>RUSTFLAGS</code> به مرحله bootstrap (<code>stage0</code>) داده می‌شود و <code>RUSTFLAGS_NOT_BOOTSTRAP</code> هنگام ساخت artifactهای مرحله‌های بعدی داده می‌شود. <code>RUSTFLAGS</code> هم کار می‌کند، اما روی ساخت خود <code>bootstrap</code> هم اثر می‌گذارد، بنابراین به‌ندرت پیش می‌آید که بخواهید از آن استفاده کنید. در نهایت، <code>MAGIC_EXTRA_RUSTFLAGS</code> از کش <code>cargo</code> عبور می‌کند تا پرچم‌ها را بدون کامپایل دوباره همه وابستگی‌ها به rustc بدهد.</p>
+<ul>
+<li><code>RUSTDOCFLAGS</code>، <code>RUSTDOCFLAGS_BOOTSTRAP</code> و <code>RUSTDOCFLAGS_NOT_BOOTSTRAP</code> مشابه <code>RUSTFLAGS</code> هستند، اما برای <code>rustdoc</code>.</li>
+<li><code>CARGOFLAGS</code> آرگومان‌ها را به خود cargo می‌دهد. <code>CARGOFLAGS_BOOTSTRAP</code> و <code>CARGOFLAGS_NOT_BOOTSTRAP</code> مشابه <code>RUSTFLAGS_BOOTSTRAP</code> کار می‌کنند.</li>
+<li><code>--test-args</code> آرگومان‌ها را به اجراکننده آزمون می‌دهد. برای <code>tests/ui</code> این <code>compiletest</code> است. برای آزمون‌های واحد و آزمون‌های مستندات، اجراکننده <code>libtest</code> است.</li>
+</ul>
+<p>بیشتر اجراکننده‌های آزمون <code>--help</code> را می‌پذیرند که می‌توانید با آن گزینه‌های پذیرفته‌شده توسط اجراکننده را پیدا کنید.</p>
+<h2 id="environment-variables"><a class="header" href="#environment-variables">متغیرهای محیطی</a></h2>
+<p>در طول bootstrapping، تعدادی متغیر محیطی داخلی کامپایلر به کار می‌روند. اگر بخواهید نسخه‌ای میانی از <code>rustc</code> را اجرا کنید، گاهی ممکن است لازم باشد برخی از این متغیرهای محیطی را دستی تنظیم کنید. در غیر این صورت خطایی مانند زیر می‌گیرید:</p>
+<pre><code class="language-text">thread 'main' panicked at 'RUSTC_STAGE was not set: NotPresent', library/core/src/result.rs:1165:5
+</code></pre>
+<p>اگر <code>./stageN/bin/rustc</code> درباره متغیرهای محیطی خطا بدهد، معمولاً یعنی چیزی بسیار اشتباه است – مثلاً دارید <code>rustc</code> یا <code>std</code> یا چیزی که به متغیرهای محیطی وابسته است را کامپایل می‌کنید. در حالت نادری که واقعاً لازم است در چنین وضعیتی <code>rustc</code> را فراخوانی کنید، می‌توانید با افزودن <code>-vvv</code> به دستور <code>x</code> به shim مربوط به bootstrap بگویید همه متغیرهای <code>env</code> را چاپ کند.</p>
+<p>در نهایت، bootstrap از <a href="https://github.com/rust-lang/cc-rs">crate با نام cc-rs</a> استفاده می‌کند که <a href="https://docs.rs/cc/latest/cc/#external-configuration-via-environment-variables">روش خودش</a> را برای پیکربندی کامپایلرهای <code>C</code> و پرچم‌های <code>C</code> از طریق متغیرهای محیطی دارد.</p>
+<h2 id="clarification-of-build-commands-stdout"><a class="header" href="#clarification-of-build-commands-stdout">توضیح درباره <code>stdout</code> دستور ساخت</a></h2>
+<p>در این بخش، <code>stdout</code> دستور ساخت را در عمل بررسی می‌کنیم (مشابه موضوع بالا، اما با مستندات دقیق‌تر و کامل‌تر). وقتی دستور <code>x build --dry-run</code> را اجرا می‌کنید، خروجی ساخت چیزی شبیه به زیر خواهد بود:</p>
+<pre><code class="language-text">Building stage0 library artifacts (x86_64-unknown-linux-gnu -&gt; x86_64-unknown-linux-gnu)
+Copying stage0 library from stage0 (x86_64-unknown-linux-gnu -&gt; x86_64-unknown-linux-gnu / x86_64-unknown-linux-gnu)
+Building stage0 compiler artifacts (x86_64-unknown-linux-gnu -&gt; x86_64-unknown-linux-gnu)
+Copying stage0 rustc from stage0 (x86_64-unknown-linux-gnu -&gt; x86_64-unknown-linux-gnu / x86_64-unknown-linux-gnu)
+Assembling stage1 compiler (x86_64-unknown-linux-gnu)
+Building stage1 library artifacts (x86_64-unknown-linux-gnu -&gt; x86_64-unknown-linux-gnu)
+Copying stage1 library from stage1 (x86_64-unknown-linux-gnu -&gt; x86_64-unknown-linux-gnu / x86_64-unknown-linux-gnu)
+Building stage1 tool rust-analyzer-proc-macro-srv (x86_64-unknown-linux-gnu)
+Building rustdoc for stage1 (x86_64-unknown-linux-gnu)
+</code></pre>
+<h3 id="building-stage0-stdcompiler-artifacts"><a class="header" href="#building-stage0-stdcompiler-artifacts">ساخت artifactهای {std,compiler} در stage0</a></h3>
+<p>این گام‌ها از کامپایلر ارائه‌شده (که معمولاً دانلود می‌شود) برای کامپایل سورس محلی Rust به کتابخانه‌هایی استفاده می‌کنند که می‌توانیم به کار ببریم.</p>
+<h3 id="copying-stage0-stdrustc"><a class="header" href="#copying-stage0-stdrustc">کپی {std,rustc} در stage0</a></h3>
+<p>این گام کتابخانه و artifactهای کامپایلر را از <code>cargo</code> به <code>stage0-sysroot/lib/rustlib/{target-triple}/lib</code> کپی می‌کند</p>
+<h3 id="assembling-stage1-compiler"><a class="header" href="#assembling-stage1-compiler">مونتاژ کامپایلر stage1</a></h3>
+<p>این گام کتابخانه‌هایی را که در «ساخت artifactهای <code>stage0</code> …» ساخته‌ایم به پوشه <code>lib/</code> کامپایلر <code>stage1</code> کپی می‌کند. این‌ها کتابخانه‌های میزبان هستند که خود کامپایلر برای اجرا استفاده می‌کند. این کتابخانه‌ها در واقع توسط artifactهایی که کامپایلر جدید تولید می‌کند به کار نمی‌روند. این گام همچنین باینری‌های <code>rustc</code> و <code>rustdoc</code> تولیدشده را در <code>build/$HOST/stage/bin</code> کپی می‌کند.</p>
+<p><code>stage1/bin/rustc</code> یک کامپایلر کاملاً کارا است که با کامپایلر و std از پیش کامپایل‌شده stage0 ساخته شده است. برای استفاده از کامپایلری که کاملاً از روی سورس با کامپایلر و std درون‌درختی ساخته شده باشد، باید کامپایلر stage2 را بسازید که با کامپایلر و std مرحله stage1 (درون‌درختی) کامپایل می‌شود.</p><nav class="page-nav"><a href="intro.html">→ پیشگفتار</a><a href="how-bootstrap-does-it.html">Bootstrap چگونه این کار را انجام می‌دهد ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../rustc-dev-guide/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

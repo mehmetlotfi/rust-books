@@ -1,0 +1,96 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>قراردادهای کدنویسی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="conventions"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="coding-conventions"><a class="header" href="#coding-conventions">قراردادهای کدنویسی</a></h1>
+<p>این فصل <a href="#formatting">قالب‌بندی</a>، <a href="#cc">کدنویسی برای درستی</a>، <a href="#cio">استفاده از crateها از crates.io</a> و چند نکته دربارهٔ <a href="#er">ساختاردهی PR برای بررسی آسان</a> را پوشش می‌دهد.</p>
+<p><a id="formatting"></a></p>
+<h2 id="formatting-and-the-tidy-script"><a class="header" href="#formatting-and-the-tidy-script">قالب‌بندی و اسکریپت tidy</a></h2>
+<p>rustc در حال حرکت به سوی <a href="https://github.com/rust-dev-tools/fmt-rfcs">سبک کدنویسی استاندارد Rust</a> است.</p>
+<p>با این حال، فعلاً از <a href="https://github.com/rust-lang/rustfmt"><code>rustfmt</code></a> پایدار استفاده نمی‌کنیم؛ از نسخه‌ای ثابت‌شده (pinned) با پیکربندی ویژه استفاده می‌کنیم، بنابراین ممکن است سبکی متفاوت از <code>rustfmt</code> معمولی تولید شود. از این رو قالب‌بندی این مخزن با <code>cargo fmt</code> توصیه نمی‌شود.</p>
+<p>در عوض، قالب‌بندی باید با <code>./x fmt</code> انجام شود. عادت خوبی است که پیش از هر commit دستور <code>./x fmt</code> را اجرا کنید، چون این کار تداخل‌های بعدی را کاهش می‌دهد.</p>
+<p>قالب‌بندی توسط اسکریپت <code>tidy</code> بررسی می‌شود. این اسکریپت هنگام اجرای <code>./x test</code> به‌طور خودکار اجرا می‌شود و می‌توان آن را به‌تنهایی با <code>./x fmt --check</code> اجرا کرد.</p>
+<blockquote>
+<p><strong>نکته: قالب‌بندی و مجموعه‌های آزمون</strong></p>
+<p>بیشتر فایل‌های منبع Rust در دایرکتوری <code>tests/</code> به دلایلی مانند حساسیت به فاصله‌های خالی، ماهیت آزمون‌های snapshot، توضیحات وابسته به مکان و موارد دیگر قالب‌بندی نمی‌شوند.</p>
+<p>برای دانستن اینکه کدام فایل‌های آزمون قالب‌بندی نمی‌شوند، به مدخل‌های <code>ignore</code> در <a href="https://github.com/rust-lang/rust/blob/main/rustfmt.toml">https://github.com/rust-lang/rust/blob/main/rustfmt.toml</a> مراجعه کنید.</p>
+</blockquote>
+<p>اگر می‌خواهید در ویرایشگر خود قالب‌بندی هنگام ذخیره را استفاده کنید، نسخهٔ ثابت‌شدهٔ <code>rustfmt</code> در مسیر <code>build/&lt;target&gt;/stage0/bin/rustfmt</code> ساخته می‌شود.</p>
+<h3 id="formatting-c-code"><a class="header" href="#formatting-c-code">قالب‌بندی کد C++</a></h3>
+<p>کامپایلر شامل مقداری کد C++ برای ارتباط با بخش‌هایی از LLVM است که API پایدار C ندارند. هنگام تغییر آن کد، برای قالب‌بندی‌اش از این دستور استفاده کنید:</p>
+<pre><code class="language-console">./x test tidy --extra-checks cpp:fmt --bless
+</code></pre>
+<p>این دستور از نسخه‌ای ثابت‌شده از <code>clang-format</code> استفاده می‌کند تا به محیط محلی وابسته نباشد.</p>
+<h3 id="formatting-and-linting-python-code"><a class="header" href="#formatting-and-linting-python-code">قالب‌بندی و lint کد Python</a></h3>
+<p>مخزن Rust مقدار زیادی کد Python دارد. تلاش می‌کنیم آن را هم با ابزار <a href="https://github.com/astral-sh/ruff">ruff</a> lint و هم قالب‌بندی کنیم.</p>
+<p>هنگام تغییر کد Python، برای قالب‌بندی از این دستور استفاده کنید:</p>
+<pre><code class="language-console">./x test tidy --extra-checks py:fmt --bless
+</code></pre>
+<p>و برای اجرای lintها از دستور زیر:</p>
+<pre><code class="language-console">./x test tidy --extra-checks py:lint
+</code></pre>
+<p>این دستورها از نسخه‌ای ثابت‌شده از <code>ruff</code> استفاده می‌کنند تا به محیط محلی وابسته نباشند.</p>
+<p><a id="copyright"></a></p>
+<!-- REUSE-IgnoreStart -->
+<!-- Prevent REUSE from interpreting the heading as a copyright notice -->
+<h3 id="copyright-notice"><a class="header" href="#copyright-notice">اعلان حق نشر</a></h3>
+<!-- REUSE-IgnoreEnd -->
+<p>در گذشته فایل‌ها با یک اعلان حق نشر و مجوز شروع می‌شدند. لطفاً این اعلان را برای فایل‌های جدیدی که تحت شرایط استاندارد (MIT OR Apache-2.0) مجوز دارند <strong>حذف کنید</strong>.</p>
+<p>اکنون همهٔ اعلان‌های حق نشر باید حذف شده باشند، اما اگر در مخزن rust-lang/rust به یکی از آن‌ها برخوردید، با خیال راحت یک PR برای حذفش باز کنید.</p>
+<h3 id="line-length"><a class="header" href="#line-length">طول خط</a></h3>
+<p>خطوط باید حداکثر ۱۰۰ نویسه باشند. اگر بتوانید آن را در ۸۰ نگه دارید حتی بهتر است.</p>
+<p>گاهی، به‌ویژه برای آزمون‌ها، ممکن است لازم باشد خودتان را از این محدودیت معاف کنید. در این صورت می‌توانید نزدیک ابتدای فایل یک توضیح به این شکل اضافه کنید:</p>
+<pre><code class="language-rust">// ignore-tidy-linelength</code></pre>
+<h3 id="tabs-vs-spaces"><a class="header" href="#tabs-vs-spaces">Tab در برابر فاصله</a></h3>
+<p>Prefer 4-space indents.</p>
+<p><a id="cc"></a></p>
+<h2 id="coding-for-correctness"><a class="header" href="#coding-for-correctness">کدنویسی برای درستی</a></h2>
+<p>فراتر از قالب‌بندی، چند نکتهٔ دیگر هم هست که پیروی از آن‌ها ارزش دارد.</p>
+<h3 id="prefer-exhaustive-matches"><a class="header" href="#prefer-exhaustive-matches">match جامع را ترجیح دهید</a></h3>
+<p>استفاده از <code>_</code> در match راحت است، اما به این معناست که وقتی variantهای جدیدی به شمارش اضافه شوند، ممکن است به‌درستی مدیریت نشوند. از خودتان بپرسید: اگر variant جدیدی به این شمارش اضافه شود، چقدر احتمال دارد که بخواهد از کد <code>_</code> استفاده کند، در برابر اینکه رفتار دیگری داشته باشد؟ مگر آنکه پاسخ «کم» باشد، match جامع را ترجیح دهید.</p>
+<p>همین توصیه دربارهٔ <code>if let</code> و <code>while let</code> هم صدق می‌کند، چون این‌ها عملاً آزمونی برای یک variant واحد هستند.</p>
+<h3 id="use-todo-comments-for-things-you-dont-want-to-forget"><a class="header" href="#use-todo-comments-for-things-you-dont-want-to-forget">برای چیزهایی که نمی‌خواهید فراموش شوند از توضیح “TODO” استفاده کنید</a></h3>
+<p>به‌عنوان ابزاری مفید برای خودتان، می‌توانید برای چیزی که می‌خواهید پیش از land کردن PR به آن برگردید یک توضیح <code>// TODO</code> بگذارید:</p>
+<pre><code class="language-rust ignore">fn do_something() {
+    if something_else {
+        unimplemented!(); // TODO write this
+    }
+}</code></pre>
+<p>اسکریپت tidy برای توضیح <code>// TODO</code> خطا گزارش می‌کند، بنابراین این کد تا زمانی که TODO رفع (یا حذف) نشود نمی‌تواند land شود.</p>
+<p>این روش در یک PR نیز می‌تواند مفید باشد تا از یک commit نشان دهید که باگی را باقی گذاشته‌اید که commit بعدی آن را رفع خواهد کرد:</p>
+<pre><code class="language-rust ignore">if foo {
+    return true; // TODO wrong, but will be fixed in a later commit
+}</code></pre>
+<p>اگر می‌خواهید در codebase یادداشتی بگذارید، به‌جای آن از <code>// FIXME</code> استفاده کنید.</p>
+<h3 id="follow-the-style-of-surrounding-code"><a class="header" href="#follow-the-style-of-surrounding-code">از سبک کد اطراف پیروی کنید</a></h3>
+<p>از کمکی‌های (helper) موجود استفاده کنید و از تکرار منطق یا اعتبارسنجی بپرهیزید.</p>
+<h3 id="avoid-duplicated-sources-of-truth"><a class="header" href="#avoid-duplicated-sources-of-truth"><a href="https://react.dev/learn/choosing-the-state-structure">از منابع حقیقت تکراری بپرهیزید</a></a></h3>
+<p>تلاش برای همگام نگه داشتن داده بین دو جای مختلف نشانهٔ کد بد (code smell) است.</p>
+<h3 id="use-types-to-enforce-invariants"><a class="header" href="#use-types-to-enforce-invariants">از نوع‌ها برای اعمال invariantها استفاده کنید</a></h3>
+<p>در صورت امکان، <a href="https://kentcdodds.com/blog/make-impossible-states-impossible">حالت‌های نامعتبر را غیرقابل بیان کنید</a>، <a href="https://lexi-lambda.github.io/blog/2020/11/01/names-are-not-type-safety/">نه اینکه فقط هنگام ساخت بررسی شوند</a>.</p>
+<h3 id="write-useful-comments"><a class="header" href="#write-useful-comments">توضیحات مفید بنویسید</a></h3>
+<p><a href="https://mitcommlab.mit.edu/broad/commkit/coding-and-comment-style/">توضیحاتی بنویسید که بگویند <em>چرا</em></a> کاری را انجام داده‌اید، نه اینکه <em>چه</em> کاری کرده‌اید. پرداختن به جزئیات باگ‌های غیرواضح اشکالی ندارد.</p>
+<h3 id="preserve-existing-behavior"><a class="header" href="#preserve-existing-behavior">رفتار موجود را حفظ کنید</a></h3>
+<p>تفاوت‌های پلتفرم و حالت‌های خطا را در نظر بگیرید. آزمون‌های مرتبطی را که حالت‌های مرزی را بررسی می‌کنند پیدا کنید.</p>
+<h3 id="work-in-small-steps"><a class="header" href="#work-in-small-steps">در گام‌های کوچک کار کنید</a></h3>
+<p>در گام‌های کوچک و مستقل‌قابل‌آزمون کار کنید. پس از هر تغییر معنادار آزمون‌های مرتبط را اجرا کنید تا بدانید اولین اشتباه کجا رخ داده است.</p>
+<p><a id="cio"></a></p>
+<h2 id="using-crates-from-cratesio"><a class="header" href="#using-crates-from-cratesio">استفاده از crateها از crates.io</a></h2>
+<p>بخش <a href="./crates-io.html">وابستگی‌های crates.io</a> را ببینید.</p>
+<p><a id="er"></a></p>
+<h2 id="how-to-structure-your-pr"><a class="header" href="#how-to-structure-your-pr">چگونه PR خود را ساختاردهی کنید</a></h2>
+<p>نحوهٔ آماده‌سازی commitهای PR می‌تواند تفاوت بزرگی برای بررسی‌کننده ایجاد کند. در اینجا چند نکته آمده است.</p>
+<p><strong>«بازآرایی‌های محض» را در commit جداگانه‌ای قرار دهید.</strong> برای مثال، اگر نام یک متد را تغییر می‌دهید، آن تغییر نام را همراه با تغییر نام همهٔ استفاده‌های آن در یک commit جداگانه بگذارید.</p>
+<p><strong>commitهای بیشتر معمولاً بهتر است.</strong> اگر تغییر بزرگی می‌دهید، تقریباً همیشه بهتر است آن را به گام‌های کوچک‌تری بشکنید که <a href="https://github.blog/developer-skills/github/write-better-commits-build-better-projects/#%e2%9a%9b%ef%b8%8f-resize-and-stabilize-the-commits">به‌طور مستقل قابل‌فهم</a> باشند. تنها نکته‌ای که باید مراقبش بود این است که اگر کدی را با یک راهبرد معرفی کنید و سپس در commit بعدی آن را به‌شدت تغییر دهید (به‌جای افزودن به آن)، این «رفت‌وبرگشت» می‌تواند گیج‌کننده باشد.</p>
+<p><strong>آزادانه قالب‌بندی کنید.</strong> هرچند فقط commit نهایی یک PR باید درست قالب‌بندی شده باشد، قالب‌بندی تک‌تک commitها با <code>./x fmt</code> هم بررسی را آسان‌تر و هم کم‌نویزتر می‌کند.</p>
+<p><strong>بدون merge.</strong> ما commit از نوع merge را در تاریخچه‌مان نمی‌پذیریم، جز آنهایی که bors ایجاد می‌کند. اگر با تداخل merge مواجه شدید، به‌جای آن با دستوری مانند <code>git rebase --interactive rust-lang/main</code> rebase کنید (با فرض اینکه برای remote خود نام <code>rust-lang</code> را به کار برده‌اید).</p>
+<p><strong>commitهای منفرد لازم نیست ساخته شوند (اما خوب است).</strong> ما الزام نمی‌کنیم که هر commit میانی با موفقیت ساخته شود – فقط انتظار داریم بتوانیم در سطح PR از bisect استفاده کنیم. با این حال، اگر <em>بتوانید</em> commitهای منفرد را قابل‌ساخت کنید، همیشه مفید است.</p>
+<h2 id="naming-conventions"><a class="header" href="#naming-conventions">قراردادهای نام‌گذاری</a></h2>
+<p>جدا از سبک و قراردادهای نام‌گذاری معمول Rust، چند قرارداد ویژهٔ کامپایلر هم وجود دارد.</p>
+<ul>
+<li>
+<p><code>cx</code> معمولاً کوتاه‌شدهٔ «context» است و اغلب به‌عنوان پسوند به کار می‌رود. برای مثال، <code>tcx</code> نام رایجی برای <a href="./ty.html">Typing Context</a> است.</p>
+</li>
+<li>
+<p><a href="./ty.html"><code>'tcx</code></a> به‌عنوان نام طول عمر برای Typing Context استفاده می‌شود.</p>
+</li>
+<li>
+<p>چون <code>crate</code> یک کلمهٔ کلیدی است، اگر به متغیری برای نمایش چیزی مرتبط با crate نیاز داشته باشید، اغلب املای آن به <code>krate</code> تغییر می‌کند.</p>
+</li>
+</ul><nav class="page-nav"><a href="walkthroughs/lang-feature.html">→ گام‌به‌گام: یک قابلیت جدید زبان، از طراحی تا پایدارسازی</a><a href="bug-fix-procedure.html">رویه‌های مربوط به تغییرات ناسازگار ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

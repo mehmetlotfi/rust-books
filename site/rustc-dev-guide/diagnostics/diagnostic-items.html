@@ -1,0 +1,74 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>آیتم‌های تشخیص — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="diagnostics/diagnostic-items"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="diagnostic-items"><a class="header" href="#diagnostic-items">آیتم‌های تشخیصی</a></h1>
+<p>هنگام نوشتن lintها، بررسی نوع‌ها، صفت‌ها و تابع‌های مشخص کار رایجی است. این موضوع این پرسش را پیش می‌آورد که این بررسی چگونه باید انجام شود. نوع‌ها را می‌توان با مسیر کامل نوعشان بررسی کرد. اما این کار مستلزم کدنویسی سخت (hard coding) مسیرهاست و در برخی موارد مرزی می‌تواند به طبقه‌بندی نادرست بینجامد. برای جلوگیری از این مشکل، rustc آیتم‌های تشخیصی (diagnostic items) را معرفی کرده است که نوع‌ها را از طریق <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/symbol/struct.Symbol.html"><code>Symbol</code></a>ها شناسایی می‌کنند.</p>
+<h2 id="finding-diagnostic-items"><a class="header" href="#finding-diagnostic-items">یافتن آیتم‌های تشخیصی</a></h2>
+<p>آیتم‌های تشخیصی با attribute به نام <code>rustc_diagnostic_item</code> به آیتم‌های درون <code>rustc</code>/<code>std</code>/<code>core</code>/<code>alloc</code> افزوده می‌شوند. آیتم مربوط به یک نوع مشخص را می‌توان با باز کردن کد منبع در مستندات و جست‌وجوی این attribute پیدا کرد. توجه کنید که این attribute اغلب با attribute به نام <code>cfg_attr</code> اضافه می‌شود تا از خطاهای کامپایل در هنگام آزمون‌ها جلوگیری شود. یک تعریف معمولاً چنین به نظر می‌رسد:</p>
+<pre><code class="language-rs">// This is the diagnostic item for this type   vvvvvvv
+#[cfg_attr(not(test), rustc_diagnostic_item = "Penguin")]
+struct Penguin;
+</code></pre>
+<p>آیتم‌های تشخیصی معمولاً فقط به صفت‌ها، نوع‌ها و تابع‌های مستقل افزوده می‌شوند. اگر هدف بررسی یک نوع وابسته یا یک متد است، لطفاً از آیتم تشخیصی همان آیتم استفاده کنید و به <a href="#using-diagnostic-items"><em>استفاده از آیتم‌های تشخیصی</em></a> مراجعه کنید.</p>
+<h2 id="adding-diagnostic-items"><a class="header" href="#adding-diagnostic-items">افزودن آیتم‌های تشخیصی</a></h2>
+<p>یک آیتم تشخیصی جدید را می‌توان با این دو گام اضافه کرد:</p>
+<ol>
+<li>
+<p>آیتم هدف را در مخزن Rust پیدا کنید. سپس آیتم تشخیصی را به صورت یک رشته از طریق attribute به نام <code>rustc_diagnostic_item</code> اضافه کنید. این کار گاهی ممکن است هنگام اجرای آزمون‌ها خطای کامپایل ایجاد کند. با استفاده از attribute به نام <code>cfg_attr</code> همراه با شرط <code>not(test)</code> می‌توان از این خطاها جلوگیری کرد (افزودن آن به همه‌ی attributeهای <code>rustc_diagnostic_item</code> به عنوان اقدام پیشگیرانه اشکالی ندارد). در نهایت باید چنین به نظر برسد:</p>
+<pre><code class="language-rs">// This will be the new diagnostic item        vvv
+#[cfg_attr(not(test), rustc_diagnostic_item = "Cat")]
+struct Cat;
+</code></pre>
+<p>برای قراردادهای نام‌گذاری آیتم‌های تشخیصی، لطفاً به <a href="#naming-conventions"><em>قراردادهای نام‌گذاری</em></a> مراجعه کنید.</p>
+</li>
+<li><!-- date-check: Jul 2026 -->
+<!-- date-check: Jul 2026 --> به آیتم‌های تشخیصی در کد از طریق symbolها در \[`rustc_span::symbol::sym`\] دسترسی پیدا می‌شود. برای افزودن آیتم تشخیصی که تازه ساخته‌اید، کافی است فایل ماژول را باز کنید و نام آن، در اینجا `Cat`، را در جای درست فهرست اضافه کنید.
+</li>
+</ol>
+<p>اکنون می‌توانید یک pull request با تغییراتتان ایجاد کنید.</p>
+<blockquote>
+<p>نکته: هنگام استفاده از آیتم‌های تشخیصی در پروژه‌های دیگر مانند Clippy، ممکن است مدتی طول بکشد تا مخزن‌ها همگام‌سازی شوند.</p>
+</blockquote>
+<h2 id="naming-conventions"><a class="header" href="#naming-conventions">قراردادهای نام‌گذاری</a></h2>
+<p>آیتم‌های تشخیصی هنوز قرارداد نام‌گذاری مشخصی ندارند. موارد زیر رهنمودهایی هستند که در آینده باید استفاده شوند، اما ممکن است با نام‌های موجود تفاوت داشته باشند:</p>
+<ul>
+<li>نوع‌ها، صفت‌ها و شمارش‌ها با UpperCamelCase نام‌گذاری می‌شوند (مثال‌ها: <code>Iterator</code> و <code>HashMap</code>)</li>
+<li>برای نام نوع‌هایی که چندین بار استفاده می‌شوند، مانند <code>Writer</code>، بهتر است نام دقیق‌تری انتخاب شود، مثلاً با افزودن ماژول به آن (مثال: <code>IoWriter</code>)</li>
+<li>آیتم‌های وابسته نباید آیتم تشخیصی مستقل خود را داشته باشند، بلکه باید به صورت غیرمستقیم از طریق آیتم تشخیصی نوعی که از آن می‌آیند در دسترس قرار گیرند.</li>
+<li>تابع‌های مستقل مانند <code>std::mem::swap()</code> باید با <code>snake_case</code> و با یک ماژول مهم (صادرشده) به عنوان پیشوند نام‌گذاری شوند (مثال‌ها: <code>mem_swap</code> و <code>cmp_max</code>)</li>
+<li>ماژول‌ها معمولاً نباید آیتم تشخیصی داشته باشند. آیتم‌های تشخیصی برای پرهیز از استفاده‌ی مسیرها اضافه شدند، و بنابراین به کار بردن آن‌ها برای ماژول‌ها به احتمال زیاد نتیجه‌ی معکوس می‌دهد.</li>
+</ul>
+<h2 id="using-diagnostic-items"><a class="header" href="#using-diagnostic-items">استفاده از آیتم‌های تشخیصی</a></h2>
+<p>در rustc، آیتم‌های تشخیصی از طریق <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/symbol/struct.Symbol.html"><code>Symbol</code></a>ها از درون ماژول <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/symbol/sym/index.html"><code>rustc_span::symbol::sym</code></a> جست‌وجو می‌شوند. سپس می‌توان آن‌ها را با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.TyCtxt.html#method.get_diagnostic_item"><code>TyCtxt::get_diagnostic_item()</code></a> به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/def_id/struct.DefId.html"><code>DefId</code></a>ها نگاشت کرد یا با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.TyCtxt.html#method.is_diagnostic_item"><code>TyCtxt::is_diagnostic_item()</code></a> بررسی کرد که آیا با یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/def_id/struct.DefId.html"><code>DefId</code></a> مطابقت دارند. هنگام نگاشت از یک آیتم تشخیصی به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/def_id/struct.DefId.html"><code>DefId</code></a>، این متد یک <code>Option&lt;DefId&gt;</code> برمی‌گرداند. این مقدار می‌تواند <code>None</code> باشد، اگر symbol یک آیتم تشخیصی نباشد یا نوع ثبت نشده باشد، مثلاً هنگام کامپایل با <code>#[no_std]</code>. همه‌ی مثال‌های زیر بر پایه‌ی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/def_id/struct.DefId.html"><code>DefId</code></a>ها و کاربرد آن‌ها هستند.</p>
+<h3 id="example-checking-for-a-type"><a class="header" href="#example-checking-for-a-type">مثال: بررسی یک نوع</a></h3>
+<pre><code class="language-rust">use rustc_span::symbol::sym;
+
+/// This example checks if the given type (`ty`) has the type `HashMap` using
+/// `TyCtxt::is_diagnostic_item()`
+fn example_1(cx: &amp;LateContext&lt;'_&gt;, ty: Ty&lt;'_&gt;) -&gt; bool {
+    match ty.kind() {
+        ty::Adt(adt, _) =&gt; cx.tcx.is_diagnostic_item(sym::HashMap, adt.did()),
+        _ =&gt; false,
+    }
+}</code></pre>
+<h3 id="example-checking-for-a-trait-implementation"><a class="header" href="#example-checking-for-a-trait-implementation">مثال: بررسی پیاده‌سازی یک صفت</a></h3>
+<pre><code class="language-rust">/// This example checks if a given [`DefId`] from a method is part of a trait
+/// implementation defined by a diagnostic item.
+fn is_diag_trait_item(
+    cx: &amp;LateContext&lt;'_&gt;,
+    def_id: DefId,
+    diag_item: Symbol
+) -&gt; bool {
+    if let Some(trait_did) = cx.tcx.trait_of_item(def_id) {
+        return cx.tcx.is_diagnostic_item(diag_item, trait_did);
+    }
+    false
+}</code></pre>
+<h3 id="associated-types"><a class="header" href="#associated-types">نوع‌های وابسته</a></h3>
+<p>به نوع‌های وابسته‌ی آیتم‌های تشخیصی می‌توان به صورت غیرمستقیم دسترسی پیدا کرد؛ ابتدا <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/def_id/struct.DefId.html"><code>DefId</code></a> صفت را می‌گیرید و سپس <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.TyCtxt.html#method.associated_items"><code>TyCtxt::associated_items()</code></a> را فراخوانی می‌کنید. این فراخوانی یک شیء <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/assoc/struct.AssocItems.html"><code>AssocItems</code></a> برمی‌گرداند که می‌توان از آن برای بررسی‌های بعدی استفاده کرد. برای نمونه‌ای از این کاربرد، <a href="https://github.com/rust-lang/rust-clippy/blob/305177342fbc622c0b3cb148467bab4b9524c934/clippy_utils/src/ty.rs#L55-L72"><code>clippy_utils::ty::get_iterator_item_ty()</code></a> را ببینید.</p>
+<h3 id="usage-in-clippy"><a class="header" href="#usage-in-clippy">استفاده در Clippy</a></h3>
+<p>Clippy تا جای ممکن از آیتم‌های تشخیصی استفاده می‌کند و چند تابع پوششی و کمکی توسعه داده است. لطفاً هنگام استفاده از آیتم‌های تشخیصی در Clippy به مستندات آن نیز مراجعه کنید. (به <a href="../../clippy/development/common_tools_writing_lints.html"><em>ابزارهای رایج برای نوشتن lintها</em></a> مراجعه کنید.)</p>
+<h2 id="related-issues"><a class="header" href="#related-issues">مسائل مرتبط</a></h2>
+<p>این موارد احتمالاً فقط برای کسانی جالب هستند که واقعاً می‌خواهند عمیقاً وارد این موضوع شوند :)</p>
+<ul>
+<li><a href="https://github.com/rust-lang/rust/pull/60966">rust#60966</a>: PR در Rust که آیتم‌های تشخیصی را معرفی کرد</li>
+<li><a href="https://github.com/rust-lang/rust-clippy/issues/5393">rust-clippy#5393</a>: issue پیگیری Clippy برای کنار گذاشتن مسیرهای کدنویسی‌شده‌ی سخت و حرکت به سمت آیتم‌های تشخیصی</li>
+</ul>
+<!-- Links --><nav class="page-nav"><a href="error-codes.html">→ کدهای خطا</a><a href="error-guaranteed.html">`ErrorGuaranteed` ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,223 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>MIR (بازنمایی میانی سطح میانی) — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="mir/index"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="the-mir-mid-level-ir"><a class="header" href="#the-mir-mid-level-ir">MIR (IR سطح میانی)</a></h1>
+<p>MIR <em>بازنمایی میانی سطح میانی (Mid-level Intermediate Representation)</em> در Rust است.
+از <a href="../hir.html">HIR</a> ساخته می‌شود.
+MIR در <a href="https://rust-lang.github.io/rfcs/1211-mir.html">RFC 1211</a> معرفی شد.
+شکل به‌شدت ساده‌شده‌ای از Rust است که برای برخی بررسی‌های ایمنی حساس به جریان به‌کار می‌رود – به‌ویژه borrow checker! – و همچنین برای بهینه‌سازی و تولید کد.</p>
+<p>اگر مقدمهٔ بسیار سطح بالایی از MIR و برخی مفاهیم کامپایلری که به آن‌ها تکیه دارد (مثل گراف‌های جریان کنترل و desugaring) می‌خواهید، ممکن است <a href="https://blog.rust-lang.org/2016/04/19/MIR.html">پست وبلاگ rust-lang که MIR را معرفی کرد</a> را دوست داشته باشید.</p>
+<h2 id="introduction-to-mir"><a class="header" href="#introduction-to-mir">مقدمه‌ای بر MIR</a></h2>
+<p>MIR در ماژول <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/index.html"><code>compiler/rustc_middle/src/mir/</code></a> تعریف شده،
+اما بخش زیادی از کدی که آن را دستکاری می‌کند در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_build/index.html"><code>compiler/rustc_mir_build</code></a>،
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/index.html"><code>compiler/rustc_mir_transform</code></a>
+و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_dataflow/index.html"><code>compiler/rustc_mir_dataflow</code></a> است.</p>
+<p>برخی ویژگی‌های کلیدی MIR این‌هاست:</p>
+<ul>
+<li>بر پایهٔ <a href="../appendix/background.html#cfg">گراف جریان کنترل</a> است.</li>
+<li>عبارت‌های تو در تو ندارد.</li>
+<li>همهٔ نوع‌ها در MIR کاملاً صریح‌اند.</li>
+</ul>
+<h2 id="key-mir-vocabulary"><a class="header" href="#key-mir-vocabulary">Key MIR vocabulary</a></h2>
+<p>این بخش مفاهیم کلیدی MIR را معرفی می‌کند که در اینجا خلاصه شده‌اند:</p>
+<ul>
+<li><strong>Basic blocks</strong>: units of the control-flow graph, consisting of:
+<ul>
+<li><strong>دستورها (statements):</strong> اعمالی با یک جانشین (successor)</li>
+<li><strong>پایان‌دهنده‌ها (terminators):</strong> اعمالی با بالقوه چند جانشین؛ همیشه در انتهای یک بلوک</li>
+<li>(اگر با اصطلاح <em>basic block</em> آشنا نیستید، <a href="../appendix/background.html#cfg">فصل پیش‌زمینه</a> را ببینید)</li>
+</ul>
+</li>
+<li><strong>Localها:</strong> مکان‌های حافظه که روی پشته تخصیص یافته‌اند (دست‌کم از نظر مفهومی)،
+مثل آرگومان‌های تابع، متغیرهای محلی و temporaryها.
+این‌ها با یک اندیس شناسایی می‌شوند که با زیرخط ابتدایی نوشته می‌شود، مثل <code>_1</code>.
+یک «local» ویژه (<code>_0</code>) هم برای ذخیرهٔ مقدار بازگشتی تخصیص یافته است.</li>
+<li><strong>Placeها:</strong> عبارت‌هایی که مکانی در حافظه را شناسایی می‌کنند، مثل <code>_1</code> یا <code>_1.f</code>.</li>
+<li><strong>Rvalues:</strong> expressions that produce a value.
+The “R” stands for the fact that these are the “right-hand side” of an assignment.
+<ul>
+<li><strong>Operandها:</strong> آرگومان‌های یک rvalue،
+که می‌توانند ثابت (مثل <code>22</code>) یا place (مثل <code>_1</code>) باشند.</li>
+</ul>
+</li>
+</ul>
+<p>می‌توانید با ترجمهٔ برنامه‌های ساده به MIR و خواندن خروجی pretty-print‌شده حسی از نحوهٔ ساخت MIR بگیرید.
+در واقع playground این را آسان می‌کند،
+چون دکمه‌ای به نام MIR دارد که MIR برنامهٔ شما را نشان می‌دهد.
+این برنامه را در play بگذارید (یا <a href="https://play.rust-lang.org/?gist=30074856e62e74e91f06abd19bd72ece&amp;version=stable&amp;edition=2021">روی این پیوند کلیک کنید</a>)،
+و سپس دکمهٔ «MIR» بالا را بزنید:</p>
+<pre><code class="language-rust">fn main() {
+    let mut vec = Vec::new();
+    vec.push(1);
+    vec.push(2);
+}</code></pre>
+<p>باید چیزی شبیه این ببینید:</p>
+<pre><code class="language-mir">// WARNING: This output format is intended for human consumers only
+// and is subject to change without notice. Knock yourself out.
+fn main() -&gt; () {
+    ...
+}
+</code></pre>
+<p>این قالب MIR برای تابع <code>main</code> است.
+MIR نشان‌داده‌شده توسط پیوند بالا بهینه‌شده است.
+برخی دستورها مثل <code>StorageLive</code> در بهینه‌سازی حذف می‌شوند.
+این به این دلیل است که کامپایلر متوجه می‌شود مقدار هرگز در کد دسترسی نمی‌شود.
+می‌توانیم از <code>rustc [filename].rs -Z mir-opt-level=0 --emit mir</code> برای دیدن MIR بهینه‌نشده استفاده کنیم.
+این toolchain از نوع nightly لازم دارد.</p>
+<p><strong>اعلان متغیرها.</strong> اگر کمی عمیق‌تر شویم،
+می‌بینیم با مجموعه‌ای از اعلان‌های متغیر شروع می‌شود.
+این‌طور به نظر می‌رسند:</p>
+<pre><code class="language-mir">let mut _0: ();                      // return place
+let mut _1: std::vec::Vec&lt;i32&gt;;      // in scope 0 at src/main.rs:2:9: 2:16
+let mut _2: ();
+let mut _3: &amp;mut std::vec::Vec&lt;i32&gt;;
+let mut _4: ();
+let mut _5: &amp;mut std::vec::Vec&lt;i32&gt;;
+</code></pre>
+<p>می‌بینید متغیرها در MIR نام ندارند، اندیس دارند،
+مثل <code>_0</code> یا <code>_1</code>.  همچنین متغیرهای کاربر (مثلاً <code>_1</code>) را با مقادیر موقت (مثلاً <code>_2</code> یا <code>_3</code>) در هم می‌آمیزیم. می‌توانید متغیرهای تعریف‌شده توسط کاربر را از بقیه تشخیص دهید چون debuginfo به آن‌ها متصل است (در ادامه ببینید).</p>
+<p><strong>debuginfo متغیر کاربر.</strong> زیر اعلان‌های متغیر،
+تنها اشاره‌ای را می‌یابیم که <code>_1</code> متغیر کاربر است:</p>
+<pre><code class="language-mir">scope 1 {
+    debug vec =&gt; _1;                 // in scope 1 at src/main.rs:2:9: 2:16
+}
+</code></pre>
+<p>هر annotation به شکل <code>debug &lt;Name&gt; =&gt; &lt;Place&gt;;</code> متغیر کاربر نام‌دار را توصیف می‌کند،
+و اینکه دیباگر کجا (یعنی place) می‌تواند داده‌های آن متغیر را بیابد.
+اینجا نگاشت بدیهی است، اما بهینه‌سازی‌ها ممکن است place را پیچیده کنند،
+یا به چند متغیر کاربر که یک place مشترک دارند بینجامند.
+علاوه بر این، captureهای closure هم با همین سامانه توصیف می‌شوند، پس حتی بدون بهینه‌سازی پیچیده‌اند، مثلاً: <code>debug x =&gt; (*((*_1).0: &amp;T));</code>.</p>
+<p>بلوک‌های «scope» (مثلاً <code>scope 1 { .. }</code>) ساختار لغوی برنامهٔ منبع را توصیف می‌کنند
+(کدام نام‌ها در چه زمانی در scope بودند)، پس هر بخشی از برنامه که با <code>// in scope 0</code> annotate شده باشد، اگر مثلاً در دیباگر گام‌به‌گام کد را طی کنید، <code>vec</code> را نخواهد داشت.</p>
+<p><strong>Basic blockها.</strong> با ادامهٔ خواندن، اولین <strong>basic block</strong> را می‌بینیم (طبیعتاً هنگام مشاهده ممکن است کمی متفاوت باشد و برخی کامنت‌ها را نادیده می‌گیرم):</p>
+<pre><code class="language-mir">bb0: {
+    StorageLive(_1);
+    _1 = const &lt;std::vec::Vec&lt;T&gt;&gt;::new() -&gt; bb2;
+}
+</code></pre>
+<p>basic block با مجموعه‌ای از <strong>دستورها</strong> و یک <strong>terminator</strong> نهایی تعریف می‌شود.
+در این مورد، یک دستور هست:</p>
+<pre><code class="language-mir">StorageLive(_1);
+</code></pre>
+<p>این دستور نشان می‌دهد متغیر <code>_1</code> «زنده» است،
+یعنی ممکن است بعداً استفاده شود – این تا زمانی که به دستور
+<code>StorageDead(_1)</code> برسیم ادامه می‌یابد که نشان می‌دهد استفاده از متغیر <code>_1</code> تمام شده است.
+این «دستورهای ذخیره‌سازی» توسط LLVM برای تخصیص فضای پشته به‌کار می‌روند.</p>
+<p><strong>terminator</strong> بلوک <code>bb0</code> فراخوانی <code>Vec::new</code> است:</p>
+<pre><code class="language-mir">_1 = const &lt;std::vec::Vec&lt;T&gt;&gt;::new() -&gt; bb2;
+</code></pre>
+<p>terminatorها با دستورها فرق دارند چون می‌توانند بیش از یک جانشین داشته باشند – یعنی کنترل می‌تواند به جاهای مختلف برود.
+فراخوانی‌های تابع مثل فراخوانی <code>Vec::new</code> به‌دلیل امکان unwinding همیشه terminator هستند،
+هرچند در مورد <code>Vec::new</code> می‌توانیم ببینیم unwinding واقعاً ممکن نیست،
+و بنابراین فقط یک بلوک جانشین را فهرست می‌کنیم، <code>bb2</code>.</p>
+<p>اگر به <code>bb2</code> نگاه کنیم، می‌بینیم این‌طور است:</p>
+<pre><code class="language-mir">bb2: {
+    StorageLive(_3);
+    _3 = &amp;mut _1;
+    _2 = const &lt;std::vec::Vec&lt;T&gt;&gt;::push(move _3, const 1i32) -&gt; [return: bb3, unwind: bb4];
+}
+</code></pre>
+<p>اینجا دو دستور هست: <code>StorageLive</code> دیگری که temporary با نام <code>_3</code> را معرفی می‌کند، و سپس یک انتساب:</p>
+<pre><code class="language-mir">_3 = &amp;mut _1;
+</code></pre>
+<p>انتساب‌ها به‌طور کلی شکل زیر را دارند:</p>
+<pre><code class="language-text">&lt;Place&gt; = &lt;Rvalue&gt;
+</code></pre>
+<p>place عبارتی مثل <code>_3</code>، <code>_3.f</code> یا <code>*_3</code> است – مکانی در حافظه را نشان می‌دهد.
+<strong>Rvalue</strong> عبارتی است که مقداری می‌سازد: در این مورد، rvalue عبارت borrow تغییرپذیر است که شبیه <code>&amp;mut &lt;Place&gt;</code> است.
+پس می‌توانیم گرامری برای rvalueها این‌طور تعریف کنیم:</p>
+<pre><code class="language-text">&lt;Rvalue&gt;  = &amp; (mut)? &lt;Place&gt;
+          | &lt;Operand&gt; + &lt;Operand&gt;
+          | &lt;Operand&gt; - &lt;Operand&gt;
+          | ...
+
+&lt;Operand&gt; = Constant
+          | copy Place
+          | move Place
+</code></pre>
+<p>همان‌طور که از این گرامر می‌بینید، rvalueها نمی‌توانند تو در تو باشند – فقط می‌توانند به placeها و ثابت‌ها ارجاع دهند.
+علاوه بر این، وقتی place را به‌کار می‌بریم، مشخص می‌کنیم آیا <strong>کپی می‌کنیم</strong> (که لازم دارد place نوع <code>T</code> با <code>T: Copy</code> داشته باشد) یا <strong>move می‌کنیم</strong> (که برای place از هر نوعی کار می‌کند).
+برای مثال، اگر عبارت <code>x = a + b + c</code> را در Rust داشتیم،
+به دو دستور و یک temporary کامپایل می‌شد:</p>
+<pre><code class="language-mir">TMP1 = a + b
+x = TMP1 + c
+</code></pre>
+<p>(<a href="https://play.rust-lang.org/?gist=1751196d63b2a71f8208119e59d8a5b6&amp;version=stable">امتحان کنید و ببینید</a>،
+هرچند ممکن است بخواهید حالت release را بزنید تا بررسی‌های سرریز رد شوند.)</p>
+<h2 id="mir-data-types"><a class="header" href="#mir-data-types">MIR data types</a></h2>
+<p>نوع‌های داده MIR در ماژول <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/index.html"><code>compiler/rustc_middle/src/mir/</code></a> تعریف شده‌اند.
+هر یک از مفاهیم کلیدی ذکرشده در بخش قبل به شکلی نسبتاً سرراست به یک نوع Rust نگاشت می‌شود.</p>
+<p>نوع داده اصلی MIR <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/struct.Body.html"><code>Body</code></a> است.
+داده‌های یک تابع واحد را دارد (به‌همراه زیرنمونه‌های Mir برای «ثابت‌های ارتقایافته (promoted constants)»،
+اما <a href="#promoted-constants">دربارهٔ آن‌ها در ادامه می‌توانید بخوانید</a>).</p>
+<ul>
+<li><strong>Basic blockها</strong>: basic blockها در فیلد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/struct.Body.html#structfield.basic_blocks"><code>Body::basic_blocks</code></a> ذخیره می‌شوند؛ این یک بردار از structهای <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/struct.BasicBlockData.html"><code>BasicBlockData</code></a> است.
+هیچ‌کس هرگز مستقیماً به basic block ارجاع نمی‌دهد: به‌جای آن مقادیر <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/struct.BasicBlock.html"><code>BasicBlock</code></a> را دست‌به‌دست می‌کنیم که اندیس‌های <a href="../appendix/glossary.html#newtype">newtype‌شدهٔ</a> این بردار هستند.</li>
+<li><strong>دستورها</strong> با نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/struct.Statement.html"><code>Statement</code></a> نمایش داده می‌شوند.</li>
+<li><strong>Terminatorها</strong> با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/terminator/struct.Terminator.html"><code>Terminator</code></a> نمایش داده می‌شوند.</li>
+<li><strong>Localها</strong> با نوع اندیس <a href="../appendix/glossary.html#newtype">newtype‌شدهٔ</a> <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/struct.Local.html"><code>Local</code></a> نمایش داده می‌شوند.
+داده‌های متغیر محلی در بردار <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/struct.Body.html#structfield.local_decls"><code>Body::local_decls</code></a> یافت می‌شود.
+همچنین ثابت ویژهٔ <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/constant.RETURN_PLACE.html"><code>RETURN_PLACE</code></a> هست که «local» ویژه را برای مقدار بازگشتی شناسایی می‌کند.</li>
+<li><strong>Places</strong> are identified by the struct <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/struct.Place.html"><code>Place</code></a>.
+There are a few fields:
+<ul>
+<li>Local variables like <code>_1</code></li>
+<li><strong>Projectionها</strong>، که فیلدها یا چیزهای دیگری هستند که از یک place پایه «تصویر (project)» می‌شوند.
+این‌ها با نوع <a href="../appendix/glossary.html#newtype">newtype‌شدهٔ</a> <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.ProjectionElem.html"><code>ProjectionElem</code></a> نمایش داده می‌شوند. مثلاً place با نام <code>_1.f</code> یک projection است،
+که <code>f</code> «عنصر projection» و <code>_1</code> مسیر پایه است.
+<code>*_1</code> هم projection است،
+که <code>*</code> با عنصر <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.ProjectionElem.html#variant.Deref"><code>ProjectionElem::Deref</code></a> نمایش داده می‌شود.</li>
+</ul>
+</li>
+<li><strong>Rvalueها</strong> با enum با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.Rvalue.html"><code>Rvalue</code></a> نمایش داده می‌شوند.</li>
+<li><strong>Operandها</strong> با enum با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.Operand.html"><code>Operand</code></a> نمایش داده می‌شوند.</li>
+</ul>
+<h2 id="representing-constants"><a class="header" href="#representing-constants">Representing constants</a></h2>
+<p>وقتی کد به مرحلهٔ MIR رسیده باشد، ثابت‌ها عموماً به دو شکل می‌آیند:
+<em>ثابت‌های MIR</em> (<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.Const.html"><code>mir::Constant</code></a>) و <em>ثابت‌های سامانهٔ نوع</em> (<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Const.html"><code>ty::Const</code></a>).
+ثابت‌های MIR به‌عنوان operand به‌کار می‌روند: در <code>x + CONST</code>، <code>CONST</code> ثابت MIR است؛
+به همین ترتیب، در <code>x + 2</code>، <code>2</code> ثابت MIR است.
+ثابت‌های سامانهٔ نوع در سامانهٔ نوع به‌کار می‌روند،
+به‌ویژه برای طول آرایه‌ها، و همچنین برای const generics.</p>
+<p>عموماً هر دو نوع ثابت می‌توانند «ارزیابی‌نشده» یا «از قبل ارزیابی‌شده» باشند.
+ثابت ارزیابی‌نشده فقط <code>DefId</code> چیزی را که باید برای محاسبهٔ این نتیجه ارزیابی شود ذخیره می‌کند.
+ثابت ارزیابی‌شده («مقدار») از قبل محاسبه شده است؛ نمایش آن‌ها بین ثابت‌های سامانهٔ نوع و ثابت‌های MIR فرق دارد: ثابت‌های MIR به <code>mir::ConstValue</code> ارزیابی می‌شوند؛ ثابت‌های سامانهٔ نوع به <code>ty::ValTree</code>.</p>
+<p>ثابت‌های سامانهٔ نوع برای پشتیبانی از const generics چند variant بیشتر دارند: می‌توانند به پارامترهای const generic محلی ارجاع دهند و در معرض استنتاج‌اند.
+علاوه بر این، variant با نام <code>mir::Constant::Ty</code> اجازه می‌دهد از ثابت دلخواه سامانهٔ نوع به‌عنوان ثابت MIR استفاده کنیم؛ این هر وقت پارامتر const generic به‌عنوان operand به‌کار رود رخ می‌دهد.</p>
+<h3 id="mir-constant-values"><a class="header" href="#mir-constant-values">MIR constant values</a></h3>
+<p>به‌طور کلی،
+مقدار ثابت MIR (<code>mir::ConstValue</code>) با ارزیابی ثابتی که کاربر نوشته محاسبه شده است.
+این <a href="../const-eval.html">ارزیابی ثابت</a> نمایش بسیار سطح پایینی از نتیجه برحسب بایت‌های جداگانه تولید می‌کند.
+این را ثابت «غیرمستقیم (indirect)» (<code>mir::ConstValue::Indirect</code>) می‌نامیم چون مقدار در حافظه ذخیره می‌شود.</p>
+<p>اما ذخیرهٔ همه‌چیز در حافظه بسیار ناکارآمد خواهد بود.
+بنابراین variantهای دیگری در <code>mir::ConstValue</code> هست که می‌توانند برخی مقادیر ساده و رایج را کارآمدتر نمایش دهند.
+به‌طور خاص، هر چیزی که مستقیماً به‌صورت literal در Rust قابل‌نوشتن است (عدد صحیح، ممیز شناور، نویسه، بولی، و همچنین <code>"string literals"</code> و <code>b"byte string literals"</code>) variant بهینه‌ای دارد که از سربار کامل نمایش درون‌حافظه‌ای پرهیز می‌کند.</p>
+<h3 id="valtrees"><a class="header" href="#valtrees">ValTrees</a></h3>
+<p>ثابت ارزیابی‌شدهٔ سامانهٔ نوع یک «valtree» است.
+ساختار داده <code>ty::ValTree</code> اجازه می‌دهد نمایش دهیم</p>
+<ul>
+<li>arrays,</li>
+<li>many structs,</li>
+<li>tuples,</li>
+<li>enumها و،</li>
+<li>most primitives.</li>
+</ul>
+<p>مهم‌ترین قاعدهٔ این نمایش این است که هر مقدار باید به‌طور یکتا نمایش داده شود.
+به عبارت دیگر، یک مقدار مشخص فقط باید به یک شکل مشخص قابل‌نمایش باشد.
+برای مثال، فقط یک راه برای نمایش آرایه‌ای از دو عدد صحیح به‌صورت <code>ValTree</code> هست:
+<code>Branch([Leaf(first_int), Leaf(second_int)])</code>.
+حتی اگر نظری <code>[u32; 2]</code> را بتوان در یک <code>u64</code> کدگذاری کرد و در نتیجه فقط <code>Leaf(bits_of_two_u32)</code> بود، این ساخت قانونی <code>ValTree</code> نیست (و انجامش بسیار پیچیده است، پس بعید است کسی وسوسه شود).</p>
+<p>این قواعد همچنین یعنی برخی مقادیر قابل‌نمایش نیستند.
+<code>union</code> در ثابت‌های سطح نوع نمی‌تواند باشد،
+چون روشن نیست چگونه باید نمایش داده شوند، چون variant فعالشان ناشناخته است.
+به همین ترتیب، راهی برای نمایش اشاره‌گرهای خام نیست چون آدرس‌ها در زمان کامپایل ناشناخته‌اند،
+و بنابراین نمی‌توانیم دربارهٔ آن‌ها فرضی کنیم.
+ارجاع‌ها از طرف دیگر <em>می‌توانند</em> نمایش داده شوند،
+چون برابری ارجاع‌ها برابری مقدارشان تعریف شده،
+پس آدرسشان را نادیده می‌گیریم و فقط به مقدار پشتیبان نگاه می‌کنیم.
+باید مطمئن شویم مقادیر اشاره‌گر ارجاع‌ها در زمان کامپایل قابل‌مشاهده نیستند.
+بنابراین <code>&amp;42</code> را دقیقاً مثل <code>42</code> کدگذاری می‌کنیم.
+هر تبدیل از valtree به مقدار ثابت MIR باید indirection واقعی را دوباره معرفی کند.
+در زمان codegen،
+آدرس‌ها ممکن است بین چند استفاده حذف تکرار شوند یا نشوند، که کاملاً به انتخاب‌های دلخواه بهینه‌سازی بستگی دارد.</p>
+<p>در نتیجه، همهٔ دیکد کردن <code>ValTree</code> باید با تطبیق روی نوع ابتدا و تصمیم‌گیری بر آن اساس انجام شود.
+خود مقدار بدون نوع متعلق به آن اطلاع مفیدی نمی‌دهد.</p>
+<h3 id="promoted-constants"><a class="header" href="#promoted-constants">Promoted constants</a></h3>
+<p><a href="https://github.com/rust-lang/const-eval/blob/master/promotion.md">مستندات promotion</a> در گروه کاری const-eval را ببینید.</p><nav class="page-nav"><a href="../thir.html">→ THIR (بازنمایی میانی سطح بالای نوع‌دار)</a><a href="construction.html">ساخت MIR ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

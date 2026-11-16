@@ -1,0 +1,1437 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>پیکربندی — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/config"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="configuration"><a class="header" href="#configuration">Configuration</a></h1>
+<p>این سند توضیح می‌دهد نظام پیکربندی Cargo چگونه کار می‌کند و چه کلیدها یا گزینه‌هایی در دسترس‌اند. برای پیکربندی یک بسته از طریق manifest آن، <a href="manifest.html">قالب manifest</a> را ببینید.</p>
+<h2 id="hierarchical-structure"><a class="header" href="#hierarchical-structure">Hierarchical structure</a></h2>
+<p>Cargo هم پیکربندی محلی برای یک بستهٔ خاص را می‌پذیرد و هم پیکربندی سراسری را. فایل‌های پیکربندی را در پوشهٔ فعلی و
+همهٔ پوشه‌های والد جست‌وجو می‌کند. برای مثال، اگر Cargo در
+<code>/projects/foo/bar/baz</code> فراخوانی شود، فایل‌های پیکربندی زیر به همین ترتیب
+بررسی و ادغام می‌شوند:</p>
+<ul>
+<li><code>/projects/foo/bar/baz/.cargo/config.toml</code></li>
+<li><code>/projects/foo/bar/.cargo/config.toml</code></li>
+<li><code>/projects/foo/.cargo/config.toml</code></li>
+<li><code>/projects/.cargo/config.toml</code></li>
+<li><code>/.cargo/config.toml</code></li>
+<li><code>$CARGO_HOME/config.toml</code> which defaults to:
+<ul>
+<li>Windows: <code>%USERPROFILE%\.cargo\config.toml</code></li>
+<li>Unix: <code>$HOME/.cargo/config.toml</code></li>
+</ul>
+</li>
+</ul>
+<p>با این ساختار می‌توانید پیکربندی را برای هر بسته مشخص کنید و حتی
+آن را در کنترل نسخه قرار دهید. همچنین می‌توانید پیش‌فرض‌های شخصی خود را
+در یک فایل پیکربندی در پوشهٔ خانگی تعیین کنید.</p>
+<p>اگر یک کلید در چند فایل پیکربندی مشخص شده باشد، مقدارها با هم ادغام می‌شوند.
+برای عددها، رشته‌ها و مقادیر بولی، مقدار در پوشهٔ عمیق‌تر بر پوشه‌های پیشین ارجحیت دارد و
+پوشهٔ خانگی کمترین اولویت را دارد. آرایه‌ها به هم الحاق می‌شوند
+و موارد با اولویت بالاتر در آرایهٔ ادغام‌شده دیرتر قرار می‌گیرند.</p>
+<p>در حال حاضر، وقتی Cargo از یک workspace فراخوانی می‌شود، فایل‌های پیکربندی را از
+crateهای درون workspace نمی‌خواند. یعنی اگر workspace دو crate به نام‌های
+<code>/projects/foo/bar/baz/mylib</code> و <code>/projects/foo/bar/baz/mybin</code> داشته باشد و
+فایل‌های پیکربندی Cargo در <code>/projects/foo/bar/baz/mylib/.cargo/config.toml</code>
+و <code>/projects/foo/bar/baz/mybin/.cargo/config.toml</code> وجود داشته باشند، Cargo
+وقتی از ریشهٔ workspace (<code>/projects/foo/bar/baz/</code>) فراخوانی شود، آن فایل‌ها را نمی‌خواند.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Cargo فایل‌های پیکربندی بدون پسوند <code>.toml</code> را هم می‌خواند، مثل
+<code>.cargo/config</code>. پشتیبانی از پسوند <code>.toml</code> در نسخهٔ 1.39 افزوده شد
+و شکل ترجیحی است. اگر هر دو فایل وجود داشته باشند، Cargo از فایل بدون پسوند استفاده می‌کند.</p>
+</blockquote>
+<h2 id="configuration-format"><a class="header" href="#configuration-format">Configuration format</a></h2>
+<p>فایل‌های پیکربندی با <a href="https://toml.io/">قالب TOML</a> نوشته می‌شوند (مثل
+manifest)، با جفت‌های کلید-مقدار ساده درون بخش‌ها (جدول‌ها). مطلب زیر
+نمای کلی سریعی از همهٔ تنظیمات است و توضیح‌های کامل در ادامه آمده است.</p>
+<pre><code class="language-toml">paths = ["/path/to/override"] # path dependency overrides
+
+[alias]     # command aliases
+b = "build"
+c = "check"
+t = "test"
+r = "run"
+rr = "run --release"
+recursive_example = "rr --example recursions"
+space_example = ["run", "--release", "--", "\"command list\""]
+
+[build]
+warnings = "warn"             # adjust the effective lint level for warnings
+jobs = 1                      # number of parallel jobs, defaults to # of CPUs
+rustc = "rustc"               # the rust compiler tool
+rustc-wrapper = "…"           # run this wrapper instead of `rustc`
+rustc-workspace-wrapper = "…" # run this wrapper instead of `rustc` for workspace members
+rustdoc = "rustdoc"           # the doc generator tool
+target = "tuple"              # build for the target tuple (ignored by `cargo install`)
+profile = "dev"               # build using the specified profile (ignored by `cargo install`)
+target-dir = "target"         # path of where to place generated artifacts
+build-dir = "target"          # path of where to place intermediate build artifacts
+rustflags = ["…", "…"]        # custom flags to pass to all compiler invocations
+rustdocflags = ["…", "…"]     # custom flags to pass to rustdoc
+incremental = true            # whether or not to enable incremental compilation
+dep-info-basedir = "…"        # path for the base directory for targets in depfiles
+
+[credential-alias]
+# Provides a way to define aliases for credential providers.
+my-alias = ["/usr/bin/cargo-credential-example", "--argument", "value", "--flag"]
+
+[doc]
+browser = "chromium"          # browser to use with `cargo doc --open`,
+                              # overrides the `BROWSER` environment variable
+
+[env]
+# Set ENV_VAR_NAME=value for any process run by Cargo
+ENV_VAR_NAME = "value"
+# Set even if already present in environment
+ENV_VAR_NAME_2 = { value = "value", force = true }
+# `value` is relative to the parent of `.cargo/config.toml`, env var will be the full absolute path
+ENV_VAR_NAME_3 = { value = "relative/path", relative = true }
+
+[future-incompat-report]
+frequency = 'always' # when to display a notification about a future incompat report
+
+[cache]
+auto-clean-frequency = "1 day"   # How often to perform automatic cache cleaning
+
+[cargo-new]
+vcs = "none"              # VCS to use ('git', 'hg', 'pijul', 'fossil', 'none')
+
+[http]
+debug = false               # HTTP debugging
+proxy = "host:port"         # HTTP proxy in libcurl format
+ssl-version = "tlsv1.3"     # TLS version to use
+ssl-version.max = "tlsv1.3" # maximum TLS version
+ssl-version.min = "tlsv1.1" # minimum TLS version
+timeout = 30                # timeout for each HTTP request, in seconds
+low-speed-limit = 10        # network timeout threshold (bytes/sec)
+cainfo = "cert.pem"         # path to Certificate Authority (CA) bundle
+proxy-cainfo = "cert.pem"   # path to proxy Certificate Authority (CA) bundle
+check-revoke = true         # check for SSL certificate revocation
+multiplexing = true         # HTTP/2 multiplexing
+user-agent = "…"            # the user-agent header
+
+[install]
+root = "/some/path"         # `cargo install` destination directory
+profile = "release"         # build using the specified profile
+
+[net]
+retry = 3                   # network retries
+git-fetch-with-cli = true   # use the `git` executable for git operations
+offline = true              # do not access the network
+
+[net.ssh]
+known-hosts = ["..."]       # known SSH host keys
+
+[patch.&lt;registry&gt;]
+# Same keys as for [patch] in Cargo.toml
+
+[profile.&lt;name&gt;]         # Modify profile settings via config.
+inherits = "dev"         # Inherits settings from [profile.dev].
+opt-level = 0            # Optimization level.
+debug = true             # Include debug info.
+split-debuginfo = '...'  # Debug info splitting behavior.
+strip = "none"           # Removes symbols or debuginfo.
+debug-assertions = true  # Enables debug assertions.
+overflow-checks = true   # Enables runtime integer overflow checks.
+lto = false              # Sets link-time optimization.
+panic = 'unwind'         # The panic strategy.
+incremental = true       # Incremental compilation.
+codegen-units = 16       # Number of code generation units.
+rpath = false            # Sets the rpath linking option.
+trim-paths = "none"      # Sanitizes paths in build outputs.
+[profile.&lt;name&gt;.build-override]  # Overrides build-script settings.
+# Same keys for a normal profile.
+[profile.&lt;name&gt;.package.&lt;name&gt;]  # Override profile for a package.
+# Same keys for a normal profile (minus `panic`, `lto`, and `rpath`).
+
+[resolver]
+lockfile-path = "…"  # Overrides the path used for
+incompatible-rust-versions = "allow"  # Specifies how resolver reacts to these
+incompatible-publish-age = "deny"  # Specifies how resolver treats recently published versions
+
+[registries.&lt;name&gt;]  # registries other than crates.io
+index = "…"          # URL of the registry index
+token = "…"          # authentication token for the registry
+credential-provider = "cargo:token" # The credential provider for this registry.
+min-publish-age = "7 days" # Override `registry.global-min-publish-age` for this registry
+
+[registries.crates-io]
+protocol = "sparse"  # The protocol to use to access crates.io.
+
+[registry]
+default = "…"        # name of the default registry
+token = "…"          # authentication token for crates.io
+credential-provider = "cargo:token"           # The credential provider for crates.io.
+global-credential-providers = ["cargo:token"] # The credential providers to use by default.
+global-min-publish-age = "7 days" # The time span allowed for registry packages to use by default.
+
+[source.&lt;name&gt;]      # source definition and replacement
+replace-with = "…"   # replace this source with the given named source
+directory = "…"      # path to a directory source
+registry = "…"       # URL to a registry source
+local-registry = "…" # path to a local registry source
+git = "…"            # URL of a git repository source
+branch = "…"         # branch name for the git repository
+tag = "…"            # tag name for the git repository
+rev = "…"            # revision for the git repository
+
+[target.&lt;tuple&gt;]
+linker = "…"              # linker to use
+runner = "…"              # wrapper to run executables
+rustflags = ["…", "…"]    # custom flags for `rustc`
+rustdocflags = ["…", "…"] # custom flags for `rustdoc`
+
+[target.&lt;cfg&gt;]
+linker = "…"            # linker to use
+runner = "…"            # wrapper to run executables
+rustflags = ["…", "…"]  # custom flags for `rustc`
+
+[target.&lt;tuple&gt;.&lt;links&gt;] # `links` build script override
+rustc-link-lib = ["foo"]
+rustc-link-search = ["/path/to/foo"]
+rustc-flags = "-L /some/path"
+rustc-cfg = ['key="value"']
+rustc-env = {key = "value"}
+rustc-cdylib-link-arg = ["…"]
+metadata_key1 = "value"
+metadata_key2 = "value"
+
+[term]
+quiet = false                    # whether cargo output is quiet
+verbose = false                  # whether cargo provides verbose output
+color = 'auto'                   # whether cargo colorizes output
+hyperlinks = true                # whether cargo inserts links into output
+unicode = true                   # whether cargo can render output using non-ASCII unicode characters
+progress.when = 'auto'           # whether cargo shows progress bar
+progress.width = 80              # width of progress bar
+progress.term-integration = true # whether cargo reports progress to terminal emulator
+</code></pre>
+<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment variables</a></h2>
+<p>علاوه بر فایل‌های پیکربندی TOML، Cargo را می‌توان از طریق متغیرهای محیطی هم پیکربندی کرد. برای هر کلید پیکربندی به شکل <code>foo.bar</code>
+می‌توان از متغیر محیطی <code>CARGO_FOO_BAR</code> هم برای تعیین مقدار استفاده کرد.
+کلیدها به حروف بزرگ تبدیل می‌شوند و نقطه‌ها و خط‌تیره‌ها به زیرخط.
+برای مثال کلید <code>target.x86_64-unknown-linux-gnu.runner</code> را می‌توان با متغیر محیطی
+<code>CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER</code> هم تعریف کرد.</p>
+<p>متغیرهای محیطی بر فایل‌های پیکربندی TOML اولویت دارند.
+فعلاً فقط مقادیر صحیح، بولی، رشته و برخی آرایه‌ها را می‌توان با متغیرهای محیطی تعریف کرد. <a href="#configuration-keys">توضیحات زیر</a>
+نشان می‌دهند کدام کلیدها از متغیر محیطی پشتیبانی می‌کنند؛ بقیه به دلیل <a href="https://github.com/rust-lang/cargo/issues/5416">مشکلات فنی</a> پشتیبانی نمی‌شوند.</p>
+<p>علاوه بر سازوکار بالا، Cargo چند <a href="environment-variables.html">متغیر محیطی</a> مشخص دیگر را هم می‌شناسد.</p>
+<h2 id="command-line-overrides"><a class="header" href="#command-line-overrides">Command-line overrides</a></h2>
+<p>Cargo همچنین بازنویسی‌های دلخواه پیکربندی را از طریق گزینهٔ خط فرمان
+<code>--config</code> می‌پذیرد. آرگومان باید به نحو TOML به شکل
+<code>KEY=VALUE</code> باشد یا به‌صورت مسیر یک فایل پیکربندی اضافی داده شود:</p>
+<pre><code class="language-console"># With `KEY=VALUE` in TOML syntax
+cargo --config net.git-fetch-with-cli=true fetch
+
+# With a path to a configuration file
+cargo --config ./path/to/my/extra-config.toml fetch
+</code></pre>
+<p>گزینهٔ <code>--config</code> را می‌توان چند بار مشخص کرد؛ در این صورت
+مقدارها به ترتیب از چپ به راست ادغام می‌شوند، با همان منطق ادغامی
+که وقتی چند فایل پیکربندی اعمال می‌شود به‌کار می‌رود. مقادیری که به این روش
+مشخص شوند بر متغیرهای محیطی اولویت دارند،
+و آن‌ها بر فایل‌های پیکربندی.</p>
+<p>وقتی گزینهٔ <code>--config</code> به‌صورت یک فایل پیکربندی اضافی داده شود،
+فایل پیکربندی بارگذاری‌شده از این راه از همان قواعد اولویتی پیروی می‌کند
+که گزینه‌های دیگری که مستقیماً با <code>--config</code> مشخص می‌شوند.</p>
+<p>چند مثال از شکل آن با نحو Bourne shell:</p>
+<pre><code class="language-console"># Most shells will require escaping.
+cargo --config http.proxy=\"http://example.com\" …
+
+# Spaces may be used.
+cargo --config "net.git-fetch-with-cli = true" …
+
+# TOML array example. Single quotes make it easier to read and write.
+cargo --config 'build.rustdocflags = ["--html-in-header", "header.html"]' …
+
+# Example of a complex TOML key.
+cargo --config "target.'cfg(all(target_arch = \"arm\", target_os = \"none\"))'.runner = 'my-runner'" …
+
+# Example of overriding a profile setting.
+cargo --config profile.dev.package.image.opt-level=3 …
+</code></pre>
+<h2 id="including-extra-configuration-files"><a class="header" href="#including-extra-configuration-files">افزودن فایل‌های پیکربندی اضافی</a></h2>
+<p>پیکربندی می‌تواند با کلید سطح بالای <code>include</code> فایل‌های پیکربندی دیگر را هم شامل شود.
+این کار اشتراک پیکربندی بین چند پروژه
+یا تقسیم پیکربندی‌های پیچیده به چند فایل را ممکن می‌کند.</p>
+<h3 id="include"><a class="header" href="#include"><code>include</code></a></h3>
+<ul>
+<li>نوع: آرایه‌ای از رشته‌ها یا جدول‌ها</li>
+<li>Default: none</li>
+<li>متغیر محیطی: پشتیبانی نمی‌شود</li>
+</ul>
+<p>فایل‌های پیکربندی اضافی را بارگذاری می‌کند.
+مسیرها نسبت به فایل پیکربندی‌ای هستند که آن‌ها را include می‌کند.
+فقط مسیرهایی که به <code>.toml</code> ختم می‌شوند پذیرفته می‌شوند.</p>
+<p>قالب‌های زیر پشتیبانی می‌شوند:</p>
+<pre><code class="language-toml"># array of paths
+include = [
+    "frodo.toml",
+    "samwise.toml",
+]
+
+# inline tables for more control
+include = [
+    { path = "required.toml" },
+    { path = "optional.toml", optional = true },
+]
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>برای خوانایی بهتر و پرهیز از سردرگمی، توصیه می‌شود:</p>
+<ul>
+<li><code>include</code> را بالای فایل پیکربندی بگذارید</li>
+<li>هر include را در یک خط جدا بنویسید تا تفاوت‌ها در کنترل نسخه واضح‌تر باشد</li>
+<li>وقتی includeهای اختیاری لازم‌اند از نحو جدول درون‌خطی (inline table) استفاده کنید</li>
+</ul>
+</blockquote>
+<p>هنگام استفاده از نحو جدول، فیلدهای زیر پشتیبانی می‌شوند:</p>
+<ul>
+<li><code>path</code> (رشته، الزامی): مسیر فایل پیکربندی‌ای که باید include شود.</li>
+<li><code>optional</code> (بولی، پیش‌فرض: false): اگر <code>true</code> باشد، فایل‌های ناموجود به‌جای ایجاد خطا
+بی‌صدا نادیده گرفته می‌شوند.</li>
+</ul>
+<p>رفتار ادغام <code>include</code> با دیگر مقادیر پیکربندی فرق دارد:</p>
+<ol>
+<li>Config values are first loaded from the <code>include</code> paths.
+<ul>
+<li>فایل‌های include‌شده از چپ به راست بارگذاری می‌شوند،
+و مقادیر فایل‌های بعدی بر فایل‌های قبلی اولویت دارند.</li>
+<li>اگر فایل‌های پیکربندی include‌شده خودشان هم کلید <code>include</code> داشته باشند، این مرحله به‌صورت بازگشتی تکرار می‌شود.</li>
+</ul>
+</li>
+<li>سپس مقادیر خود فایل پیکربندی روی پیکربندی include‌شده ادغام می‌شوند
+و بالاترین اولویت را دارند.</li>
+</ol>
+<h2 id="config-relative-paths"><a class="header" href="#config-relative-paths">Config-relative paths</a></h2>
+<p>مسیرها در فایل‌های پیکربندی می‌توانند مطلق، نسبی، یا یک نام ساده بدون هیچ جداکنندهٔ مسیر باشند.
+مسیر فایل‌های اجرایی بدون جداکنندهٔ مسیر برای جست‌وجوی فایل اجرایی از متغیر محیطی <code>PATH</code> استفاده می‌کند.
+مسیر غیر اجرایی‌ها نسبت به جایی است که مقدار پیکربندی تعریف شده است.</p>
+<p>به‌طور خاص، قواعد این‌هاست:</p>
+<ul>
+<li>برای متغیرهای محیطی، مسیرها نسبت به پوشهٔ کاری فعلی‌اند.</li>
+<li>برای مقادیر پیکربندی که مستقیماً از گزینهٔ <a href="#command-line-overrides"><code>--config KEY=VALUE</code></a> بارگذاری می‌شوند،
+مسیرها نسبت به پوشهٔ کاری فعلی‌اند.</li>
+<li>برای فایل‌های پیکربندی، مسیرها نسبت به پوشهٔ والدِ پوشه‌ای هستند که فایل‌های پیکربندی در آن تعریف شده‌اند،
+چه آن فایل‌ها از <a href="#hierarchical-structure">جست‌وجوی سلسله‌مراتبی</a>
+آمده باشند و چه از گزینهٔ <a href="#command-line-overrides"><code>--config &lt;path&gt;</code></a>.</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>برای حفظ سازگاری با رفتار موجود جست‌وجوی <code>.cargo/config.toml</code>،
+عمداً چنین طراحی شده که مسیر در فایل پیکربندی‌ای که با <code>--config &lt;path&gt;</code> داده می‌شود
+هم نسبت به دو سطح بالاتر از خود فایل پیکربندی باشد.</p>
+<p>برای پرهیز از نتایج غیرمنتظره، قاعدهٔ سرانگشتی این است که فایل‌های پیکربندی اضافی را
+در همان سطحی بگذارید که <code>.cargo/config.toml</code> در پروژهٔ شما پیدا می‌شود.
+مثلاً برای پروژهٔ <code>/my/project</code>
+توصیه می‌شود فایل‌های پیکربندی را زیر <code>/my/project/.cargo</code>
+یا در پوشهٔ جدیدی در همان سطح بگذارید، مثل <code>/my/project/.config</code>.</p>
+</blockquote>
+<pre><code class="language-toml"># Relative path examples.
+
+[target.x86_64-unknown-linux-gnu]
+runner = "foo"  # Searches `PATH` for `foo`.
+
+[source.vendored-sources]
+# Directory is relative to the parent where `.cargo/config.toml` is located.
+# For example, `/my/project/.cargo/config.toml` would result in `/my/project/vendor`.
+directory = "vendor"
+</code></pre>
+<h2 id="executable-paths-with-arguments"><a class="header" href="#executable-paths-with-arguments">مسیر فایل‌های اجرایی همراه با آرگومان‌ها</a></h2>
+<p>برخی دستورهای Cargo برنامه‌های خارجی را فراخوانی می‌کنند که می‌توان آن‌ها را به‌صورت یک مسیر
+و تعدادی آرگومان پیکربندی کرد.</p>
+<p>مقدار می‌تواند آرایه‌ای از رشته‌ها باشد مثل <code>['/path/to/program', 'somearg']</code> یا
+یک رشتهٔ جداشده با فاصله مثل <code>'/path/to/program somearg'</code>. اگر مسیر
+فایل اجرایی فاصله داشته باشد، باید از شکل آرایه‌ای استفاده کرد.</p>
+<p>اگر Cargo آرگومان‌های دیگری مثل مسیری برای باز‌کردن یا اجرا به برنامه بدهد،
+آن‌ها بعد از آخرین آرگومان مشخص‌شده در مقدار گزینه‌ای با این قالب داده می‌شوند. اگر برنامهٔ مشخص‌شده
+جداکنندهٔ مسیر نداشته باشد، Cargo فایل اجرایی آن را در <code>PATH</code> جست‌وجو می‌کند.</p>
+<h2 id="credentials"><a class="header" href="#credentials">Credentials</a></h2>
+<p>مقادیر پیکربندی که اطلاعات حساس دارند در فایل
+<code>$CARGO_HOME/credentials.toml</code> ذخیره می‌شوند. وقتی از ارائه‌دهندهٔ اعتبارنامهٔ <a href="registry-authentication.html#cargotoken"><code>cargo:token</code></a> استفاده شود، این فایل به‌طور خودکار توسط
+<a href="../commands/cargo-login.html"><code>cargo login</code></a> و <a href="../commands/cargo-logout.html"><code>cargo logout</code></a> ساخته و به‌روز می‌شود.</p>
+<p>توکن‌ها در برخی دستورهای Cargo مثل <a href="../commands/cargo-publish.html"><code>cargo publish</code></a> برای
+احراز هویت با registryهای راه‌دور استفاده می‌شوند. باید مراقب بود از توکن‌ها
+محافظت شود و محرمانه بمانند.</p>
+<p>قالب آن همان قالب فایل‌های پیکربندی Cargo است.</p>
+<pre><code class="language-toml">[registry]
+token = "…"   # Access token for crates.io
+
+[registries.&lt;name&gt;]
+token = "…"   # Access token for the named registry
+</code></pre>
+<p>مثل بیشتر مقادیر پیکربندی دیگر، توکن‌ها را می‌توان با متغیرهای محیطی مشخص کرد. توکن <a href="https://crates.io/">crates.io</a> را می‌توان با متغیر محیطی
+<code>CARGO_REGISTRY_TOKEN</code> مشخص کرد. توکن registryهای دیگر را می‌توان با متغیرهای محیطی به شکل
+<code>CARGO_REGISTRIES_&lt;name&gt;_TOKEN</code> مشخص کرد که در آن <code>&lt;name&gt;</code> نام registry
+با حروف بزرگ است.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Cargo فایل‌های اعتبارنامه را هم بدون پسوند <code>.toml</code> می‌خواند و می‌نویسد،
+مثل <code>.cargo/credentials</code>. پشتیبانی از پسوند <code>.toml</code>
+در نسخهٔ 1.39 افزوده شد. در نسخهٔ 1.68، Cargo به‌طور پیش‌فرض در فایل دارای
+پسوند می‌نویسد. اما به دلیل سازگاری با نسخه‌های قبلی، وقتی هر دو
+فایل وجود داشته باشند، Cargo فایل بدون پسوند را می‌خواند و در آن می‌نویسد.</p>
+</blockquote>
+<h2 id="configuration-keys"><a class="header" href="#configuration-keys">Configuration keys</a></h2>
+<p>این بخش همهٔ کلیدهای پیکربندی را مستند می‌کند. توضیح کلیدهایی که بخش متغیر دارند
+با قلاب‌های زاویه‌ای مشخص شده، مثل <code>target.&lt;tuple&gt;</code> که در آن
+بخش <code>&lt;tuple&gt;</code> می‌تواند هر <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)">target tuple</a> مثل
+<code>target.x86_64-pc-windows-msvc</code> باشد.</p>
+<h3 id="paths"><a class="header" href="#paths"><code>paths</code></a></h3>
+<ul>
+<li>نوع: آرایه‌ای از رشته‌ها (مسیرها)</li>
+<li>Default: none</li>
+<li>متغیر محیطی: پشتیبانی نمی‌شود</li>
+</ul>
+<p>آرایه‌ای از مسیرها به بسته‌های محلی که باید به‌عنوان بازنویسی (override) برای
+وابستگی‌ها استفاده شوند. برای اطلاعات بیشتر <a href="overriding-dependencies.html#paths-overrides">راهنمای بازنویسی وابستگی‌ها</a> را ببینید.</p>
+<h3 id="alias"><a class="header" href="#alias"><code>[alias]</code></a></h3>
+<ul>
+<li>نوع: رشته یا آرایه‌ای از رشته‌ها</li>
+<li>Default: see below</li>
+<li>Environment: <code>CARGO_ALIAS_&lt;name&gt;</code></li>
+</ul>
+<p>جدول <code>[alias]</code> نام‌های مستعار (alias) دستورهای خط فرمان را تعریف می‌کند. برای مثال، اجرای <code>cargo b</code> نام مستعاری برای اجرای <code>cargo build</code> است. هر کلید در جدول
+زیردستور است و مقدار، دستور واقعی‌ای است که باید اجرا شود. مقدار می‌تواند
+آرایه‌ای از رشته‌ها باشد که عنصر اول دستور و بقیه آرگومان‌ها هستند. همچنین می‌تواند رشته‌ای باشد که با فاصله به
+زیردستور و آرگومان‌ها تقسیم می‌شود. نام‌های مستعار زیر در Cargo ازپیش‌تعبیه‌شده‌اند:</p>
+<pre><code class="language-toml">[alias]
+b = "build"
+c = "check"
+d = "doc"
+t = "test"
+r = "run"
+rm = "remove"
+</code></pre>
+<p>نام‌های مستعار اجازهٔ بازتعریف دستورهای داخلی موجود را ندارند.</p>
+<p>نام‌های مستعار بازگشتی‌اند:</p>
+<pre><code class="language-toml">[alias]
+rr = "run --release"
+recursive_example = "rr --example recursions"
+</code></pre>
+<h3 id="build"><a class="header" href="#build"><code>[build]</code></a></h3>
+<p>جدول <code>[build]</code> عملیات زمان ساخت و تنظیمات کامپایلر را کنترل می‌کند.</p>
+<h4 id="buildwarnings"><a class="header" href="#buildwarnings"><code>build.warnings</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: <code>"warn"</code></li>
+<li>Environment: <code>CARGO_BUILD_WARNINGS</code></li>
+</ul>
+<p>سطح مؤثر هشدارهای lint را برای بسته‌های محلی تنظیم می‌کند.
+سطح‌های مجاز عبارت‌اند از:</p>
+<ul>
+<li><code>"warn"</code>: ادامهٔ تولید lintها به‌صورت هشدار (پیش‌فرض).</li>
+<li><code>"allow"</code>: پنهان‌کردن lintها.</li>
+<li><code>"deny"</code>: برای crate‌ای که هشدار lint دارد خطا تولید می‌کند.
+برای دیدن هشدارهای lint همهٔ crateهای وابسته از <code>--keep-going</code> استفاده کنید.</li>
+</ul>
+<p>فقط هشدارهایی که lint هستند (یعنی سطحشان قابل‌تنظیم است) تحت‌تأثیر قرار می‌گیرند،
+مثلاً هشدارهایی که lint نیستند یا هشدارهای وابستگی‌ها دست‌نخورده می‌مانند و از طریق <code>--verbose --verbose</code> قابل‌مشاهده‌اند.</p>
+<blockquote>
+<p><strong>MSRV:</strong> از نسخهٔ 1.97 رعایت می‌شود.</p>
+</blockquote>
+<h4 id="buildjobs"><a class="header" href="#buildjobs"><code>build.jobs</code></a></h4>
+<ul>
+<li>نوع: عدد صحیح یا رشته</li>
+<li>پیش‌فرض: تعداد CPUهای منطقی</li>
+<li>Environment: <code>CARGO_BUILD_JOBS</code></li>
+</ul>
+<p>حداکثر تعداد فرایندهای کامپایلر را که به‌صورت موازی اجرا می‌شوند تعیین می‌کند. اگر منفی باشد،
+حداکثر تعداد فرایندهای کامپایلر برابر تعداد CPUهای منطقی
+به‌علاوهٔ مقدار داده‌شده می‌شود. نباید 0 باشد. اگر رشتهٔ <code>default</code> داده شود،
+مقدار به پیش‌فرض‌ها برمی‌گردد.</p>
+<p>می‌توان آن را با گزینهٔ خط فرمان <code>--jobs</code> بازنویسی کرد.</p>
+<h4 id="buildrustc"><a class="header" href="#buildrustc"><code>build.rustc</code></a></h4>
+<ul>
+<li>نوع: رشته (مسیر برنامه)</li>
+<li>Default: <code>"rustc"</code></li>
+<li>متغیر محیطی: <code>CARGO_BUILD_RUSTC</code> یا <code>RUSTC</code></li>
+</ul>
+<p>فایل اجرایی مورد استفاده برای <code>rustc</code> را تعیین می‌کند.</p>
+<h4 id="buildrustc-wrapper"><a class="header" href="#buildrustc-wrapper"><code>build.rustc-wrapper</code></a></h4>
+<ul>
+<li>نوع: رشته (مسیر برنامه)</li>
+<li>Default: none</li>
+<li>متغیر محیطی: <code>CARGO_BUILD_RUSTC_WRAPPER</code> یا <code>RUSTC_WRAPPER</code></li>
+</ul>
+<p>wrapper‌ای را تعیین می‌کند که به‌جای <code>rustc</code> اجرا شود. اولین آرگومانی که به
+wrapper داده می‌شود مسیر فایل اجرایی واقعی است
+(یعنی <code>build.rustc</code> اگر تنظیم شده باشد، در غیر این صورت <code>"rustc"</code>).</p>
+<h4 id="buildrustc-workspace-wrapper"><a class="header" href="#buildrustc-workspace-wrapper"><code>build.rustc-workspace-wrapper</code></a></h4>
+<ul>
+<li>نوع: رشته (مسیر برنامه)</li>
+<li>Default: none</li>
+<li>متغیر محیطی: <code>CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER</code> یا <code>RUSTC_WORKSPACE_WRAPPER</code></li>
+</ul>
+<p>wrapper‌ای را تعیین می‌کند که به‌جای <code>rustc</code> فقط برای اعضای workspace اجرا شود. در پروژهٔ
+تک‌بسته‌ای بدون workspace، همان بسته workspace به حساب می‌آید. اولین
+آرگومانی که به wrapper داده می‌شود مسیر فایل اجرایی واقعی است (یعنی <code>build.rustc</code> اگر
+تنظیم شده باشد، در غیر این صورت <code>"rustc"</code>). این بر هش نام فایل اثر می‌گذارد تا آرتیفکت‌های تولیدشده توسط
+wrapper جداگانه cache شوند.</p>
+<p>اگر هم <code>rustc-wrapper</code> و هم <code>rustc-workspace-wrapper</code> تنظیم شده باشند، تو در تو اجرا می‌شوند:
+فراخوانی نهایی <code>$RUSTC_WRAPPER $RUSTC_WORKSPACE_WRAPPER $RUSTC</code> است.</p>
+<h4 id="buildrustdoc"><a class="header" href="#buildrustdoc"><code>build.rustdoc</code></a></h4>
+<ul>
+<li>نوع: رشته (مسیر برنامه)</li>
+<li>Default: <code>"rustdoc"</code></li>
+<li>متغیر محیطی: <code>CARGO_BUILD_RUSTDOC</code> یا <code>RUSTDOC</code></li>
+</ul>
+<p>فایل اجرایی مورد استفاده برای <code>rustdoc</code> را تعیین می‌کند.</p>
+<h4 id="buildtarget"><a class="header" href="#buildtarget"><code>build.target</code></a></h4>
+<ul>
+<li>نوع: رشته یا آرایه‌ای از رشته‌ها</li>
+<li>Default: host platform</li>
+<li>Environment: <code>CARGO_BUILD_TARGET</code></li>
+</ul>
+<p><a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)">سه‌تایی‌های پلتفرم هدف</a> پیش‌فرض برای کامپایل.</p>
+<p>Possible values:</p>
+<ul>
+<li>هر هدف پشتیبانی‌شده در <code>rustc --print target-list</code>.</li>
+<li><code>"host-tuple"</code>، که به‌طور داخلی با هدف میزبان جایگزین می‌شود. این برای وقتی مفید است که برخی crateها را cross-compile می‌کنید و نمی‌خواهید ماشین میزبان را به‌عنوان هدف مشخص کنید (مثلاً یک <code>xtask</code> در پروژهٔ مشترکی که میزبان‌های زیادی روی آن کار می‌کنند).</li>
+<li>مسیر یک مشخصات هدف سفارشی. برای اطلاعات بیشتر <a href="../../rustc/targets/custom.html#custom-target-lookup-path">مسیر جست‌وجوی هدف سفارشی</a> را ببینید.</li>
+</ul>
+<p>می‌توان آن را با گزینهٔ خط فرمان <code>--target</code> بازنویسی کرد.</p>
+<pre><code class="language-toml">[build]
+target = ["x86_64-unknown-linux-gnu", "i686-unknown-linux-gnu"]
+</code></pre>
+<h4 id="buildprofile"><a class="header" href="#buildprofile"><code>build.profile</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>پیش‌فرض: <code>"test"</code> اگر <code>cargo test</code> باشد، در غیر این صورت <code>"dev"</code></li>
+<li>Environment: <code>CARGO_BUILD_PROFILE</code></li>
+</ul>
+<p><a href="profiles.html">profile</a> پیش‌فرضی که با آن کامپایل می‌شود.</p>
+<p>می‌توان آن را با گزینه‌های خط فرمان <code>--release</code> یا <code>--profile</code> بازنویسی کرد.</p>
+<pre><code class="language-toml">[build]
+profile = "debug"
+</code></pre>
+<blockquote>
+<p><strong>MSRV:</strong> از نسخهٔ 1.100 رعایت می‌شود.</p>
+</blockquote>
+<h4 id="buildtarget-dir"><a class="header" href="#buildtarget-dir"><code>build.target-dir</code></a></h4>
+<ul>
+<li>Type: string (path)</li>
+<li>Default: <code>"target"</code></li>
+<li>متغیر محیطی: <code>CARGO_BUILD_TARGET_DIR</code> یا <code>CARGO_TARGET_DIR</code></li>
+</ul>
+<p>مسیری که همهٔ خروجی‌های کامپایلر در آن قرار می‌گیرد. اگر مشخص نشود، پیش‌فرض
+پوشه‌ای به نام <code>target</code> در ریشهٔ workspace است.</p>
+<p>می‌توان آن را با گزینهٔ خط فرمان <code>--target-dir</code> بازنویسی کرد.</p>
+<p>برای اطلاعات بیشتر <a href="../reference/build-cache.html">مستندات cache ساخت</a> را ببینید.</p>
+<h4 id="buildbuild-dir"><a class="header" href="#buildbuild-dir"><code>build.build-dir</code></a></h4>
+<ul>
+<li>Type: string (path)</li>
+<li>پیش‌فرض: مقدار <code>build.target-dir</code></li>
+<li>Environment: <code>CARGO_BUILD_BUILD_DIR</code></li>
+</ul>
+<p>پوشه‌ای که آرتیفکت‌های میانی ساخت در آن ذخیره می‌شوند.
+آرتیفکت‌های میانی توسط Rustc/Cargo در فرایند ساخت تولید می‌شوند.</p>
+<p>این گزینه از قالب‌بندی مسیر (path templating) پشتیبانی می‌کند.</p>
+<p>Available template variables:</p>
+<ul>
+<li><code>{workspace-root}</code> به ریشهٔ workspace فعلی تبدیل می‌شود.</li>
+<li><code>{cargo-cache-home}</code> به <code>CARGO_HOME</code> تبدیل می‌شود</li>
+<li><code>{workspace-path-hash}</code> به هشی از مسیر manifest تبدیل می‌شود</li>
+</ul>
+<p>برای اطلاعات بیشتر <a href="../reference/build-cache.html">مستندات cache ساخت</a> را ببینید.</p>
+<h4 id="buildrustflags"><a class="header" href="#buildrustflags"><code>build.rustflags</code></a></h4>
+<ul>
+<li>نوع: رشته یا آرایه‌ای از رشته‌ها</li>
+<li>Default: none</li>
+<li>متغیر محیطی: <code>CARGO_BUILD_RUSTFLAGS</code> یا <code>CARGO_ENCODED_RUSTFLAGS</code> یا <code>RUSTFLAGS</code></li>
+</ul>
+<p>پرچم‌های اضافی خط فرمان که به <code>rustc</code> داده می‌شوند. مقدار می‌تواند آرایه‌ای از
+رشته‌ها یا یک رشتهٔ جداشده با فاصله باشد.</p>
+<p>چهار منبع متقابلاً ناسازگار برای پرچم‌های اضافی وجود دارد. به ترتیب
+بررسی می‌شوند و اولینی که یافت شود استفاده می‌شود:</p>
+<ol>
+<li><code>CARGO_ENCODED_RUSTFLAGS</code> environment variable.</li>
+<li><code>RUSTFLAGS</code> environment variable.</li>
+<li>همهٔ ورودی‌های پیکربندی منطبق <code>target.&lt;tuple&gt;.rustflags</code> و <code>target.&lt;cfg&gt;.rustflags</code>
+که به هم متصل می‌شوند.</li>
+<li><code>build.rustflags</code> config value.</li>
+</ol>
+<p>پرچم‌های اضافی را می‌توان با دستور <a href="../commands/cargo-rustc.html"><code>cargo rustc</code></a> هم داد.</p>
+<p>اگر پرچم <code>--target</code> (یا <a href="#buildtarget"><code>build.target</code></a>) استفاده شود،
+پرچم‌ها فقط به کامپایلر برای آن هدف داده می‌شوند. چیزهایی که
+برای میزبان ساخته می‌شوند، مثل اسکریپت‌های ساخت یا proc macroها، این آرگومان‌ها را دریافت نمی‌کنند.
+بدون <code>--target</code>، پرچم‌ها به همهٔ فراخوانی‌های کامپایلر داده می‌شوند
+(از جمله اسکریپت‌های ساخت و proc macroها) چون وابستگی‌ها مشترک‌اند. اگر
+آرگومان‌هایی دارید که نمی‌خواهید به اسکریپت‌های ساخت یا proc macroها داده شوند و
+برای میزبان می‌سازید، <code>--target</code> را با <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)">host tuple</a> بدهید.</p>
+<p>توصیه نمی‌شود پرچم‌هایی را بدهید که معمولاً خود Cargo مدیریت می‌کند. برای
+مثال، پرچم‌هایی که از <a href="profiles.html">profileها</a> می‌آیند بهتر است با تنظیم
+گزینهٔ مناسب profile اعمال شوند.</p>
+<blockquote class="blockquote-tag blockquote-tag-caution">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Caution</p>
+<p>به‌دلیل ماهیت سطح پایین دادن مستقیم پرچم‌ها به
+کامپایلر، این کار ممکن است با نسخه‌های آیندهٔ Cargo تداخل پیدا کند، چون ممکن است
+خود همان پرچم‌ها یا مشابه آن‌ها را بدهند و با
+پرچم‌هایی که شما مشخص می‌کنید تداخل کنند. این حوزه‌ای است که Cargo ممکن است همیشه
+سازگار با نسخه‌های قبلی نباشد.</p>
+</blockquote>
+<h4 id="buildrustdocflags"><a class="header" href="#buildrustdocflags"><code>build.rustdocflags</code></a></h4>
+<ul>
+<li>نوع: رشته یا آرایه‌ای از رشته‌ها</li>
+<li>Default: none</li>
+<li>متغیر محیطی: <code>CARGO_BUILD_RUSTDOCFLAGS</code> یا <code>CARGO_ENCODED_RUSTDOCFLAGS</code> یا <code>RUSTDOCFLAGS</code></li>
+</ul>
+<p>پرچم‌های اضافی خط فرمان که به <code>rustdoc</code> داده می‌شوند. مقدار می‌تواند آرایه‌ای از
+رشته‌ها یا یک رشتهٔ جداشده با فاصله باشد.</p>
+<p>چهار منبع متقابلاً ناسازگار برای پرچم‌های اضافی وجود دارد. به ترتیب
+بررسی می‌شوند و اولینی که یافت شود استفاده می‌شود:</p>
+<ol>
+<li><code>CARGO_ENCODED_RUSTDOCFLAGS</code> environment variable.</li>
+<li><code>RUSTDOCFLAGS</code> environment variable.</li>
+<li>همهٔ ورودی‌های پیکربندی منطبق <code>target.&lt;tuple&gt;.rustdocflags</code> و <code>target.&lt;cfg&gt;.rustdocflags</code>
+که به هم متصل می‌شوند.</li>
+<li><code>build.rustdocflags</code> config value.</li>
+</ol>
+<p>پرچم‌های اضافی را می‌توان با دستور <a href="../commands/cargo-rustdoc.html"><code>cargo rustdoc</code></a> هم داد.</p>
+<blockquote class="blockquote-tag blockquote-tag-caution">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Caution</p>
+<p>به‌دلیل ماهیت سطح پایین دادن مستقیم پرچم‌ها به
+کامپایلر، این کار ممکن است با نسخه‌های آیندهٔ Cargo تداخل پیدا کند، چون ممکن است
+خود همان پرچم‌ها یا مشابه آن‌ها را بدهند و با
+پرچم‌هایی که شما مشخص می‌کنید تداخل کنند. این حوزه‌ای است که Cargo ممکن است همیشه
+سازگار با نسخه‌های قبلی نباشد.</p>
+</blockquote>
+<h4 id="buildincremental"><a class="header" href="#buildincremental"><code>build.incremental</code></a></h4>
+<ul>
+<li>Type: bool</li>
+<li>پیش‌فرض: از profile</li>
+<li>متغیر محیطی: <code>CARGO_BUILD_INCREMENTAL</code> یا <code>CARGO_INCREMENTAL</code></li>
+</ul>
+<p>اینکه آیا <a href="profiles.html#incremental">کامپایل افزایشی</a> انجام شود یا نه.</p>
+<p>در محیط‌هایی که <code>CI</code> تنظیم شده است، پیش‌فرض در صورت تنظیم‌نشدن <code>CARGO_BUILD_INCREMENTAL=false</code> است.
+در غیر این صورت، پیش‌فرض استفاده از مقدار <a href="profiles.html#incremental">profile</a> است.</p>
+<p>متغیر محیطی <code>CARGO_INCREMENTAL</code> را می‌توان روی <code>1</code> تنظیم کرد تا کامپایل افزایشی برای همهٔ profileها اجباراً فعال شود،
+یا روی <code>0</code> تا غیرفعال شود. این متغیر محیطی
+تنظیم config را بازنویسی می‌کند.</p>
+<h4 id="builddep-info-basedir"><a class="header" href="#builddep-info-basedir"><code>build.dep-info-basedir</code></a></h4>
+<ul>
+<li>Type: string (path)</li>
+<li>Default: none</li>
+<li>Environment: <code>CARGO_BUILD_DEP_INFO_BASEDIR</code></li>
+</ul>
+<p>پیشوند مسیر داده‌شده را از مسیرهای فایل <a href="../reference/build-cache.html#dep-info-files">dep
+info</a> حذف می‌کند. این تنظیم config
+برای تبدیل مسیرهای مطلق به نسبی برای ابزارهایی است که به
+مسیرهای نسبی نیاز دارند.</p>
+<p>خود این تنظیم یک مسیر نسبت به config است. برای مثال، مقدار
+<code>"."</code> همهٔ مسیرهایی را که با پوشهٔ والد پوشهٔ <code>.cargo</code>
+شروع می‌شوند حذف می‌کند.</p>
+<h4 id="buildpipelining"><a class="header" href="#buildpipelining"><code>build.pipelining</code></a></h4>
+<p>این گزینه منسوخ و بی‌استفاده است. Cargo همیشه pipelining را فعال دارد.</p>
+<h3 id="credential-alias"><a class="header" href="#credential-alias"><code>[credential-alias]</code></a></h3>
+<ul>
+<li>نوع: رشته یا آرایه‌ای از رشته‌ها</li>
+<li>Default: empty</li>
+<li>Environment: <code>CARGO_CREDENTIAL_ALIAS_&lt;name&gt;</code></li>
+</ul>
+<p>جدول <code>[credential-alias]</code> نام‌های مستعار ارائه‌دهندهٔ اعتبارنامه را تعریف می‌کند.
+این نام‌های مستعار را می‌توان به‌عنوان عنصری از آرایهٔ <code>registry.global-credential-providers</code>،
+یا به‌عنوان ارائه‌دهندهٔ اعتبارنامه برای یک registry مشخص
+زیر <code>registries.&lt;NAME&gt;.credential-provider</code> به‌کار برد.</p>
+<p>اگر به‌صورت رشته مشخص شود، مقدار با فاصله به مسیر و آرگومان‌ها تقسیم می‌شود.</p>
+<p>برای مثال، برای تعریف نام مستعاری به نام <code>my-alias</code>:</p>
+<pre><code class="language-toml">[credential-alias]
+my-alias = ["/usr/bin/cargo-credential-example", "--argument", "value", "--flag"]
+</code></pre>
+<p>برای اطلاعات بیشتر <a href="registry-authentication.html">احراز هویت registry</a> را ببینید.</p>
+<h3 id="doc"><a class="header" href="#doc"><code>[doc]</code></a></h3>
+<p>جدول <code>[doc]</code> گزینه‌های دستور <a href="../commands/cargo-doc.html"><code>cargo doc</code></a> را تعریف می‌کند.</p>
+<h4 id="docbrowser"><a class="header" href="#docbrowser"><code>doc.browser</code></a></h4>
+<ul>
+<li>نوع: رشته یا آرایه‌ای از رشته‌ها (<a href="#executable-paths-with-arguments">مسیر برنامه همراه با آرگومان‌ها</a>)</li>
+<li>پیش‌فرض: متغیر محیطی <code>BROWSER</code>، و اگر وجود نداشت،
+باز‌کردن پیوند به روشی وابسته به سیستم</li>
+</ul>
+<p>این گزینه مرورگری را که <a href="../commands/cargo-doc.html"><code>cargo doc</code></a> استفاده می‌کند تعیین می‌کند و هنگام باز‌کردن مستندات با گزینهٔ <code>--open</code>،
+متغیر محیطی <code>BROWSER</code> را بازنویسی می‌کند.</p>
+<h3 id="cargo-new"><a class="header" href="#cargo-new"><code>[cargo-new]</code></a></h3>
+<p>جدول <code>[cargo-new]</code> پیش‌فرض‌های دستور <a href="../commands/cargo-new.html"><code>cargo new</code></a> را تعریف می‌کند.</p>
+<h4 id="cargo-newname"><a class="header" href="#cargo-newname"><code>cargo-new.name</code></a></h4>
+<p>این گزینه منسوخ و بی‌استفاده است.</p>
+<h4 id="cargo-newemail"><a class="header" href="#cargo-newemail"><code>cargo-new.email</code></a></h4>
+<p>این گزینه منسوخ و بی‌استفاده است.</p>
+<h4 id="cargo-newvcs"><a class="header" href="#cargo-newvcs"><code>cargo-new.vcs</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>پیش‌فرض: <code>"git"</code> یا <code>"none"</code></li>
+<li>Environment: <code>CARGO_CARGO_NEW_VCS</code></li>
+</ul>
+<p>سیستم کنترل نسخه‌ای را که برای مقداردهی اولیهٔ یک مخزن جدید به‌کار می‌رود مشخص می‌کند.
+مقادیر معتبر <code>git</code>، <code>hg</code> (برای Mercurial)، <code>pijul</code>، <code>fossil</code> یا <code>none</code> برای
+غیرفعال‌کردن این رفتار هستند. پیش‌فرض <code>git</code> است، یا <code>none</code> اگر از قبل درون یک مخزن VCS باشید.
+می‌توان آن را با گزینهٔ خط فرمان <code>--vcs</code> بازنویسی کرد.</p>
+<h3 id="env"><a class="header" href="#env"><code>[env]</code></a></h3>
+<p>بخش <code>[env]</code> به شما اجازه می‌دهد متغیرهای محیطی اضافی را برای
+اسکریپت‌های ساخت، فراخوانی‌های rustc، <code>cargo run</code> و <code>cargo build</code> تنظیم کنید.</p>
+<pre><code class="language-toml">[env]
+OPENSSL_DIR = "/opt/openssl"
+</code></pre>
+<p>به‌طور پیش‌فرض، متغیرهای مشخص‌شده مقادیری را که از قبل در محیط وجود دارند بازنویسی نمی‌کنند.
+این رفتار را می‌توان با تنظیم پرچم <code>force</code> تغییر داد.</p>
+<p>تنظیم پرچم <code>relative</code> مقدار را به‌عنوان مسیری نسبت به config ارزیابی می‌کند که
+نسبت به پوشهٔ والد پوشهٔ <code>.cargo</code> حاوی فایل
+<code>config.toml</code> است. مقدار متغیر محیطی، مسیر مطلق کامل خواهد بود.</p>
+<pre><code class="language-toml">[env]
+TMPDIR = { value = "/home/tmp", force = true }
+OPENSSL_DIR = { value = "vendor/openssl", relative = true }
+</code></pre>
+<h3 id="future-incompat-report"><a class="header" href="#future-incompat-report"><code>[future-incompat-report]</code></a></h3>
+<p>جدول <code>[future-incompat-report]</code> تنظیمات <a href="future-incompat-report.html">گزارش ناسازگاری آینده (future incompat)</a> را کنترل می‌کند</p>
+<h4 id="future-incompat-reportfrequency"><a class="header" href="#future-incompat-reportfrequency"><code>future-incompat-report.frequency</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: <code>"always"</code></li>
+<li>Environment: <code>CARGO_FUTURE_INCOMPAT_REPORT_FREQUENCY</code></li>
+</ul>
+<p>کنترل می‌کند هر چند وقت یک‌بار، وقتی گزارش future incompat در دسترس است، اعلانی در ترمینال نمایش داده شود. مقادیر ممکن:</p>
+<ul>
+<li><code>always</code> (پیش‌فرض): هر بار که دستوری (مثلاً <code>cargo build</code>) گزارش future incompat تولید کند، اعلان نمایش داده می‌شود</li>
+<li><code>never</code>: هرگز اعلان نمایش داده نمی‌شود</li>
+</ul>
+<h3 id="cache"><a class="header" href="#cache"><code>[cache]</code></a></h3>
+<p>جدول <code>[cache]</code> تنظیمات cacheهای cargo را تعریف می‌کند.</p>
+<h4 id="global-caches"><a class="header" href="#global-caches">Global caches</a></h4>
+<p>هنگام اجرای دستورهای <code>cargo</code>، Cargo به‌طور خودکار پیگیری می‌کند کدام فایل‌ها را درون cache سراسری استفاده می‌کنید.
+Cargo به‌طور دوره‌ای فایل‌هایی را که مدتی استفاده نشده‌اند پاک می‌کند.
+فایل‌هایی را که باید از شبکه دانلود شوند اگر ۳ ماه استفاده نشده باشند پاک می‌کند. فایل‌هایی که بدون دسترسی به شبکه قابل‌تولیدند اگر ۱ ماه استفاده نشده باشند پاک می‌شوند.</p>
+<p>پاک‌سازی خودکار فایل‌ها فقط هنگام اجرای دستورهایی رخ می‌دهد که از قبل کار قابل‌توجهی انجام می‌دهند، مثل همهٔ دستورهای ساخت (<code>cargo build</code>، <code>cargo test</code>، <code>cargo check</code> و غیره) و <code>cargo fetch</code>.</p>
+<p>اگر cargo آفلاین باشد، مثلاً با <code>--offline</code> یا <code>--frozen</code>، پاک‌سازی خودکار غیرفعال می‌شود تا آرتیفکت‌هایی که ممکن است در آفلاین‌بودن طولانی‌مدت لازم شوند پاک نشوند.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>این پیگیری فعلاً فقط برای cache سراسری در پوشهٔ خانگی Cargo پیاده‌سازی شده است.
+این شامل فهرست‌های registry و فایل‌های منبعی است که از registryها و وابستگی‌های git دانلود می‌شوند.
+پشتیبانی از پیگیری آرتیفکت‌های ساخت هنوز پیاده‌سازی نشده و در <a href="https://github.com/rust-lang/cargo/issues/13136">cargo#13136</a> پیگیری می‌شود.</p>
+<p>علاوه بر این، یک قابلیت ناپایدار برای پشتیبانی از راه‌اندازی <em>دستی</em> پاک‌سازی cache و سفارشی‌سازی بیشتر گزینه‌های پیکربندی وجود دارد.
+برای اطلاعات بیشتر <a href="unstable.html#gc">فصل قابلیت‌های ناپایدار</a> را ببینید.</p>
+</blockquote>
+<h4 id="cacheauto-clean-frequency"><a class="header" href="#cacheauto-clean-frequency"><code>cache.auto-clean-frequency</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: <code>"1 day"</code></li>
+<li>Environment: <code>CARGO_CACHE_AUTO_CLEAN_FREQUENCY</code></li>
+</ul>
+<p>این گزینه تعیین می‌کند Cargo هر چند وقت یک‌بار فایل‌های استفاده‌نشده را از cache سراسری به‌طور خودکار پاک کند.
+این گزینه <em>تعیین نمی‌کند</em> فایل‌ها چقدر باید قدیمی باشند؛ آن آستانه‌ها <a href="#global-caches">در بالا</a> توضیح داده شده‌اند.</p>
+<p>تنظیمات زیر را پشتیبانی می‌کند:</p>
+<ul>
+<li><code>"never"</code> — هرگز فایل‌های قدیمی را پاک نمی‌کند.</li>
+<li><code>"always"</code> — هر بار که Cargo اجرا می‌شود بررسی می‌کند فایل‌های قدیمی را پاک کند.</li>
+<li>یک عدد صحیح به‌دنبال «seconds»، «minutes»، «hours»، «days»، «weeks» یا «months» — حداکثر یک‌بار در بازهٔ زمانی داده‌شده بررسی می‌کند فایل‌های قدیمی را پاک کند.</li>
+</ul>
+<h3 id="http"><a class="header" href="#http"><code>[http]</code></a></h3>
+<p>جدول <code>[http]</code> تنظیمات رفتار HTTP را تعریف می‌کند. این شامل دریافت
+وابستگی‌های crate و دسترسی به مخازن git راه‌دور است.</p>
+<h4 id="httpdebug"><a class="header" href="#httpdebug"><code>http.debug</code></a></h4>
+<ul>
+<li>Type: boolean</li>
+<li>Default: false</li>
+<li>Environment: <code>CARGO_HTTP_DEBUG</code></li>
+</ul>
+<p>اگر <code>true</code> باشد، اشکال‌زدایی درخواست‌های HTTP را فعال می‌کند. اطلاعات اشکال‌زدایی را می‌توان
+با تنظیم متغیر محیطی <code>CARGO_LOG=network=debug</code> دید
+(یا برای اطلاعات بیشتر از <code>network=trace</code> استفاده کنید).</p>
+<p>هنگام انتشار لاگ‌های این خروجی در جای عمومی محتاط باشید. خروجی
+ممکن است سرایندهایی با توکن‌های احراز هویت داشته باشد که نمی‌خواهید فاش شوند!
+حتماً لاگ‌ها را پیش از انتشار بررسی کنید.</p>
+<h4 id="httpproxy"><a class="header" href="#httpproxy"><code>http.proxy</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: none</li>
+<li>متغیر محیطی: <code>CARGO_HTTP_PROXY</code> یا <code>HTTPS_PROXY</code> یا <code>https_proxy</code> یا <code>http_proxy</code></li>
+</ul>
+<p>یک پروکسی HTTP و HTTPS را برای استفاده تنظیم می‌کند. قالب آن <a href="https://everything.curl.dev/transfers/conn/proxies#proxy-types">قالب libcurl</a> است، مثل
+<code>[protocol://]host[:port]</code>. اگر تنظیم نشود، Cargo تنظیم <code>http.proxy</code>
+را در پیکربندی سراسری git شما هم بررسی می‌کند. اگر هیچ‌کدام تنظیم نشده باشند،
+متغیرهای محیطی <code>HTTPS_PROXY</code> یا <code>https_proxy</code> پروکسی را برای درخواست‌های HTTPS تعیین می‌کنند
+و <code>http_proxy</code> آن را برای درخواست‌های HTTP تعیین می‌کند.</p>
+<h4 id="httptimeout"><a class="header" href="#httptimeout"><code>http.timeout</code></a></h4>
+<ul>
+<li>Type: integer</li>
+<li>Default: 30</li>
+<li>متغیر محیطی: <code>CARGO_HTTP_TIMEOUT</code> یا <code>HTTP_TIMEOUT</code></li>
+</ul>
+<p>مهلت هر درخواست HTTP را بر حسب ثانیه تنظیم می‌کند.</p>
+<h4 id="httpcainfo"><a class="header" href="#httpcainfo"><code>http.cainfo</code></a></h4>
+<ul>
+<li>Type: string (path)</li>
+<li>Default: none</li>
+<li>Environment: <code>CARGO_HTTP_CAINFO</code></li>
+</ul>
+<p>مسیر فایل بستهٔ مرجع صدور گواهی (CA) که برای تأیید گواهی‌های TLS
+استفاده می‌شود. اگر مشخص نشود، Cargo سعی می‌کند از گواهی‌های سیستم استفاده کند.</p>
+<h4 id="httpproxy-cainfo"><a class="header" href="#httpproxy-cainfo"><code>http.proxy-cainfo</code></a></h4>
+<ul>
+<li>Type: string (path)</li>
+<li>پیش‌فرض: اگر تنظیم نشود به <code>http.cainfo</code> برمی‌گردد</li>
+<li>Environment: <code>CARGO_HTTP_PROXY_CAINFO</code></li>
+</ul>
+<p>مسیر فایل بستهٔ مرجع صدور گواهی (CA) که برای تأیید گواهی‌های TLS
+پروکسی استفاده می‌شود.</p>
+<h4 id="httpcheck-revoke"><a class="header" href="#httpcheck-revoke"><code>http.check-revoke</code></a></h4>
+<ul>
+<li>Type: boolean</li>
+<li>پیش‌فرض: true (ویندوز)، false (بقیه)</li>
+<li>Environment: <code>CARGO_HTTP_CHECK_REVOKE</code></li>
+</ul>
+<p>این تعیین می‌کند آیا بررسی ابطال گواهی TLS انجام شود یا نه. این فقط در ویندوز کار می‌کند.</p>
+<h4 id="httpssl-version"><a class="header" href="#httpssl-version"><code>http.ssl-version</code></a></h4>
+<ul>
+<li>نوع: رشته یا جدول min/max</li>
+<li>Default: none</li>
+<li>Environment: <code>CARGO_HTTP_SSL_VERSION</code></li>
+</ul>
+<p>این حداقل نسخهٔ TLS مورد استفاده را تنظیم می‌کند. یک رشته می‌گیرد، با یکی از
+مقادیر ممکن <code>"default"</code>، <code>"tlsv1"</code>، <code>"tlsv1.0"</code>، <code>"tlsv1.1"</code>، <code>"tlsv1.2"</code> یا
+<code>"tlsv1.3"</code>.</p>
+<p>همچنین می‌تواند جدولی با دو کلید <code>min</code> و <code>max</code> بگیرد که هر کدام
+مقدار رشته‌ای از همین نوع می‌گیرند و بازهٔ حداقل و حداکثر
+نسخه‌های TLS مورد استفاده را مشخص می‌کنند.</p>
+<p>پیش‌فرض، حداقل نسخهٔ <code>"tlsv1.0"</code> و حداکثر جدیدترین نسخهٔ
+پشتیبانی‌شده در پلتفرم شماست، که معمولاً <code>"tlsv1.3"</code> است.</p>
+<h4 id="httplow-speed-limit"><a class="header" href="#httplow-speed-limit"><code>http.low-speed-limit</code></a></h4>
+<ul>
+<li>Type: integer</li>
+<li>Default: 10</li>
+<li>Environment: <code>CARGO_HTTP_LOW_SPEED_LIMIT</code></li>
+</ul>
+<p>این تنظیم رفتار مهلت‌زمانی (timeout) برای اتصال‌های کند را کنترل می‌کند. اگر میانگین
+سرعت انتقال بر حسب بایت در ثانیه برای <a href="#httptimeout"><code>http.timeout</code></a> ثانیه (پیش‌فرض ۳۰ ثانیه)
+کمتر از مقدار داده‌شده باشد، اتصال بیش از حد کند در نظر گرفته می‌شود و Cargo آن را رها کرده و دوباره تلاش می‌کند.</p>
+<h4 id="httpmultiplexing"><a class="header" href="#httpmultiplexing"><code>http.multiplexing</code></a></h4>
+<ul>
+<li>Type: boolean</li>
+<li>Default: true</li>
+<li>Environment: <code>CARGO_HTTP_MULTIPLEXING</code></li>
+</ul>
+<p>وقتی <code>true</code> باشد، Cargo سعی می‌کند از پروتکل HTTP2 با multiplexing استفاده کند.
+این به چند درخواست اجازه می‌دهد از یک اتصال استفاده کنند و معمولاً
+عملکرد دریافت چند فایل را بهبود می‌دهد. اگر <code>false</code> باشد، Cargo از HTTP 1.1
+بدون pipelining استفاده می‌کند.</p>
+<h4 id="httpuser-agent"><a class="header" href="#httpuser-agent"><code>http.user-agent</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: Cargo’s version</li>
+<li>Environment: <code>CARGO_HTTP_USER_AGENT</code></li>
+</ul>
+<p>یک سرایند user-agent سفارشی برای استفاده مشخص می‌کند. پیش‌فرض در صورت مشخص‌نشدن
+رشته‌ای است که نسخهٔ Cargo را در بر دارد.</p>
+<h3 id="install"><a class="header" href="#install"><code>[install]</code></a></h3>
+<p>جدول <code>[install]</code> پیش‌فرض‌های دستور <a href="../commands/cargo-install.html"><code>cargo install</code></a> را تعریف می‌کند.</p>
+<h4 id="installroot"><a class="header" href="#installroot"><code>install.root</code></a></h4>
+<ul>
+<li>Type: string (path)</li>
+<li>پیش‌فرض: پوشهٔ خانگی Cargo</li>
+<li>Environment: <code>CARGO_INSTALL_ROOT</code></li>
+</ul>
+<p>مسیر پوشهٔ ریشه را برای نصب فایل‌های اجرایی توسط <a href="../commands/cargo-install.html"><code>cargo install</code></a> تنظیم می‌کند. فایل‌های اجرایی در پوشهٔ <code>bin</code> زیر ریشه قرار می‌گیرند.</p>
+<p>برای پیگیری اطلاعات فایل‌های اجرایی نصب‌شده، چند فایل اضافی مثل
+<code>.crates.toml</code> و <code>.crates2.json</code> هم زیر همین ریشه ساخته می‌شوند.</p>
+<p>پیش‌فرض در صورت مشخص‌نشدن، پوشهٔ خانگی Cargo است (پیش‌فرض <code>.cargo</code> در
+پوشهٔ خانگی شما).</p>
+<p>می‌توان آن را با گزینهٔ خط فرمان <code>--root</code> بازنویسی کرد.</p>
+<h4 id="installprofile"><a class="header" href="#installprofile"><code>install.profile</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: <code>"release"</code></li>
+<li>Environment: <code>CARGO_INSTALL_PROFILE</code></li>
+</ul>
+<p><a href="profiles.html">profile</a> پیش‌فرضی که <code>cargo install</code> با آن کامپایل می‌کند.</p>
+<p>می‌توان آن را با گزینه‌های خط فرمان <code>--debug</code> یا <code>--profile</code> بازنویسی کرد.</p>
+<pre><code class="language-toml">[install]
+profile = "tool"
+
+[profile.tool]
+inherits = "release"
+lto = true
+</code></pre>
+<blockquote>
+<p><strong>MSRV:</strong> از نسخهٔ 1.100 رعایت می‌شود.</p>
+</blockquote>
+<h3 id="net"><a class="header" href="#net"><code>[net]</code></a></h3>
+<p>جدول <code>[net]</code> پیکربندی شبکه را کنترل می‌کند.</p>
+<h4 id="netretry"><a class="header" href="#netretry"><code>net.retry</code></a></h4>
+<ul>
+<li>Type: integer</li>
+<li>Default: 3</li>
+<li>Environment: <code>CARGO_NET_RETRY</code></li>
+</ul>
+<p>تعداد دفعات تلاش مجدد برای خطاهای شبکه‌ای که احتمالاً گذرا (spurious) هستند.</p>
+<h4 id="netgit-fetch-with-cli"><a class="header" href="#netgit-fetch-with-cli"><code>net.git-fetch-with-cli</code></a></h4>
+<ul>
+<li>Type: boolean</li>
+<li>Default: auto-detect</li>
+<li>Environment: <code>CARGO_NET_GIT_FETCH_WITH_CLI</code></li>
+</ul>
+<p>اگر این <code>true</code> باشد، Cargo برای دریافت فهرست‌های registry و وابستگی‌های git از فایل اجرایی <code>git</code> استفاده می‌کند. اگر <code>false</code> باشد، از
+کتابخانهٔ <code>git</code> داخلی استفاده می‌کند.</p>
+<p>تنظیم این روی <code>true</code> وقتی می‌تواند مفید باشد که نیازهای احراز هویت ویژه‌ای دارید
+که Cargo پشتیبانی نمی‌کند. برای اطلاعات بیشتر دربارهٔ راه‌اندازی احراز هویت git،
+<a href="../appendix/git-authentication.html">احراز هویت Git</a> را ببینید.</p>
+<h4 id="netoffline"><a class="header" href="#netoffline"><code>net.offline</code></a></h4>
+<ul>
+<li>Type: boolean</li>
+<li>Default: false</li>
+<li>Environment: <code>CARGO_NET_OFFLINE</code></li>
+</ul>
+<p>اگر این <code>true</code> باشد، Cargo از دسترسی به شبکه خودداری می‌کند و سعی می‌کند
+با داده‌های cache‌شدهٔ محلی ادامه دهد. اگر <code>false</code> باشد، Cargo در صورت نیاز به شبکه دسترسی پیدا می‌کند
+و اگر با خطای شبکه روبه‌رو شود، خطا تولید می‌کند.</p>
+<p>می‌توان آن را با گزینهٔ خط فرمان <code>--offline</code> بازنویسی کرد.</p>
+<h4 id="netssh"><a class="header" href="#netssh"><code>net.ssh</code></a></h4>
+<p>جدول <code>[net.ssh]</code> تنظیمات اتصال‌های SSH را در بر دارد.</p>
+<h4 id="netsshknown-hosts"><a class="header" href="#netsshknown-hosts"><code>net.ssh.known-hosts</code></a></h4>
+<ul>
+<li>نوع: آرایه‌ای از رشته‌ها</li>
+<li>Default: see description</li>
+<li>متغیر محیطی: پشتیبانی نمی‌شود</li>
+</ul>
+<p>آرایهٔ <code>known-hosts</code> فهرستی از کلیدهای میزبان SSH را دربر دارد که باید
+هنگام اتصال به سرور SSH (مثلاً برای وابستگی‌های git از طریق SSH) معتبر پذیرفته شوند. هر ورودی باید رشته‌ای با قالبی مشابه فایل‌های
+<code>known_hosts</code> در OpenSSH باشد. هر رشته باید با یک یا چند نام میزبان
+که با ویرگول جدا شده‌اند، یک فاصله، نام نوع کلید، یک فاصله و
+کلید رمزگذاری‌شده با base64 شروع شود. برای مثال:</p>
+<pre><code class="language-toml">[net.ssh]
+known-hosts = [
+    "example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFO4Q5T0UV0SQevair9PFwoxY9dl4pQl3u5phoqJH3cF"
+]
+</code></pre>
+<p>Cargo سعی می‌کند کلیدهای میزبان شناخته‌شده را از مکان‌های رایج پشتیبانی‌شده در
+OpenSSH بارگذاری کند و آن‌ها را با هر کلید فهرست‌شده در فایل پیکربندی Cargo ترکیب می‌کند.
+اگر هر ورودی منطبق کلید درست داشته باشد، اتصال مجاز خواهد بود.</p>
+<p>Cargo کلیدهای میزبان <a href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints">github.com</a> را از پیش دارد. اگر
+آن‌ها تغییر کنند، می‌توانید کلیدهای جدید را به config یا فایل known_hosts اضافه کنید.</p>
+<p>برای جزئیات بیشتر <a href="../appendix/git-authentication.html#ssh-known-hosts">احراز هویت Git</a> را ببینید.</p>
+<h3 id="patch"><a class="header" href="#patch"><code>[patch]</code></a></h3>
+<p>همان‌طور که می‌توانید وابستگی‌ها را با <a href="overriding-dependencies.html#the-patch-section"><code>[patch]</code> در
+<code>Cargo.toml</code></a> بازنویسی کنید، می‌توانید آن‌ها را در فایل پیکربندی cargo هم بازنویسی کنید تا آن patchها روی
+هر ساخت متأثر اعمال شوند. قالب آن با قالب <code>Cargo.toml</code> یکسان است.</p>
+<p>از آنجا که فایل‌های <code>.cargo/config.toml</code> معمولاً در کنترل نسخه ثبت نمی‌شوند، بهتر است
+تا حد امکان patch را با <code>Cargo.toml</code> انجام دهید تا
+دیگر توسعه‌دهندگان بتوانند crate شما را در محیط‌های خودشان کامپایل کنند. patch‌کردن از طریق فایل‌های پیکربندی cargo معمولاً
+فقط وقتی مناسب است که بخش patch به‌طور خودکار توسط
+یک ابزار ساخت خارجی تولید شود.</p>
+<p>اگر یک وابستگی هم در فایل پیکربندی cargo و هم در
+فایل <code>Cargo.toml</code> patch شده باشد، patch فایل پیکربندی استفاده می‌شود. اگر
+چند فایل پیکربندی یک وابستگی را patch کنند، ادغام استاندارد پیکربندی cargo به‌کار می‌رود که مقداری را ترجیح می‌دهد که نزدیک‌ترین به
+پوشهٔ فعلی تعریف شده است و <code>$HOME/.cargo/config.toml</code> کمترین اولویت را دارد.</p>
+<p>وابستگی‌های <code>path</code> نسبی در چنین بخش <code>[patch]</code>ای
+نسبت به فایل پیکربندی‌ای که در آن آمده‌اند حل می‌شوند.</p>
+<h3 id="profile"><a class="header" href="#profile"><code>[profile]</code></a></h3>
+<p>جدول <code>[profile]</code> را می‌توان برای تغییر سراسری تنظیمات profile و
+بازنویسی تنظیمات مشخص‌شده در <code>Cargo.toml</code> به‌کار برد. نحو و گزینه‌های آن
+همان‌هایی است که برای profileهای مشخص‌شده در <code>Cargo.toml</code> وجود دارد. برای جزئیات گزینه‌ها <a href="profiles.html">فصل Profileها</a> را ببینید.</p>
+<h4 id="profilenamebuild-override"><a class="header" href="#profilenamebuild-override"><code>[profile.&lt;name&gt;.build-override]</code></a></h4>
+<ul>
+<li>Environment: <code>CARGO_PROFILE_&lt;name&gt;_BUILD_OVERRIDE_&lt;key&gt;</code></li>
+</ul>
+<p>جدول build-override تنظیمات اسکریپت‌های ساخت، proc macroها
+و وابستگی‌های آن‌ها را بازنویسی می‌کند. کلیدهای آن مانند یک profile عادی است. برای جزئیات بیشتر
+<a href="profiles.html#overrides">بخش بازنویسی‌ها (overrides)</a> را ببینید.</p>
+<h4 id="profilenamepackagename"><a class="header" href="#profilenamepackagename"><code>[profile.&lt;name&gt;.package.&lt;name&gt;]</code></a></h4>
+<ul>
+<li>متغیر محیطی: پشتیبانی نمی‌شود</li>
+</ul>
+<p>جدول package تنظیمات بسته‌های مشخص را بازنویسی می‌کند. کلیدهای آن مانند یک profile عادی است،
+به‌جز تنظیمات <code>panic</code>، <code>lto</code> و <code>rpath</code>. برای جزئیات بیشتر
+<a href="profiles.html#overrides">بخش بازنویسی‌ها (overrides)</a> را ببینید.</p>
+<h4 id="profilenamecodegen-units"><a class="header" href="#profilenamecodegen-units"><code>profile.&lt;name&gt;.codegen-units</code></a></h4>
+<ul>
+<li>Type: integer</li>
+<li>پیش‌فرض: مستندات profile را ببینید.</li>
+<li>Environment: <code>CARGO_PROFILE_&lt;name&gt;_CODEGEN_UNITS</code></li>
+</ul>
+<p>See <a href="profiles.html#codegen-units">codegen-units</a>.</p>
+<h4 id="profilenamedebug"><a class="header" href="#profilenamedebug"><code>profile.&lt;name&gt;.debug</code></a></h4>
+<ul>
+<li>نوع: عدد صحیح یا بولی</li>
+<li>پیش‌فرض: مستندات profile را ببینید.</li>
+<li>Environment: <code>CARGO_PROFILE_&lt;name&gt;_DEBUG</code></li>
+</ul>
+<p>See <a href="profiles.html#debug">debug</a>.</p>
+<h4 id="profilenamesplit-debuginfo"><a class="header" href="#profilenamesplit-debuginfo"><code>profile.&lt;name&gt;.split-debuginfo</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>پیش‌فرض: مستندات profile را ببینید.</li>
+<li>Environment: <code>CARGO_PROFILE_&lt;name&gt;_SPLIT_DEBUGINFO</code></li>
+</ul>
+<p>See <a href="profiles.html#split-debuginfo">split-debuginfo</a>.</p>
+<h4 id="profilenamedebug-assertions"><a class="header" href="#profilenamedebug-assertions"><code>profile.&lt;name&gt;.debug-assertions</code></a></h4>
+<ul>
+<li>Type: boolean</li>
+<li>پیش‌فرض: مستندات profile را ببینید.</li>
+<li>Environment: <code>CARGO_PROFILE_&lt;name&gt;_DEBUG_ASSERTIONS</code></li>
+</ul>
+<p>See <a href="profiles.html#debug-assertions">debug-assertions</a>.</p>
+<h4 id="profilenameincremental"><a class="header" href="#profilenameincremental"><code>profile.&lt;name&gt;.incremental</code></a></h4>
+<ul>
+<li>Type: boolean</li>
+<li>پیش‌فرض: مستندات profile را ببینید.</li>
+<li>Environment: <code>CARGO_PROFILE_&lt;name&gt;_INCREMENTAL</code></li>
+</ul>
+<p>See <a href="profiles.html#incremental">incremental</a>.</p>
+<h4 id="profilenamelto"><a class="header" href="#profilenamelto"><code>profile.&lt;name&gt;.lto</code></a></h4>
+<ul>
+<li>نوع: رشته یا بولی</li>
+<li>پیش‌فرض: مستندات profile را ببینید.</li>
+<li>Environment: <code>CARGO_PROFILE_&lt;name&gt;_LTO</code></li>
+</ul>
+<p>See <a href="profiles.html#lto">lto</a>.</p>
+<h4 id="profilenameoverflow-checks"><a class="header" href="#profilenameoverflow-checks"><code>profile.&lt;name&gt;.overflow-checks</code></a></h4>
+<ul>
+<li>Type: boolean</li>
+<li>پیش‌فرض: مستندات profile را ببینید.</li>
+<li>Environment: <code>CARGO_PROFILE_&lt;name&gt;_OVERFLOW_CHECKS</code></li>
+</ul>
+<p>See <a href="profiles.html#overflow-checks">overflow-checks</a>.</p>
+<h4 id="profilenameopt-level"><a class="header" href="#profilenameopt-level"><code>profile.&lt;name&gt;.opt-level</code></a></h4>
+<ul>
+<li>نوع: عدد صحیح یا رشته</li>
+<li>پیش‌فرض: مستندات profile را ببینید.</li>
+<li>Environment: <code>CARGO_PROFILE_&lt;name&gt;_OPT_LEVEL</code></li>
+</ul>
+<p>See <a href="profiles.html#opt-level">opt-level</a>.</p>
+<h4 id="profilenamepanic"><a class="header" href="#profilenamepanic"><code>profile.&lt;name&gt;.panic</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>پیش‌فرض: مستندات profile را ببینید.</li>
+<li>Environment: <code>CARGO_PROFILE_&lt;name&gt;_PANIC</code></li>
+</ul>
+<p>See <a href="profiles.html#panic">panic</a>.</p>
+<h4 id="profilenamerpath"><a class="header" href="#profilenamerpath"><code>profile.&lt;name&gt;.rpath</code></a></h4>
+<ul>
+<li>Type: boolean</li>
+<li>پیش‌فرض: مستندات profile را ببینید.</li>
+<li>Environment: <code>CARGO_PROFILE_&lt;name&gt;_RPATH</code></li>
+</ul>
+<p>See <a href="profiles.html#rpath">rpath</a>.</p>
+<h4 id="profilenamestrip"><a class="header" href="#profilenamestrip"><code>profile.&lt;name&gt;.strip</code></a></h4>
+<ul>
+<li>نوع: رشته یا بولی</li>
+<li>پیش‌فرض: مستندات profile را ببینید.</li>
+<li>Environment: <code>CARGO_PROFILE_&lt;name&gt;_STRIP</code></li>
+</ul>
+<p>See <a href="profiles.html#strip">strip</a>.</p>
+<h4 id="profilenametrim-paths"><a class="header" href="#profilenametrim-paths"><code>profile.&lt;name&gt;.trim-paths</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>پیش‌فرض: مستندات profile را ببینید.</li>
+<li>Environment: <code>CARGO_PROFILE_&lt;name&gt;_TRIM_PATHS</code></li>
+</ul>
+<p>See <a href="profiles.html#trim-paths">trim-paths</a>.</p>
+<h3 id="resolver"><a class="header" href="#resolver"><code>[resolver]</code></a></h3>
+<p>جدول <code>[resolver]</code> <a href="resolver.html">رفتار حل وابستگی</a> را برای توسعهٔ محلی بازنویسی می‌کند (مثلاً <code>cargo install</code> را شامل نمی‌شود).</p>
+<h4 id="resolverlockfile-path"><a class="header" href="#resolverlockfile-path"><code>resolver.lockfile-path</code></a></h4>
+<ul>
+<li>Type: string (path)</li>
+<li>Default: <code>&lt;workspace_root&gt;/Cargo.lock</code></li>
+<li>Environment: <code>CARGO_RESOLVER_LOCKFILE_PATH</code></li>
+</ul>
+<p>مسیر lockfile مورد استفاده هنگام حل وابستگی‌ها را مشخص می‌کند.
+این گزینه هنگام کار با پوشه‌های منبع فقط‌خواندنی مفید است.</p>
+<p>مسیر باید به <code>Cargo.lock</code> ختم شود.</p>
+<blockquote>
+<p><strong>MSRV:</strong> Requires 1.97+</p>
+</blockquote>
+<h4 id="resolverincompatible-rust-versions"><a class="header" href="#resolverincompatible-rust-versions"><code>resolver.incompatible-rust-versions</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: See <a href="resolver.html#resolver-versions"><code>resolver</code></a> docs</li>
+<li>Environment: <code>CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS</code></li>
+</ul>
+<p>هنگام حل اینکه از کدام نسخهٔ یک وابستگی استفاده شود، مشخص می‌کند با نسخه‌هایی که <code>package.rust-version</code> ناسازگار دارند چگونه رفتار شود.
+مقادیر عبارت‌اند از:</p>
+<ul>
+<li><code>allow</code>: نسخه‌های ناسازگار با <code>rust-version</code> مثل هر نسخهٔ دیگر در نظر گرفته می‌شوند</li>
+<li><code>fallback</code>: نسخه‌های ناسازگار با <code>rust-version</code> فقط وقتی در نظر گرفته می‌شوند که هیچ نسخهٔ دیگری منطبق نباشد</li>
+</ul>
+<p>می‌توان آن را بازنویسی کرد با</p>
+<ul>
+<li><code>--ignore-rust-version</code> CLI option</li>
+<li>تنظیم نیازمندی نسخهٔ وابستگی بالاتر از هر نسخه‌ای که <code>rust-version</code> سازگار دارد</li>
+<li>مشخص‌کردن نسخه برای <code>cargo update</code> با <code>--precise</code></li>
+</ul>
+<p>برای جزئیات بیشتر فصل <a href="resolver.html#rust-version">حل‌کننده (resolver)</a> را ببینید.</p>
+<blockquote>
+<p><strong>MSRV:</strong></p>
+<ul>
+<li><code>allow</code> در هر نسخه‌ای پشتیبانی می‌شود</li>
+<li><code>fallback</code> از نسخهٔ 1.84 رعایت می‌شود</li>
+</ul>
+</blockquote>
+<h4 id="resolverincompatible-publish-age"><a class="header" href="#resolverincompatible-publish-age"><code>resolver.incompatible-publish-age</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: <code>"deny"</code></li>
+<li>Environment: <code>CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE</code></li>
+</ul>
+<p>هنگام حل نسخهٔ یک وابستگی،
+رفتار با نسخه‌هایی را مشخص می‌کند که <code>pubtime</code> دارند (در صورت وجود)
+و با <code>min-publish-age</code> پیکربندی‌شده ناسازگارند.
+مقادیر عبارت‌اند از:</p>
+<ul>
+<li><code>allow</code>: نسخه‌های ناسازگار از نظر pubtime مثل هر نسخهٔ دیگر در نظر گرفته می‌شوند</li>
+<li><code>deny</code>: نسخه‌های ناسازگار از نظر pubtime نادیده گرفته می‌شوند، مگر اینکه از قبل در فایل lock وجود داشته باشند</li>
+</ul>
+<p>برای جزئیات بیشتر فصل <a href="resolver.html#publish-age">حل‌کننده (resolver)</a> را ببینید.</p>
+<blockquote>
+<p><strong>MSRV:</strong> از نسخهٔ 1.100 به بعد رعایت می‌شود</p>
+</blockquote>
+<h3 id="registries"><a class="header" href="#registries"><code>[registries]</code></a></h3>
+<p>جدول <code>[registries]</code> برای مشخص‌کردن <a href="registries.html">registryهای</a> اضافی به‌کار می‌رود. شامل
+یک زیرجدول برای هر registry نام‌دار است.</p>
+<h4 id="registriesnameindex"><a class="header" href="#registriesnameindex"><code>registries.&lt;name&gt;.index</code></a></h4>
+<ul>
+<li>Type: string (url)</li>
+<li>Default: none</li>
+<li>Environment: <code>CARGO_REGISTRIES_&lt;name&gt;_INDEX</code></li>
+</ul>
+<p>نشانی فهرست (index) registry را مشخص می‌کند.</p>
+<h4 id="registriesnametoken"><a class="header" href="#registriesnametoken"><code>registries.&lt;name&gt;.token</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: none</li>
+<li>Environment: <code>CARGO_REGISTRIES_&lt;name&gt;_TOKEN</code></li>
+</ul>
+<p>توکن احراز هویت registry مورد نظر را مشخص می‌کند. این مقدار باید
+فقط در فایل <a href="#credentials">credentials</a> بیاید. برای دستورهای registry
+مثل <a href="../commands/cargo-publish.html"><code>cargo publish</code></a> که احراز هویت لازم دارند استفاده می‌شود.</p>
+<p>می‌توان آن را با گزینهٔ خط فرمان <code>--token</code> بازنویسی کرد.</p>
+<h4 id="registriesnamecredential-provider"><a class="header" href="#registriesnamecredential-provider"><code>registries.&lt;name&gt;.credential-provider</code></a></h4>
+<ul>
+<li>نوع: رشته یا آرایه‌ای از مسیر و آرگومان‌ها</li>
+<li>Default: none</li>
+<li>Environment: <code>CARGO_REGISTRIES_&lt;name&gt;_CREDENTIAL_PROVIDER</code></li>
+</ul>
+<p>ارائه‌دهندهٔ اعتبارنامه برای registry مورد نظر را مشخص می‌کند. اگر تنظیم نشود،
+ارائه‌دهندگان موجود در <a href="#registryglobal-credential-providers"><code>registry.global-credential-providers</code></a>
+استفاده می‌شوند.</p>
+<p>اگر به‌صورت رشته مشخص شود، مسیر و آرگومان‌ها با فاصله تقسیم می‌شوند. برای
+مسیرها یا آرگومان‌هایی که فاصله دارند از آرایه استفاده کنید.</p>
+<p>اگر مقدار در جدول <a href="#credential-alias"><code>[credential-alias]</code></a> وجود داشته باشد، از نام مستعار استفاده می‌شود.</p>
+<p>برای اطلاعات بیشتر <a href="registry-authentication.html">احراز هویت registry</a> را ببینید.</p>
+<h4 id="registriesnamemin-publish-age"><a class="header" href="#registriesnamemin-publish-age"><code>registries.&lt;name&gt;.min-publish-age</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: <a href="#registryglobal-min-publish-age"><code>registry.global-min-publish-age</code></a></li>
+<li>Environment: <code>CARGO_REGISTRIES_&lt;name&gt;_MIN_PUBLISH_AGE</code></li>
+</ul>
+<p>حداقل بازهٔ زمانی از <code>pubtime</code> یک نسخه را مشخص می‌کند که ممکن است
+برای <a href="config.html#resolverincompatible-publish-age"><code>resolver.incompatible-publish-age</code></a> برای بسته‌های این
+registry در نظر گرفته شود. اگر تنظیم نشود، <a href="#registryglobal-min-publish-age"><code>registry.global-min-publish-age</code></a> استفاده می‌شود.</p>
+<p>اگر registry از این پشتیبانی نکند نادیده گرفته می‌شود.</p>
+<p>مقادیر زیر را پشتیبانی می‌کند:</p>
+<ul>
+<li>یک عدد صحیح به‌دنبال «seconds»، «minutes»، «hours»، «days»، «weeks» یا «months»</li>
+<li><code>"0"</code> برای مجاز‌کردن همهٔ بسته‌ها</li>
+</ul>
+<p>معمولاً <code>"0"</code>، <code>"N days"</code> و <code>"N weeks"</code> استفاده می‌شوند.</p>
+<blockquote>
+<p><strong>MSRV:</strong> از نسخهٔ 1.100 به بعد رعایت می‌شود</p>
+</blockquote>
+<h4 id="registriescrates-ioprotocol"><a class="header" href="#registriescrates-ioprotocol"><code>registries.crates-io.protocol</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: <code>"sparse"</code></li>
+<li>Environment: <code>CARGO_REGISTRIES_CRATES_IO_PROTOCOL</code></li>
+</ul>
+<p>پروتکل دسترسی به crates.io را مشخص می‌کند. مقادیر مجاز <code>git</code> یا <code>sparse</code> هستند.</p>
+<p><code>git</code> باعث می‌شود Cargo کل فهرست همهٔ بسته‌هایی را که تاکنون در <a href="https://crates.io/">crates.io</a> منتشر شده‌اند از <a href="https://github.com/rust-lang/crates.io-index/">https://github.com/rust-lang/crates.io-index/</a> clone کند.
+به‌دلیل اندازهٔ فهرست، این می‌تواند تبعات عملکردی داشته باشد.
+<code>sparse</code> پروتکل جدیدتری است که از HTTPS استفاده می‌کند تا فقط آنچه لازم است را از <a href="https://index.crates.io/">https://index.crates.io/</a> دانلود کند.
+این در بیشتر موارد می‌تواند بهبود چشمگیری در عملکرد حل وابستگی‌های جدید ایجاد کند.</p>
+<p>اطلاعات بیشتر دربارهٔ پروتکل‌های registry را می‌توانید در <a href="registries.html">فصل Registryها</a> بیابید.</p>
+<h3 id="registry"><a class="header" href="#registry"><code>[registry]</code></a></h3>
+<p>جدول <code>[registry]</code> registry پیش‌فرضی را که در صورت مشخص‌نشدن آن به‌کار می‌رود کنترل می‌کند.</p>
+<h4 id="registryindex"><a class="header" href="#registryindex"><code>registry.index</code></a></h4>
+<p>این مقدار دیگر پذیرفته نمی‌شود و نباید استفاده شود.</p>
+<h4 id="registrydefault"><a class="header" href="#registrydefault"><code>registry.default</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: <code>"crates-io"</code></li>
+<li>Environment: <code>CARGO_REGISTRY_DEFAULT</code></li>
+</ul>
+<p>نام registry (از <a href="#registries">جدول <code>registries</code></a>) که به‌طور پیش‌فرض
+برای دستورهای registry مثل <a href="../commands/cargo-publish.html"><code>cargo publish</code></a> استفاده می‌شود.</p>
+<p>می‌توان آن را با گزینهٔ خط فرمان <code>--registry</code> بازنویسی کرد.</p>
+<h4 id="registrycredential-provider"><a class="header" href="#registrycredential-provider"><code>registry.credential-provider</code></a></h4>
+<ul>
+<li>نوع: رشته یا آرایه‌ای از مسیر و آرگومان‌ها</li>
+<li>Default: none</li>
+<li>Environment: <code>CARGO_REGISTRY_CREDENTIAL_PROVIDER</code></li>
+</ul>
+<p>ارائه‌دهندهٔ اعتبارنامه را برای <a href="https://crates.io/">crates.io</a> مشخص می‌کند. اگر تنظیم نشود،
+ارائه‌دهندگان موجود در <a href="#registryglobal-credential-providers"><code>registry.global-credential-providers</code></a>
+استفاده می‌شوند.</p>
+<p>اگر به‌صورت رشته مشخص شود، مسیر و آرگومان‌ها با فاصله تقسیم می‌شوند. برای
+مسیرها یا آرگومان‌هایی که فاصله دارند از آرایه استفاده کنید.</p>
+<p>اگر مقدار در جدول <code>[credential-alias]</code> وجود داشته باشد، از نام مستعار استفاده می‌شود.</p>
+<p>برای اطلاعات بیشتر <a href="registry-authentication.html">احراز هویت registry</a> را ببینید.</p>
+<h4 id="registrytoken"><a class="header" href="#registrytoken"><code>registry.token</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: none</li>
+<li>Environment: <code>CARGO_REGISTRY_TOKEN</code></li>
+</ul>
+<p>توکن احراز هویت <a href="https://crates.io/">crates.io</a> را مشخص می‌کند. این مقدار باید فقط
+در فایل <a href="#credentials">credentials</a> بیاید. برای دستورهای registry
+مثل <a href="../commands/cargo-publish.html"><code>cargo publish</code></a> که احراز هویت لازم دارند استفاده می‌شود.</p>
+<p>می‌توان آن را با گزینهٔ خط فرمان <code>--token</code> بازنویسی کرد.</p>
+<h4 id="registryglobal-credential-providers"><a class="header" href="#registryglobal-credential-providers"><code>registry.global-credential-providers</code></a></h4>
+<ul>
+<li>Type: array</li>
+<li>Default: <code>["cargo:token"]</code></li>
+<li>Environment: <code>CARGO_REGISTRY_GLOBAL_CREDENTIAL_PROVIDERS</code></li>
+</ul>
+<p>فهرست ارائه‌دهندگان سراسری اعتبارنامه را مشخص می‌کند. اگر برای یک registry مشخص با <code>registries.&lt;name&gt;.credential-provider</code>
+ارائه‌دهندهٔ اعتبارنامه تنظیم نشده باشد، Cargo از
+ارائه‌دهندگان این فهرست استفاده می‌کند. ارائه‌دهندگان انتهای فهرست اولویت دارند.</p>
+<p>مسیر و آرگومان‌ها با فاصله تقسیم می‌شوند. اگر مسیر یا آرگومان‌ها فاصله داشته باشند، ارائه‌دهندهٔ اعتبارنامه
+باید در جدول <a href="#credential-alias"><code>[credential-alias]</code></a> تعریف شود
+و اینجا با نام مستعارش به آن ارجاع داده شود.</p>
+<p>برای اطلاعات بیشتر <a href="registry-authentication.html">احراز هویت registry</a> را ببینید.</p>
+<h4 id="registryglobal-min-publish-age"><a class="header" href="#registryglobal-min-publish-age"><code>registry.global-min-publish-age</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: <code>"0"</code></li>
+<li>Environment: <code>CARGO_REGISTRY_GLOBAL_MIN_PUBLISH_AGE</code></li>
+</ul>
+<p>حداقل بازهٔ زمانی سراسری از <code>pubtime</code> یک نسخه را مشخص می‌کند که ممکن است
+برای <a href="config.html#resolverincompatible-publish-age"><code>resolver.incompatible-publish-age</code></a> برای بسته‌ها در نظر گرفته شود.
+اگر <code>min-publish-age</code> برای یک registry مشخص با
+<code>registries.&lt;name&gt;.min-publish-age</code> تنظیم نشده باشد، Cargo از همین حداقل سن انتشار استفاده می‌کند.</p>
+<p>مقادیر زیر را پشتیبانی می‌کند:</p>
+<ul>
+<li>یک عدد صحیح به‌دنبال «seconds»، «minutes»، «hours»، «days»، «weeks» یا «months»</li>
+<li><code>"0"</code> برای مجاز‌کردن همهٔ بسته‌ها</li>
+</ul>
+<p>معمولاً <code>"0"</code>، <code>"N days"</code> و <code>"N weeks"</code> استفاده می‌شوند.</p>
+<blockquote>
+<p><strong>MSRV:</strong> از نسخهٔ 1.100 به بعد رعایت می‌شود</p>
+</blockquote>
+<h3 id="source"><a class="header" href="#source"><code>[source]</code></a></h3>
+<p>جدول <code>[source]</code> منبع‌های registry موجود را تعریف می‌کند. برای اطلاعات بیشتر <a href="source-replacement.html">جایگزینی منبع (Source Replacement)</a> را ببینید. شامل یک زیرجدول برای هر
+منبع نام‌دار است. یک منبع باید فقط یک نوع را تعریف کند (directory، registry،
+local-registry یا git).</p>
+<h4 id="sourcenamereplace-with"><a class="header" href="#sourcenamereplace-with"><code>source.&lt;name&gt;.replace-with</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: none</li>
+<li>متغیر محیطی: پشتیبانی نمی‌شود</li>
+</ul>
+<p>اگر تنظیم شود، این منبع را با منبع یا registry نام‌دار داده‌شده جایگزین می‌کند.</p>
+<h4 id="sourcenamedirectory"><a class="header" href="#sourcenamedirectory"><code>source.&lt;name&gt;.directory</code></a></h4>
+<ul>
+<li>Type: string (path)</li>
+<li>Default: none</li>
+<li>متغیر محیطی: پشتیبانی نمی‌شود</li>
+</ul>
+<p>مسیر پوشه‌ای را برای استفاده به‌عنوان منبع directory تعیین می‌کند.</p>
+<h4 id="sourcenameregistry"><a class="header" href="#sourcenameregistry"><code>source.&lt;name&gt;.registry</code></a></h4>
+<ul>
+<li>Type: string (url)</li>
+<li>Default: none</li>
+<li>متغیر محیطی: پشتیبانی نمی‌شود</li>
+</ul>
+<p>نشانی URL را برای استفاده به‌عنوان منبع registry تعیین می‌کند.</p>
+<h4 id="sourcenamelocal-registry"><a class="header" href="#sourcenamelocal-registry"><code>source.&lt;name&gt;.local-registry</code></a></h4>
+<ul>
+<li>Type: string (path)</li>
+<li>Default: none</li>
+<li>متغیر محیطی: پشتیبانی نمی‌شود</li>
+</ul>
+<p>مسیر پوشه‌ای را برای استفاده به‌عنوان منبع local registry تعیین می‌کند.</p>
+<h4 id="sourcenamegit"><a class="header" href="#sourcenamegit"><code>source.&lt;name&gt;.git</code></a></h4>
+<ul>
+<li>Type: string (url)</li>
+<li>Default: none</li>
+<li>متغیر محیطی: پشتیبانی نمی‌شود</li>
+</ul>
+<p>نشانی URL را برای استفاده به‌عنوان منبع مخزن git تعیین می‌کند.</p>
+<h4 id="sourcenamebranch"><a class="header" href="#sourcenamebranch"><code>source.&lt;name&gt;.branch</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: none</li>
+<li>متغیر محیطی: پشتیبانی نمی‌شود</li>
+</ul>
+<p>نام شاخه (branch) را برای استفاده در مخزن git تعیین می‌کند.</p>
+<p>اگر هیچ‌کدام از <code>branch</code>، <code>tag</code> یا <code>rev</code> تنظیم نشده باشد، پیش‌فرض شاخهٔ <code>master</code> است.</p>
+<h4 id="sourcenametag"><a class="header" href="#sourcenametag"><code>source.&lt;name&gt;.tag</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: none</li>
+<li>متغیر محیطی: پشتیبانی نمی‌شود</li>
+</ul>
+<p>نام برچسب (tag) را برای استفاده در مخزن git تعیین می‌کند.</p>
+<p>اگر هیچ‌کدام از <code>branch</code>، <code>tag</code> یا <code>rev</code> تنظیم نشده باشد، پیش‌فرض شاخهٔ <code>master</code> است.</p>
+<h4 id="sourcenamerev"><a class="header" href="#sourcenamerev"><code>source.&lt;name&gt;.rev</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: none</li>
+<li>متغیر محیطی: پشتیبانی نمی‌شود</li>
+</ul>
+<p><a href="https://git-scm.com/docs/gitrevisions">revision</a> را برای استفاده در مخزن git تعیین می‌کند.</p>
+<p>اگر هیچ‌کدام از <code>branch</code>، <code>tag</code> یا <code>rev</code> تنظیم نشده باشد، پیش‌فرض شاخهٔ <code>master</code> است.</p>
+<h3 id="target"><a class="header" href="#target"><code>[target]</code></a></h3>
+<p>جدول <code>[target]</code> برای مشخص‌کردن تنظیمات اهداف پلتفرم‌های خاص به‌کار می‌رود. شامل یک زیرجدول است که یا <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)">tuple پلتفرم</a>
+یا یک <a href="../../reference/conditional-compilation.html">عبارت <code>cfg()</code></a> است. مقادیر داده‌شده وقتی استفاده می‌شوند که پلتفرم هدف
+با مقدار <code>&lt;tuple&gt;</code> یا عبارت <code>&lt;cfg&gt;</code> مطابقت داشته باشد.</p>
+<pre><code class="language-toml">[target.thumbv7m-none-eabi]
+linker = "arm-none-eabi-gcc"
+runner = "my-emulator"
+rustflags = ["…", "…"]
+
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+runner = "my-arm-wrapper"
+rustflags = ["…", "…"]
+</code></pre>
+<p>مقادیر <code>cfg</code> از مقادیر داخلی کامپایلر می‌آیند (برای دیدن آن‌ها <code>rustc --print=cfg</code> را اجرا کنید)
+و از پرچم‌های اضافی <code>--cfg</code> که به <code>rustc</code> داده می‌شوند (مثل آن‌هایی که در
+<code>RUSTFLAGS</code> تعریف می‌شوند). سعی نکنید با <code>debug_assertions</code>، <code>test</code>، featureهای Cargo
+مثل <code>feature="foo"</code> یا مقادیری که <a href="build-scripts.html">اسکریپت‌های ساخت</a> تنظیم می‌کنند مطابقت دهید.</p>
+<p>اگر از فایل JSON مشخصات هدف استفاده می‌کنید، مقدار <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)"><code>&lt;tuple&gt;</code></a> نام فایل بدون پسوند است.
+مثلاً <code>--target foo/bar.json</code> با <code>[target.bar]</code> مطابقت می‌کند.</p>
+<h4 id="targettuplear"><a class="header" href="#targettuplear"><code>target.&lt;tuple&gt;.ar</code></a></h4>
+<p>این گزینه منسوخ و بی‌استفاده است.</p>
+<h4 id="targettuplelinker"><a class="header" href="#targettuplelinker"><code>target.&lt;tuple&gt;.linker</code></a></h4>
+<ul>
+<li>نوع: رشته (مسیر برنامه)</li>
+<li>Default: none</li>
+<li>Environment: <code>CARGO_TARGET_&lt;tuple&gt;_LINKER</code></li>
+</ul>
+<p>لینکری را مشخص می‌کند که هنگام کامپایل برای <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)"><code>&lt;tuple&gt;</code></a>
+به <code>rustc</code> داده می‌شود (از طریق <a href="../../rustc/codegen-options/index.html#linker"><code>-C linker</code></a>). به‌طور پیش‌فرض لینکر بازنویسی نمی‌شود.</p>
+<h4 id="targetcfglinker"><a class="header" href="#targetcfglinker"><code>target.&lt;cfg&gt;.linker</code></a></h4>
+<p>این مشابه <a href="#targettuplelinker">لینکر هدف</a> است، اما با استفاده از
+یک <a href="../../reference/conditional-compilation.html">عبارت <code>cfg()</code></a>. اگر هم لینکر <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)"><code>&lt;tuple&gt;</code></a> و هم <code>&lt;cfg&gt;</code> منطبق باشند،
+<code>&lt;tuple&gt;</code> اولویت دارد. اگر بیش از یک
+لینکر <code>&lt;cfg&gt;</code> با هدف فعلی مطابقت کند، خطاست.</p>
+<h4 id="targettuplerunner"><a class="header" href="#targettuplerunner"><code>target.&lt;tuple&gt;.runner</code></a></h4>
+<ul>
+<li>نوع: رشته یا آرایه‌ای از رشته‌ها (<a href="#executable-paths-with-arguments">مسیر برنامه همراه با آرگومان‌ها</a>)</li>
+<li>Default: none</li>
+<li>Environment: <code>CARGO_TARGET_&lt;tuple&gt;_RUNNER</code></li>
+</ul>
+<p>اگر runner ارائه شود، فایل‌های اجرایی هدف <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)"><code>&lt;tuple&gt;</code></a> با
+فراخوانی runner مشخص‌شده اجرا می‌شوند و فایل اجرایی واقعی به‌عنوان
+آرگومان به آن داده می‌شود. این برای دستورهای <a href="../commands/cargo-run.html"><code>cargo run</code></a>، <a href="../commands/cargo-test.html"><code>cargo test</code></a> و <a href="../commands/cargo-bench.html"><code>cargo bench</code></a>
+صدق می‌کند. به‌طور پیش‌فرض فایل‌های اجرایی کامپایل‌شده مستقیماً اجرا می‌شوند.</p>
+<h4 id="targetcfgrunner"><a class="header" href="#targetcfgrunner"><code>target.&lt;cfg&gt;.runner</code></a></h4>
+<p>این مشابه <a href="#targettuplerunner">runner هدف</a> است، اما با استفاده از
+یک <a href="../../reference/conditional-compilation.html">عبارت <code>cfg()</code></a>. اگر هم runner <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)"><code>&lt;tuple&gt;</code></a> و هم <code>&lt;cfg&gt;</code> منطبق باشند،
+<code>&lt;tuple&gt;</code> اولویت دارد. اگر بیش از یک
+runner <code>&lt;cfg&gt;</code> با هدف فعلی مطابقت کند، خطاست.</p>
+<h4 id="targettuplerustflags"><a class="header" href="#targettuplerustflags"><code>target.&lt;tuple&gt;.rustflags</code></a></h4>
+<ul>
+<li>نوع: رشته یا آرایه‌ای از رشته‌ها</li>
+<li>Default: none</li>
+<li>Environment: <code>CARGO_TARGET_&lt;tuple&gt;_RUSTFLAGS</code></li>
+</ul>
+<p>مجموعه‌ای از پرچم‌های سفارشی را برای این <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)"><code>&lt;tuple&gt;</code></a> به کامپایلر می‌دهد.
+مقدار می‌تواند آرایه‌ای از رشته‌ها یا رشته‌ای جداشده با فاصله باشد.</p>
+<p>برای جزئیات بیشتر دربارهٔ راه‌های مختلف مشخص‌کردن پرچم‌های اضافی، <a href="#buildrustflags"><code>build.rustflags</code></a> را ببینید.</p>
+<h4 id="targetcfgrustflags"><a class="header" href="#targetcfgrustflags"><code>target.&lt;cfg&gt;.rustflags</code></a></h4>
+<p>این مشابه <a href="#targettuplerustflags">rustflags هدف</a> است، اما
+با استفاده از یک <a href="../../reference/conditional-compilation.html">عبارت <code>cfg()</code></a>. اگر چند ورودی <code>&lt;cfg&gt;</code> و <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)"><code>&lt;tuple&gt;</code></a>
+با هدف فعلی مطابقت کنند، پرچم‌ها به هم متصل می‌شوند.</p>
+<h4 id="targettuplerustdocflags"><a class="header" href="#targettuplerustdocflags"><code>target.&lt;tuple&gt;.rustdocflags</code></a></h4>
+<ul>
+<li>نوع: رشته یا آرایه‌ای از رشته‌ها</li>
+<li>Default: none</li>
+<li>Environment: <code>CARGO_TARGET_&lt;tuple&gt;_RUSTDOCFLAGS</code></li>
+</ul>
+<p>مجموعه‌ای از پرچم‌های سفارشی را برای این <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)"><code>&lt;tuple&gt;</code></a> به کامپایلر می‌دهد.
+مقدار می‌تواند آرایه‌ای از رشته‌ها یا رشته‌ای جداشده با فاصله باشد.</p>
+<p>برای جزئیات بیشتر دربارهٔ راه‌های مختلف مشخص‌کردن پرچم‌های اضافی، <a href="#buildrustdocflags"><code>build.rustdocflags</code></a> را ببینید.</p>
+<h4 id="targetcfgrustdocflags"><a class="header" href="#targetcfgrustdocflags"><code>target.&lt;cfg&gt;.rustdocflags</code></a></h4>
+<p>این مشابه <a href="#targettuplerustdocflags">rustdocflags هدف</a> است، اما
+با استفاده از یک <a href="../../reference/conditional-compilation.html">عبارت <code>cfg()</code></a>. اگر چند ورودی <code>&lt;cfg&gt;</code> و <a href="../appendix/glossary.html#target" title="&quot;target&quot; (glossary)"><code>&lt;tuple&gt;</code></a>
+با هدف فعلی مطابقت کنند، پرچم‌ها به هم متصل می‌شوند.</p>
+<h4 id="targettuplelinks"><a class="header" href="#targettuplelinks"><code>target.&lt;tuple&gt;.&lt;links&gt;</code></a></h4>
+<p>زیرجدول links راهی برای <a href="build-scripts.html#overriding-build-scripts">بازنویسی اسکریپت ساخت</a> فراهم می‌کند. وقتی
+مشخص شود، اسکریپت ساخت کتابخانهٔ <code>links</code> مورد نظر
+اجرا نمی‌شود و به‌جای آن مقادیر داده‌شده استفاده می‌شوند.</p>
+<pre><code class="language-toml">[target.x86_64-unknown-linux-gnu.foo]
+rustc-link-lib = ["foo"]
+rustc-link-search = ["/path/to/foo"]
+rustc-flags = "-L /some/path"
+rustc-cfg = ['key="value"']
+rustc-env = {key = "value"}
+rustc-cdylib-link-arg = ["…"]
+metadata_key1 = "value"
+metadata_key2 = "value"
+</code></pre>
+<h3 id="term"><a class="header" href="#term"><code>[term]</code></a></h3>
+<p>جدول <code>[term]</code> خروجی و تعامل ترمینال را کنترل می‌کند.</p>
+<h4 id="termquiet"><a class="header" href="#termquiet"><code>term.quiet</code></a></h4>
+<ul>
+<li>Type: boolean</li>
+<li>Default: false</li>
+<li>Environment: <code>CARGO_TERM_QUIET</code></li>
+</ul>
+<p>کنترل می‌کند Cargo پیام‌های لاگ را نمایش دهد یا نه.</p>
+<p>مشخص‌کردن پرچم <code>--quiet</code> این را بازنویسی می‌کند و خروجی ساکت را اجباری می‌کند.
+مشخص‌کردن پرچم <code>--verbose</code> آن را بازنویسی می‌کند و خروجی ساکت را غیرفعال می‌کند.</p>
+<h4 id="termverbose"><a class="header" href="#termverbose"><code>term.verbose</code></a></h4>
+<ul>
+<li>Type: boolean</li>
+<li>Default: false</li>
+<li>Environment: <code>CARGO_TERM_VERBOSE</code></li>
+</ul>
+<p>کنترل می‌کند Cargo پیام‌های بسیار مفصل اضافی را نمایش دهد یا نه.</p>
+<p>مشخص‌کردن پرچم <code>--quiet</code> آن را بازنویسی می‌کند و خروجی مفصل را غیرفعال می‌کند.
+مشخص‌کردن پرچم <code>--verbose</code> آن را بازنویسی می‌کند و خروجی مفصل را اجباری می‌کند.</p>
+<h4 id="termcolor"><a class="header" href="#termcolor"><code>term.color</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: <code>"auto"</code></li>
+<li>Environment: <code>CARGO_TERM_COLOR</code></li>
+</ul>
+<p>کنترل می‌کند در ترمینال از خروجی رنگی استفاده شود یا نه. مقادیر ممکن:</p>
+<ul>
+<li><code>auto</code> (پیش‌فرض): به‌طور خودکار تشخیص می‌دهد که آیا ترمینال از رنگ پشتیبانی می‌کند.</li>
+<li><code>always</code>: Always display colors.</li>
+<li><code>never</code>: Never display colors.</li>
+</ul>
+<p>می‌توان آن را با گزینهٔ خط فرمان <code>--color</code> بازنویسی کرد.</p>
+<h4 id="termhyperlinks"><a class="header" href="#termhyperlinks"><code>term.hyperlinks</code></a></h4>
+<ul>
+<li>Type: bool</li>
+<li>Default: auto-detect</li>
+<li>Environment: <code>CARGO_TERM_HYPERLINKS</code></li>
+</ul>
+<p>کنترل می‌کند در ترمینال از ابرپیوند استفاده شود یا نه.</p>
+<h4 id="termunicode"><a class="header" href="#termunicode"><code>term.unicode</code></a></h4>
+<ul>
+<li>Type: bool</li>
+<li>Default: auto-detect</li>
+<li>Environment: <code>CARGO_TERM_UNICODE</code></li>
+</ul>
+<p>کنترل می‌کند خروجی بتواند با نویسه‌های یونیکد غیر ASCII نمایش داده شود یا نه.</p>
+<h4 id="termprogresswhen"><a class="header" href="#termprogresswhen"><code>term.progress.when</code></a></h4>
+<ul>
+<li>Type: string</li>
+<li>Default: <code>"auto"</code></li>
+<li>Environment: <code>CARGO_TERM_PROGRESS_WHEN</code></li>
+</ul>
+<p>کنترل می‌کند نوار پیشرفت در ترمینال نمایش داده شود یا نه. مقادیر ممکن:</p>
+<ul>
+<li><code>auto</code> (پیش‌فرض): هوشمندانه حدس می‌زند که نوار پیشرفت نمایش داده شود یا نه.</li>
+<li><code>always</code>: همیشه نوار پیشرفت را نمایش می‌دهد.</li>
+<li><code>never</code>: هرگز نوار پیشرفت را نمایش نمی‌دهد.</li>
+</ul>
+<h4 id="termprogresswidth"><a class="header" href="#termprogresswidth"><code>term.progress.width</code></a></h4>
+<ul>
+<li>Type: integer</li>
+<li>Default: none</li>
+<li>Environment: <code>CARGO_TERM_PROGRESS_WIDTH</code></li>
+</ul>
+<p>پهنای نوار پیشرفت را تنظیم می‌کند.</p>
+<h4 id="termprogressterm-integration"><a class="header" href="#termprogressterm-integration"><code>term.progress.term-integration</code></a></h4>
+<ul>
+<li>Type: bool</li>
+<li>Default: auto-detect</li>
+<li>Environment: <code>CARGO_TERM_PROGRESS_TERM_INTEGRATION</code></li>
+</ul>
+<p>پیشرفت را به شبیه‌ساز ترمینال گزارش می‌دهد تا در جاهایی مثل نوار وظایف نمایش داده شود.</p><nav class="page-nav"><a href="profiles.html">→ Profileها</a><a href="environment-variables.html">متغیرهای محیطی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

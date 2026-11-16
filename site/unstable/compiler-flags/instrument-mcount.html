@@ -1,0 +1,136 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>instrument-mcount — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="compiler-flags/instrument-mcount"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="instrument-mcount"><a class="header" href="#instrument-mcount"><code>instrument-mcount</code></a></h1>
+<p>در ورودی هر تابع، فراخوانی‌هایی به یک تابع شمارنده درج می‌کند. به‌طور سنتی نام این تابع mcount بود، اما نام دقیق ممکن است بسته به هدف و گزینه‌های استفاده‌شده متفاوت باشد.</p>
+<p>تابع شمارنده یک تابع ویژه است که معمولاً از ABI هدف پیروی نمی‌کند. به‌طور کلی دو آرگومان می‌گیرد: نشانی تابع فراخواننده و نشانی تابع فراخوانی‌شده. در ابتدا برای پروفایل‌گیری (profiling) از برنامه‌ها به کار می‌رفت، اما کاربردهایش گسترش یافته است (برای مثال <a href="https://docs.kernel.org/trace/ftrace.html">ftrace در لینوکس</a>).</p>
+<p>گزینه‌های پشتیبانی‌شده:</p>
+<ul>
+<li><code>no</code>، <code>n</code>، <code>off</code>: ابزارگذاری را فعال نکن. این گزینه‌ی پیش‌فرض است. این گزینه تولید frame pointer را لازم دارد و فعال می‌کند.</li>
+<li><code>yes</code>، <code>y</code>، <code>on</code>: ابزارگذاری تابع‌ها بر پایه‌ی mcount را فعال کن.</li>
+<li><code>fentry</code>: ابزارگذاری تابع‌ها بر پایه‌ی fentry را در جایی که پشتیبانی می‌شود فعال کن. قرارداد فراخوانی (calling convention) این روش با mcount فرق دارد، سربار کمتری دارد و به frame pointer نیاز ندارد. نام این تابع شمارنده همیشه <code>__fentry__</code> است. این گزینه فقط روی هدف‌های x86 و s390x در دسترس است.</li>
+<li><code>fentry-nop-record</code> و <code>fentry-record</code>: این گزینه‌ها گزینه‌ی <code>fentry</code> را با ثبت هر محل فراخوانی در بخشی به نام <code>__mcount_loc</code> در فایل شیء خروجی گسترش می‌دهند و در صورت لزوم فراخوانی <code>__fentry__</code> را با یک nop جایگزین می‌کنند. این گزینه‌ها برای همه‌ی هدف‌ها پیاده‌سازی نشده‌اند. پشتیبانی در ستون «supports fentry recording» جدول زیر مشخص شده است.</li>
+</ul>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>target</th><th>تابع mcount</th><th>پشتیبانی از fentry</th><th>پشتیبانی از ثبت fentry</th><th>ABI notes</th></tr>
+</thead>
+<tbody>
+<tr><td>aarch64-apple-darwin</td><td><code>\u{1}mcount</code></td><td></td><td></td><td></td></tr>
+<tr><td>aarch64-pc-windows-msvc</td><td><code>mcount</code></td><td></td><td></td><td></td></tr>
+<tr><td>aarch64-unknown-linux-gnu</td><td><code>_mcount</code></td><td></td><td></td><td></td></tr>
+<tr><td>i686-pc-windows-msvc</td><td><code>mcount</code></td><td>x</td><td></td><td></td></tr>
+<tr><td>i686-unknown-linux-gnu</td><td><code>mcount</code></td><td>x</td><td></td><td></td></tr>
+<tr><td>x86_64-pc-windows-gnu</td><td><code>_mcount</code></td><td>x</td><td></td><td></td></tr>
+<tr><td>x86_64-pc-windows-msvc</td><td><code>mcount</code></td><td>x</td><td></td><td></td></tr>
+<tr><td>x86_64-unknown-linux-gnu</td><td><code>mcount</code></td><td>x</td><td></td><td>1</td></tr>
+<tr><td>s390x-unknown-linux-gnu</td><td><code>mcount</code></td><td>x</td><td>x</td><td></td></tr>
+</tbody>
+</table>
+</div>
+<p>در هدف‌های arm eabi، تابع mcount معمولاً <code>__gnu_mcount_nc</code> نامیده می‌شود، هرچند برخی هدف‌ها ممکن است نام‌های متفاوتی به کار ببرند. پیاده‌سازان تابع شمارنده باید برای آگاهی از ویژگی‌های خاص ABI هر تابع، مستندات مخصوص هدف را مطالعه کنند.</p>
+<ol>
+<li>در x86-64، mcount و fentry باید ثبات‌های آرگومان <code>rax</code>، <code>rcx</code>، <code>rdx</code>، <code>rsi</code>، <code>rdi</code>، <code>r8</code>، <code>r9</code> را حفظ کنند. هنگام استفاده از fentry، ممکن است لازم باشد اشاره‌گر پشته‌ی <code>rsp</code> برای برآوردن الزامات ABI تراز شود.</li>
+</ol>
+<h2 id="implementing-custom-counting-functions"><a class="header" href="#implementing-custom-counting-functions">پیاده‌سازی تابع‌های شمارنده‌ی سفارشی</a></h2>
+<p>در اصل، این کار پیاده‌سازی تابع <code>fn mcount(caller: *const std::ffi::c_void, callee: *const std::ffi::c_void)</code> است. قرارداد فراخوانی mcount از ABI مخصوص خودش پیروی می‌کند که معمولاً ABI استاندارد هدف نیست، اما با یک قرارداد از پیش موجود اعمال می‌شود.</p>
+<p>یک نمونه‌ی ساده روی x86_64-unknown-linux-gnu چیزی شبیه زیر است. ویژگی <code>#[instrument_fn]</code> را می‌توان برای غیرفعال‌کردن پروفایل‌گیری به کار برد تا نوشتن تابع‌های شمارنده ساده‌تر شود، اما پیاده‌سازان باید هنگام فراخوانی تابع‌های دیگر (یا closureهایی که درون‌خطی نمی‌شوند) بسیار دقت کنند، چون آن‌ها هم ممکن است mcount را فراخوانی کنند.</p>
+<p>نمونه‌ی زیر را می‌توان با <code>-Zinstrument-mcount=yes</code> یا <code>-Zinstrument-mcount=fentry</code> روی هدف x86_64-unknown-linux-gnu کامپایل کرد. لینک‌کردن شیءهایی با کاربردهای مختلف <code>-Zinstrument-mcount</code> هم مجاز است، اما انجام این کار در هدف‌هایی که هر دو را پشتیبانی می‌کنند مستلزم پیاده‌سازی هر دو <code>__fentry__</code> و <code>mcount</code> است.</p>
+<pre><code class="language-rust">#![feature(instrument_fn)]
+
+fn main() {
+    // Ensure all the early startup occurs before attempting to call this trivial, single-threaded
+    // counting function.
+    unsafe {
+        PROFILING_ENABLED = true;
+    }
+    println!("main() called");
+    unsafe {
+        PROFILING_ENABLED = false;
+    }
+}
+
+// This example is not threadsafe.
+pub static mut IN_MCOUNT: isize = 0;
+pub static mut PROFILING_ENABLED: bool = false;
+
+#[unsafe(no_mangle)]
+#[instrument_fn = "off"]
+unsafe extern "C" fn __count_fn(caller: u64, callee: u64) {
+    unsafe {
+        if IN_MCOUNT == 0 &amp;&amp; PROFILING_ENABLED {
+            IN_MCOUNT += 1;
+            {
+                println!("mcount: call from 0x{caller:x} to 0x{callee:x}");
+            }
+            IN_MCOUNT -= 1;
+        }
+    }
+}
+
+// Define a custom mcount function. This may partially or fully override the glibc
+// implementation depending on linker options.
+#[unsafe(naked)]
+#[unsafe(no_mangle)]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+unsafe extern "custom" fn mcount() {
+    core::arch::naked_asm!(
+        // A simplified version based on the glibc x86-64 mcount wrapper.
+        // Save register arguments to the stack, and call the mcount above.
+        "push rax",
+        "push rcx",
+        "push rdx",
+        "push rsi",
+        "push rdi",
+        "push r8",
+        "push r9",
+        "mov rsi, 56[rsp]",
+        "mov rdi, 8[rbp]",
+        "call __count_fn",
+        "pop r9",
+        "pop r8",
+        "pop rdi",
+        "pop rsi",
+        "pop rdx",
+        "pop rcx",
+        "pop rax",
+        "ret",
+    )
+}
+
+// Supply a custom __fentry__ instead of glibc's. This has the same linker
+// restrictions as noted with mcount, but does not require a frame pointer.
+#[unsafe(naked)]
+#[unsafe(no_mangle)]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+unsafe extern "custom" fn __fentry__() {
+    core::arch::naked_asm!(
+        // __fentry__ is called before any other prologue actions, be careful
+        // with stack alignment. The stack slots look something like:
+        // [...]
+        // [caller return address]
+        // [callee return address] &lt;- top of stack
+        "sub rsp, 8",
+        "push rax",
+        "push rcx",
+        "push rdx",
+        "push rsi",
+        "push rdi",
+        "push r8",
+        "push r9",
+        "mov rsi, 64[rsp]",
+        "mov rdi, 72[rsp]",
+        "call __count_fn",
+        "pop r9",
+        "pop r8",
+        "pop rdi",
+        "pop rsi",
+        "pop rdx",
+        "pop rcx",
+        "pop rax",
+        "add rsp, 8",
+        "ret",
+    )
+}</code></pre>
+<p>هنگام اجرا، برنامه‌ی بالا باید خروجی‌ای مشابه زیر تولید کند:</p>
+<pre><code class="language-txt">mcount: call from 0x5614c97d778a to 0x5614c97d76e5
+main() called
+</code></pre><nav class="page-nav"><a href="../../unstable/compiler-flags/indirect-branch-cs-prefix.html">→ indirect-branch-cs-prefix</a><a href="../../unstable/compiler-flags/instrument-xray.html">instrument-xray ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,58 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>#[panic_handler] — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="panic-handler"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="panic_handler"><a class="header" href="#panic_handler">#[panic_handler]</a></h1>
+<p><code>#[panic_handler]</code> برای تعریف رفتار <code>panic!</code> در برنامه‌های <code>#![no_std]</code> به کار می‌رود. اتریبیوت <code>#[panic_handler]</code> باید روی تابعی با امضای <code>fn(&amp;PanicInfo) -&gt; !</code> اعمال شود و چنین تابعی باید <em>یک بار</em> در گراف وابستگی یک crate از نوع binary / dylib / cdylib ظاهر شود. API مربوط به <code>PanicInfo</code> را می‌توانید در <a href="https://doc.rust-lang.org/core/panic/struct.PanicInfo.html">مستندات API</a> ببینید.</p>
+<p>از آنجا که برنامه‌های <code>#![no_std]</code> خروجی <em>استاندارد</em> ندارند و برخی برنامه‌های <code>#![no_std]</code>، مثلاً برنامه‌های نهفته، برای توسعه و برای انتشار به رفتارهای panic متفاوتی نیاز دارند، می‌تواند مفید باشد که crateهای panic داشته باشیم، یعنی crateهایی که فقط یک <code>#[panic_handler]</code> دارند. به این ترتیب برنامه‌ها می‌توانند رفتار panic را به‌سادگی و تنها با پیوند دادن به یک crate panic دیگر عوض کنند.</p>
+<p>در ادامه مثالی نشان داده شده است که در آن یک برنامه بسته به اینکه با پروفایل dev (<code>cargo build</code>) یا با پروفایل release (<code>cargo build --release</code>) کامپایل شود، رفتار panic متفاوتی دارد.</p>
+<p>crate با نام <code>panic-semihosting</code> – پیام‌های panic را با semihosting در stderr میزبان ثبت می‌کند:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">#![no_std]
+
+use core::fmt::{Write, self};
+use core::panic::PanicInfo;
+
+struct HStderr {
+    // ..
+<span class="boring">    _0: (),
+</span>}
+<span class="boring">
+</span><span class="boring">impl HStderr {
+</span><span class="boring">    fn new() -&gt; HStderr { HStderr { _0: () } }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl fmt::Write for HStderr {
+</span><span class="boring">    fn write_str(&amp;mut self, _: &amp;str) -&gt; fmt::Result { Ok(()) }
+</span><span class="boring">}
+</span>
+#[panic_handler]
+fn panic(info: &amp;PanicInfo) -&gt; ! {
+    let mut host_stderr = HStderr::new();
+
+    // logs "panicked at '$reason', src/main.rs:27:4" to the host stderr
+    writeln!(host_stderr, "{}", info).ok();
+
+    loop {}
+}</code></pre>
+<p>crate با نام <code>panic-halt</code> – نخ را هنگام panic متوقف می‌کند؛ پیام‌ها دور ریخته می‌شوند:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">#![no_std]
+
+use core::panic::PanicInfo;
+
+#[panic_handler]
+fn panic(_info: &amp;PanicInfo) -&gt; ! {
+    loop {}
+}</code></pre>
+<p>crate با نام <code>app</code>:</p>
+<!-- ignore: requires the above crates -->
+<pre><code class="language-rust ignore">#![no_std]
+
+// dev profile
+#[cfg(debug_assertions)]
+extern crate panic_semihosting;
+
+// release profile
+#[cfg(not(debug_assertions))]
+extern crate panic_halt;
+
+fn main() {
+    // ..
+}</code></pre><nav class="page-nav"><a href="beneath-std.html">→ زیر std</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

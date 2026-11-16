@@ -1,0 +1,130 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>type-alias-impl-trait — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/type-alias-impl-trait"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="type_alias_impl_trait"><a class="header" href="#type_alias_impl_trait"><code>type_alias_impl_trait</code></a></h1>
+<p>issue ردیابی این ویژگی: <a href="https://github.com/rust-lang/rust/issues/63063">#63063</a></p>
+<hr>
+<blockquote>
+<p>این ویژگی را با <a href="./trait-alias.html"><code>trait_alias</code></a> یا <a href="https://doc.rust-lang.org/unstable-book/language-features/impl-trait-in-assoc-type.html"><code>impl_trait_in_assoc_type</code></a> اشتباه نگیرید.</p>
+</blockquote>
+<h3 id="what-is-impl-trait"><a class="header" href="#what-is-impl-trait"><code>impl Trait</code> چیست؟</a></h3>
+<p><code>impl Trait</code> در موقعیت مقدار بازگشتی برای اعلام نوع‌هایی مفید است که با صفت‌ها محدود شده‌اند، اما نوع مشخص آن‌ها باید پنهان بماند:</p>
+<pre><code class="language-rust">use std::fmt::Debug;
+
+fn new() -&gt; impl Debug {
+    42
+}
+
+fn main() {
+    let thing = new();
+    // What actually is a `thing`?
+    // No idea but we know it implements `Debug`, so we can debug print it
+    println!("{thing:?}");
+}</code></pre>
+<p>برای اطلاعات بیشتر دربارهٔ <code>impl Trait</code> در موقعیت مقدار بازگشتی، به <a href="../../reference/types/impl-trait.html#abstract-return-types">مرجع</a> مراجعه کنید.</p>
+<h3 id="type_alias_impl_trait-1"><a class="header" href="#type_alias_impl_trait-1"><code>type_alias_impl_trait</code></a></h3>
+<p>با این حال، ممکن است بخواهیم از <code>impl Trait</code> در چند جا استفاده کنیم اما در همه‌جا واقعاً همان نوع مشخص را به کار ببریم و آن را پنهان نگه داریم. این کار می‌تواند در کتابخانه‌هایی مفید باشد که می‌خواهید جزئیات پیاده‌سازی را در آن‌ها پنهان کنید.</p>
+<p>attribute به نام <code>#[define_opaque]</code> باید برای فهرست کردن صریح آیتم‌های مبهم (opaque) که توسط آیتمِ حامل آن محدود می‌شوند استفاده شود.</p>
+<pre><code class="language-rust">#![feature(type_alias_impl_trait)]
+<span class="boring">#![allow(unused_variables, dead_code)]
+</span>trait Trait {}
+
+struct MyType;
+
+impl Trait for MyType {}
+
+type Alias = impl Trait;
+
+#[define_opaque(Alias)] // To constrain the type alias to `MyType`
+fn new() -&gt; Alias {
+    MyType
+}
+
+#[define_opaque(Alias)] // So we can name the concrete type inside this item
+fn main() {
+    let thing: MyType = new();
+}
+
+// It can be a part of a struct too
+struct HaveAlias {
+    stuff: String,
+    thing: Alias,
+}</code></pre>
+<p>در این مثال، نوع مشخصی که <code>Alias</code> به آن اشاره دارد تضمین شده است که در هر جایی که <code>Alias</code> ظاهر شود یکسان است.</p>
+<blockquote>
+<p>در ابتدا این ویژگی نام‌های مستعار نوع را به عنوان نوع وابسته (associated type) یک trait نیز شامل می‌شد. در <a href="https://github.com/rust-lang/rust/pull/110237">#110237</a> این بخش جدا شد و به <a href="https://doc.rust-lang.org/unstable-book/language-features/impl-trait-in-assoc-type.html"><code>impl_trait_in_assoc_type</code></a> منتقل گردید.</p>
+</blockquote>
+<h3 id="type_alias_impl_trait-in-argument-position"><a class="header" href="#type_alias_impl_trait-in-argument-position"><code>type_alias_impl_trait</code> در موقعیت آرگومان.</a></h3>
+<p>توجه کنید که استفاده از <code>Alias</code> به عنوان نوع آرگومان با <code>impl Trait</code> در موقعیت آرگومان یکسان <em>نیست</em>، زیرا <code>Alias</code> به یک نوع یکتا اشاره می‌کند، در حالی که نوع مشخص برای <code>impl Trait</code> در موقعیت آرگومان را فراخواننده انتخاب می‌کند.</p>
+<pre><code class="language-rust"><span class="boring">#![feature(type_alias_impl_trait)]
+</span><span class="boring">#![allow(unused_variables)]
+</span><span class="boring">pub mod x {
+</span><span class="boring">pub trait Trait {}
+</span><span class="boring">
+</span><span class="boring">struct MyType;
+</span><span class="boring">
+</span><span class="boring">impl Trait for MyType {}
+</span><span class="boring">
+</span><span class="boring">pub type Alias = impl Trait;
+</span><span class="boring">
+</span><span class="boring">#[define_opaque(Alias)]
+</span><span class="boring">pub fn new() -&gt; Alias {
+</span><span class="boring">    MyType
+</span><span class="boring">}
+</span><span class="boring">}
+</span><span class="boring">use x::*;
+</span>// this...
+pub fn take_alias(x: Alias) {
+    // ...
+}
+
+// ...is *not* the same as
+pub fn take_impl(x: impl Trait) {
+    // ...
+}
+<span class="boring">fn main(){}</span></code></pre>
+<pre><code class="language-rust compile_fail E0308"><span class="boring">#![feature(type_alias_impl_trait)]
+</span><span class="boring">#![allow(unused_variables)]
+</span><span class="boring">pub mod x {
+</span><span class="boring">pub trait Trait {}
+</span><span class="boring">
+</span><span class="boring">struct MyType;
+</span><span class="boring">
+</span><span class="boring">impl Trait for MyType {}
+</span><span class="boring">
+</span><span class="boring">pub type Alias = impl Trait;
+</span><span class="boring">
+</span><span class="boring">#[define_opaque(Alias)]
+</span><span class="boring">pub fn new() -&gt; Alias {
+</span><span class="boring">    MyType
+</span><span class="boring">}
+</span><span class="boring">}
+</span><span class="boring">use x::*;
+</span><span class="boring">pub fn take_alias(x: Alias) {
+</span><span class="boring">    // ...
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">pub fn take_impl(x: impl Trait) {
+</span><span class="boring">   // ...
+</span><span class="boring">}
+</span><span class="boring">
+</span>// a user's crate using the trait and type alias
+struct UserType;
+impl Trait for UserType {}
+
+<span class="boring">fn main(){
+</span>let x = UserType;
+take_alias(x);
+// ERROR expected opaque type, found `UserType`
+// this function *actually* takes a `MyType` as is constrained in `new`
+
+let x = UserType;
+take_impl(x);
+// OK
+
+let x = new();
+take_alias(x);
+// OK
+
+let x = new();
+take_impl(x);
+// OK
+<span class="boring">}</span></code></pre>
+<p>توجه کنید که کاربر نمی‌تواند از <code>#[define_opaque(Alias)]</code> برای مشخص کردن (reify) نوع مبهم استفاده کند، چون فقط crateای که نام مستعار نوع در آن اعلام شده این اجازه را دارد. اما اگر این اتفاق در همان crate می‌افتاد و نوع مبهم مشخص می‌شد، با خطای آشنای «expected <code>MyType</code>, got <code>UserType</code>» روبه‌رو می‌شدند.</p><nav class="page-nav"><a href="../../unstable/language-features/try-blocks.html">→ try-blocks</a><a href="../../unstable/language-features/type-changing-struct-update.html">type-changing-struct-update ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

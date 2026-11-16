@@ -1,0 +1,266 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>Editionها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="guides/editions"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="editions"><a class="header" href="#editions">Editions</a></h1>
+<p>این فصل نمای کلی از نحوهٔ کار پشتیبانی Edition در rustc ارائه می‌دهد.
+فرض می‌کند با اینکه Editionها چیستند آشنا هستید (<a href="https://doc.rust-lang.org/edition-guide/">راهنمای Edition</a> را ببینید).</p>
+<h2 id="edition-definition"><a class="header" href="#edition-definition">Edition definition</a></h2>
+<p>پرچم CLI با نام <code>--edition</code> edition مورد استفاده برای یک crate را مشخص می‌کند.
+این را می‌توان از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_session/struct.Session.html#method.edition"><code>Session::edition</code></a> دسترسی داشت.
+توابع کمکی مثل <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_session/struct.Session.html#method.at_least_rust_2021"><code>Session::at_least_rust_2021</code></a> برای بررسی
+edition یک crate هست، هرچند باید مراقب باشید که session سراسری را بررسی می‌کنید یا span را، به
+<a href="#edition-hygiene">Edition hygiene</a> در ادامه نگاه کنید.</p>
+<p>به‌عنوان جایگزین متدهای کمکی <code>at_least_rust_20xx</code>، نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/edition/enum.Edition.html"><code>Edition</code></a> هم
+مقایسه‌ها را برای بررسی بازه‌ای پشتیبانی می‌کند، مثل <code>span.edition() &gt;= Edition::Edition2021</code>.</p>
+<h3 id="adding-a-new-edition"><a class="header" href="#adding-a-new-edition">افزودن یک edition جدید</a></h3>
+<p>افزودن edition جدید عمدتاً شامل افزودن یک variant به enum با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/edition/enum.Edition.html"><code>Edition</code></a> و سپس رفع
+هر چیزی است که می‌شکند.
+برای مثال <a href="https://github.com/rust-lang/rust/pull/94461">#94461</a> را ببینید.</p>
+<h3 id="features-and-edition-stability"><a class="header" href="#features-and-edition-stability">قابلیت‌ها و پایداری Edition</a></h3>
+<p>enum با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/edition/enum.Edition.html"><code>Edition</code></a> تعریف می‌کند آیا یک edition پایدار است یا نه.
+اگر پایدار نباشد، گزینهٔ CLI با نام <code>-Zunstable-options</code> باید برای فعال‌کردن آن داده شود.</p>
+<p>هنگام افزودن قابلیت جدید، دو گزینه برای نحوهٔ برخورد با پایداری نسبت به edition آینده دارید:</p>
+<ul>
+<li>فقط edition مربوط به span را بررسی کنید، مثل <code>span.at_least_rust_20xx()</code> (<a href="#edition-hygiene">Edition hygiene</a> را ببینید) یا
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_session/struct.Session.html#method.edition"><code>Session::edition</code></a>.
+این به‌طور ضمنی به پایداری خود edition وابسته است تا نشان دهد قابلیت شما در دسترس است.</li>
+<li>رفتار جدید خود را پشت یک <a href="../feature-gates.html">feature gate</a> قرار دهید.</li>
+</ul>
+<p>برای تغییرات نسبتاً ساده ممکن است بررسی edition فعلی کافی باشد.
+اما برای تغییرات بزرگ‌تر زبان، باید ساخت feature gate را در نظر بگیرید.
+چند مزیت برای استفاده از feature gate هست:</p>
+<ul>
+<li>feature gate کار روی قابلیت جدید و آزمایش با آن را آسان‌تر می‌کند.</li>
+<li>وقتی attribute با نام <code>#![feature(…)]</code> به‌کار می‌رود، قصد فعال‌شدن قابلیت جدید شما را روشن می‌کند.</li>
+<li>تست editionها را آسان‌تر می‌کند تا قابلیت‌هایی که هنوز کامل نیستند در تست قابلیت‌های مخصوص edition که کامل و آماده‌اند دخالت نکنند.</li>
+<li>قابلیت را از edition جدا می‌کند، که وقتی قابلیت آماده است اتخاذ تصمیم آگاهانهٔ تیم دربارهٔ اینکه آیا باید به edition بعدی افزوده شود را آسان‌تر می‌کند.</li>
+</ul>
+<p>وقتی قابلیت کامل و آماده است، feature gate را می‌توان حذف کرد (و کد باید فقط edition مربوط به span یا <code>Session</code> را برای تعیین فعال‌بودن بررسی کند).</p>
+<p>چند گزینهٔ مختلف برای انجام بررسی‌های قابلیت هست:</p>
+<ul>
+<li>
+<p>برای قابلیت‌های بسیار آزمایشی که ممکن است در edition دخیل باشند یا نباشند، می‌توانند
+feature gateهای معمولی مثل <code>tcx.features().my_feature</code> را پیاده کنند و فعلاً editionها را نادیده بگیرند.</p>
+</li>
+<li>
+<p>برای قابلیت‌های آزمایشی که <em>ممکن است</em> در edition دخیل باشند، باید gateها را با
+<code>tcx.features().my_feature &amp;&amp; span.at_least_rust_20xx()</code> پیاده کنند.
+این همچنان لازم می‌کند کاربر <code>#![feature(my_feature)]</code> را مشخص کند، تا تست قابلیت‌های edition دیگری که آماده‌اند و در edition پذیرفته شده‌اند مختل نشود.</p>
+</li>
+<li>
+<p>برای قابلیت‌های آزمایشی که به‌طور قطعی بخشی از edition شده‌اند،
+باید gateها را با <code>tcx.features().my_feature || span.at_least_rust_20xx()</code> پیاده کنند،
+یا کلاً بررسی قابلیت را حذف کنند و فقط <code>span.at_least_rust_20xx()</code> را بررسی کنند.</p>
+</li>
+</ul>
+<p>اگر باید feature gating را در چند جا انجام دهید، قراردادن بررسی در یک تابع واحد را در نظر بگیرید تا فقط یک جا برای به‌روزرسانی باشد.
+برای مثال:</p>
+<pre><code class="language-rust ignore">// An example from Edition 2021 disjoint closure captures.
+
+fn enable_precise_capture(tcx: TyCtxt&lt;'_&gt;, span: Span) -&gt; bool {
+    tcx.features().capture_disjoint_fields || span.rust_2021()
+}</code></pre>
+<p>برای اطلاعات بیشتر دربارهٔ نحوهٔ برخورد lintها با پایداری <a href="#lints-and-stability">Lintها و پایداری</a> را در ادامه ببینید.</p>
+<h2 id="edition-parsing"><a class="header" href="#edition-parsing">Edition parsing</a></h2>
+<p>در بیشتر موارد، lexer از edition مستقل است.
+درون <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/lexer/struct.Lexer.html"><code>Lexer</code></a>، توکن‌ها را می‌توان بر اساس رفتار مخصوص edition تغییر داد.
+برای مثال، literalهای C-String مثل <code>c"foo"</code> در editionهای قبل از 2021 به چند توکن تقسیم می‌شوند.
+اینجا همچنین جایی است که چیزهایی مثل پیشوندهای رزروشده برای edition 2021 مدیریت می‌شوند.</p>
+<p>تجزیهٔ مخصوص edition نسبتاً نادر است.
+یک مثال <code>async fn</code> است که span توکن را بررسی می‌کند تا ببیند edition 2015 است یا نه، و در آن صورت خطا صادر می‌کند.
+این فقط وقتی ممکن است که نحو از قبل نامعتبر بوده باشد.</p>
+<p>اگر لازم است بررسی edition را در parser انجام دهید، معمولاً می‌خواهید edition توکن را ببینید، <a href="#edition-hygiene">Edition hygiene</a> را ببینید.
+در برخی موارد نادر ممکن است به‌جای آن لازم باشد edition سراسری را از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_session/parse/struct.ParseSess.html#structfield.edition"><code>ParseSess::edition</code></a> بررسی کنید.</p>
+<p>بیشتر رفتارهای تجزیهٔ مخصوص edition با <a href="#migration-lints">lintهای مهاجرت</a> مدیریت می‌شوند، نه در parser.
+این وقتی مناسب است که در نحو <em>تغییر</em> باشد (در مقابل نحو جدید).
+این اجازه می‌دهد نحو قدیمی روی editionهای قبلی همچنان کار کند.
+lint سپس تغییر رفتار را بررسی می‌کند.
+در editionهای قدیمی‌تر، گذر lint باید lint مهاجرت را برای کمک به مهاجرت به editionهای جدید صادر کند.
+در editionهای جدیدتر، کد شما باید به‌جای آن با <code>emit_err</code> خطای سخت صادر کند.
+برای مثال، نحو الگوی منسوخ <code>start...end</code> در editionهای قبل از 2021 lint با نام
+<a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#ellipsis-inclusive-range-patterns"><code>ellipsis_inclusive_range_patterns</code></a> را صادر می‌کند، و در 2021 از طریق متد <code>emit_err</code> خطای سخت است.</p>
+<h3 id="keywords"><a class="header" href="#keywords">Keywords</a></h3>
+<p>کلیدواژه‌های جدید را می‌توان از مرز edition معرفی کرد.
+این با توابعی مثل <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/symbol/struct.Symbol.html#method.is_used_keyword_conditional"><code>Symbol::is_used_keyword_conditional</code></a> پیاده‌سازی می‌شود که به
+ترتیب تعریف کلیدواژه‌ها تکیه دارند.</p>
+<p>وقتی کلیدواژه‌های جدید معرفی می‌شوند، lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html#keyword-idents"><code>keyword_idents</code></a> باید به‌روز شود تا
+مهاجرت‌های خودکار بتوانند کدی را که ممکن است از کلیدواژه به‌عنوان شناسه استفاده کند منتقل کنند (<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/builtin/struct.KeywordIdents.html"><code>KeywordIdents</code></a> را ببینید).
+یک جایگزین قابل‌توجه پیاده‌سازی کلیدواژه به‌صورت کلیدواژهٔ ضعیف (weak keyword) است اگر موقعیتی که در آن به‌کار می‌رود برای تمایز کافی باشد.</p>
+<p>گزینهٔ اضافی دیگر پیشوند <code>k#</code> است که در <a href="https://rust-lang.github.io/rfcs/3101-reserved_prefixes.html">RFC 3101</a> معرفی شد.
+این اجازه می‌دهد از کلیدواژه در editionهای <em>پیش از</em> editionی که کلیدواژه در آن معرفی شده استفاده شود.
+این فعلاً پیاده‌سازی نشده است.</p>
+<h3 id="edition-hygiene"><a class="header" href="#edition-hygiene">Edition hygiene</a></h3>
+<p>spanها با edition همان crateای که span از آن آمده علامت‌گذاری می‌شوند.
+برای توصیف کاربرمحور معنای این، <a href="../../edition-guide/editions/advanced-migrations.html#macro-hygiene">Macro hygiene</a> را در راهنمای Edition ببینید.</p>
+<p>معمولاً باید به‌جای نگاه‌کردن به edition سراسری <code>Session</code>، از edition مربوط به span توکن استفاده کنید.
+برای مثال، از <code>span.edition().at_least_rust_2021()</code> به‌جای <code>sess.at_least_rust_2021()</code> استفاده کنید.
+این کمک می‌کند ماکروها هنگام استفاده بین crateها درست رفتار کنند.</p>
+<h2 id="lints"><a class="header" href="#lints">Lints</a></h2>
+<p>lintها چند گزینهٔ مختلف برای تعامل با editionها پشتیبانی می‌کنند.
+lintها می‌توانند <em>lintهای مهاجرت edition ناسازگار با آینده</em> باشند که برای پشتیبانی از <a href="#migration-lints">مهاجرت</a> به editionهای جدید به‌کار می‌روند.
+یا lintها می‌توانند <a href="#edition-specific-lints">مخصوص edition</a> باشند، که از edition مشخصی سطح پیش‌فرض خود را تغییر می‌دهند.</p>
+<h3 id="migration-lints"><a class="header" href="#migration-lints">Migration lints</a></h3>
+<p><em>lintهای مهاجرت</em> برای مهاجرت پروژه‌ها از یک edition به edition بعدی به‌کار می‌روند.
+آن‌ها با <a href="../diagnostics.html#suggestions">پیشنهاد</a> از نوع <code>MachineApplicable</code> پیاده‌سازی می‌شوند که
+کد را طوری بازنویسی می‌کند که <strong>هم در edition قبلی و هم بعدی با موفقیت کامپایل شود</strong>.
+برای مثال، lint با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html#keyword-idents"><code>keyword_idents</code></a> شناسه‌هایی را که با کلیدواژه‌ای جدید تعارض دارند به نحو شناسهٔ خام
+(raw identifier) تبدیل می‌کند تا تعارض از بین برود (برای مثال تغییر <code>async</code> به <code>r#async</code>).</p>
+<p>lintهای مهاجرت باید با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint_defs/enum.FutureIncompatibilityReason.html#variant.EditionError"><code>FutureIncompatibilityReason::EditionError</code></a> یا
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint_defs/enum.FutureIncompatibilityReason.html#variant.EditionSemanticsChange"><code>FutureIncompatibilityReason::EditionSemanticsChange</code></a> <a href="../diagnostics.html#future-incompatible-lints">گزینهٔ future-incompatible</a> در اعلان lint تعریف شوند:</p>
+<pre><code class="language-rust ignore">declare_lint! {
+    pub KEYWORD_IDENTS,
+    Allow,
+    "detects edition keywords being used as an identifier",
+    @future_incompatible = FutureIncompatibleInfo {
+        reason: fcw!(EditionError 2018 "slug-of-edition-guide-page")
+    };
+}</code></pre>
+<p>وقتی این‌طور اعلان شود، lint به‌طور خودکار به گروه lint مناسب <code>rust-20xx-compatibility</code> اضافه می‌شود.
+وقتی کاربر <code>cargo fix --edition</code> را اجرا می‌کند، cargo پرچم <code>--force-warn rust-20xx-compatibility</code> را می‌دهد تا همهٔ این lintها هنگام مهاجرت edition ظاهر شوند.
+Cargo همچنین <code>--cap-lints=allow</code> را می‌دهد تا هیچ lint دیگری در مهاجرت edition دخالت نکند.</p>
+<p>مطمئن شوید کد مثال edition درست را تنظیم می‌کند.
+مثال باید edition قبلی را نشان دهد و نشان دهد هشدار مهاجرت چگونه به نظر می‌رسد.
+برای مثال، این lint برای مهاجرت 2024 مثالی در 2021 نشان می‌دهد:</p>
+<pre><code class="language-rust ignore">declare_lint! {
+    /// The `keyword_idents_2024` lint detects ...
+    ///
+    /// ### Example
+    ///
+    /// ```rust,edition2021
+    /// #![warn(keyword_idents_2024)]
+    /// fn gen() {}
+    /// ```
+    ///
+    /// {{produces}}
+}</code></pre>
+<p>lintهای مهاجرت می‌توانند به‌طور پیش‌فرض <code>Allow</code> یا <code>Warn</code> باشند.
+اگر <code>Allow</code> باشد، کاربران معمولاً این هشدار را نمی‌بینند مگر مهاجرت edition را دستی انجام دهند یا هنگام مهاجرت مشکلی رخ دهد.
+بیشتر lintهای مهاجرت <code>Allow</code> هستند.</p>
+<p>اگر به‌طور پیش‌فرض <code>Warn</code> باشد، کاربران همهٔ editionها این هشدار را می‌بینند.
+فقط وقتی از <code>Warn</code> استفاده کنید که فکر می‌کنید مهم است همه از تغییر آگاه شوند و برای تشویق افراد به به‌روزرسانی کدشان در همهٔ editionها.
+مراقب باشید lintهای جدید warn-by-default که بسیاری از پروژه‌ها را درگیر می‌کنند می‌توانند برای کاربران بسیار مختل‌کننده و ناامیدکننده باشند.
+ممکن است چند سال پس از پایدارشدن edition تغییر <code>Allow</code> به <code>Warn</code> را در نظر بگیرید.
+این فقط برای تعداد نسبتاً کمی عقب‌مانده که به edition جدید به‌روز نشده‌اند ظاهر می‌شود.</p>
+<h3 id="edition-specific-lints"><a class="header" href="#edition-specific-lints">Edition-specific lints</a></h3>
+<p>lintها را می‌توان طوری علامت‌گذاری کرد که از edition مشخصی سطح متفاوتی داشته باشند.
+در اعلان lint از نشانگر <code>@edition</code> استفاده کنید:</p>
+<pre><code class="language-rust ignore">declare_lint! {
+    pub SOME_LINT_NAME,
+    Allow,
+    "my lint description",
+    @edition Edition2024 =&gt; Warn;
+}</code></pre>
+<p>اینجا، <code>SOME_LINT_NAME</code> در همهٔ editionهای قبل از 2024 پیش‌فرض <code>Allow</code> است و پس از آن <code>Warn</code> می‌شود.</p>
+<p>این معمولاً باید با احتیاط به‌کار رود، چون گزینه‌های دیگری هست:</p>
+<ul>
+<li>
+<p>تغییرات سبکی با اثر کم که به edition ربط ندارند می‌توانند lint را در همهٔ editionها <code>Warn</code> کنند.
+اگر می‌خواهید افراد شیوهٔ نوشتن متفاوتی را بپذیرند، پیش بروید و متعهد شوید که برای همهٔ پروژه‌ها ظاهر شود.</p>
+<p>مراقب باشید که اگر lint جدید warn-by-default بسیاری از پروژه‌ها را درگیر کند، می‌تواند برای کاربران بسیار مختل‌کننده و ناامیدکننده باشد.</p>
+</li>
+<li>
+<p>سبک جدید را در edition جدید به خطای سخت تبدیل کنید، و از <a href="#migration-lints">lint مهاجرت</a> برای تبدیل خودکار پروژه‌ها به سبک جدید استفاده کنید.
+برای مثال،
+<a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#ellipsis-inclusive-range-patterns"><code>ellipsis_inclusive_range_patterns</code></a> در 2021 خطای سخت است و در همهٔ editionهای قبلی هشدار می‌دهد.</p>
+<p>مراقب باشید این‌ها را پس از پایدارشدن edition نمی‌توان اضافه کرد.</p>
+</li>
+<li>
+<p>lintهای مهاجرت می‌توانند با گذشت زمان تغییر کنند.
+برای مثال، lint مهاجرت می‌تواند ابتدا به‌طور پیش‌فرض <code>Allow</code> باشد.
+افرادی که مهاجرت را انجام می‌دهند به‌طور خودکار به کد جدید به‌روز می‌شوند.
+سپس، پس از چند سال، می‌توان lint را در editionهای قبلی <code>Warn</code> کرد.</p>
+<p>برای مثال <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#anonymous-parameters"><code>anonymous_parameters</code></a> یک lint مهاجرت edition 2018 بود (و در 2018 خطای سخت)
+که در editionهای قبلی پیش‌فرض <code>Allow</code> بود.
+سپس، سه سال بعد، برای همهٔ editionهای قبلی به <code>Warn</code> تغییر یافت، تا همهٔ کاربران
+هشداری بگیرند که آن سبک در حال حذف تدریجی است.
+اگر این از ابتدا هشدار بود، بسیاری از پروژه‌ها را درگیر و بسیار مختل می‌کرد.
+با قراردادن آن به‌عنوان بخشی از edition، بیشتر کاربران در نهایت به edition جدید به‌روز شدند و
+توسط مهاجرت مدیریت شدند.
+تغییر به <code>Warn</code> فقط چند عقب‌مانده را درگیر کرد که به‌روز نشده بودند.</p>
+</li>
+</ul>
+<h3 id="lints-and-stability"><a class="header" href="#lints-and-stability">Lintها و پایداری</a></h3>
+<p>lintها را می‌توان ناپایدار علامت زد، که هنگام توسعهٔ قابلیت edition جدید و
+می‌خواهید lint مهاجرت را آزمایش کنید مفید است.
+feature gate را می‌توان در اعلان lint این‌طور مشخص کرد:</p>
+<pre><code class="language-rust ignore">declare_lint! {
+    pub SOME_LINT_NAME,
+    Allow,
+    "my cool lint",
+    @feature_gate = sym::my_feature_name;
+}</code></pre>
+<p>آن‌گاه lint فقط وقتی فعال می‌شود که کاربر <code>#![feature(my_feature_name)]</code> مناسب را داشته باشد.
+فقط مراقب باشید که هنگام اجرای crater برای تست مهاجرت، feature gate باید حذف شود.</p>
+<p>یا می‌توانید <a href="#migration-lints">lint مهاجرتِ</a> allow-by-default را برای edition ناپایدار آینده بدون feature gate پیاده کنید.
+هرچند کاربران از نظر فنی ممکن است بتوانند lint را پیش از پایدارشدن edition فعال کنند، بیشتر آن‌ها متوجه وجود lint جدید نمی‌شوند و نباید چیزی را مختل کند یا باعث شکست شود.</p>
+<h3 id="idiom-lints"><a class="header" href="#idiom-lints">Idiom lints</a></h3>
+<p>در edition 2018، مفهومی به نام «lintهای idiom» تحت گروه lint با نام <code>rust-2018-idioms</code> بود.
+ایده این بود که سبک‌های اصطلاحی جدید در گروه lint جدا از مهاجرت‌های اجباری زیر گروه lint با نام <code>rust-2018-compatibility</code> باشند و انعطافی در نحوهٔ opt-in افراد به برخی تغییرات edition بدهند.</p>
+<p>در مجموع این رویکرد خیلی خوب کار نکرد،
+و بعید است در آینده از گروه‌های idiom استفاده کنیم.</p>
+<h2 id="standard-library-changes"><a class="header" href="#standard-library-changes">Standard library changes</a></h2>
+<h3 id="preludes"><a class="header" href="#preludes">Preludes</a></h3>
+<p>هر edition با prelude مشخصی از کتابخانهٔ استاندارد می‌آید.
+این‌ها به‌صورت ماژول‌های معمول در <a href="https://doc.rust-lang.org/core/prelude/index.html"><code>core::prelude</code></a> و <a href="https://doc.rust-lang.org/std/prelude/index.html"><code>std::prelude</code></a> پیاده‌سازی می‌شوند.
+آیتم‌های جدید را می‌توان به prelude افزود، فقط مراقب باشید ممکن است با کد موجود کاربران تعارض داشته باشد.
+معمولاً باید از <a href="#migration-lints">lint مهاجرت</a> برای مهاجرت کد موجود جهت پرهیز از تعارض استفاده کرد.
+برای مثال، <a href="https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html#rust-2021-prelude-collisions"><code>rust_2021_prelude_collisions</code></a> برای مدیریت تعارض با traitهای جدید در 2021 به‌کار می‌رود.</p>
+<h3 id="customized-language-behavior"><a class="header" href="#customized-language-behavior">Customized language behavior</a></h3>
+<p>معمولاً نمی‌توان تغییرات شکننده در کتابخانهٔ استاندارد ایجاد کرد.
+در برخی موارد نادر، تیم‌ها ممکن است تصمیم بگیرند تغییر رفتار آن‌قدر مهم است که این قاعده را بشکنند.
+نقطهٔ ضعف این است که این به برخورد ویژه در کامپایلر نیاز دارد تا تشخیص دهد چه وقت امضاها یا رفتارهای قدیمی و جدید باید به‌کار روند.</p>
+<p>یک مثال تغییر در حل متد برای <a href="../../edition-guide/rust-2021/IntoIterator-for-arrays.html"><code>into_iter()</code> آرایه‌ها</a> است.
+این با attribute با نام <code>#[rustc_skip_array_during_method_dispatch]</code> روی trait با نام
+<code>IntoIterator</code> پیاده‌سازی شد که به کامپایلر می‌گوید بر اساس edition انتخاب جایگزین برای حل trait را در نظر بگیرد.</p>
+<p>مثال دیگر <a href="../../edition-guide/rust-2021/panic-macro-consistency.html">تغییرات ماکروی <code>panic!</code></a> است.
+این نیاز داشت چند ماکروی panic تعریف شود، و پیاده‌سازی ماکروی داخلی panic روش مناسب گسترش را تعیین کند.
+این شامل <a href="#migration-lints">lint مهاجرت</a> با نام <a href="https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#non-fmt-panics"><code>non_fmt_panics</code></a> هم بود تا کد قدیمی را به شکل جدید تنظیم کند،
+که attribute با نام <code>rustc_diagnostic_item</code> را برای تشخیص استفاده از ماکروی panic لازم داشت.</p>
+<p>عموماً توصیه می‌شود از این موارد خاص جز برای موقعیت‌های با ارزش بسیار بالا پرهیز شود.</p>
+<h3 id="migrating-the-standard-library-edition"><a class="header" href="#migrating-the-standard-library-edition">مهاجرت edition کتابخانهٔ استاندارد</a></h3>
+<p>به‌روزرسانی edition خود کتابخانهٔ استاندارد تقریباً شامل این فرایند است:</p>
+<ul>
+<li>صبر کنید تا edition تازه پایدارشده به beta برسد و کامپایلر bootstrap به‌روز شود.</li>
+<li>Apply migration lints.
+This can be an involved process since some code is in external submodules<sup class="footnote-reference" id="fr-std-submodules-1"><a href="#footnote-std-submodules">1</a></sup>, and the standard library makes heavy use of conditional compilation.
+Also, running <code>cargo fix --edition</code> can be impractical on the standard library itself.
+One approach is to individually add <code>#![warn(...)]</code> at the top of each crate for each lint, run <code>./x check library</code>, apply the migrations, remove the <code>#![warn(...)]</code> and commit each migration separately.
+You’ll likely need to run <code>./x check</code> with <code>--target</code> for many different targets to get full coverage (otherwise you’ll likely spend days or weeks getting CI to pass)<sup class="footnote-reference" id="fr-ed-docker-1"><a href="#footnote-ed-docker">2</a></sup>.
+See also the <a href="../../edition-guide/editions/advanced-migrations.html">advanced migration guide</a> for more tips.
+<ul>
+<li>مهاجرت‌ها را روی <a href="https://github.com/rust-lang/backtrace-rs/"><code>backtrace-rs</code></a> اعمال کنید.
+<a href="https://github.com/rust-lang/backtrace-rs/pull/700">مثال برای 2024</a>.
+توجه کنید این edition خود crate را به‌روز نمی‌کند چون به‌صورت مستقل در crates.io منتشر می‌شود و در غیر این صورت حداقل نسخهٔ Rust را محدود می‌کرد.
+افزودن چند attribute با نام <code>#![deny()]</code> را برای پرهیز از رگرسیون تا به‌روزرسانی edition آن در نظر بگیرید.</li>
+<li>مهاجرت‌ها را روی <a href="https://github.com/rust-lang/stdarch/"><code>stdarch</code></a> اعمال کنید، و edition و قالب‌بندی آن را به‌روز کنید.
+<a href="https://github.com/rust-lang/stdarch/pull/1710">مثال برای 2024</a>.</li>
+<li>PRهایی برای به‌روزرسانی زیرماژول‌های backtrace و stdarch بفرستید و منتظر land شدن آن‌ها بمانید.</li>
+<li>lintهای مهاجرت را روی crateهای کتابخانهٔ استاندارد اعمال کنید و edition آن‌ها را به‌روز کنید.
+توصیه می‌شود هر بار روی یک crate کار کنید، با شروع از <code>core</code>.
+<a href="https://github.com/rust-lang/rust/pull/138162">مثال برای 2024</a>.</li>
+</ul>
+</li>
+</ul>
+<h2 id="stabilizing-an-edition"><a class="header" href="#stabilizing-an-edition">پایدارسازی یک edition</a></h2>
+<p>پس از اینکه تیم edition چراغ سبز داد، فرایند پایدارسازی یک edition تقریباً این است:</p>
+<ul>
+<li>Update <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/edition/constant.LATEST_STABLE_EDITION.html"><code>LATEST_STABLE_EDITION</code></a>.</li>
+<li>Update <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/edition/enum.Edition.html#method.is_stable"><code>Edition::is_stable</code></a>.</li>
+<li>Hunt and find any document that refers to edition by number, and update it:
+<ul>
+<li><a href="https://github.com/rust-lang/rust/blob/HEAD/src/doc/rustc/src/command-line-arguments.md#--edition-specify-the-edition-to-use"><code>--edition</code> flag</a></li>
+<li><a href="https://github.com/rust-lang/rust/blob/HEAD/src/doc/rustdoc/src/write-documentation/documentation-tests.md#attributes">Rustdoc attributes</a></li>
+</ul>
+</li>
+<li>تست‌هایی را که از سرایند <code>//@ edition</code> استفاده می‌کنند پاک‌سازی کنید تا پرچم <code>-Zunstable-options</code> حذف شود و مطمئن شوید واقعاً پایدارند.
+نکته: ایده‌آل این است که این خودکار شود، <a href="https://github.com/rust-lang/rust/issues/133582">#133582</a> را ببینید.</li>
+<li>هر تستی را که تغییر می‌کند bless کنید.</li>
+<li><code>lint-docs</code> را به‌روز کنید تا پیش‌فرض edition جدید باشد.</li>
+</ul>
+<p><a href="https://github.com/rust-lang/rust/pull/133349">مثال برای 2024</a> را ببینید.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-std-submodules">
+<p>امیدواریم در آینده این تغییر کند تا این زیرماژول‌ها به <code>rust-lang/rust</code> کشیده شوند. <a href="#fr-std-submodules-1">↩</a></p>
+</li>
+<li id="footnote-ed-docker">
+<p>احتمالاً باید تست زیادی برای هدف‌های مختلف انجام دهید، و اینجاست که <a href="../tests/docker.html">تست با docker</a> به کار می‌آید. <a href="#fr-ed-docker-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="../licenses.html">→ مجوزها</a><a href="../building/bootstrapping/intro.html">پیشگفتار ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

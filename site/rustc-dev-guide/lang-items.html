@@ -1,0 +1,37 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Lang Itemها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="lang-items"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="lang-items"><a class="header" href="#lang-items">Lang items</a></h1>
+<p>کامپایلر عملیات «قابل‌اتصال (pluggable)» خاصی دارد؛ یعنی قابلیتی که در زبان hardcode نشده، بلکه در کتابخانه‌ها پیاده‌سازی شده، با نشانگر ویژه‌ای که به کامپایلر می‌گوید وجود دارد.
+نشانگر attribute با نام <code>#[lang = "..."]</code> است و مقادیر مختلفی برای <code>...</code> هست، یعنی «lang itemهای» مختلف.</p>
+<p>بسیاری از این lang itemها فقط به یک شکل معقول قابل‌پیاده‌سازی‌اند، مثل <code>add</code> (<code>trait core::ops::Add</code>) یا <code>future_trait</code> (<code>trait core::future::Future</code>).
+برخی دیگر را می‌توان برای دستیابی به اهداف مشخص بازنویسی کرد؛
+برای مثال می‌توانید نقطهٔ ورود فایل دودویی خود را کنترل کنید.</p>
+<p>قابلیت‌هایی که lang itemها فراهم می‌کنند شامل این‌هاست:</p>
+<ul>
+<li>عملگرهای قابل‌سربارگذاری از طریق traitها: traitهای متناظر عملگرهای <code>==</code>، <code>&lt;</code>، dereference (<code>*</code>)، <code>+</code> و غیره همگی با lang item علامت‌گذاری شده‌اند؛ آن چهار مشخص به‌ترتیب <code>eq</code>، <code>ord</code>، <code>deref</code> و <code>add</code> هستند.</li>
+<li>panic‌کردن و unwind پشته؛ lang itemهای <code>eh_personality</code>، <code>panic</code> و <code>panic_bounds_checks</code>.</li>
+<li>traitهای <code>std::marker</code> که برای نشان‌دادن ویژگی‌های نوع‌ها توسط کامپایلر به‌کار می‌روند؛ lang itemهای <code>send</code>، <code>sync</code> و <code>copy</code>.</li>
+<li>نوع‌های نشانگر ویژه‌ای که برای شاخص‌های واریانس در <code>core::marker</code> به‌کار می‌روند؛ lang item با نام <code>phantom_data</code>.</li>
+</ul>
+<p>lang itemها توسط کامپایلر به‌صورت lazy بارگذاری می‌شوند؛ مثلاً اگر هرگز از <code>Box</code> استفاده نکنید، نیازی نیست توابع <code>exchange_malloc</code> و <code>box_free</code> را تعریف کنید.
+<code>rustc</code> وقتی آیتمی لازم باشد اما در crate فعلی یا هر crateای که به آن وابسته است یافت نشود خطا صادر می‌کند.</p>
+<p>بیشتر lang itemها توسط کتابخانهٔ <code>core</code> تعریف شده‌اند، اما اگر می‌خواهید فایل اجرایی با <code>#![no_std]</code> بسازید، همچنان باید چند lang item را که معمولاً توسط <code>std</code> فراهم می‌شوند تعریف کنید.</p>
+<h2 id="retrieving-a-language-item"><a class="header" href="#retrieving-a-language-item">بازیابی یک lang item</a></h2>
+<p>می‌توانید با فراخوانی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html#method.lang_items"><code>tcx.lang_items()</code></a> lang itemها را بازیابی کنید.</p>
+<p>یک مثال کوچک از بازیابی lang item با نام <code>trait Sized {}</code>:</p>
+<pre><code class="language-rust">// Note that in case of `#![no_core]`, the trait is not available.
+if let Some(sized_trait_def_id) = tcx.lang_items().sized_trait() {
+    // do something with `sized_trait_def_id`
+}</code></pre>
+<p>توجه کنید <code>sized_trait()</code> یک <code>Option</code> برمی‌گرداند، نه خود <code>DefId</code>.
+دلیلش این است که lang itemها در کتابخانهٔ استاندارد تعریف می‌شوند، پس اگر کسی با <code>#![no_core]</code> کامپایل کند (یا برای برخی lang itemها، <code>#![no_std]</code>)، ممکن است lang item موجود نباشد.
+می‌توانید یا:</p>
+<ul>
+<li>اگر lang item برای ادامه ضروری است خطای سخت بدهید (panic نکنید، چون این می‌تواند در کد کاربر رخ دهد).</li>
+<li>با قابلیت محدود ادامه دهید، با حذف هر کاری که می‌خواستید با <code>DefId</code> انجام دهید.</li>
+</ul>
+<h2 id="list-of-all-language-items"><a class="header" href="#list-of-all-language-items">فهرست همهٔ lang itemها</a></h2>
+<p>می‌توانید lang itemها را در این جاها بیابید:</p>
+<ul>
+<li>مرجع جامعی در مستندات کامپایلر: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/lang_items/enum.LangItem.html"><code>rustc_hir::LangItem</code></a></li>
+<li>فهرست خودکارتولیدشده با مکان‌های منبع با استفاده از ripgrep: <code>rg '#\[.*lang =' library/</code></li>
+</ul>
+<p>توجه کنید lang itemها صراحتاً ناپایدارند و ممکن است در هر انتشار جدید تغییر کنند.</p><nav class="page-nav"><a href="feature-gate-check.html">→ بررسی دروازهٔ قابلیت</a><a href="hir.html">HIR (بازنمایی میانی سطح بالا) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

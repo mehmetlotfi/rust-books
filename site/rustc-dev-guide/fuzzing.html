@@ -1,0 +1,68 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>Fuzzing — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="fuzzing"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="fuzzing"><a class="header" href="#fuzzing">Fuzzing</a></h1>
+<!-- date-check: Mar 2023 -->
+<p>در این راهنما، <em>fuzzing</em> به هر روش آزمونی گفته می‌شود که شامل کامپایل طیف گسترده‌ای از برنامه‌ها برای کشف باگ‌های rustc باشد. Fuzzing اغلب برای یافتن خطاهای داخلی کامپایلر (ICE) به کار می‌رود. Fuzzing می‌تواند مفید باشد، چون می‌تواند باگ‌ها را پیش از آن‌که کاربران به آن‌ها برخورد کنند پیدا کند. همچنین برنامه‌هایی کوچک و مستقل تولید می‌کند که ردیابی باگ را آسان‌تر می‌کنند. با این حال، برخی اشتباه‌های رایج می‌توانند فایده‌ی fuzzing را کم کنند و در نهایت کار مشارکت‌کنندگان را سخت‌تر کنند. برای این‌که بیشترین تأثیر مثبت را روی پروژه‌ی Rust داشته باشید، لطفاً پیش از گزارش باگ‌های تولیدشده توسط fuzzer این راهنما را بخوانید!</p>
+<h2 id="guidelines"><a class="header" href="#guidelines">رهنمودها</a></h2>
+<h3 id="in-a-nutshell"><a class="header" href="#in-a-nutshell">به‌طور خلاصه</a></h3>
+<p><em>لطفاً این کارها را بکنید:</em></p>
+<ul>
+<li>مطمئن شوید باگ هنوز روی آخرین rustc نسخه‌ی nightly وجود دارد</li>
+<li>همراه هر گزارش باگ یک نمونه‌ی نسبتاً کمینه و مستقل ارائه کنید</li>
+<li>همه‌ی اطلاعات خواسته‌شده در قالب گزارش باگ را بنویسید</li>
+<li>گزارش‌های موجود با همان پیام و همان query stack را جست‌وجو کنید</li>
+<li>مورد آزمون را با <code>rustfmt</code> قالب‌بندی کنید</li>
+<li>مشخص کنید که باگ با fuzzing پیدا شده است</li>
+</ul>
+<p><em>Please don’t:</em></p>
+<ul>
+<li>تعداد زیادی باگ را که از featureهای داخلی استفاده می‌کنند گزارش نکنید؛ از جمله <code>custom_mir</code>، <code>lang_items</code>، <code>no_core</code> و <code>rustc_attrs</code>، که البته محدود به این‌ها نیست.</li>
+<li>fuzzer خود را با ورودی‌هایی که می‌دانید rustc را از کار می‌اندازند راه‌اندازی (seed) نکنید (جزئیات در ادامه).</li>
+</ul>
+<h3 id="discussion"><a class="header" href="#discussion">Discussion</a></h3>
+<p>اگر مطمئن نیستید که یک ICE تکراری از موردی است که قبلاً گزارش شده یا نه، با اطمینان آن را گزارش کنید و به issueهایی که فکر می‌کنید مرتبط هستند پیوند بدهید. به‌طور کلی، ICEهایی که روی یک خط رخ می‌دهند اما <em>query stack</em> متفاوتی دارند معمولاً باگ‌های جداگانه‌ای هستند. برای مثال، <a href="https://github.com/rust-lang/rust/issues/109020">#109020</a> و <a href="https://github.com/rust-lang/rust/issues/109129">#109129</a> پیام‌های خطای مشابهی داشتند:</p>
+<pre><code>error: internal compiler error: compiler/rustc_middle/src/ty/normalize_erasing_regions.rs:195:90: Failed to normalize &lt;[closure@src/main.rs:36:25: 36:28] as std::ops::FnOnce&lt;(Emplacable&lt;()&gt;,)&gt;&gt;::Output, maybe try to call `try_normalize_erasing_regions` instead
+</code></pre>
+<pre><code>error: internal compiler error: compiler/rustc_middle/src/ty/normalize_erasing_regions.rs:195:90: Failed to normalize &lt;() as Project&gt;::Assoc, maybe try to call `try_normalize_erasing_regions` instead
+</code></pre>
+<p>اما query stackهای متفاوتی دارند:</p>
+<pre><code>query stack during panic:
+#0 [fn_abi_of_instance] computing call ABI of `&lt;[closure@src/main.rs:36:25: 36:28] as core::ops::function::FnOnce&lt;(Emplacable&lt;()&gt;,)&gt;&gt;::call_once - shim(vtable)`
+end of query stack
+</code></pre>
+<pre><code>query stack during panic:
+#0 [check_mod_attrs] checking attributes in top-level module
+#1 [analysis] running analysis passes on this crate
+end of query stack
+</code></pre>
+<h2 id="building-a-corpus"><a class="header" href="#building-a-corpus">ساخت corpus</a></h2>
+<p>هنگام ساخت corpus، مراقب باشید آزمون‌هایی را که از قبل می‌دانیم rustc را از کار می‌اندازند جمع نکنید. fuzzerی که با چنین آزمون‌هایی راه‌اندازی شود احتمال بیشتری دارد باگ‌هایی با ریشه‌ی یکسان تولید کند. ساده‌ترین راه برای اجتناب از این مشکل این است که روی هر فایل corpus حلقه بزنید، ببینید آیا باعث ICE می‌شود یا نه، و در صورت ICE آن را حذف کنید.</p>
+<p>برای ساخت corpus ممکن است بخواهید از موارد زیر استفاده کنید:</p>
+<ul>
+<li>مجموعه‌های آزمون rustc/rust-analyzer/clippy (یا حتی کد منبع آن‌ها) — هرچند از آزمون‌هایی که از قبل می‌دانیم باعث خرابی می‌شوند پرهیز کنید؛ این آزمون‌ها اغلب با کامنت‌هایی مانند <code>//@ failure-status: 101</code> یا <code>//@ known-bug: #NNN</code> شروع می‌شوند.</li>
+<li>ICEهای قبلاً رفع‌شده در مخزن بایگانی‌شده‌ی <a href="https://github.com/rust-lang/glacier">Glacier</a> — هرچند از موارد رفع‌نشده در <code>ices/</code> پرهیز کنید!</li>
+</ul>
+<h2 id="extra-credit"><a class="header" href="#extra-credit">امتیاز اضافه</a></h2>
+<p>در اینجا چند کار آمده که پس از ثبت یک ICE می‌توانید برای کمک به پروژه‌ی Rust انجام دهید:</p>
+<ul>
+<li>باگ را <a href="https://rust-lang.github.io/cargo-bisect-rustc/">bisect</a> کنید تا بفهمید چه زمانی وارد شده است. اگر PR / کامیت مسبب پسرفت را پیدا کردید، می‌توانید issue را با برچسب <code>S-has-bisection</code> علامت بزنید. اگر نه، به‌جای آن برچسب <code>E-needs-bisection</code> را در نظر بگیرید.</li>
+<li>«حواس‌پرتی‌ها» را اصلاح کنید: مشکل‌هایی در مورد آزمون که در ایجاد ICE نقشی ندارند، مانند خطاهای نحوی یا خطاهای borrow-checking</li>
+<li>مورد آزمون را کمینه کنید (در ادامه ببینید). اگر موفق شدید، می‌توانید issue را با برچسب <code>S-has-mcve</code> علامت بزنید. در غیر این صورت، می‌توانید <code>E-needs-mcve</code> را اعمال کنید.</li>
+<li>مورد آزمون کمینه را به‌عنوان <a href="tests/compiletest.html#crash-tests">crash test</a> به مخزن rust-lang/rust اضافه کنید. حین انجام این کار، شاید بخواهید سایر خرابی‌های «پیگیری‌نشده» را هم در PR خود بگنجانید. لطفاً فراموش نکنید پس از merge شدن PR، همه‌ی issueهای مرتبط را با <code>S-bug-has-test</code> علامت بزنید.</li>
+</ul>
+<p>همچنین <a href="https://forge.rust-lang.org/release/issue-triaging.html#applying-and-removing-labels">اعمال و حذف برچسب‌ها</a> را ببینید.</p>
+<h2 id="minimization"><a class="header" href="#minimization">کمینه‌سازی</a></h2>
+<p>مفید است که ورودی تولیدشده توسط fuzzer را با دقت <em>کمینه</em> کنید. هنگام کمینه‌سازی مراقب باشید خطای اصلی حفظ شود و از ایجاد مشکل‌های حواس‌پرت‌کننده مانند خطاهای نحوی، بررسی نوع یا borrow-checking پرهیز کنید.</p>
+<p>ابزارهایی هستند که می‌توانند در کمینه‌سازی کمک کنند. اگر مطمئن نیستید هنگام استفاده از این ابزارها چگونه از ایجاد خطاهای نحوی، نوع و borrow-checking جلوگیری کنید، هم مورد آزمون کامل و هم کمینه‌شده را ارسال کنید. به‌طور کلی، ابزارهای <em>آگاه از نحو</em> در کمترین زمان بهترین نتیجه را می‌دهند. <a href="https://github.com/langston-barrett/treereduce"><code>treereduce-rust</code></a> و <a href="https://github.com/renatahodovan/picireny">picireny</a> آگاه از نحو هستند. <a href="https://github.com/googleprojectzero/halfempty"><code>halfempty</code></a> چنین نیست، اما به‌طور کلی ابزاری باکیفیت است.</p>
+<h2 id="effective-fuzzing"><a class="header" href="#effective-fuzzing">fuzzing مؤثر</a></h2>
+<p>هنگام fuzz کردن rustc، شاید بخواهید از تولید کد ماشین پرهیز کنید، چون این کار بیشتر توسط LLVM انجام می‌شود. به‌جای آن <code>--emit=mir</code> را امتحان کنید.</p>
+<p>انواع پرچم‌های کامپایلر می‌توانند مشکل‌های متفاوتی را آشکار کنند. <code>-Zmir-opt-level=4</code> گذرهای بهینه‌سازی MIR را که به‌طور پیش‌فرض اجرا نمی‌شوند فعال می‌کند و ممکن است باگ‌های جالبی را آشکار کند. <code>-Zvalidate-mir</code> می‌تواند به کشف چنین باگ‌هایی کمک کند.</p>
+<p>اگر کامپایلری را که خودتان ساخته‌اید fuzz می‌کنید، شاید بخواهید آن را با <code>-C target-cpu=native</code> یا حتی PGO/BOLT بسازید تا چند اجرای بیشتر در ثانیه به دست آورید. البته بهتر است چند پیکربندی ساخت را امتحان کنید و ببینید کدام واقعاً به توان عملیاتی بهتری می‌رسد.</p>
+<p>ممکن است بخواهید rustc را از کد منبع و با debug assertions بسازید تا باگ‌های بیشتری پیدا کنید، هرچند این کار می‌تواند fuzzing را کند کند، زیرا برای هر اجرا کار اضافه‌ای لازم است. برای فعال کردن debug assertions، هنگام کامپایل rustc این را به <code>bootstrap.toml</code> اضافه کنید:</p>
+<pre><code class="language-toml">rust.debug-assertions = true
+</code></pre>
+<p>ICEهایی که برای بازتولید به debug assertions نیاز دارند باید با <a href="https://github.com/rust-lang/rust/labels/requires-debug-assertions"><code>requires-debug-assertions</code></a> برچسب‌گذاری شوند.</p>
+<h2 id="existing-projects"><a class="header" href="#existing-projects">پروژه‌های موجود</a></h2>
+<ul>
+<li><a href="https://github.com/dwrensha/fuzz-rustc">fuzz-rustc</a> نشان می‌دهد چگونه rustc را با libfuzzer فازینگ کنیم</li>
+<li><a href="https://github.com/matthiaskrgr/icemaker/">icemaker</a> rustc و ابزارهای دیگر را روی تعداد زیادی فایل منبع با پرچم‌های گوناگون اجرا می‌کند تا ICEها را شناسایی کند</li>
+<li><a href="https://github.com/langston-barrett/tree-splicer/">tree-splicer</a> با ترکیب فایل‌های منبع موجود، فایل‌های منبع جدید تولید می‌کند و در عین حال نحو درست را حفظ می‌کند</li>
+</ul><nav class="page-nav"><a href="external-repos.html">→ استفاده از مخازن خارجی</a><a href="notification-groups/about.html">گروه‌های اطلاع‌رسانی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,59 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>بررسی متد — کتاب Clippy</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="development/method_checking"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Clippy</a><small class="en-title" dir="ltr">The Clippy Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="method-checking"><a class="header" href="#method-checking">بررسی متدها</a></h1>
+<p>در برخی سناریوها ممکن است هنگام توسعهٔ یک lint بخواهیم متدها را بررسی کنیم. دو نوع پرسش وجود دارد که ممکن است برایمان جالب باشد:</p>
+<ul>
+<li>فراخوانی: آیا یک عبارت یک متد مشخص را فراخوانی می‌کند؟</li>
+<li>تعریف: آیا یک <code>impl</code> یک متد را تعریف می‌کند؟</li>
+</ul>
+<h2 id="checking-if-an-expr-is-calling-a-specific-method"><a class="header" href="#checking-if-an-expr-is-calling-a-specific-method">بررسی اینکه یک <code>expr</code> یک متد مشخص را فراخوانی می‌کند</a></h2>
+<p>فرض کنید یک <code>expr</code> داریم. می‌توانیم با انجام تطبیق الگو روی <a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_hir/hir/enum.ExprKind.html"><code>ExprKind</code></a> که از <code>expr.kind</code> در دسترس است، بررسی کنیم که آیا یک متد مشخص، مثلاً <code>our_fancy_method</code>، را فراخوانی می‌کند یا نه:</p>
+<pre><code class="language-rust">use rustc_hir as hir;
+use rustc_lint::{LateContext, LateLintPass};
+use clippy_utils::res::{MaybeDef, MaybeTypeckRes};
+use clippy_utils::sym;
+
+impl&lt;'tcx&gt; LateLintPass&lt;'tcx&gt; for OurFancyMethodLint {
+    fn check_expr(&amp;mut self, cx: &amp;LateContext&lt;'tcx&gt;, expr: &amp;'tcx hir::Expr&lt;'_&gt;) {
+        // Check our expr is calling a method with pattern matching
+        if let hir::ExprKind::MethodCall(path, _, _, _) = &amp;expr.kind
+            // Check if the name of this method is `our_fancy_method`
+            &amp;&amp; path.ident.name == sym::our_fancy_method
+            // Check if the method belongs to the `sym::OurFancyTrait` trait.
+            // (for example, a `map` method could belong to user-defined trait instead of to `Iterator`)
+            // See the next section for more information.
+            &amp;&amp; cx.ty_based_def(expr).opt_parent(cx).is_diag_item(cx, sym::OurFancyTrait)
+        {
+            println!("`expr` is a method call for `our_fancy_method`");
+        }
+    }
+}</code></pre>
+<p>برای اطلاعات بیشتر دربارهٔ تطبیق الگو، نگاهی دقیق‌تر به واریانت <a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_hir/hir/enum.ExprKind.html#variant.MethodCall"><code>MethodCall</code></a> از enum به نام <code>ExprKind</code> بیندازید. همان‌طور که در <a href="defining_lints.html#lint-types">تعریف lintها</a> اشاره شد، نوع lint به نام <code>methods</code> پر از تطبیق الگو با <code>MethodCall</code> است، اگر خواننده بخواهد بیشتر کاوش کند.</p>
+<p>نمادهای جدید مانند <code>our_fancy_method</code> باید به ماژول <code>clippy_utils::sym</code> اضافه شوند. این ماژول فهرست نمادهایی را که crateهای کامپایلر در <code>rustc_span::sym</code> از قبل فراهم کرده‌اند گسترش می‌دهد.</p>
+<p>اگر یک صفت فقط یک متد تعریف کند (مانند صفت <code>std::ops::Deref</code> که فقط متد <code>deref()</code> را دارد)، ممکن است وسوسه شویم بررسی نام متد را حذف کنیم. این کار جواب می‌دهد، اما همیشه توصیه نمی‌شود، زیرا:</p>
+<ul>
+<li>اگر متد جدیدی (احتمالاً با پیاده‌سازی پیش‌فرض) به صفت اضافه شود، خطر تطبیق با متد اشتباه وجود دارد.</li>
+<li>مقایسهٔ نمادها بسیار ارزان است و ممکن است از جستجویی پرهزینه‌تر جلوگیری کند.</li>
+</ul>
+<h2 id="checking-if-a-impl-block-implements-a-method"><a class="header" href="#checking-if-a-impl-block-implements-a-method">بررسی اینکه یک بلوک <code>impl</code> یک متد را پیاده‌سازی می‌کند</a></h2>
+<p>گاهی می‌خواهیم بررسی کنیم که یک متد فراخوانی می‌شود یا نه، و گاهی هم می‌خواهیم بدانیم <code>Ty</code> ما متدی را تعریف می‌کند یا نه.</p>
+<p>برای بررسی اینکه بلوک <code>impl</code> ما متد <code>our_fancy_method</code> را تعریف می‌کند یا نه، از متد <a href="https://doc.rust-lang.org/stable/nightly-rustc/rustc_lint/trait.LateLintPass.html#method.check_impl_item"><code>check_impl_item</code></a> استفاده می‌کنیم که در <a href="https://doc.rust-lang.org/stable/nightly-rustc/rustc_lint/trait.LateLintPass.html"><code>LateLintPass</code></a> محبوب ما در دسترس است (برای اطلاعات بیشتر به فصل <a href="lint_passes.html">«Lint Passها»</a> در کتاب Clippy مراجعه کنید). این متد struct به نام <a href="https://doc.rust-lang.org/stable/nightly-rustc/rustc_hir/hir/struct.ImplItem.html"><code>ImplItem</code></a> را در اختیار ما می‌گذارد که هر چیزی را داخل یک بلوک <code>impl</code> نشان می‌دهد.</p>
+<p>بیایید ببینیم چگونه می‌توانیم پیاده‌سازی <code>our_fancy_method</code> را روی یک نوع بررسی کنیم:</p>
+<pre><code class="language-rust">use clippy_utils::{return_ty, sym};
+use clippy_utils::res::MaybeDef;
+use rustc_hir::{ImplItem, ImplItemKind};
+use rustc_lint::{LateContext, LateLintPass};
+
+impl&lt;'tcx&gt; LateLintPass&lt;'tcx&gt; for MyTypeImpl {
+    fn check_impl_item(&amp;mut self, cx: &amp;LateContext&lt;'tcx&gt;, impl_item: &amp;'tcx ImplItem&lt;'_&gt;) {
+        // Check if item is a method/function
+        if let ImplItemKind::Fn(ref signature, _) = impl_item.kind
+            // Check the method is named `our_fancy_method`
+            &amp;&amp; impl_item.ident.name.as_str() == "our_fancy_method"
+            // We can also check it has a parameter `self`
+            &amp;&amp; signature.decl.implicit_self.has_implicit_self()
+            // We can go even further and even check if its return type is `String`
+            &amp;&amp; return_ty(cx, impl_item.hir_id).is_diag_item(cx, sym::String)
+        {
+            println!("`our_fancy_method` is implemented!");
+        }
+    }
+}</code></pre><nav class="page-nav"><a href="trait_checking.html">→ بررسی صفت</a><a href="macro_expansions.html">گسترش ماکرو ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../clippy/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,376 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>قالب Manifest — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/manifest"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="the-manifest-format"><a class="header" href="#the-manifest-format">قالب Manifest</a></h1>
+<p>فایل <code>Cargo.toml</code> هر بسته، <em>manifest</em> آن بسته نامیده می‌شود. این فایل با قالب <a href="https://toml.io/">TOML</a> نوشته می‌شود و شامل فراداده‌ای است که برای کامپایل بسته لازم است. برای جزئیات بیشتر دربارهٔ اینکه cargo چگونه فایل manifest را پیدا می‌کند، بخش <code>cargo locate-project</code> را ببینید.</p>
+<p>هر فایل manifest از بخش‌های زیر تشکیل می‌شود:</p>
+<ul>
+<li><a href="unstable.html"><code>cargo-features</code></a> — featureهای ناپایدار که فقط در nightly در دسترس‌اند.</li>
+<li><a href="#the-package-section"><code>[package]</code></a> — یک بسته را تعریف می‌کند.
+<ul>
+<li><a href="#the-name-field"><code>name</code></a> — نام بسته.</li>
+<li><a href="#the-version-field"><code>version</code></a> — نسخهٔ بسته.</li>
+<li><a href="#the-authors-field"><code>authors</code></a> — نویسندگان بسته.</li>
+<li><a href="#the-edition-field"><code>edition</code></a> — ویرایش Rust.</li>
+<li><a href="rust-version.html"><code>rust-version</code></a> — حداقل نسخهٔ پشتیبانی‌شدهٔ Rust.</li>
+<li><a href="#the-description-field"><code>description</code></a> — توضیحی دربارهٔ بسته.</li>
+<li><a href="#the-documentation-field"><code>documentation</code></a> — URL مستندات بسته.</li>
+<li><a href="#the-readme-field"><code>readme</code></a> — مسیر فایل README بسته.</li>
+<li><a href="#the-homepage-field"><code>homepage</code></a> — URL صفحهٔ اصلی بسته.</li>
+<li><a href="#the-repository-field"><code>repository</code></a> — URL مخزن سورس بسته.</li>
+<li><a href="#the-license-and-license-file-fields"><code>license</code></a> — مجوز بسته.</li>
+<li><a href="#the-license-and-license-file-fields"><code>license-file</code></a> — مسیر متن مجوز.</li>
+<li><a href="#the-keywords-field"><code>keywords</code></a> — کلیدواژه‌های بسته.</li>
+<li><a href="#the-categories-field"><code>categories</code></a> — دسته‌بندی‌های بسته.</li>
+<li><a href="#the-workspace-field"><code>workspace</code></a> — مسیر workspace بسته.</li>
+<li><a href="#the-build-field"><code>build</code></a> — مسیر اسکریپت ساخت بسته.</li>
+<li><a href="#the-links-field"><code>links</code></a> — نام کتابخانهٔ بومی که بسته با آن پیوند می‌خورد.</li>
+<li><a href="#the-exclude-and-include-fields"><code>exclude</code></a> — فایل‌هایی که هنگام انتشار کنار گذاشته می‌شوند.</li>
+<li><a href="#the-exclude-and-include-fields"><code>include</code></a> — فایل‌هایی که هنگام انتشار گنجانده می‌شوند.</li>
+<li><a href="#the-publish-field"><code>publish</code></a> — می‌تواند برای جلوگیری از انتشار بسته به کار رود.</li>
+<li><a href="#the-metadata-table"><code>metadata</code></a> — تنظیمات اضافی برای ابزارهای خارجی.</li>
+<li><a href="#the-default-run-field"><code>default-run</code></a> — فایل اجرایی پیش‌فرضی که <a href="../commands/cargo-run.html"><code>cargo run</code></a> اجرا می‌کند.</li>
+<li><a href="cargo-targets.html#target-auto-discovery"><code>autolib</code></a> — کشف خودکار کتابخانه را غیرفعال می‌کند.</li>
+<li><a href="cargo-targets.html#target-auto-discovery"><code>autobins</code></a> — کشف خودکار فایل‌های اجرایی را غیرفعال می‌کند.</li>
+<li><a href="cargo-targets.html#target-auto-discovery"><code>autoexamples</code></a> — کشف خودکار مثال‌ها را غیرفعال می‌کند.</li>
+<li><a href="cargo-targets.html#target-auto-discovery"><code>autotests</code></a> — کشف خودکار آزمون‌ها را غیرفعال می‌کند.</li>
+<li><a href="cargo-targets.html#target-auto-discovery"><code>autobenches</code></a> — کشف خودکار بنچمارک‌ها را غیرفعال می‌کند.</li>
+<li><a href="resolver.html#resolver-versions"><code>resolver</code></a> — حل‌کنندهٔ وابستگی‌ای را که باید استفاده شود تعیین می‌کند.</li>
+</ul>
+</li>
+<li>جدول‌های هدف: (برای تنظیمات، <a href="cargo-targets.html#configuring-a-target">پیکربندی</a> را ببینید)
+<ul>
+<li><a href="cargo-targets.html#library"><code>[lib]</code></a> — تنظیمات هدف کتابخانه.</li>
+<li><a href="cargo-targets.html#binaries"><code>[[bin]]</code></a> — تنظیمات هدف فایل اجرایی.</li>
+<li><a href="cargo-targets.html#examples"><code>[[example]]</code></a> — تنظیمات هدف مثال.</li>
+<li><a href="cargo-targets.html#tests"><code>[[test]]</code></a> — تنظیمات هدف آزمون.</li>
+<li><a href="cargo-targets.html#benchmarks"><code>[[bench]]</code></a> — تنظیمات هدف بنچمارک.</li>
+</ul>
+</li>
+<li>جدول‌های وابستگی:
+<ul>
+<li><a href="specifying-dependencies.html"><code>[dependencies]</code></a> — وابستگی‌های کتابخانه‌ای بسته.</li>
+<li><a href="specifying-dependencies.html#development-dependencies"><code>[dev-dependencies]</code></a> — وابستگی‌های مثال‌ها، آزمون‌ها و بنچمارک‌ها.</li>
+<li><a href="specifying-dependencies.html#build-dependencies"><code>[build-dependencies]</code></a> — وابستگی‌های اسکریپت‌های ساخت.</li>
+<li><a href="specifying-dependencies.html#platform-specific-dependencies"><code>[target]</code></a> — وابستگی‌های مختص پلتفرم.</li>
+</ul>
+</li>
+<li><a href="#the-badges-section"><code>[badges]</code></a> — نشان‌هایی (badge) که در یک رجیستری نمایش داده می‌شوند.</li>
+<li><a href="features.html"><code>[features]</code></a> — featureهای کامپایل شرطی.</li>
+<li><a href="#the-lints-section"><code>[lints]</code></a> — پیکربندی linterها برای این بسته.</li>
+<li><a href="#the-hints-section"><code>[hints]</code></a> — ارائهٔ راهنما (hint) برای کامپایل این بسته.</li>
+<li><a href="overriding-dependencies.html#the-patch-section"><code>[patch]</code></a> — بازنویسی وابستگی‌ها.</li>
+<li><a href="overriding-dependencies.html#the-replace-section"><code>[replace]</code></a> — بازنویسی وابستگی‌ها (منسوخ).</li>
+<li><a href="profiles.html"><code>[profile]</code></a> — تنظیمات و بهینه‌سازی‌های کامپایلر.</li>
+<li><a href="workspaces.html"><code>[workspace]</code></a> — تعریف workspace.</li>
+</ul>
+<h2 id="the-package-section"><a class="header" href="#the-package-section">بخش <code>[package]</code></a></h2>
+<p>اولین بخش در <code>Cargo.toml</code> بخش <code>[package]</code> است.</p>
+<pre><code class="language-toml">[package]
+name = "hello_world" # the name of the package
+version = "0.1.0"    # the current version, obeying semver
+</code></pre>
+<p>تنها فیلدی که Cargo الزاماً می‌خواهد <a href="#the-name-field"><code>name</code></a> است. اگر بسته را در یک رجیستری منتشر می‌کنید، ممکن است آن رجیستری فیلدهای اضافی دیگری هم بخواهد. برای الزامات انتشار در <a href="https://crates.io/">crates.io</a>، یادداشت‌های زیر و <a href="publishing.html">فصل انتشار</a> را ببینید.</p>
+<h3 id="the-name-field"><a class="header" href="#the-name-field">فیلد <code>name</code></a></h3>
+<p>نام بسته شناسه‌ای است که برای ارجاع به بسته به کار می‌رود. این نام هنگامی که بسته به‌عنوان وابستگی در بستهٔ دیگری فهرست می‌شود، و همچنین به‌عنوان نام پیش‌فرض هدف‌های lib و bin استنتاج‌شده استفاده می‌شود.</p>
+<p>نام فقط باید از نویسه‌های <a href="https://doc.rust-lang.org/std/primitive.char.html#method.is_alphanumeric">الفبایی‌عددی</a> یا <code>-</code> یا <code>_</code> تشکیل شده باشد و نمی‌تواند خالی باشد.</p>
+<p>توجه کنید که <a href="../commands/cargo-new.html"><code>cargo new</code></a> و <a href="../commands/cargo-init.html"><code>cargo init</code></a> محدودیت‌های اضافی‌ای بر نام بسته اعمال می‌کنند، مانند اینکه نام باید شناسهٔ معتبر Rust باشد و کلیدواژه نباشد. <a href="https://crates.io/">crates.io</a> محدودیت‌های بیشتری هم اعمال می‌کند، از جمله:</p>
+<ul>
+<li>فقط نویسه‌های ASCII مجاز هستند.</li>
+<li>از نام‌های رزروشده استفاده نکنید.</li>
+<li>از نام‌های ویژهٔ ویندوز مانند “nul” استفاده نکنید.</li>
+<li>حداکثر طول نام ۶۴ نویسه است.</li>
+</ul>
+<h3 id="the-version-field"><a class="header" href="#the-version-field">فیلد <code>version</code></a></h3>
+<p>فیلد <code>version</code> طبق مشخصات <a href="https://semver.org">SemVer</a> قالب‌بندی می‌شود:</p>
+<p>نسخه‌ها باید سه بخش عددی داشته باشند: نسخهٔ اصلی (major)، نسخهٔ فرعی (minor) و نسخهٔ وصله (patch).</p>
+<p>پس از یک خط تیره می‌توان بخش پیش‌انتشار (pre-release) افزود، مانند <code>1.0.0-alpha</code>. بخش پیش‌انتشار را می‌توان با نقطه جدا کرد تا مؤلفه‌های جداگانه از هم متمایز شوند. مؤلفه‌های عددی با مقایسهٔ عددی و بقیهٔ مؤلفه‌ها به‌صورت واژه‌نامه‌ای (lexicographic) مقایسه می‌شوند. برای مثال، <code>1.0.0-alpha.11</code> از <code>1.0.0-alpha.4</code> بزرگ‌تر است.</p>
+<p>پس از یک علامت جمع می‌توان بخش فراداده (metadata) افزود، مانند <code>1.0.0+21AF26D3</code>. این بخش فقط جنبهٔ اطلاع‌رسانی دارد و Cargo عموماً آن را نادیده می‌گیرد.</p>
+<p>Cargo مفهوم <a href="https://semver.org/">نسخه‌گذاری معنایی</a> را در خود جای داده است، بنابراین اگر چپ‌ترین مؤلفهٔ ناصفر از major/minor/patch دو نسخه یکسان باشد، آن دو نسخه <a href="semver.html">سازگار</a> به شمار می‌روند. برای اطلاعات بیشتر دربارهٔ اینکه Cargo چگونه از نسخه‌ها برای حل وابستگی‌ها استفاده می‌کند، فصل <a href="resolver.html">Resolver</a> را ببینید.</p>
+<p>این فیلد اختیاری است و پیش‌فرض آن <code>0.0.0</code> است. این فیلد برای انتشار بسته‌ها الزامی است.</p>
+<blockquote>
+<p><strong>MSRV:</strong> پیش از 1.75 این فیلد الزامی بود</p>
+</blockquote>
+<h3 id="the-authors-field"><a class="header" href="#the-authors-field">فیلد <code>authors</code></a></h3>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>این فیلد منسوخ شده است.</p>
+</blockquote>
+<p>فیلد اختیاری <code>authors</code> در قالب یک آرایه، افراد یا سازمان‌هایی را فهرست می‌کند که «نویسندگان» بسته به شمار می‌روند. در انتهای هر ورودی نویسنده می‌توان یک نشانی ایمیل اختیاری را درون کروشهٔ زاویه‌ای (<code>&lt;</code> و <code>&gt;</code>) قرار داد.</p>
+<pre><code class="language-toml">[package]
+# ...
+authors = ["Graydon Hoare", "Fnu Lnu &lt;no-reply@rust-lang.org&gt;"]
+</code></pre>
+<p>این فیلد برای سازگاری با نسخه‌های قدیمی‌تر در فراداده‌های بسته و در متغیر محیطی <code>CARGO_PKG_AUTHORS</code> درون <code>build.rs</code> در دسترس قرار می‌گیرد.</p>
+<h3 id="the-edition-field"><a class="header" href="#the-edition-field">فیلد <code>edition</code></a></h3>
+<p>کلید <code>edition</code> کلیدی اختیاری است که تعیین می‌کند بستهٔ شما با کدام <a href="https://doc.rust-lang.org/edition-guide/index.html">edition زبان Rust</a> کامپایل شود. تنظیم کلید <code>edition</code> در <code>[package]</code> بر همهٔ هدف‌ها/crateهای بسته، از جمله مجموعه‌های آزمون، بنچمارک‌ها، فایل‌های اجرایی، مثال‌ها و غیره اثر می‌گذارد.</p>
+<pre><code class="language-toml">[package]
+# ...
+edition = '2024'
+</code></pre>
+<p>در بیشتر manifestها فیلد <code>edition</code> به‌طور خودکار توسط <a href="../commands/cargo-new.html"><code>cargo new</code></a> با جدیدترین edition پایدار پر می‌شود. در حال حاضر <a href="../commands/cargo-new.html"><code>cargo new</code></a> به‌طور پیش‌فرض manifestی با edition 2024 ایجاد می‌کند.</p>
+<p>اگر فیلد <code>edition</code> در <code>Cargo.toml</code> وجود نداشته باشد، برای سازگاری با نسخه‌های قدیمی‌تر فرض می‌شود که edition 2015 مورد نظر است. توجه کنید که همهٔ manifestهایی که با <code>cargo new</code> ایجاد شده‌اند از این حالت بازگشتی تاریخی استفاده نمی‌کنند، زیرا <code>edition</code> در آن‌ها به‌طور صریح روی مقداری جدیدتر تنظیم شده است.</p>
+<h3 id="the-rust-version-field"><a class="header" href="#the-rust-version-field">فیلد <code>rust-version</code></a></h3>
+<p>فیلد <code>rust-version</code> به cargo می‌گوید که بستهٔ شما از کدام نسخهٔ toolchain زبان Rust پشتیبانی می‌کند. برای جزئیات بیشتر <a href="rust-version.html">فصل نسخهٔ Rust</a> را ببینید.</p>
+<h3 id="the-description-field"><a class="header" href="#the-description-field">فیلد <code>description</code></a></h3>
+<p>توضیح (description) یک معرفی کوتاه دربارهٔ بسته است. <a href="https://crates.io/">crates.io</a> آن را همراه با بستهٔ شما نمایش می‌دهد. این متن باید ساده (plain text) باشد، نه Markdown.</p>
+<pre><code class="language-toml">[package]
+# ...
+description = "A short description of my package"
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>(https://crates.io/) الزام می‌کند که <code>description</code> تنظیم شده باشد.</p>
+</blockquote>
+<h3 id="the-documentation-field"><a class="header" href="#the-documentation-field">فیلد <code>documentation</code></a></h3>
+<p>فیلد <code>documentation</code> یک URL به وب‌سایتی را مشخص می‌کند که مستندات crate را میزبانی می‌کند. اگر در فایل manifest هیچ URLای مشخص نشده باشد، <a href="https://crates.io/">crates.io</a> پس از اینکه مستندات ساخته شد و در دسترس قرار گرفت، به‌طور خودکار crate شما را به صفحهٔ متناظر در <a href="https://docs.rs/">docs.rs</a> پیوند می‌دهد (به <a href="https://docs.rs/releases/queue">صف docs.rs</a> نگاه کنید).</p>
+<pre><code class="language-toml">[package]
+# ...
+documentation = "https://docs.rs/bitflags"
+</code></pre>
+<h3 id="the-readme-field"><a class="header" href="#the-readme-field">فیلد <code>readme</code></a></h3>
+<p>فیلد <code>readme</code> باید مسیر فایلی در ریشهٔ بسته (نسبت به همین <code>Cargo.toml</code>) باشد که اطلاعات کلی دربارهٔ بسته را در بر دارد. این فایل هنگام انتشار به رجیستری منتقل می‌شود. <a href="https://crates.io/">crates.io</a> آن را به‌صورت Markdown تفسیر می‌کند و در صفحهٔ crate نمایش می‌دهد.</p>
+<pre><code class="language-toml">[package]
+# ...
+readme = "README.md"
+</code></pre>
+<p>اگر برای این فیلد مقداری مشخص نشده باشد و فایلی با نام <code>README.md</code>، <code>README.txt</code> یا <code>README</code> در ریشهٔ بسته وجود داشته باشد، نام همان فایل استفاده خواهد شد. با تنظیم این فیلد روی <code>false</code> می‌توانید این رفتار را غیرفعال کنید. اگر فیلد روی <code>true</code> تنظیم شود، مقدار پیش‌فرض <code>README.md</code> در نظر گرفته می‌شود.</p>
+<h3 id="the-homepage-field"><a class="header" href="#the-homepage-field">فیلد <code>homepage</code></a></h3>
+<p>فیلد <code>homepage</code> باید URL سایتی باشد که صفحهٔ اصلی بستهٔ شماست.</p>
+<pre><code class="language-toml">[package]
+# ...
+homepage = "https://serde.rs"
+</code></pre>
+<p>فقط در صورتی باید برای <code>homepage</code> مقدار تعیین شود که برای crate یک وب‌سایت اختصاصی، غیر از مخزن سورس یا مستندات API، وجود داشته باشد. <code>homepage</code> را با مقادیر <code>documentation</code> یا <code>repository</code> تکراری نکنید.</p>
+<h3 id="the-repository-field"><a class="header" href="#the-repository-field">فیلد <code>repository</code></a></h3>
+<p>فیلد <code>repository</code> باید URL مخزن سورس بستهٔ شما باشد.</p>
+<pre><code class="language-toml">[package]
+# ...
+repository = "https://github.com/rust-lang/cargo"
+</code></pre>
+<h3 id="the-license-and-license-file-fields"><a class="header" href="#the-license-and-license-file-fields">فیلدهای <code>license</code> و <code>license-file</code></a></h3>
+<p>فیلد <code>license</code> نام مجوز نرم‌افزاری را که بسته تحت آن منتشر شده است در بر دارد. فیلد <code>license-file</code> مسیر فایلی را که متن مجوز در آن است (نسبت به همین <code>Cargo.toml</code>) در بر دارد.</p>
+<p><a href="https://crates.io/">crates.io</a> فیلد <code>license</code> را به‌عنوان <a href="https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/">عبارت مجوز SPDX 2.3</a> تفسیر می‌کند. نام باید یکی از مجوزهای شناخته‌شده در <a href="https://github.com/spdx/license-list-data/tree/v3.20">فهرست مجوزهای SPDX نسخهٔ 3.20</a> باشد. برای اطلاعات بیشتر <a href="https://spdx.org">سایت SPDX</a> را ببینید.</p>
+<p>عبارت‌های مجوز SPDX از عملگرهای AND و OR برای ترکیب چند مجوز پشتیبانی می‌کنند.<sup class="footnote-reference" id="fr-slash-1"><a href="#footnote-slash">1</a></sup></p>
+<pre><code class="language-toml">[package]
+# ...
+license = "MIT OR Apache-2.0"
+</code></pre>
+<p>استفاده از <code>OR</code> نشان می‌دهد که کاربر می‌تواند هر یک از دو مجوز را برگزیند. استفاده از <code>AND</code> نشان می‌دهد که کاربر باید هم‌زمان از هر دو مجوز پیروی کند. عملگر <code>WITH</code> مجوزی را نشان می‌دهد که استثنای ویژه‌ای دارد. چند نمونه:</p>
+<ul>
+<li><code>MIT OR Apache-2.0</code></li>
+<li><code>LGPL-2.1-only AND MIT AND BSD-2-Clause</code></li>
+<li><code>GPL-2.0-or-later WITH Bison-exception-2.2</code></li>
+</ul>
+<p>اگر بسته از مجوزی غیراستاندارد استفاده می‌کند، می‌توان به‌جای فیلد <code>license</code> فیلد <code>license-file</code> را مشخص کرد.</p>
+<pre><code class="language-toml">[package]
+# ...
+license-file = "LICENSE.txt"
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>(https://crates.io/) الزام می‌کند که یکی از <code>license</code> یا <code>license-file</code> تنظیم شده باشد.</p>
+</blockquote>
+<h3 id="the-keywords-field"><a class="header" href="#the-keywords-field">فیلد <code>keywords</code></a></h3>
+<p>فیلد <code>keywords</code> آرایه‌ای از رشته‌هاست که این بسته را توصیف می‌کنند. این فیلد می‌تواند هنگام جست‌وجوی بسته در یک رجیستری کمک کند، و می‌توانید هر واژه‌ای را که به کسی در یافتن این crate کمک می‌کند انتخاب کنید.</p>
+<pre><code class="language-toml">[package]
+# ...
+keywords = ["gamedev", "graphics"]
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>(https://crates.io/) حداکثر ۵ کلیدواژه را مجاز می‌داند. هر کلیدواژه باید متن ASCII باشد، حداکثر ۲۰ نویسه داشته باشد، با یک نویسهٔ الفبایی‌عددی شروع شود و فقط شامل حروف، ارقام، <code>_</code>، <code>-</code> یا <code>+</code> باشد.</p>
+</blockquote>
+<h3 id="the-categories-field"><a class="header" href="#the-categories-field">فیلد <code>categories</code></a></h3>
+<p>فیلد <code>categories</code> آرایه‌ای از رشته‌هاست که دسته‌بندی‌های مربوط به این بسته را مشخص می‌کنند.</p>
+<pre><code class="language-toml">categories = ["command-line-utilities", "development-tools::cargo-plugins"]
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>(https://crates.io/) حداکثر ۵ دسته‌بندی را مجاز می‌داند. هر دسته‌بندی باید با یکی از رشته‌های موجود در <a href="https://crates.io/category_slugs">https://crates.io/category_slugs</a> مطابقت داشته باشد و این تطابق باید دقیق باشد.</p>
+</blockquote>
+<h3 id="the-workspace-field"><a class="header" href="#the-workspace-field">فیلد <code>workspace</code></a></h3>
+<p>فیلد <code>workspace</code> را می‌توان برای پیکربندی workspaceای به کار برد که این بسته عضوی از آن خواهد بود. اگر مشخص نشود، workspace به‌صورت اولین Cargo.toml حاوی <code>[workspace]</code> در مسیرهای بالاتر فایل‌سیستم استنتاج می‌شود. تنظیم این فیلد زمانی مفید است که عضو در زیرشاخه‌ای از ریشهٔ workspace قرار نداشته باشد.</p>
+<pre><code class="language-toml">[package]
+# ...
+workspace = "path/to/workspace/root"
+</code></pre>
+<p>اگر manifest از قبل جدول <code>[workspace]</code> را تعریف کرده باشد، این فیلد را نمی‌توان مشخص کرد. یعنی یک crate نمی‌تواند هم‌زمان crate ریشهٔ یک workspace (دارای <code>[workspace]</code>) و هم crate عضو workspace دیگری (دارای <code>package.workspace</code>) باشد.</p>
+<p>برای اطلاعات بیشتر <a href="workspaces.html">فصل workspaceها</a> را ببینید.</p>
+<h3 id="the-build-field"><a class="header" href="#the-build-field">فیلد <code>build</code></a></h3>
+<p>فیلد <code>build</code> فایلی را در ریشهٔ بسته مشخص می‌کند که یک <a href="build-scripts.html">اسکریپت ساخت</a> برای ساخت کد بومی است. اطلاعات بیشتر را می‌توان در <a href="build-scripts.html">راهنمای اسکریپت ساخت</a> یافت.</p>
+<pre><code class="language-toml">[package]
+# ...
+build = "build.rs"
+</code></pre>
+<p>مقدار پیش‌فرض <code>"build.rs"</code> است که اسکریپت را از فایلی به نام <code>build.rs</code> در ریشهٔ بسته بارگذاری می‌کند. برای تعیین مسیر فایلی دیگر از <code>build = "custom_build_name.rs"</code> و برای غیرفعال کردن تشخیص خودکار اسکریپت ساخت از <code>build = false</code> استفاده کنید.</p>
+<h3 id="the-links-field"><a class="header" href="#the-links-field">فیلد <code>links</code></a></h3>
+<p>فیلد <code>links</code> نام کتابخانهٔ بومی‌ای را مشخص می‌کند که با آن پیوند داده می‌شود. اطلاعات بیشتر را می‌توان در بخش <a href="build-scripts.html#the-links-manifest-key"><code>links</code></a> راهنمای اسکریپت ساخت یافت.</p>
+<p>برای مثال، crateای که با کتابخانهٔ بومی‌ای به نام “git2” (مثلاً <code>libgit2.a</code> در لینوکس) پیوند می‌خورد می‌تواند این را مشخص کند:</p>
+<pre><code class="language-toml">[package]
+# ...
+links = "git2"
+</code></pre>
+<h3 id="the-exclude-and-include-fields"><a class="header" href="#the-exclude-and-include-fields">فیلدهای <code>exclude</code> و <code>include</code></a></h3>
+<p>فیلدهای <code>exclude</code> و <code>include</code> را می‌توان برای تعیین صریح این به کار برد که هنگام بسته‌بندی یک پروژه برای <a href="publishing.html">انتشار</a> و همچنین برای برخی انواع ردیابی تغییرات (که در ادامه توضیح داده می‌شود) کدام فایل‌ها گنجانده شوند. الگوهای مشخص‌شده در فیلد <code>exclude</code> مجموعه‌ای از فایل‌ها را که گنجانده نمی‌شوند معرفی می‌کنند، و الگوهای <code>include</code> فایل‌هایی را که صریحاً گنجانده می‌شوند مشخص می‌کنند.</p>
+<pre><code class="language-toml">[package]
+# ...
+exclude = ["/ci", "images/", ".*"]
+</code></pre>
+<pre><code class="language-toml">[package]
+# ...
+include = ["/src", "COPYRIGHT", "/examples", "!/examples/big_example"]
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>برای اطمینان از اینکه کدام فایل‌ها در بسته گنجانده خواهند شد، <code>cargo package --list</code> را اجرا کنید.</p>
+</blockquote>
+<p>اگر هیچ‌یک از دو فیلد مشخص نشده باشد، پیش‌فرض این است که همهٔ فایل‌های ریشهٔ بسته گنجانده شوند، به جز استثناهایی که در ادامه فهرست شده‌اند.</p>
+<p>اگر <code>include</code> مشخص نشده باشد، فایل‌های زیر کنار گذاشته می‌شوند:</p>
+<ul>
+<li>اگر بسته در یک مخزن git نباشد، همهٔ فایل‌های «پنهان» که با نقطه شروع می‌شوند نادیده گرفته می‌شوند.</li>
+<li>اگر بسته در یک مخزن git باشد، هر فایلی که قواعد <a href="https://git-scm.com/docs/gitignore">gitignore</a> مخزن و پیکربندی سراسری git آن را نادیده می‌گیرند، کنار گذاشته می‌شود.</li>
+</ul>
+<p>اگر <code>include</code> مشخص شده باشد، قواعد gitignore مخزن و پیکربندی سراسری git اعمال نمی‌شوند.</p>
+<p>صرف‌نظر از اینکه <code>exclude</code> یا <code>include</code> مشخص شده باشد، فایل‌های زیر همیشه کنار گذاشته می‌شوند:</p>
+<ul>
+<li>هر زیربسته‌ای نادیده گرفته می‌شود (هر زیرشاخه‌ای که فایل <code>Cargo.toml</code> داشته باشد).</li>
+<li>شاخه‌ای به نام <code>target</code> در ریشهٔ بسته نادیده گرفته می‌شود.</li>
+</ul>
+<p>فایل‌های زیر همیشه گنجانده می‌شوند:</p>
+<ul>
+<li>فایل <code>Cargo.toml</code> خود بسته همیشه گنجانده می‌شود و لازم نیست در <code>include</code> فهرست شود.</li>
+<li>یک <code>Cargo.lock</code> کمینه‌شده به‌طور خودکار گنجانده می‌شود. برای اطلاعات بیشتر <a href="../commands/cargo-package.html"><code>cargo package</code></a> را ببینید.</li>
+<li>اگر <a href="#the-license-and-license-file-fields"><code>license-file</code></a> مشخص شده باشد، همیشه گنجانده می‌شود.</li>
+</ul>
+<p>این گزینه‌ها دوبه‌دو ناسازگارند؛ تنظیم <code>include</code> بر <code>exclude</code> غلبه می‌کند. اگر لازم است برای مجموعه‌ای از فایل‌های <code>include</code> استثناهایی داشته باشید، از عملگر <code>!</code> که در ادامه توضیح داده شده است استفاده کنید.</p>
+<p>الگوها باید الگوهای به سبک <a href="https://git-scm.com/docs/gitignore">gitignore</a> باشند. به‌طور خلاصه:</p>
+<ul>
+<li><code>foo</code> با هر فایل یا شاخه‌ای که نامش <code>foo</code> باشد، در هر جای بسته، مطابقت دارد. این معادل الگوی <code>**/foo</code> است.</li>
+<li><code>/foo</code> فقط با فایل یا شاخه‌ای به نام <code>foo</code> در ریشهٔ بسته مطابقت دارد.</li>
+<li><code>foo/</code> با هر <em>شاخه‌ای</em> به نام <code>foo</code> در هر جای بسته مطابقت دارد.</li>
+<li>الگوهای glob رایج مانند <code>*</code>، <code>?</code> و <code>[]</code> پشتیبانی می‌شوند:
+<ul>
+<li><code>*</code> با صفر یا چند نویسه، به جز <code>/</code>، مطابقت دارد. برای مثال، <code>*.html</code> با هر فایل یا شاخه‌ای که پسوند <code>.html</code> داشته باشد، در هر جای بسته، مطابقت دارد.</li>
+<li><code>?</code> با هر نویسه‌ای به جز <code>/</code> مطابقت دارد. برای مثال، <code>foo?</code> با <code>food</code> مطابقت دارد، اما با <code>foo</code> نه.</li>
+<li><code>[]</code> امکان مطابقت با بازه‌ای از نویسه‌ها را می‌دهد. برای مثال، <code>[ab]</code> با <code>a</code> یا <code>b</code> مطابقت دارد. <code>[a-z]</code> با حروف a تا z مطابقت دارد.</li>
+</ul>
+</li>
+<li>پیشوند <code>**/</code> در هر شاخه‌ای مطابقت می‌دهد. برای مثال، <code>**/foo/bar</code> با فایل یا شاخهٔ <code>bar</code> در هر جایی که مستقیماً زیر شاخهٔ <code>foo</code> باشد مطابقت دارد.</li>
+<li>پسوند <code>/**</code> با هر چیزی که درون آن است مطابقت دارد. برای مثال، <code>foo/**</code> با همهٔ فایل‌های درون شاخهٔ <code>foo</code>، از جمله همهٔ فایل‌های زیرشاخه‌های <code>foo</code>، مطابقت دارد.</li>
+<li><code>/**/</code> با صفر یا چند شاخه مطابقت دارد. برای مثال، <code>a/**/b</code> با <code>a/b</code>، <code>a/x/b</code>، <code>a/x/y/b</code> و مانند آن‌ها مطابقت دارد.</li>
+<li>پیشوند <code>!</code> یک الگو را نفی می‌کند. برای مثال، الگوی <code>src/*.rs</code> همراه با <code>!foo.rs</code> با همهٔ فایل‌هایی که پسوند <code>.rs</code> دارند و درون شاخهٔ <code>src</code> هستند، به جز هر فایل با نام <code>foo.rs</code>، مطابقت دارد.</li>
+</ul>
+<p>فهرست include/exclude در برخی موقعیت‌ها برای ردیابی تغییرات نیز به کار می‌رود. برای هدف‌هایی که با <code>rustdoc</code> ساخته می‌شوند، از این فهرست برای تعیین فایل‌هایی که باید ردیابی شوند استفاده می‌شود تا مشخص شود هدف باید دوباره ساخته شود یا نه. اگر بسته <a href="build-scripts.html">اسکریپت ساخت</a>ی داشته باشد که هیچ دستور <code>rerun-if-*</code>ای صادر نمی‌کند، از فهرست include/exclude برای ردیابی اینکه آیا اسکریپت ساخت باید دوباره اجرا شود یا نه استفاده می‌شود، در صورتی که هر یک از آن فایل‌ها تغییر کند.</p>
+<h3 id="the-publish-field"><a class="header" href="#the-publish-field">فیلد <code>publish</code></a></h3>
+<p>فیلد <code>publish</code> را می‌توان برای کنترل اینکه بسته در کدام رجیستری‌ها (با نام) منتشر شود به کار برد:</p>
+<pre><code class="language-toml">[package]
+# ...
+publish = ["some-registry-name"]
+</code></pre>
+<p>برای جلوگیری از انتشار اشتباهی بسته در یک رجیستری (مانند crates.io)، مثلاً برای خصوصی نگه داشتن یک بسته در یک شرکت، می‌توانید فیلد <a href="#the-version-field"><code>version</code></a> را حذف کنید. اگر می‌خواهید صریح‌تر عمل کنید، می‌توانید انتشار را غیرفعال کنید:</p>
+<pre><code class="language-toml">[package]
+# ...
+publish = false
+</code></pre>
+<p>اگر آرایهٔ publish فقط یک رجیستری داشته باشد، دستور <code>cargo publish</code> هنگامی که پرچم <code>--registry</code> مشخص نشده باشد از همان رجیستری استفاده می‌کند.</p>
+<h3 id="the-metadata-table"><a class="header" href="#the-metadata-table">جدول <code>metadata</code></a></h3>
+<p>Cargo به‌طور پیش‌فرض دربارهٔ کلیدهای استفاده‌نشده در <code>Cargo.toml</code> هشدار می‌دهد تا به تشخیص غلط‌های تایپی و مانند آن کمک کند. اما جدول <code>package.metadata</code> کاملاً توسط Cargo نادیده گرفته می‌شود و دربارهٔ آن هشداری داده نمی‌شود. این بخش را می‌توان برای ابزارهایی به کار برد که می‌خواهند پیکربندی بسته را در <code>Cargo.toml</code> ذخیره کنند. برای مثال:</p>
+<pre><code class="language-toml">[package]
+name = "..."
+# ...
+
+# Metadata used when generating an Android APK, for example.
+[package.metadata.android]
+package-name = "my-awesome-android-app"
+assets = "path/to/static"
+</code></pre>
+<p>برای دانستن نحوهٔ استفاده از این فیلد باید به مستندات ابزار خود مراجعه کنید. برای پروژه‌های Rust که از جدول‌های <code>package.metadata</code> استفاده می‌کنند، این‌ها را ببینید:</p>
+<ul>
+<li><a href="https://docs.rs/about/metadata">docs.rs</a></li>
+</ul>
+<p>جدول مشابهی در سطح workspace در <a href="workspaces.html#the-metadata-table"><code>workspace.metadata</code></a> وجود دارد. اگرچه cargo قالبی برای محتوای هیچ‌یک از این دو جدول مشخص نمی‌کند، پیشنهاد می‌شود ابزارهای خارجی از آن‌ها به شیوه‌ای یکدست استفاده کنند، مثلاً اگر داده‌ای در <code>package.metadata</code> وجود ندارد، به داده‌های <code>workspace.metadata</code> ارجاع دهند، البته اگر برای ابزار مورد نظر معنا داشته باشد.</p>
+<h3 id="the-default-run-field"><a class="header" href="#the-default-run-field">فیلد <code>default-run</code></a></h3>
+<p>فیلد <code>default-run</code> در بخش <code>[package]</code> فایل manifest را می‌توان برای تعیین فایل اجرایی پیش‌فرضی که <a href="../commands/cargo-run.html"><code>cargo run</code></a> انتخاب می‌کند به کار برد. برای مثال، وقتی هم <code>src/bin/a.rs</code> و هم <code>src/bin/b.rs</code> وجود دارد:</p>
+<pre><code class="language-toml">[package]
+default-run = "a"
+</code></pre>
+<h2 id="the-lints-section"><a class="header" href="#the-lints-section">بخش <code>[lints]</code></a></h2>
+<p>سطح پیش‌فرض lintهای ابزارهای مختلف را با اختصاص دادن سطحی جدید به آن‌ها در یک جدول بازنویسی کنید، برای مثال:</p>
+<pre><code class="language-toml">[lints.rust]
+unsafe_code = "forbid"
+</code></pre>
+<p>این مخفف عبارت زیر است:</p>
+<pre><code class="language-toml">[lints.rust]
+unsafe_code = { level = "forbid", priority = 0 }
+</code></pre>
+<p><code>level</code> با <a href="../../rustc/lints/levels.html">سطح‌های lint</a> در <code>rustc</code> متناظر است:</p>
+<ul>
+<li><code>forbid</code></li>
+<li><code>deny</code></li>
+<li><code>warn</code></li>
+<li><code>allow</code></li>
+</ul>
+<p><code>priority</code> یک عدد صحیح علامت‌دار است که کنترل می‌کند کدام lintها یا گروه‌های lint بر گروه‌های lint دیگر غلبه کنند:</p>
+<ul>
+<li>اعداد کوچک‌تر (به‌ویژه منفی) اولویت پایین‌تری دارند، توسط اعداد بزرگ‌تر بازنویسی می‌شوند، و در خط فرمان ابزارهایی مانند <code>rustc</code> زودتر ظاهر می‌شوند</li>
+</ul>
+<p>برای دانستن اینکه یک lint مشخص زیر کدام جدول از <code>[lints]</code> قرار می‌گیرد، به بخش پیش از <code>::</code> در نام lint نگاه کنید. اگر <code>::</code> وجود نداشته باشد، ابزار <code>rust</code> است. برای مثال، هشدار دربارهٔ <code>unsafe_code</code> به‌صورت <code>lints.rust.unsafe_code</code> خواهد بود، اما lint مربوط به <code>clippy::enum_glob_use</code> به‌صورت <code>lints.clippy.enum_glob_use</code> خواهد بود.</p>
+<p>برای مثال:</p>
+<pre><code class="language-toml">[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+enum_glob_use = "deny"
+
+[lints.cargo]
+unused_dependencies = "deny"
+</code></pre>
+<p>عموماً این تنظیمات فقط بر توسعهٔ محلی بستهٔ فعلی اثر می‌گذارند. Cargo آن‌ها را فقط بر بستهٔ فعلی اعمال می‌کند و نه بر وابستگی‌ها. در مورد بسته‌های وابسته به آن، Cargo با قابلیت‌هایی مانند <a href="../../rustc/lints/levels.html#capping-lints"><code>--cap-lints</code></a> lintهای وابستگی‌های غیر path را خاموش می‌کند.</p>
+<p>برای lintهای موجودی که خود Cargo تولید می‌کند، <a href="lints.html">فصل lintها</a> را نیز ببینید.</p>
+<blockquote>
+<p><strong>MSRV:</strong> از 1.74 رعایت می‌شود</p>
+</blockquote>
+<h2 id="the-hints-section"><a class="header" href="#the-hints-section">بخش <code>[hints]</code></a></h2>
+<p>بخش <code>[hints]</code> امکان تعیین راهنماهایی (hint) برای کامپایل این بسته را فراهم می‌کند. Cargo به‌طور پیش‌فرض هنگام کامپایل این بسته به این راهنماها احترام می‌گذارد، هرچند بستهٔ سطح بالایی که ساخته می‌شود می‌تواند این مقادیر را از طریق سازوکار <code>[profile]</code> بازنویسی کند. راهنماها، طبق طراحی، همیشه برای Cargo بی‌خطر هستند که نادیده گرفته شوند؛ اگر Cargo با راهنمایی روبه‌رو شود که آن را نمی‌فهمد، یا راهنمایی که آن را می‌فهمد اما مقدارش را نمی‌فهمد، هشدار می‌دهد اما خطا نمی‌دهد. در نتیجه، تعیین راهنما در یک crate بر MSRV آن crate اثری ندارد.</p>
+<p>هر راهنما ممکن است یک feature gate ناپایدار مرتبط داشته باشد که برای اعمال پیکربندی‌ای که مشخص می‌کند باید آن را بدهید، اما اگر آن feature gate ناپایدار را مشخص نکنید، باز هم فقط یک هشدار دریافت می‌کنید، نه خطا.</p>
+<p>در حال حاضر هیچ راهنمای پایداری وجود ندارد. برای اطلاعات دربارهٔ یک راهنمای ناپایدار، <a href="unstable.html#profile-hint-mostly-unused-option">مستندات hint-mostly-unused</a> را ببینید.</p>
+<blockquote>
+<p><strong>MSRV:</strong> از 1.90 رعایت می‌شود.</p>
+</blockquote>
+<h2 id="the-badges-section"><a class="header" href="#the-badges-section">بخش <code>[badges]</code></a></h2>
+<p>بخش <code>[badges]</code> برای تعیین نشان‌های وضعیتی است که می‌توانند هنگام انتشار بسته در وب‌سایت رجیستری نمایش داده شوند.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>(https://crates.io/) پیش‌تر نشان‌ها را کنار یک crate در وب‌سایت خود نمایش می‌داد، اما این قابلیت حذف شده است. بسته‌ها باید نشان‌ها را در فایل README خود قرار دهند که در <a href="https://crates.io/">crates.io</a> نمایش داده می‌شود (به <a href="#the-readme-field">فیلد <code>readme</code></a> نگاه کنید).</p>
+</blockquote>
+<pre><code class="language-toml">[badges]
+# The `maintenance` table indicates the status of the maintenance of
+# the crate. This may be used by a registry, but is currently not
+# used by crates.io. See https://github.com/rust-lang/crates.io/issues/2437
+# and https://github.com/rust-lang/crates.io/issues/2438 for more details.
+#
+# The `status` field is required. Available options are:
+# - `actively-developed`: New features are being added and bugs are being fixed.
+# - `passively-maintained`: There are no plans for new features, but the maintainer intends to
+#   respond to issues that get filed.
+# - `as-is`: The crate is feature complete, the maintainer does not intend to continue working on
+#   it or providing support, but it works for the purposes it was designed for.
+# - `experimental`: The author wants to share it with the community but is not intending to meet
+#   anyone's particular use case.
+# - `looking-for-maintainer`: The current maintainer would like to transfer the crate to someone
+#   else.
+# - `deprecated`: The maintainer does not recommend using this crate (the description of the crate
+#   can describe why, there could be a better solution available or there could be problems with
+#   the crate that the author does not want to fix).
+# - `none`: Displays no badge on crates.io, since the maintainer has not chosen to specify
+#   their intentions, potential crate users will need to investigate on their own.
+maintenance = { status = "..." }
+</code></pre>
+<h2 id="dependency-sections"><a class="header" href="#dependency-sections">بخش‌های وابستگی</a></h2>
+<p>برای اطلاعات دربارهٔ بخش‌های <code>[dependencies]</code>، <code>[dev-dependencies]</code>، <code>[build-dependencies]</code> و <code>[target.*.dependencies]</code> مختص هدف، <a href="specifying-dependencies.html">صفحهٔ تعیین وابستگی‌ها</a> را ببینید.</p>
+<h2 id="the-profile-sections"><a class="header" href="#the-profile-sections">بخش‌های <code>[profile.*]</code></a></h2>
+<p>جدول‌های <code>[profile]</code> راهی برای سفارشی‌سازی تنظیمات کامپایلر، مانند بهینه‌سازی‌ها و تنظیمات اشکال‌زدایی، فراهم می‌کنند. برای جزئیات بیشتر <a href="profiles.html">فصل پروفایل‌ها</a> را ببینید.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-slash">
+<p>پیش‌تر می‌شد چند مجوز را با <code>/</code> از هم جدا کرد، اما این روش منسوخ شده است. <a href="#fr-slash-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="index.html">→ مرجع Cargo</a><a href="cargo-targets.html">هدف‌های Cargo ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

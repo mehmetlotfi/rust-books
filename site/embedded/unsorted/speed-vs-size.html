@@ -1,0 +1,86 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>بهینه‌سازی‌ها: مبادلهٔ سرعت و اندازه — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="unsorted/speed-vs-size"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="optimizations-the-speed-size-tradeoff"><a class="header" href="#optimizations-the-speed-size-tradeoff">بهینه‌سازی‌ها: مصالحهٔ سرعت و اندازه</a></h1>
+<p>همه می‌خواهند برنامه‌شان بسیار سریع و بسیار کوچک باشد، اما معمولاً نمی‌توان هر دو ویژگی را با هم داشت. این بخش سطوح مختلف بهینه‌سازی‌ای را که <code>rustc</code> فراهم می‌کند و تأثیر آن‌ها بر زمان اجرا و اندازهٔ باینری برنامه را بررسی می‌کند.</p>
+<h2 id="no-optimizations"><a class="header" href="#no-optimizations">بدون بهینه‌سازی</a></h2>
+<p>این حالت پیش‌فرض است. وقتی <code>cargo build</code> را اجرا می‌کنید از پروفایل توسعه (که به آن <code>dev</code> هم می‌گویند) استفاده می‌کنید. این پروفایل برای اشکال‌زدایی بهینه شده است؛ بنابراین اطلاعات اشکال‌زدایی را فعال می‌کند و هیچ بهینه‌سازی‌ای را فعال <em>نمی‌کند</em>، یعنی از <code>-C opt-level = 0</code> استفاده می‌کند.</p>
+<p>دست‌کم برای توسعهٔ bare metal، اطلاعات اشکال‌زدایی (debuginfo) از این نظر هزینه‌ای ندارد که فضایی در Flash / ROM اشغال نمی‌کند؛ بنابراین در واقع توصیه می‌کنیم debuginfo را در پروفایل release فعال کنید – به‌طور پیش‌فرض غیرفعال است. این کار به شما اجازه می‌دهد هنگام اشکال‌زدایی ساخت‌های release از نقطهٔ توقف (breakpoint) استفاده کنید.</p>
+<pre><code class="language-toml">[profile.release]
+# symbols are nice and they don't increase the size on Flash
+debug = true
+</code></pre>
+<p>نبود بهینه‌سازی برای اشکال‌زدایی عالی است، چون گام‌به‌گام پیش رفتن در کد حس اجرای برنامه دستور به دستور را می‌دهد، و افزون بر آن می‌توانید متغیرهای پشته و آرگومان‌های تابع را در GDB با <code>print</code> چاپ کنید. وقتی کد بهینه شده باشد، تلاش برای چاپ متغیرها باعث می‌شود <code>$0 = &lt;value optimized out&gt;</code> چاپ شود.</p>
+<p>بزرگ‌ترین عیب پروفایل <code>dev</code> این است که باینری حاصل بسیار بزرگ و کند خواهد بود. معمولاً اندازه مشکل بزرگ‌تری است، چون باینری‌های بهینه‌نشده می‌توانند ده‌ها KiB از Flash را اشغال کنند که ممکن است دستگاه هدف شما آن‌قدر نداشته باشد – نتیجه: باینری بهینه‌نشدهٔ شما در دستگاهتان جا نمی‌شود!</p>
+<p>آیا می‌توانیم باینری‌های کوچک‌تر و سازگار با اشکال‌زدا داشته باشیم؟ بله، یک ترفند وجود دارد.</p>
+<h3 id="optimizing-dependencies"><a class="header" href="#optimizing-dependencies">بهینه‌سازی وابستگی‌ها</a></h3>
+<p>یک قابلیت Cargo با نام <a href="../../cargo/reference/profiles.html#overrides"><code>profile-overrides</code></a> وجود دارد که به شما اجازه می‌دهد سطح بهینه‌سازی وابستگی‌ها را بازنویسی کنید. می‌توانید از این قابلیت استفاده کنید تا همهٔ وابستگی‌ها را برای اندازه بهینه کنید و در عین حال crate اصلی را بهینه‌نشده و سازگار با اشکال‌زدا نگه دارید.</p>
+<p>حواستان باشد که کد جنریک (generic) گاهی ممکن است همراه با crate‌ای بهینه شود که در آن نمونه‌سازی می‌شود، نه crate‌ای که در آن تعریف شده است. اگر در برنامهٔ خود نمونه‌ای از یک struct جنریک بسازید و ببینید کدی با ردپای بزرگ را وارد می‌کند، ممکن است افزایش سطح بهینه‌سازی وابستگی‌های مربوط هیچ تأثیری نداشته باشد.</p>
+<p>این یک مثال است:</p>
+<pre><code class="language-toml"># Cargo.toml
+[package]
+name = "app"
+# ..
+
+[profile.dev.package."*"] # +
+opt-level = "z" # +
+</code></pre>
+<p>بدون بازنویسی:</p>
+<pre><code class="language-text">$ cargo size --bin app -- -A
+app  :
+section               size        addr
+.vector_table         1024   0x8000000
+.text                 9060   0x8000400
+.rodata               1708   0x8002780
+.data                    0  0x20000000
+.bss                     4  0x20000000
+</code></pre>
+<p>با بازنویسی:</p>
+<pre><code class="language-text">$ cargo size --bin app -- -A
+app  :
+section               size        addr
+.vector_table         1024   0x8000000
+.text                 3490   0x8000400
+.rodata               1100   0x80011c0
+.data                    0  0x20000000
+.bss                     4  0x20000000
+</code></pre>
+<p>این یعنی ۶ KiB کاهش در مصرف Flash بدون هیچ آسیبی به قابلیت اشکال‌زدایی crate اصلی. اگر وارد یک وابستگی شوید، دوباره آن پیام‌های <code>&lt;value optimized out&gt;</code> را خواهید دید، اما معمولاً می‌خواهید crate اصلی را اشکال‌زدایی کنید و نه وابستگی‌ها را. و اگر <em>واقعاً</em> لازم است یک وابستگی را اشکال‌زدایی کنید، می‌توانید با قابلیت <code>profile-overrides</code> یک وابستگی مشخص را از بهینه‌سازی مستثنا کنید. مثال زیر را ببینید:</p>
+<pre><code class="language-toml"># ..
+
+# don't optimize the `cortex-m-rt` crate
+[profile.dev.package.cortex-m-rt] # +
+opt-level = 0 # +
+
+# but do optimize all the other dependencies
+[profile.dev.package."*"]
+codegen-units = 1 # better optimizations
+opt-level = "z"
+</code></pre>
+<p>اکنون crate اصلی و <code>cortex-m-rt</code> سازگار با اشکال‌زدا هستند!</p>
+<h2 id="optimize-for-speed"><a class="header" href="#optimize-for-speed">بهینه‌سازی برای سرعت</a></h2>
+<p>تا تاریخ ۲۰۱۸-۰۹-۱۸، <code>rustc</code> از سه سطح «بهینه‌سازی برای سرعت» پشتیبانی می‌کند: <code>opt-level = 1</code>، <code>2</code> و <code>3</code>. وقتی <code>cargo build --release</code> را اجرا می‌کنید از پروفایل release استفاده می‌کنید که به‌طور پیش‌فرض <code>opt-level = 3</code> دارد.</p>
+<p>هر دو سطح <code>opt-level = 2</code> و <code>3</code> به بهای اندازهٔ باینری برای سرعت بهینه می‌کنند، اما سطح <code>3</code> بیش از سطح <code>2</code> برداری‌سازی (vectorization) و درون‌خطی‌سازی (inlining) انجام می‌دهد. به‌ویژه می‌بینید که در <code>opt-level</code> برابر یا بیشتر از <code>2</code>، LLVM حلقه‌ها را باز می‌کند (unroll). بازکردن حلقه از نظر Flash / ROM هزینهٔ نسبتاً بالایی دارد (مثلاً از ۲۶ بایت به ۱۹۴ بایت برای حلقه‌ای که یک آرایه را صفر می‌کند) اما در شرایط مناسب (مثلاً وقتی تعداد تکرارها به‌اندازهٔ کافی زیاد باشد) می‌تواند زمان اجرا را به نصف هم برساند.</p>
+<p>در حال حاضر راهی برای غیرفعال کردن باز کردن حلقه در <code>opt-level = 2</code> و <code>3</code> وجود ندارد، بنابراین اگر نمی‌توانید هزینهٔ آن را بپردازید باید برنامهٔ خود را برای اندازه بهینه کنید.</p>
+<h2 id="optimize-for-size"><a class="header" href="#optimize-for-size">بهینه‌سازی برای اندازه</a></h2>
+<p>تا تاریخ ۲۰۱۸-۰۹-۱۸، <code>rustc</code> از دو سطح «بهینه‌سازی برای اندازه» پشتیبانی می‌کند: <code>opt-level = "s"</code> و <code>"z"</code>. این نام‌ها از clang / LLVM به ارث رسیده‌اند و چندان گویا نیستند، اما <code>"z"</code> قرار است این مفهوم را برساند که باینری‌های کوچک‌تری از <code>"s"</code> تولید می‌کند.</p>
+<p>اگر می‌خواهید باینری‌های release شما برای اندازه بهینه شوند، تنظیم <code>profile.release.opt-level</code> را در <code>Cargo.toml</code> همان‌طور که در زیر نشان داده شده است تغییر دهید.</p>
+<pre><code class="language-toml">[profile.release]
+# or "z"
+opt-level = "s"
+</code></pre>
+<p>این دو سطح بهینه‌سازی آستانهٔ درون‌خطی‌سازی (inline threshold) در LLVM را به شدت کاهش می‌دهند؛ معیاری که برای تصمیم‌گیری دربارهٔ درون‌خطی کردن یا نکردن یک تابع به کار می‌رود. یکی از اصول Rust انتزاع‌های بدون هزینه (zero cost abstractions) است؛ این انتزاع‌ها برای حفظ پایانه‌ها (invariants) تمایل دارند از تعداد زیادی newtype و تابع کوچک استفاده کنند (مثلاً تابع‌هایی که یک مقدار داخلی را قرض می‌گیرند، مانند <code>deref</code> و <code>as_ref</code>)، بنابراین پایین بودن آستانهٔ درون‌خطی‌سازی می‌تواند باعث شود LLVM فرصت‌های بهینه‌سازی را از دست بدهد (مثلاً حذف شاخه‌های مرده یا درون‌خطی کردن فراخوانی closureها).</p>
+<p>هنگام بهینه‌سازی برای اندازه ممکن است بخواهید آستانهٔ درون‌خطی‌سازی را افزایش دهید تا ببینید آیا بر اندازهٔ باینری تأثیری دارد یا نه. روش توصیه‌شده برای تغییر آستانهٔ درون‌خطی‌سازی این است که پرچم <code>-C inline-threshold</code> را به دیگر rustflagها در <code>.cargo/config.toml</code> اضافه کنید.</p>
+<pre><code class="language-toml"># .cargo/config.toml
+# this assumes that you are using the cortex-m-quickstart template
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+rustflags = [
+  # ..
+  "-C", "inline-threshold=123", # +
+]
+</code></pre>
+<p>چه مقداری استفاده کنیم؟ <a href="https://github.com/rust-lang/rust/blob/1.29.0/src/librustc_codegen_llvm/back/write.rs#L2105-L2122">از نسخهٔ 1.29.0، این‌ها آستانه‌های درون‌خطی‌سازی‌ای هستند که سطوح مختلف بهینه‌سازی استفاده می‌کنند</a>:</p>
+<ul>
+<li><code>opt-level = 3</code> uses 275</li>
+<li><code>opt-level = 2</code> uses 225</li>
+<li><code>opt-level = "s"</code> uses 75</li>
+<li><code>opt-level = "z"</code> uses 25</li>
+</ul>
+<p>هنگام بهینه‌سازی برای اندازه، مقادیر <code>225</code> و <code>275</code> را امتحان کنید.</p><nav class="page-nav"><a href="../../embedded/unsorted/index.html">→ موضوعات دسته‌بندی‌نشده</a><a href="../../embedded/unsorted/math.html">انجام عملیات ریاضی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,213 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>مکان فراخوانی ضمنی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="backend/implicit-caller-location"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="implicit-caller-location"><a class="header" href="#implicit-caller-location">مکان ضمنی فراخواننده (Implicit caller location)</a></h1>
+<p>این ویژگی که در <a href="https://github.com/rust-lang/rfcs/blob/master/text/2091-inline-semantic.md">RFC 2091</a> تأیید شد، گزارش دقیق مکان فراخواننده را در panicهایی ممکن می‌کند
+که از توابعی مانند <code>Option::unwrap</code>، <code>Result::expect</code> و <code>Index::index</code> آغاز می‌شوند.
+این ویژگی attribute ‏<a href="../../reference/attributes/codegen.html#the-track_caller-attribute"><code>#[track_caller]</code></a> را برای توابع،
+intrinsic ‏<a href="https://doc.rust-lang.org/nightly/core/intrinsics/fn.caller_location.html"><code>caller_location</code></a> و
+wrapper مناسب پایدارسازی یعنی <a href="https://doc.rust-lang.org/nightly/core/panic/struct.Location.html#method.caller"><code>core::panic::Location::caller</code></a> را اضافه می‌کند.</p>
+<h2 id="motivating-example"><a class="header" href="#motivating-example">مثال انگیزه‌بخش</a></h2>
+<p>این برنامهٔ نمونه را در نظر بگیرید:</p>
+<pre><code class="language-rust">fn main() {
+    let foo: Option&lt;()&gt; = None;
+    foo.unwrap(); // this should produce a useful panic message!
+}</code></pre>
+<p>پیش از Rust 1.42، panicهایی مانند این <code>unwrap()</code> مکانی را در core چاپ می‌کردند:</p>
+<pre><code>$ rustc +1.41.0 example.rs; example.exe
+thread 'main' panicked at 'called `Option::unwrap()` on a `None` value',...core\macros\mod.rs:15:40
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace.
+</code></pre>
+<p>از 1.42 به بعد، پیامی بسیار مفیدتر می‌گیریم:</p>
+<pre><code>$ rustc +1.42.0 example.rs; example.exe
+thread 'main' panicked at 'called `Option::unwrap()` on a `None` value', example.rs:3:5
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</code></pre>
+<p>این پیام‌های خطا از ترکیبی از تغییرات در درونیات <code>panic!</code> برای بهره‌گیری
+از <code>core::panic::Location::caller</code> و تعدادی حاشیه‌نویسی <code>#[track_caller]</code> در کتابخانهٔ استاندارد
+به دست می‌آیند که اطلاعات فراخواننده را منتشر می‌کنند.</p>
+<h2 id="reading-caller-location"><a class="header" href="#reading-caller-location">خواندن مکان فراخواننده</a></h2>
+<p>پیش‌تر، <code>panic!</code> از ماکروهای <code>file!()</code>، <code>line!()</code> و <code>column!()</code> برای ساختن یک
+<a href="https://doc.rust-lang.org/core/panic/struct.Location.html"><code>Location</code></a> استفاده می‌کرد که به محل رخ دادن panic اشاره می‌کرد.
+نمی‌شد به این ماکروها مکانی جایگزین داد،
+پس توابعی که عمداً <code>panic!</code> را فراخوانی می‌کردند نمی‌توانستند مکان خودشان را فراهم کنند
+و منبع واقعی خطا پنهان می‌ماند.</p>
+<p>در درون، <code>panic!()</code> اکنون <a href="https://doc.rust-lang.org/nightly/core/panic/struct.Location.html#method.caller"><code>core::panic::Location::caller()</code></a> را فراخوانی می‌کند تا بفهمد
+در کجا بسط داده شده است.
+این تابع خودش با <code>#[track_caller]</code> حاشیه‌نویسی شده و
+intrinsic کامپایلر ‏<a href="https://doc.rust-lang.org/nightly/core/intrinsics/fn.caller_location.html"><code>caller_location</code></a> را که rustc پیاده‌سازی کرده است می‌پوشاند.
+این intrinsic را آسان‌تر می‌توان بر حسب نحوهٔ کارش در بافت <code>const</code> توضیح داد.</p>
+<h2 id="caller-location-in-const"><a class="header" href="#caller-location-in-const">مکان فراخواننده در <code>const</code></a></h2>
+<p>بازگرداندن مکان فراخواننده در بافت const دو فاز اصلی دارد: پیمایش به بالای پشته
+برای یافتن مکان درست و تخصیص یک مقدار const برای بازگرداندن.</p>
+<h3 id="finding-the-right-location"><a class="header" href="#finding-the-right-location">یافتن <code>Location</code> درست</a></h3>
+<p>در بافت const از جایی که intrinsic فراخوانی شده «به بالای پشته پیمایش می‌کنیم» و وقتی
+به نخستین فراخوانی تابع در پشته می‌رسیم که attribute را <em>ندارد</em> متوقف می‌شویم.
+این پیمایش در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_const_eval/interpret/struct.InterpCx.html#method.find_closest_untracked_caller_location"><code>InterpCx::find_closest_untracked_caller_location()</code></a> قرار دارد.</p>
+<p>با شروع از پایین، روی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_const_eval/interpret/struct.Frame.html"><code>Frame</code></a>های پشته در
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_const_eval/interpret/struct.InterpCx.html#structfield.stack"><code>InterpCx::stack</code></a> به سمت بالا پیمایش می‌کنیم و
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/instance/enum.InstanceKind.html#method.requires_caller_location"><code>InstanceKind::requires_caller_location</code></a> را روی
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_const_eval/interpret/struct.Frame.html#structfield.instance"><code>Instance</code>های هر <code>Frame</code></a> فراخوانی می‌کنیم.
+به محض اینکه یکی را بیابیم که <code>false</code> برمی‌گرداند متوقف می‌شویم و
+span مربوط به قاب <em>قبلی</em> را برمی‌گردانیم که «بالاترین» تابع ردیابی‌شده بود.</p>
+<h3 id="allocating-a-static-location"><a class="header" href="#allocating-a-static-location">تخصیص یک <code>Location</code> ایستا</a></h3>
+<p>وقتی یک <code>Span</code> داریم، باید برای <code>Location</code> حافظهٔ ایستا تخصیص دهیم، که توسط
+query ‏<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html#method.const_caller_location"><code>TyCtxt::const_caller_location()</code></a> انجام می‌شود.
+در درون این <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_const_eval/interpret/struct.InterpCx.html#method.alloc_caller_location"><code>InterpCx::alloc_caller_location()</code></a> را فراخوانی می‌کند و به یک
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_const_eval/interpret/enum.MemoryKind.html#variant.CallerLocation">نوع حافظهٔ</a> یکتا (<code>MemoryKind::CallerLocation</code>) می‌انجامد.
+بک‌اند codegen از نوع SSA می‌تواند برای همین مقادیر کد تولید کند
+و ما آن کد را آنجا هم به کار می‌بریم.</p>
+<p>وقتی <code>Location</code> ما در حافظهٔ ایستا تخصیص یافت، intrinsic ما ارجاعی به آن برمی‌گرداند.</p>
+<h2 id="generating-code-for-track_caller-callees"><a class="header" href="#generating-code-for-track_caller-callees">تولید کد برای callee‌های <code>#[track_caller]</code></a></h2>
+<p>برای تولید کد کارآمد برای یک تابع ردیابی‌شده و فراخواننده‌های آن، باید از دید intrinsic
+همان رفتار را بدون داشتن پشته‌ای برای پیمایش به بالا در زمان اجرا فراهم کنیم.
+رویکرد را معکوس می‌کنیم:
+هنگامی که پشته را به پایین رشد می‌دهیم یک آرگومان اضافی به فراخوانی‌های توابع ردیابی‌شده می‌دهیم،
+به‌جای اینکه هنگام فراخوانی intrinsic به بالای پشته پیمایش کنیم.
+آن آرگومان اضافی را می‌توان هر جا مکان فراخواننده پرس‌وجو می‌شود برگرداند.</p>
+<p>آرگومانی که اضافه می‌کنیم از نوع <code>&amp;'static core::panic::Location&lt;'static&gt;</code> است.
+ارجاع انتخاب شد تا از کپی غیرضروری پرهیز شود، چون در زمان نگارش، اندازهٔ یک اشاره‌گر یک‌سوم
+<code>std::mem::size_of::&lt;core::panic::Location&gt;() == 24</code> است.</p>
+<p>هنگام تولید فراخوانی به تابعی که ردیابی می‌شود، به آرگومان مکان مقدار
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_codegen_ssa/mir/struct.FunctionCx.html#method.get_caller_location"><code>FunctionCx::get_caller_location</code></a> را می‌دهیم.</p>
+<p>اگر تابع فراخواننده ردیابی شود، <code>get_caller_location</code> متغیر محلی را در
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_codegen_ssa/mir/struct.FunctionCx.html#structfield.caller_location"><code>FunctionCx::caller_location</code></a> برمی‌گرداند که توسط فراخوانندهٔ فراخوانندهٔ فعلی پر شده است.
+در این موارد intrinsic ارجاعی را «برمی‌گرداند» که در واقع در یک آرگومان به
+فراخواننده‌اش داده شده بود.</p>
+<p>اگر تابع فراخواننده ردیابی نشود، <code>get_caller_location</code> یک <code>Location</code> ایستا را از
+<code>Span</code> فعلی تخصیص می‌دهد و ارجاعی به آن برمی‌گرداند.</p>
+<p>همان رفتار حلقه‌ای را که از پایین شروع شود کارآمدتر به دست می‌آوریم، با عبور یک مقدار
+<code>&amp;Location</code> واحد از فیلدهای <code>caller_location</code> چند <code>FunctionCx</code> در حین رشد پشته
+به سمت پایین.</p>
+<h3 id="codegen-examples"><a class="header" href="#codegen-examples">مثال‌های codegen</a></h3>
+<p>این تبدیل در عمل چه شکلی دارد؟
+این مثال را که از ویژگی جدید استفاده می‌کند در نظر بگیرید:</p>
+<pre><code class="language-rust">#![feature(track_caller)]
+use std::panic::Location;
+
+#[track_caller]
+fn print_caller() {
+    println!("called from {}", Location::caller());
+}
+
+fn main() {
+    print_caller();
+}</code></pre>
+<p>در اینجا <code>print_caller()</code> ظاهراً هیچ آرگومانی نمی‌گیرد، اما آن را به چیزی شبیه این کامپایل می‌کنیم:</p>
+<pre><code class="language-rust">#![feature(panic_internals)]
+use std::panic::Location;
+
+fn print_caller(caller: &amp;Location) {
+    println!("called from {}", caller);
+}
+
+fn main() {
+    print_caller(&amp;Location::internal_constructor(file!(), line!(), column!()));
+}</code></pre>
+<h3 id="dynamic-dispatch"><a class="header" href="#dynamic-dispatch">dispatch پویا</a></h3>
+<p>در بافت‌های codegen باید ABI مربوط به callee را تغییر دهیم تا این اطلاعات را به پایین پشته منتقل کنیم، اما
+attribute صراحتاً نوع تابع را تغییر <em>نمی‌دهد</em>.
+تغییر ABI باید برای بررسی نوع شفاف باشد و در همهٔ کاربردها سالم (sound) بماند.</p>
+<p>فراخوانی‌های مستقیم به توابع ردیابی‌شده همیشه پرچم‌های کامل codegen مربوط به callee را می‌دانند و می‌توانند
+کد مناسب تولید کنند.
+فراخواننده‌های غیرمستقیم این اطلاعات را ندارند و در
+نوع اشاره‌گر تابعی که فراخوانی می‌کنند کدگذاری نشده است، پس هر وقت اشاره‌گری به تابع می‌گیریم یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/enum.InstanceKind.html#variant.ReifyShim"><code>ReifyShim</code></a> دور آن تابع تولید می‌کنیم.
+این shim نمی‌تواند مکان واقعی فراخوانی غیرمستقیم را گزارش کند
+(به‌جای آن محل تعریف تابع گزارش می‌شود)، اما از کامپایل نادرست جلوگیری می‌کند و
+احتمالاً بهترین کاری است که بدون تغییر امضاهای نوع کاملاً پایدارشده می‌توانیم بکنیم.</p>
+<blockquote>
+<p><em>نکته:</em> هر وقت اشاره‌گری به یک تابع ردیابی‌شده می‌گیریم همیشه یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/enum.InstanceKind.html#variant.ReifyShim"><code>ReifyShim</code></a> تولید می‌کنیم. اگرچه
+این قید را بافت‌های codegen تحمیل می‌کنند، هنگام ساخت MIR مربوط به shim نمی‌دانیم
+آیا در بافت const فراخوانی می‌شویم (نادیده گرفتن shim ایمن است) یا در بافت codegen (نادیده گرفتن
+shim ناایمن است). حتی اگر می‌دانستیم، نتایج بافت‌های const و codegen باید با هم سازگار باشند.</p>
+</blockquote>
+<h2 id="the-attribute"><a class="header" href="#the-attribute">attribute</a></h2>
+<p>attribute ‏<code>#[track_caller]</code> در کنار attributeهای codegen دیگر بررسی می‌شود تا مطمئن شویم
+تابع:</p>
+<ul>
+<li>ABI ‏<code>"Rust"</code> دارد (نه مثلاً <code>"C"</code>)</li>
+<li>closure نیست</li>
+<li><code>#[naked]</code> نیست</li>
+</ul>
+<p>اگر کاربرد معتبر باشد، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/middle/codegen_fn_attrs/struct.CodegenFnAttrFlags.html#associatedconstant.TRACK_CALLER"><code>CodegenFnAttrsFlags::TRACK_CALLER</code></a> را تنظیم می‌کنیم.
+این پرچم بر مقدار بازگشتی
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/instance/enum.InstanceKind.html#method.requires_caller_location"><code>InstanceKind::requires_caller_location</code></a> اثر می‌گذارد که به‌نوبهٔ خود
+هم در بافت‌های const و هم در بافت‌های codegen برای تضمین انتشار درست به کار می‌رود.</p>
+<h3 id="traits"><a class="header" href="#traits">صفت‌ها (Traits)</a></h3>
+<p>وقتی بر پیاده‌سازی‌های متد صفت اعمال شود، attribute همان‌طور که برای توابع معمولی کار می‌کند عمل می‌کند.</p>
+<p>وقتی بر نمونهٔ اولیهٔ یک متد صفت اعمال شود،
+attribute بر همهٔ پیاده‌سازی‌های آن متد اعمال می‌شود.
+وقتی بر پیاده‌سازی پیش‌فرض متد صفت اعمال شود، attribute بر
+آن پیاده‌سازی <em>و</em> هر بازنویسی (override) آن اثر می‌گذارد.</p>
+<p>مثال‌ها:</p>
+<pre><code class="language-rust">#![feature(track_caller)]
+
+macro_rules! assert_tracked {
+    () =&gt; {{
+        let location = std::panic::Location::caller();
+        assert_eq!(location.file(), file!());
+        assert_ne!(location.line(), line!(), "line should be outside this fn");
+        println!("called at {}", location);
+    }};
+}
+
+trait TrackedFourWays {
+    /// All implementations inherit `#[track_caller]`.
+    #[track_caller]
+    fn blanket_tracked();
+
+    /// Implementors can annotate themselves.
+    fn local_tracked();
+
+    /// This implementation is tracked (overrides are too).
+    #[track_caller]
+    fn default_tracked() {
+        assert_tracked!();
+    }
+
+    /// Overrides of this implementation are tracked (it is too).
+    #[track_caller]
+    fn default_tracked_to_override() {
+        assert_tracked!();
+    }
+}
+
+/// This impl uses the default impl for `default_tracked` and provides its own for
+/// `default_tracked_to_override`.
+impl TrackedFourWays for () {
+    fn blanket_tracked() {
+        assert_tracked!();
+    }
+
+    #[track_caller]
+    fn local_tracked() {
+        assert_tracked!();
+    }
+
+    fn default_tracked_to_override() {
+        assert_tracked!();
+    }
+}
+
+fn main() {
+    &lt;() as TrackedFourWays&gt;::blanket_tracked();
+    &lt;() as TrackedFourWays&gt;::default_tracked();
+    &lt;() as TrackedFourWays&gt;::default_tracked_to_override();
+    &lt;() as TrackedFourWays&gt;::local_tracked();
+}</code></pre>
+<h2 id="backgroundhistory"><a class="header" href="#backgroundhistory">پیش‌زمینه/تاریخچه</a></h2>
+<p>به‌طور کلی، هدف این ویژگی بهبود پیام‌های خطای رایج Rust است، بدون شکستن
+تضمین‌های پایداری، نیاز به تغییر در کد منبع کاربر نهایی، تکیه بر
+اطلاعات دیباگ وابسته به پلتفرم، یا محروم کردن نوع‌های تعریف‌شده توسط کاربر از همین مزایای گزارش خطا.</p>
+<p>بهبود خروجی این panicها دست‌کم از اواسط ۲۰۱۶ هدف پیشنهادها بوده است (برای جزئیات
+<a href="https://github.com/rust-lang/rfcs/blob/master/text/2091-inline-semantic.md#non-viable-alternatives">جایگزین‌های ناممکن</a> را در RFC تأییدشده ببینید).
+دو سال دیگر طول کشید تا RFC 2091 تأیید شود،
+و بخش بزرگی از <a href="https://github.com/rust-lang/rfcs/blob/master/text/2091-inline-semantic.md#rationale">استدلال</a> طراحی این ویژگی در بحث پیرامون چند پیشنهاد پیشین کشف شده بود.</p>
+<p>طراحی در RFC اصلی خود را به پیاده‌سازی‌هایی محدود کرد که در آن زمان می‌شد
+بدون بازآرایی چشمگیر درون کامپایلر انجام داد.
+اما در یک سال و نیم میان تأیید RFC و کار پیاده‌سازی واقعی،
+یک <a href="https://github.com/rust-lang/rust/issues/47809#issuecomment-443538059">طراحی بازنگری‌شده</a> پیشنهاد و در tracking issue نوشته شد.
+در جریان پیاده‌سازی آن، همچنین کشف شد که
+پیاده‌سازی بدون تغییر تعداد آرگومان‌ها در MIR یک تابع ممکن است، که
+مراحل بعدی را ساده می‌کند و استفاده در صفت‌ها را ممکن می‌سازد.</p>
+<p>چون راهبرد پیاده‌سازی RFC نمی‌توانست به‌آسانی از صفت‌ها پشتیبانی کند، معناشناسی در ابتدا
+مشخص نشد.
+از آن زمان بر اساس مسیری پیاده‌سازی شده‌اند که از نظر
+نویسنده و بازبین‌ها درست‌تر به نظر می‌رسید.</p><nav class="page-nav"><a href="backend-agnostic.html">→ تولید کد مستقل از بک‌اند</a><a href="../debuginfo/intro.html">اطلاعات اشکال‌زدایی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

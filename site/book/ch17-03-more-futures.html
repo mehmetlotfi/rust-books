@@ -1,0 +1,301 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>کار با هر تعداد future — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch17-03-more-futures"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><!-- Old headings. Do not remove or links may break. -->
+<p><a id="yielding"></a></p>
+<h3 id="yielding-control-to-the-runtime"><a class="header" href="#yielding-control-to-the-runtime">واگذاری کنترل به محیط اجرا</a></h3>
+<p>از بخش <a href="ch17-01-futures-and-syntax.html#our-first-async-program">«نخستین برنامهٔ async ما»</a><!-- ignore --> به یاد بیاورید که در هر نقطهٔ await، اگر future مورد انتظار آماده نباشد، Rust به runtime فرصت می‌دهد task را متوقف کند و به task دیگری برود. عکس این موضوع هم درست است: Rust <em>فقط</em> در نقطهٔ await بلوک‌های async را متوقف می‌کند و کنترل را به runtime بازمی‌گرداند. همه‌چیز میان نقاط await همگام است.</p>
+<p>پس اگر در یک بلوک async بدون هیچ نقطهٔ await کار زیادی انجام دهید، آن Future جلوی پیشرفت Futureهای دیگر را می‌گیرد. گاهی گفته می‌شود یک Future، Futureهای دیگر را <em>گرسنه</em> می‌کند. در بعضی موارد این مسئله چندان مهم نیست. اما اگر آماده‌سازی پرهزینه یا کاری طولانی انجام می‌دهید، یا Futureای دارید که کاری مشخص را بی‌پایان ادامه می‌دهد، باید به زمان و محل بازگرداندن کنترل به محیط اجرا بیندیشید.</p>
+<p>برای نمایش مشکل گرسنگی، ابتدا عملیاتی طولانی را شبیه‌سازی و سپس راه‌حل آن را بررسی می‌کنیم. فهرست ۱۷-۱۴ تابعی به نام <code>slow</code> معرفی می‌کند.</p>
+<figure class="listing" id="listing-17-14">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span><span class="boring">use std::{thread, time::Duration};
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    trpl::block_on(async {
+</span><span class="boring">        // We will call `slow` here later
+</span><span class="boring">    });
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn slow(name: &amp;str, ms: u64) {
+    thread::sleep(Duration::from_millis(ms));
+    println!("'{name}' ran for {ms}ms");
+}</code></pre>
+<figcaption><a href="#listing-17-14">لیست ۱۷-۱۴</a>: استفاده از &lt;code&gt;&lt;/x-listing&gt;thread::sleep&lt;/code&gt; برای شبیه‌سازی عملیات کند</figcaption>
+</figure>
+<p>این کد به‌جای <code>trpl::sleep</code> از <code>std::thread::sleep</code> استفاده می‌کند تا فراخوانی <code>slow</code> نخ جاری را برای چند میلی‌ثانیه مسدود کند. می‌توانیم <code>slow</code> را نمایندهٔ عملیات واقعیِ طولانی و مسدودکننده در نظر بگیریم.</p>
+<p>در فهرست ۱۷-۱۵ با <code>slow</code> انجام این نوع کار مقید به CPU را در یک جفت Future شبیه‌سازی می‌کنیم.</p>
+<figure class="listing" id="listing-17-15">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span><span class="boring">use std::{thread, time::Duration};
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    trpl::block_on(async {
+</span>        let a = async {
+            println!("'a' started.");
+            slow("a", 30);
+            slow("a", 10);
+            slow("a", 20);
+            trpl::sleep(Duration::from_millis(50)).await;
+            println!("'a' finished.");
+        };
+
+        let b = async {
+            println!("'b' started.");
+            slow("b", 75);
+            slow("b", 10);
+            slow("b", 15);
+            slow("b", 350);
+            trpl::sleep(Duration::from_millis(50)).await;
+            println!("'b' finished.");
+        };
+
+        trpl::select(a, b).await;
+<span class="boring">    });
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">fn slow(name: &amp;str, ms: u64) {
+</span><span class="boring">    thread::sleep(Duration::from_millis(ms));
+</span><span class="boring">    println!("'{name}' ran for {ms}ms");
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-17-15">لیست ۱۷-۱۵</a>: فراخوانی تابع &lt;code&gt;&lt;/x-listing&gt;slow&lt;/code&gt; برای شبیه‌سازی عملیات کند</figcaption>
+</figure>
+<p>هر Future فقط <em>پس از</em> انجام چند عملیات کند، کنترل را به محیط اجرا بازمی‌گرداند. با اجرای این کد خروجی زیر را می‌بینید:</p>
+<!-- manual-regeneration
+cd listings/ch17-async-await/listing-17-15/
+cargo run
+copy just the output
+-->
+<pre><code class="language-text">'a' started.
+'a' ran for 30ms
+'a' ran for 10ms
+'a' ran for 20ms
+'b' started.
+'b' ran for 75ms
+'b' ran for 10ms
+'b' ran for 15ms
+'b' ran for 350ms
+'a' finished.
+</code></pre>
+<p>مانند فهرست ۱۷-۵ که در آن با <code>trpl::select</code>، Futureهای دریافت‌کنندهٔ دو URL را با هم مسابقه دادیم، اینجا نیز <code>select</code> به‌محض پایان <code>a</code> تمام می‌شود. بااین‌حال، فراخوانی‌های <code>slow</code> در دو Future با هم درنمی‌آمیزند. Future با نام <code>a</code> همهٔ کارش را تا انتظار روی <code>trpl::sleep</code> انجام می‌دهد، سپس Future با نام <code>b</code> تمام کارش را تا انتظار روی <code>trpl::sleep</code> خودش پیش می‌برد و سرانجام Future با نام <code>a</code> کامل می‌شود. برای آنکه هر دو Future میان کارهای کند خود پیشرفت کنند، به نقاط await نیاز داریم تا کنترل را به محیط اجرا بازگردانیم. بنابراین به چیزی نیاز داریم که بتوانیم منتظرش بمانیم!</p>
+<p>این واگذاری را از همین حالا در فهرست ۱۷-۱۵ می‌بینیم: اگر <code>trpl::sleep</code> انتهای Future با نام <code>a</code> را حذف کنیم، <code>a</code> بدون آنکه Future با نام <code>b</code> <em>اصلاً</em> اجرا شود کامل خواهد شد. در فهرست ۱۷-۱۶، تابع <code>trpl::sleep</code> را نقطهٔ شروعی برای جابه‌جایی پیشرفت عملیات قرار می‌دهیم.</p>
+<figure class="listing" id="listing-17-16">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span><span class="boring">use std::{thread, time::Duration};
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    trpl::block_on(async {
+</span>        let one_ms = Duration::from_millis(1);
+
+        let a = async {
+            println!("'a' started.");
+            slow("a", 30);
+            trpl::sleep(one_ms).await;
+            slow("a", 10);
+            trpl::sleep(one_ms).await;
+            slow("a", 20);
+            trpl::sleep(one_ms).await;
+            println!("'a' finished.");
+        };
+
+        let b = async {
+            println!("'b' started.");
+            slow("b", 75);
+            trpl::sleep(one_ms).await;
+            slow("b", 10);
+            trpl::sleep(one_ms).await;
+            slow("b", 15);
+            trpl::sleep(one_ms).await;
+            slow("b", 350);
+            trpl::sleep(one_ms).await;
+            println!("'b' finished.");
+        };
+<span class="boring">
+</span><span class="boring">        trpl::select(a, b).await;
+</span><span class="boring">    });
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">fn slow(name: &amp;str, ms: u64) {
+</span><span class="boring">    thread::sleep(Duration::from_millis(ms));
+</span><span class="boring">    println!("'{name}' ran for {ms}ms");
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-17-16">لیست ۱۷-۱۶</a>: استفاده از &lt;code&gt;&lt;/x-listing&gt;trpl::sleep&lt;/code&gt; برای جابه‌جایی پیشرفت عملیات</figcaption>
+</figure>
+<p>میان هر فراخوانی <code>slow</code>، فراخوانی‌های <code>trpl::sleep</code> همراه با نقاط await افزوده‌ایم. اکنون کار دو Future در هم می‌آمیزد:</p>
+<!-- manual-regeneration
+cd listings/ch17-async-await/listing-17-16
+cargo run
+copy just the output
+-->
+<pre><code class="language-text">'a' started.
+'a' ran for 30ms
+'b' started.
+'b' ran for 75ms
+'a' ran for 10ms
+'b' ran for 10ms
+'a' ran for 20ms
+'b' ran for 15ms
+'a' finished.
+</code></pre>
+<p>Future با نام <code>a</code> هنوز پیش از واگذاری کنترل به <code>b</code> کمی اجرا می‌شود، زیرا پیش از نخستین فراخوانی <code>trpl::sleep</code>، تابع <code>slow</code> را فرا می‌خواند. پس از آن، هر بار یکی از Futureها به نقطهٔ await می‌رسد، دو Future جای خود را عوض می‌کنند. اینجا پس از هر فراخوانی <code>slow</code> چنین کرده‌ایم، اما می‌توانیم کار را به هر روشی که منطقی‌تر است تقسیم کنیم.</p>
+<p>بااین‌حال، اینجا واقعاً نمی‌خواهیم <em>بخوابیم</em>؛ می‌خواهیم با بیشترین سرعت پیشرفت کنیم و فقط لازم است کنترل را به محیط اجرا پس بدهیم. با تابع <code>trpl::yield_now</code> می‌توانیم مستقیماً چنین کنیم. در فهرست ۱۷-۱۷ همهٔ فراخوانی‌های <code>trpl::sleep</code> را با <code>trpl::yield_now</code> جایگزین می‌کنیم.</p>
+<figure class="listing" id="listing-17-17">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span><span class="boring">use std::{thread, time::Duration};
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    trpl::block_on(async {
+</span>        let a = async {
+            println!("'a' started.");
+            slow("a", 30);
+            trpl::yield_now().await;
+            slow("a", 10);
+            trpl::yield_now().await;
+            slow("a", 20);
+            trpl::yield_now().await;
+            println!("'a' finished.");
+        };
+
+        let b = async {
+            println!("'b' started.");
+            slow("b", 75);
+            trpl::yield_now().await;
+            slow("b", 10);
+            trpl::yield_now().await;
+            slow("b", 15);
+            trpl::yield_now().await;
+            slow("b", 350);
+            trpl::yield_now().await;
+            println!("'b' finished.");
+        };
+<span class="boring">
+</span><span class="boring">        trpl::select(a, b).await;
+</span><span class="boring">    });
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">fn slow(name: &amp;str, ms: u64) {
+</span><span class="boring">    thread::sleep(Duration::from_millis(ms));
+</span><span class="boring">    println!("'{name}' ran for {ms}ms");
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-17-17">لیست ۱۷-۱۷</a>: استفاده از &lt;code&gt;&lt;/x-listing&gt;yield_now&lt;/code&gt; برای جابه‌جایی پیشرفت عملیات</figcaption>
+</figure>
+<p>این کد هم مقصود واقعی را روشن‌تر بیان می‌کند و هم ممکن است به‌طور چشمگیری از <code>sleep</code> سریع‌تر باشد، زیرا زمان‌سنج‌هایی مانند نمونهٔ مورداستفادهٔ <code>sleep</code> اغلب در ریزدانگی محدودیت دارند. برای نمونه، نسخهٔ <code>sleep</code> مورداستفادهٔ ما همیشه دست‌کم یک میلی‌ثانیه می‌خوابد، حتی اگر <code>Duration</code> یک نانوثانیه‌ای به آن بدهیم. باز هم باید گفت رایانه‌های امروزی <em>سریع‌اند</em>: در یک میلی‌ثانیه کارهای فراوانی انجام می‌دهند!</p>
+<p>پس بسته به دیگر کارهای برنامه، async حتی برای وظایف مقید به محاسبه نیز سودمند است؛ زیرا ابزاری مناسب برای ساختاربندی رابطهٔ بخش‌های مختلف برنامه فراهم می‌کند، هرچند سربار ماشین حالت async را نیز دارد. این شکلی از <em>چندکارگی مشارکتی</em> است که در آن هر Future با نقاط await زمان واگذاری کنترل را تعیین می‌کند. در نتیجه هر Future مسئولیت دارد بیش از حد طولانی مسدود نماند. در بعضی سیستم‌عامل‌های نهفتهٔ مبتنی بر Rust، این <em>تنها</em> نوع چندکارگی است!</p>
+<p>البته در کد واقعی معمولاً فراخوانی تابع و نقطهٔ await را یکی‌درمیان روی تک‌تک خط‌ها نمی‌نویسید. واگذاری کنترل به این روش نسبتاً کم‌هزینه است، اما رایگان نیست. در بسیاری موارد، تلاش برای تقسیم یک کار مقید به محاسبه ممکن است آن را بسیار کندتر کند؛ بنابراین گاهی برای کارایی <em>کلی</em> بهتر است عملیات برای مدت کوتاهی مسدود بماند. همیشه اندازه‌گیری کنید تا گلوگاه‌های واقعی کارایی کدتان را بیابید. بااین‌حال، اگر انتظار اجرای هم‌روند دارید اما کارهای زیادی به‌ترتیب انجام می‌شوند، این پویایی زیربنایی را به یاد داشته باشید.</p>
+<h3 id="building-our-own-async-abstractions"><a class="header" href="#building-our-own-async-abstractions">ساختن انتزاع‌های Async خودمان</a></h3>
+<p>می‌توانیم Futureها را با هم ترکیب و الگوهای تازه‌ای ایجاد کنیم. برای نمونه، با اجزای سازندهٔ async که از قبل داریم می‌توانیم تابع <code>timeout</code> بسازیم. نتیجهٔ کار خود یک جزء سازندهٔ دیگر خواهد بود که می‌توانیم با آن انتزاع‌های async بیشتری بسازیم.</p>
+<p>فهرست ۱۷-۱۸ رفتار مورد انتظار <code>timeout</code> با یک Future کند را نشان می‌دهد.</p>
+<figure class="listing" id="listing-17-18">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span><span class="boring">use std::time::Duration;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    trpl::block_on(async {
+</span>        let slow = async {
+            trpl::sleep(Duration::from_secs(5)).await;
+            "Finally finished"
+        };
+
+        match timeout(slow, Duration::from_secs(2)).await {
+            Ok(message) =&gt; println!("Succeeded with '{message}'"),
+            Err(duration) =&gt; {
+                println!("Failed after {} seconds", duration.as_secs())
+            }
+        }
+<span class="boring">    });
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-17-18">لیست ۱۷-۱۸</a>: استفاده از &lt;code&gt;&lt;/x-listing&gt;timeout&lt;/code&gt; فرضی برای اجرای عملیات کند با محدودیت زمانی</figcaption>
+</figure>
+<p>بیایید آن را پیاده‌سازی کنیم! نخست دربارهٔ API تابع <code>timeout</code> بیندیشیم:</p>
+<ul>
+<li>خود تابع باید async باشد تا بتوانیم منتظرش بمانیم.</li>
+<li>پارامتر نخست باید Future مورد اجرا باشد. آن را عمومی می‌کنیم تا با هر Futureای کار کند.</li>
+<li>پارامتر دوم بیشترین زمان انتظار است. استفاده از <code>Duration</code> فرستادن آن به <code>trpl::sleep</code> را آسان می‌کند.</li>
+<li>تابع باید یک <code>Result</code> بازگرداند. اگر Future با موفقیت کامل شود، <code>Result</code> از نوع <code>Ok</code> و شامل مقدار تولیدشدهٔ Future خواهد بود. اگر مهلت زودتر تمام شود، <code>Result</code> از نوع <code>Err</code> و شامل مدت انتظار تعیین‌شده خواهد بود.</li>
+</ul>
+<p>فهرست ۱۷-۱۹ این اعلان را نشان می‌دهد.</p>
+<!-- This is not tested because it intentionally does not compile. -->
+<figure class="listing" id="listing-17-19">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span><span class="boring">use std::time::Duration;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    trpl::block_on(async {
+</span><span class="boring">        let slow = async {
+</span><span class="boring">            trpl::sleep(Duration::from_secs(5)).await;
+</span><span class="boring">            "Finally finished"
+</span><span class="boring">        };
+</span><span class="boring">
+</span><span class="boring">        match timeout(slow, Duration::from_secs(2)).await {
+</span><span class="boring">            Ok(message) =&gt; println!("Succeeded with '{message}'"),
+</span><span class="boring">            Err(duration) =&gt; {
+</span><span class="boring">                println!("Failed after {} seconds", duration.as_secs())
+</span><span class="boring">            }
+</span><span class="boring">        }
+</span><span class="boring">    });
+</span><span class="boring">}
+</span><span class="boring">
+</span>async fn timeout&lt;F: Future&gt;(
+    future_to_try: F,
+    max_time: Duration,
+) -&gt; Result&lt;F::Output, Duration&gt; {
+    // Here is where our implementation will go!
+}</code></pre>
+<figcaption><a href="#listing-17-19">لیست ۱۷-۱۹</a>: تعریف امضای &lt;code&gt;&lt;/x-listing&gt;timeout&lt;/code&gt;</figcaption>
+</figure>
+<p>این تعریف هدف‌های نوعی ما را برآورده می‌کند. اکنون به <em>رفتار</em> لازم فکر کنیم: می‌خواهیم Future ورودی را با مدت‌زمان مسابقه دهیم. با <code>trpl::sleep</code> می‌توانیم از مدت‌زمان یک Future زمان‌سنج بسازیم و با <code>trpl::select</code> زمان‌سنج را همراه با Future داده‌شده از سوی فراخواننده اجرا کنیم.</p>
+<p>در فهرست ۱۷-۲۰ با تطبیق روی نتیجهٔ انتظار برای <code>trpl::select</code>، تابع <code>timeout</code> را پیاده‌سازی می‌کنیم.</p>
+<figure class="listing" id="listing-17-20">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">extern crate trpl; // required for mdbook test
+</span><span class="boring">
+</span><span class="boring">use std::time::Duration;
+</span><span class="boring">
+</span>use trpl::Either;
+
+// --snip--
+
+<span class="boring">fn main() {
+</span><span class="boring">    trpl::block_on(async {
+</span><span class="boring">        let slow = async {
+</span><span class="boring">            trpl::sleep(Duration::from_secs(5)).await;
+</span><span class="boring">            "Finally finished"
+</span><span class="boring">        };
+</span><span class="boring">
+</span><span class="boring">        match timeout(slow, Duration::from_secs(2)).await {
+</span><span class="boring">            Ok(message) =&gt; println!("Succeeded with '{message}'"),
+</span><span class="boring">            Err(duration) =&gt; {
+</span><span class="boring">                println!("Failed after {} seconds", duration.as_secs())
+</span><span class="boring">            }
+</span><span class="boring">        }
+</span><span class="boring">    });
+</span><span class="boring">}
+</span><span class="boring">
+</span>async fn timeout&lt;F: Future&gt;(
+    future_to_try: F,
+    max_time: Duration,
+) -&gt; Result&lt;F::Output, Duration&gt; {
+    match trpl::select(future_to_try, trpl::sleep(max_time)).await {
+        Either::Left(output) =&gt; Ok(output),
+        Either::Right(_) =&gt; Err(max_time),
+    }
+}</code></pre>
+<figcaption><a href="#listing-17-20">لیست ۱۷-۲۰</a>: تعریف &lt;code&gt;&lt;/x-listing&gt;timeout&lt;/code&gt; با &lt;code&gt;select&lt;/code&gt; و &lt;code&gt;sleep&lt;/code&gt;</figcaption>
+</figure>
+<p>پیاده‌سازی <code>trpl::select</code> منصفانه نیست و آرگومان‌ها را همیشه به ترتیب ورود poll می‌کند؛ پیاده‌سازی‌های دیگر <code>select</code> ممکن است آرگومان نخست را تصادفی انتخاب کنند. بنابراین <code>future_to_try</code> را نخست به <code>select</code> می‌دهیم تا حتی اگر <code>max_time</code> بسیار کوتاه باشد، فرصت کامل‌شدن داشته باشد. اگر <code>future_to_try</code> نخست پایان یابد، <code>select</code> مقدار <code>Left</code> را با خروجی <code>future_to_try</code> بازمی‌گرداند. اگر <code>timer</code> نخست تمام شود، <code>select</code> مقدار <code>Right</code> را با خروجی <code>()</code> زمان‌سنج بازمی‌گرداند.</p>
+<p>اگر <code>future_to_try</code> موفق شود و <code>Left(output)</code> بگیریم، <code>Ok(output)</code> را بازمی‌گردانیم. اگر زمان‌سنج خواب زودتر تمام شود و <code>Right(())</code> بگیریم، <code>()</code> را با <code>_</code> نادیده می‌گیریم و به‌جای آن <code>Err(max_time)</code> را بازمی‌گردانیم.</p>
+<p>اکنون یک <code>timeout</code> کاربردی داریم که از دو ابزار async دیگر ساخته شده است. با اجرای کد، پس از پایان مهلت حالت شکست چاپ می‌شود:</p>
+<pre><code class="language-text">Failed after 2 seconds
+</code></pre>
+<p>چون Futureها با Futureهای دیگر ترکیب می‌شوند، می‌توانید با اجزای کوچک async ابزارهایی بسیار قدرتمند بسازید. برای نمونه، با همین رویکرد می‌توان مهلت‌های زمانی را با تلاش مجدد ترکیب کرد و سپس آن‌ها را همراه عملیاتی مانند فراخوانی شبکه ــ مانند موارد فهرست ۱۷-۵ ــ به کار برد.</p>
+<p>در عمل بیشتر مستقیماً با <code>async</code> و <code>await</code> کار می‌کنید و در درجهٔ دوم با توابعی مانند <code>select</code> و ماکروهایی مانند <code>join!</code> شیوهٔ اجرای بیرونی‌ترین Futureها را کنترل می‌کنید.</p>
+<p>اکنون چندین روش کار هم‌زمان با چند Future را دیده‌ایم. در ادامه می‌بینیم چگونه می‌توانیم با <em>Streamها</em> روی چند Future در یک دنبالهٔ زمانی کار کنیم.</p><nav class="page-nav"><a href="ch17-02-concurrency-with-async.html">→ به‌کارگیری همروندی با async</a><a href="ch17-04-streams.html">Streamها: Futureها به‌صورت دنباله‌ای ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

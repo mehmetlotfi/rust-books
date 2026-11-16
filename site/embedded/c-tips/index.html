@@ -1,0 +1,215 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>نکاتی برای توسعه‌دهندگان C نهفته — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="c-tips/index"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="tips-for-embedded-c-developers"><a class="header" href="#tips-for-embedded-c-developers">نکاتی برای توسعه‌دهندگان C نهفته</a></h1>
+<p>این فصل مجموعه‌ای از نکات گوناگون را گرد آورده است که ممکن است برای توسعه‌دهندگان باتجربهٔ C نهفته که می‌خواهند نوشتن Rust را آغاز کنند مفید باشد. تأکید ویژهٔ آن بر این است که چیزهایی که شاید در C به آن‌ها عادت کرده باشید، در Rust چه تفاوتی دارند.</p>
+<h2 id="preprocessor"><a class="header" href="#preprocessor">پیش‌پردازنده</a></h2>
+<p>در C نهفته استفاده از پیش‌پردازنده (preprocessor) برای مقاصد گوناگون بسیار رایج است، مانند:</p>
+<ul>
+<li>انتخاب بلوک‌های کد در زمان کامپایل با <code>#ifdef</code></li>
+<li>اندازه‌ها و محاسبات آرایه در زمان کامپایل</li>
+<li>ماکروهایی برای ساده‌کردن الگوهای رایج (برای پرهیز از سربار فراخوانی تابع)</li>
+</ul>
+<p>در Rust پیش‌پردازنده وجود ندارد و به همین دلیل بسیاری از این موارد استفاده به شیوه‌ای دیگر پوشش داده می‌شوند. در ادامهٔ این بخش جایگزین‌های مختلفی را برای استفاده از پیش‌پردازنده بررسی می‌کنیم.</p>
+<h3 id="compile-time-code-selection"><a class="header" href="#compile-time-code-selection">انتخاب کد در زمان کامپایل</a></h3>
+<p>نزدیک‌ترین معادل <code>#ifdef ... #endif</code> در Rust، <a href="../../cargo/reference/manifest.html">featureهای Cargo</a> هستند. این featureها از پیش‌پردازندهٔ C کمی رسمی‌تر هستند: همهٔ featureهای ممکن برای هر crate به‌صراحت فهرست می‌شوند و تنها می‌توانند روشن یا خاموش باشند. featureها هنگامی روشن می‌شوند که یک crate را به‌عنوان وابستگی فهرست می‌کنید و جمع‌پذیرند: اگر هر crate در درخت وابستگی‌های شما یک feature را برای crate دیگری فعال کند، آن feature برای همهٔ کاربران آن crate فعال خواهد شد.</p>
+<p>برای مثال، ممکن است crateای داشته باشید که کتابخانه‌ای از اجزای پایهٔ پردازش سیگنال فراهم می‌کند. هر کدام از این اجزا ممکن است زمان کامپایل بیشتری بگیرد یا جدول بزرگی از ثابت‌ها اعلام کند که دوست دارید از آن پرهیز کنید. می‌توانید برای هر جزء یک feature در <code>Cargo.toml</code> خود اعلام کنید:</p>
+<pre><code class="language-toml">[features]
+FIR = []
+IIR = []
+</code></pre>
+<p>سپس در کد خود از <code>#[cfg(feature="FIR")]</code> برای کنترل آنچه شامل می‌شود استفاده کنید.</p>
+<pre><code class="language-rust">/// In your top-level lib.rs
+
+#[cfg(feature="FIR")]
+pub mod fir;
+
+#[cfg(feature="IIR")]
+pub mod iir;</code></pre>
+<p>به‌طور مشابه می‌توانید بلوک‌های کد را فقط در صورتی شامل کنید که یک feature فعال <em>نباشد</em>، یا هر ترکیبی از featureهای فعال و غیرفعال برقرار باشد.</p>
+<p>افزون بر این، Rust تعدادی شرط خودکار فراهم می‌کند که می‌توانید از آن‌ها استفاده کنید، مانند <code>target_arch</code> برای انتخاب کدهای متفاوت بر اساس معماری. برای جزئیات کامل پشتیبانی از کامپایل شرطی، به فصل <a href="../../reference/conditional-compilation.html">کامپایل شرطی</a> در مرجع Rust مراجعه کنید.</p>
+<p>کامپایل شرطی فقط بر دستور یا بلوک بعدی اعمال می‌شود. اگر در دامنهٔ فعلی نتوان از بلوک استفاده کرد، attribute <code>cfg</code> باید چندین بار به کار برود. شایان ذکر است که در بیشتر موارد بهتر است همهٔ کد را شامل کنید و بگذارید کامپایلر هنگام بهینه‌سازی کد مرده را حذف کند: این کار برای شما و کاربرانتان ساده‌تر است و معمولاً کامپایلر در حذف کدهای استفاده‌نشده خوب عمل می‌کند.</p>
+<h3 id="compile-time-sizes-and-computation"><a class="header" href="#compile-time-sizes-and-computation">اندازه‌ها و محاسبات در زمان کامپایل</a></h3>
+<p>Rust از <code>const fn</code> پشتیبانی می‌کند: توابعی که تضمین می‌شود در زمان کامپایل قابل ارزیابی هستند و بنابراین می‌توان در جاهایی که ثابت لازم است، مانند اندازهٔ آرایه‌ها، از آن‌ها استفاده کرد. این قابلیت را می‌توان همراه featureهای یادشده به کار برد، برای مثال:</p>
+<pre><code class="language-rust">const fn array_size() -&gt; usize {
+    #[cfg(feature="use_more_ram")]
+    { 1024 }
+    #[cfg(not(feature="use_more_ram"))]
+    { 128 }
+}
+
+static BUF: [u32; array_size()] = [0u32; array_size()];</code></pre>
+<p>این قابلیت‌ها از نسخهٔ 1.31 به Rust پایدار (stable) افزوده شده‌اند، بنابراین مستندات آن‌ها هنوز اندک است. قابلیت‌های در دسترس <code>const fn</code> نیز در زمان نگارش بسیار محدود است؛ انتظار می‌رود در نسخه‌های آیندهٔ Rust آنچه در <code>const fn</code> مجاز است گسترش یابد.</p>
+<h3 id="macros"><a class="header" href="#macros">ماکروها</a></h3>
+<p>Rust یک <a href="https://doc.rust-lang.org/book/ch19-06-macros.html">سامانهٔ ماکرو</a> بسیار قدرتمند فراهم می‌کند. در حالی که پیش‌پردازندهٔ C تقریباً مستقیماً روی متن کد منبع شما کار می‌کند، سامانهٔ ماکروی Rust در سطحی بالاتر عمل می‌کند. دو گونه ماکروی Rust وجود دارد: <em>ماکروهای مبتنی بر مثال</em> (macros by example) و <em>ماکروهای رویه‌ای</em> (procedural macros). گونهٔ نخست ساده‌تر و رایج‌تر است؛ شبیه فراخوانی تابع به نظر می‌رسد و می‌تواند به یک عبارت، دستور، آیتم یا الگوی کامل گسترش یابد. ماکروهای رویه‌ای پیچیده‌ترند اما افزودن قابلیت‌های بسیار قدرتمند به زبان Rust را ممکن می‌کنند: آن‌ها می‌توانند نحو دلخواه Rust را به نحو جدیدی از Rust تبدیل کنند.</p>
+<p>به‌طور کلی، هرجا ممکن بود از یک ماکروی پیش‌پردازندهٔ C استفاده کنید، احتمالاً بهتر است ببینید آیا یک ماکروی مبتنی بر مثال می‌تواند همان کار را انجام دهد. این ماکروها را می‌توان در crate خودتان تعریف کرد و به‌سادگی در همان crate استفاده یا برای کاربران دیگر صادر کرد. توجه داشته باشید که چون آن‌ها باید به عبارت، دستور، آیتم یا الگوی کامل گسترش یابند، برخی موارد استفاده از ماکروهای پیش‌پردازندهٔ C کار نخواهند کرد؛ برای مثال ماکرویی که به بخشی از نام یک متغیر یا مجموعه‌ای ناقص از آیتم‌ها در یک فهرست گسترش می‌یابد.</p>
+<p>مانند featureهای Cargo، ارزش دارد که بررسی کنید اصلاً به ماکرو نیاز دارید یا نه. در بسیاری از موارد یک تابع معمولی آسان‌تر فهمیده می‌شود و به همان کدی inline می‌شود که ماکرو تولید می‌کرد. <a href="../../reference/attributes.html">attributeهای</a> <code>#[inline]</code> و <code>#[inline(always)]</code> کنترل بیشتری بر این فرایند به شما می‌دهند، هرچند در اینجا نیز باید احتیاط کرد — کامپایلر به‌طور خودکار توابع هم‌crate را در جاهای مناسب inline می‌کند، بنابراین مجبور کردن آن به inline کردن در جای نامناسب ممکن است در واقع به کاهش کارایی بینجامد.</p>
+<p>توضیح کامل سامانهٔ ماکروی Rust از حوصلهٔ این صفحهٔ نکات خارج است، بنابراین توصیه می‌شود برای جزئیات کامل به مستندات Rust مراجعه کنید.</p>
+<h2 id="build-system"><a class="header" href="#build-system">سامانهٔ ساخت</a></h2>
+<p>بیشتر crateهای Rust با Cargo ساخته می‌شوند (هرچند الزامی نیست). Cargo بسیاری از مشکلات دشوار سامانه‌های ساخت سنتی را حل می‌کند. با این حال ممکن است بخواهید فرایند ساخت را سفارشی کنید. Cargo برای این منظور <a href="../../cargo/reference/build-scripts.html">اسکریپت‌های <code>build.rs</code></a> را فراهم می‌کند. این‌ها اسکریپت‌های Rust هستند که در صورت نیاز می‌توانند با سامانهٔ ساخت Cargo تعامل داشته باشند.</p>
+<p>موارد استفادهٔ رایج اسکریپت‌های ساخت عبارت‌اند از:</p>
+<ul>
+<li>فراهم‌کردن اطلاعات زمان ساخت، برای مثال درج ایستای تاریخ ساخت یا هش commit در Git درون فایل اجرایی شما</li>
+<li>تولید اسکریپت‌های لینکر (linker) در زمان ساخت، بسته به featureهای انتخاب‌شده یا منطق دیگر</li>
+<li>تغییر پیکربندی ساخت Cargo</li>
+<li>افزودن کتابخانه‌های ایستای اضافی برای پیوند (link) شدن</li>
+</ul>
+<p>در حال حاضر از اسکریپت‌های پس از ساخت (post-build) پشتیبانی نمی‌شود؛ اسکریپت‌هایی که شاید به‌طور سنتی برای کارهایی مانند تولید خودکار فایل‌های باینری از اشیای ساخت یا چاپ اطلاعات ساخت از آن‌ها استفاده می‌کردید.</p>
+<h3 id="cross-compiling"><a class="header" href="#cross-compiling">کامپایل متقابل</a></h3>
+<p>استفاده از Cargo به‌عنوان سامانهٔ ساخت، کامپایل متقابل (cross-compiling) را نیز ساده می‌کند. در بیشتر موارد کافی است <code>--target thumbv6m-none-eabi</code> را به Cargo بدهید و فایل اجرایی مناسب را در <code>target/thumbv6m-none-eabi/debug/myapp</code> پیدا کنید.</p>
+<p>برای پلتفرم‌هایی که Rust به‌طور بومی از آن‌ها پشتیبانی نمی‌کند، باید خودتان <code>libcore</code> را برای آن هدف بسازید. در چنین پلتفرم‌هایی می‌توان از <a href="https://github.com/japaric/xargo">Xargo</a> به‌جای Cargo استفاده کرد که <code>libcore</code> را به‌طور خودکار برای شما می‌سازد.</p>
+<h2 id="iterators-vs-array-access"><a class="header" href="#iterators-vs-array-access">iteratorها در برابر دسترسی به آرایه</a></h2>
+<p>در C احتمالاً به دسترسی مستقیم به آرایه‌ها با اندیس آن‌ها عادت دارید:</p>
+<pre><code class="language-c">int16_t arr[16];
+int i;
+for(i=0; i&lt;sizeof(arr)/sizeof(arr[0]); i++) {
+    process(arr[i]);
+}
+</code></pre>
+<p>در Rust این کار یک ضدالگو (anti-pattern) است: دسترسی با اندیس می‌تواند کندتر باشد (چون باید مرزها بررسی شوند) و ممکن است از بهینه‌سازی‌های مختلف کامپایلر جلوگیری کند. این تفاوت مهمی است و ارزش تکرار دارد: Rust برای تضمین ایمنی حافظه، دسترسی خارج از محدوده را هنگام اندیس‌گذاری دستی آرایه بررسی می‌کند، در حالی که C با کمال میل بیرون از آرایه اندیس می‌زند.</p>
+<p>به‌جای آن از iteratorها استفاده کنید:</p>
+<pre><code class="language-rust ignore">let arr = [0u16; 16];
+for element in arr.iter() {
+    process(*element);
+}</code></pre>
+<p>iteratorها مجموعهٔ قدرتمندی از قابلیت‌ها را فراهم می‌کنند که در C باید خودتان به‌صورت دستی پیاده‌شان کنید، مانند زنجیره‌کردن (chaining)، zip‌کردن، شمارش‌گذاری (enumerating)، یافتن کمینه یا بیشینه، جمع‌زدن و موارد دیگر. متدهای iterator را نیز می‌توان زنجیر کرد و کدی بسیار خوانا برای پردازش داده نوشت.</p>
+<p>برای جزئیات بیشتر <a href="../../book/ch13-02-iterators.html">تکرارگرها در کتاب</a> و <a href="https://doc.rust-lang.org/core/iter/trait.Iterator.html">مستندات Iterator</a> را ببینید.</p>
+<h2 id="references-vs-pointers"><a class="header" href="#references-vs-pointers">ارجاع‌ها در برابر اشاره‌گرها</a></h2>
+<p>در Rust اشاره‌گرها (که <a href="https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html#dereferencing-a-raw-pointer"><em>اشاره‌گرهای خام</em></a> نامیده می‌شوند) وجود دارند اما فقط در شرایط خاص به کار می‌روند، زیرا ارجاع‌زدایی از آن‌ها همیشه <code>unsafe</code> به حساب می‌آید – Rust نمی‌تواند تضمین‌های معمول خود را دربارهٔ آنچه پشت اشاره‌گر قرار دارد ارائه دهد.</p>
+<p>در بیشتر موارد به‌جای آن از <em>ارجاع‌ها</em> (references) استفاده می‌کنیم که با نماد <code>&amp;</code> نشان داده می‌شوند، یا <em>ارجاع‌های تغییرپذیر</em> که با <code>&amp;mut</code> نشان داده می‌شوند. ارجاع‌ها از این نظر شبیه اشاره‌گرها رفتار می‌کنند که می‌توان با ارجاع‌زدایی به مقادیر زیرین دسترسی یافت، اما آن‌ها بخش کلیدی سامانهٔ مالکیت Rust هستند: Rust به‌شدت اعمال می‌کند که در هر لحظه برای یک مقدار فقط می‌توانید یک ارجاع تغییرپذیر <em>یا</em> چند ارجاع غیرتغییرپذیر داشته باشید.</p>
+<p>در عمل این یعنی باید بیشتر دقت کنید که آیا به دسترسی تغییرپذیر به داده نیاز دارید یا نه: در C حالت پیش‌فرض تغییرپذیر است و باید <code>const</code> را صریحاً بنویسید، اما در Rust برعکس است.</p>
+<p>یک وضعیت که هنوز ممکن است از اشاره‌گرهای خام استفاده کنید، تعامل مستقیم با سخت‌افزار است (برای مثال نوشتن اشاره‌گر به یک بافر درون ثبات یک پیرامونی DMA)، و همچنین آن‌ها در پشت صحنهٔ همهٔ crateهای دسترسی به پیرامونی به کار می‌روند تا بتوانید ثبات‌های نگاشت‌شده به حافظه را بخوانید و بنویسید.</p>
+<h2 id="volatile-access"><a class="header" href="#volatile-access">دسترسی Volatile</a></h2>
+<p>در C می‌توان متغیرهای منفرد را <code>volatile</code> علامت زد تا به کامپایلر بگوید مقدار متغیر ممکن است بین دسترسی‌ها تغییر کند. متغیرهای volatile معمولاً در زمینهٔ سیستم‌های نهفته برای ثبات‌های نگاشت‌شده به حافظه به کار می‌روند.</p>
+<p>در Rust به‌جای علامت‌زدن یک متغیر به‌عنوان <code>volatile</code>، از متدهای مشخصی برای دسترسی volatile استفاده می‌کنیم: <a href="https://doc.rust-lang.org/core/ptr/fn.read_volatile.html"><code>core::ptr::read_volatile</code></a> و <a href="https://doc.rust-lang.org/core/ptr/fn.write_volatile.html"><code>core::ptr::write_volatile</code></a>. این متدها یک <code>*const T</code> یا <code>*mut T</code> (<em>اشاره‌گرهای خام</em>، همان‌گونه که در بالا گفته شد) می‌گیرند و یک خواندن یا نوشتن volatile انجام می‌دهند.</p>
+<p>برای مثال، در C ممکن است چنین بنویسید:</p>
+<pre><code class="language-c">volatile bool signalled = false;
+
+void ISR() {
+    // Signal that the interrupt has occurred
+    signalled = true;
+}
+
+void driver() {
+    while(true) {
+        // Sleep until signalled
+        while(!signalled) { WFI(); }
+        // Reset signalled indicator
+        signalled = false;
+        // Perform some task that was waiting for the interrupt
+        run_task();
+    }
+}
+</code></pre>
+<p>معادل آن در Rust در هر دسترسی از متدهای volatile استفاده می‌کند:</p>
+<pre><code class="language-rust ignore">static mut SIGNALLED: bool = false;
+
+#[interrupt]
+fn ISR() {
+    // Signal that the interrupt has occurred
+    // (In real code, you should consider a higher level primitive,
+    //  such as an atomic type).
+    unsafe { core::ptr::write_volatile(&amp;mut SIGNALLED, true) };
+}
+
+fn driver() {
+    loop {
+        // Sleep until signalled
+        while unsafe { !core::ptr::read_volatile(&amp;SIGNALLED) } {}
+        // Reset signalled indicator
+        unsafe { core::ptr::write_volatile(&amp;mut SIGNALLED, false) };
+        // Perform some task that was waiting for the interrupt
+        run_task();
+    }
+}</code></pre>
+<p>چند نکته در نمونه کد بالا شایان توجه است:</p>
+<ul>
+<li>می‌توانیم <code>&amp;mut SIGNALLED</code> را به تابعی که <code>*mut T</code> می‌خواهد بدهیم، زیرا <code>&amp;mut T</code> به‌طور خودکار به <code>*mut T</code> تبدیل می‌شود (و همین‌طور برای <code>*const T</code>)</li>
+<li>برای متدهای <code>read_volatile</code>/<code>write_volatile</code> به بلوک‌های <code>unsafe</code> نیاز داریم، زیرا آن‌ها توابع <code>unsafe</code> هستند. مسئولیت اطمینان از استفادهٔ ایمن بر عهدهٔ برنامه‌نویس است: برای جزئیات بیشتر مستندات این متدها را ببینید.</li>
+</ul>
+<p>نیاز مستقیم به این توابع در کد شما نادر است، زیرا معمولاً کتابخانه‌های سطح بالاتر آن‌ها را برایتان مدیریت می‌کنند. برای پیرامونی‌های نگاشت‌شده به حافظه، crateهای دسترسی به پیرامونی دسترسی volatile را به‌طور خودکار پیاده‌سازی می‌کنند، و برای ابزارهای پایهٔ همروندی انتزاع‌های بهتری در دسترس است (فصل <a href="../concurrency/index.html">همروندی</a> را ببینید).</p>
+<h2 id="packed-and-aligned-types"><a class="header" href="#packed-and-aligned-types">نوع‌های فشرده و ترازشده</a></h2>
+<p>در C نهفته معمول است که به کامپایلر بگویند یک متغیر باید تراز (alignment) مشخصی داشته باشد یا یک struct باید به‌جای ترازشده، فشرده (packed) باشد، معمولاً برای برآورده‌کردن الزامات سخت‌افزار یا پروتکل.</p>
+<p>در Rust این موضوع با attribute به نام <code>repr</code> روی یک ساختار یا union کنترل می‌شود. نمایش پیش‌فرض هیچ تضمینی دربارهٔ چیدمان نمی‌دهد، بنابراین نباید برای کدی که با سخت‌افزار یا C تعامل دارد از آن استفاده کرد. کامپایلر ممکن است اعضای ساختار را بازچینی کند یا padding درج کند و این رفتار ممکن است با نسخه‌های آیندهٔ Rust تغییر کند.</p>
+<pre><code class="language-rust">struct Foo {
+    x: u16,
+    y: u8,
+    z: u16,
+}
+
+fn main() {
+    let v = Foo { x: 0, y: 0, z: 0 };
+    println!("{:p} {:p} {:p}", &amp;v.x, &amp;v.y, &amp;v.z);
+}
+
+// 0x7ffecb3511d0 0x7ffecb3511d4 0x7ffecb3511d2
+// Note ordering has been changed to x, z, y to improve packing.</code></pre>
+<p>برای اطمینان از چیدمانی سازگار با C، از <code>repr(C)</code> استفاده کنید:</p>
+<pre><code class="language-rust">#[repr(C)]
+struct Foo {
+    x: u16,
+    y: u8,
+    z: u16,
+}
+
+fn main() {
+    let v = Foo { x: 0, y: 0, z: 0 };
+    println!("{:p} {:p} {:p}", &amp;v.x, &amp;v.y, &amp;v.z);
+}
+
+// 0x7fffd0d84c60 0x7fffd0d84c62 0x7fffd0d84c64
+// Ordering is preserved and the layout will not change over time.
+// `z` is two-byte aligned so a byte of padding exists between `y` and `z`.</code></pre>
+<p>برای اطمینان از نمایش فشرده، از <code>repr(packed)</code> استفاده کنید:</p>
+<pre><code class="language-rust">#[repr(packed)]
+struct Foo {
+    x: u16,
+    y: u8,
+    z: u16,
+}
+
+fn main() {
+    let v = Foo { x: 0, y: 0, z: 0 };
+    // References must always be aligned, so to check the addresses of the
+    // struct's fields, we use `std::ptr::addr_of!()` to get a raw pointer
+    // instead of just printing `&amp;v.x`.
+    let px = std::ptr::addr_of!(v.x);
+    let py = std::ptr::addr_of!(v.y);
+    let pz = std::ptr::addr_of!(v.z);
+    println!("{:p} {:p} {:p}", px, py, pz);
+}
+
+// 0x7ffd33598490 0x7ffd33598492 0x7ffd33598493
+// No padding has been inserted between `y` and `z`, so now `z` is unaligned.</code></pre>
+<p>توجه کنید که استفاده از <code>repr(packed)</code> تراز نوع را نیز روی <code>1</code> تنظیم می‌کند.</p>
+<p>سرانجام، برای تعیین یک تراز مشخص از <code>repr(align(n))</code> استفاده کنید، که <code>n</code> تعداد بایت‌هایی است که باید روی آن‌ها تراز شود (و باید توانی از دو باشد):</p>
+<pre><code class="language-rust">#[repr(C)]
+#[repr(align(4096))]
+struct Foo {
+    x: u16,
+    y: u8,
+    z: u16,
+}
+
+fn main() {
+    let v = Foo { x: 0, y: 0, z: 0 };
+    let u = Foo { x: 0, y: 0, z: 0 };
+    println!("{:p} {:p} {:p}", &amp;v.x, &amp;v.y, &amp;v.z);
+    println!("{:p} {:p} {:p}", &amp;u.x, &amp;u.y, &amp;u.z);
+}
+
+// 0x7ffec909a000 0x7ffec909a002 0x7ffec909a004
+// 0x7ffec909b000 0x7ffec909b002 0x7ffec909b004
+// The two instances `u` and `v` have been placed on 4096-byte alignments,
+// evidenced by the `000` at the end of their addresses.</code></pre>
+<p>توجه کنید که می‌توانیم <code>repr(C)</code> را با <code>repr(align(n))</code> ترکیب کنیم تا چیدمانی ترازشده و سازگار با C به دست آوریم. ترکیب <code>repr(align(n))</code> با <code>repr(packed)</code> مجاز نیست، زیرا <code>repr(packed)</code> تراز را روی <code>1</code> تنظیم می‌کند. همچنین مجاز نیست که یک نوع <code>repr(packed)</code> شامل یک نوع <code>repr(align(n))</code> باشد.</p>
+<p>برای جزئیات بیشتر دربارهٔ چیدمان نوع‌ها، به فصل <a href="../../reference/type-layout.html">چیدمان نوع</a> در مرجع Rust مراجعه کنید.</p>
+<h2 id="other-resources"><a class="header" href="#other-resources">منابع دیگر</a></h2>
+<ul>
+<li>در این کتاب:
+<ul>
+<li><a href="../interoperability/c-with-rust.html">کمی C همراه Rust شما</a></li>
+<li><a href="../interoperability/rust-with-c.html">کمی Rust همراه C شما</a></li>
+</ul>
+</li>
+<li><a href="https://docs.rust-embedded.org/faq.html">پرسش‌های متداول Rust نهفته</a></li>
+<li><a href="http://blahg.josefsipek.net/?p=580">اشاره‌گرهای Rust برای برنامه‌نویسان C</a></li>
+<li><a href="https://github.com/diwic/reffers-rs/blob/master/docs/Pointers.md">من قبلاً از اشاره‌گرها استفاده می‌کردم - حالا چه کنم؟</a></li>
+</ul><nav class="page-nav"><a href="../../embedded/design-patterns/hal/gpio.html">→ GPIO</a><a href="../../embedded/interoperability/index.html">تعامل‌پذیری ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

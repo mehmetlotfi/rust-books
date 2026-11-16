@@ -1,0 +1,235 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>اشکال‌زدایی LLVM — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="backend/debugging"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="debugging-llvm"><a class="header" href="#debugging-llvm">اشکال‌زدایی LLVM</a></h2>
+<blockquote>
+<p>نکته: اگر به‌دنبال اطلاعاتی دربارهٔ تولید کد هستید، لطفاً به‌جای این <a href="./codegen.html">این
+فصل</a> را ببینید.</p>
+</blockquote>
+<p>این بخش دربارهٔ اشکال‌زدایی باگ‌های کامپایلر در تولید کد است (مثلاً اینکه چرا
+کامپایلر قطعه کدی را تولید کرده یا در LLVM crash کرده است).
+LLVM پروژه‌ای بزرگ است که احتمالاً به سند اشکال‌زدایی مخصوص خودش نیاز دارد،
+اما در ادامه چند نکته آمده که در بستر rustc مهم‌اند.</p>
+<h3 id="minimize-the-example"><a class="header" href="#minimize-the-example">مثال را کمینه کنید</a></h3>
+<p>به‌عنوان یک قاعدهٔ کلی، کامپایلرها از تحلیل کد اطلاعات زیادی تولید می‌کنند.
+بنابراین گام اول مفید معمولاً یافتن یک مثال کمینه است.
+یکی از راه‌ها برای این کار:</p>
+<ol>
+<li>
+<p>ساخت یک crate جدید که مشکل را بازتولید کند (مثلاً افزودن هر crateای که
+مقصر است به‌عنوان وابستگی و استفاده از آن از آنجا)</p>
+</li>
+<li>
+<p>کمینه کردن crate با حذف وابستگی‌های بیرونی؛ یعنی انتقال
+همهٔ موارد مرتبط به crate جدید</p>
+</li>
+<li>
+<p>کمینه‌تر کردن مشکل با کوتاه‌تر کردن کد (ابزارهایی هستند که
+در این کار کمک می‌کنند مانند <code>creduce</code>)</p>
+</li>
+</ol>
+<p>برای بحث بیشتر دربارهٔ روش‌شناسی گام‌های ۲ و ۳ بالا،
+<a href="https://blog.pnkfx.org/blog/2019/11/18/rust-bug-minimization-patterns/">یک پست وبلاگ حماسی</a> از pnkfelix هست که به‌طور مشخص دربارهٔ کمینه‌سازی برنامه‌های Rust است.</p>
+<h3 id="enable-llvm-internal-checks"><a class="header" href="#enable-llvm-internal-checks">بررسی‌های درونی LLVM را فعال کنید</a></h3>
+<p>کامپایلرهای رسمی (از جمله nightlyها) assertionهای LLVM را غیرفعال دارند،
+یعنی شکست assertionهای LLVM می‌تواند به‌صورت crash کامپایلر (نه
+ICE بلکه crashهای «واقعی») و انواع دیگر رفتار عجیب ظاهر شود.
+اگر با این‌ها روبه‌رو هستید، ایدهٔ خوبی است که سعی کنید از کامپایلری با assertionهای LLVM
+فعال استفاده کنید – یا یک nightly از نوع «alt» یا کامپایلری که خودتان
+با تنظیم <code>llvm.assertions = true</code> در bootstrap.toml می‌سازید – و ببینید چیزی پیدا می‌شود یا نه.</p>
+<p>فرایند build مربوط به rustc ابزارهای LLVM را در <code>build/host/llvm/bin</code> می‌سازد.
+می‌توان آن‌ها را مستقیماً فراخوانی کرد.
+این ابزارها شامل موارد زیرند:</p>
+<ul>
+<li><a href="https://llvm.org/docs/CommandGuide/llc.html"><code>llc</code></a>، که bitcode (فایل‌های <code>.bc</code>) را به کد اجرایی کامپایل می‌کند؛ این را می‌توان برای
+بازتولید باگ‌های backend در LLVM به کار برد.</li>
+<li><a href="https://llvm.org/docs/CommandGuide/opt.html"><code>opt</code></a>، یک تبدیل‌گر bitcode که passهای بهینه‌سازی LLVM را اجرا می‌کند.</li>
+<li><a href="https://llvm.org/docs/Bugpoint.html"><code>bugpoint</code></a>، که موارد آزمون بزرگ را به موارد کوچک و مفید کاهش می‌دهد.</li>
+<li>و بسیاری دیگر که برخی از آن‌ها در متن زیر ارجاع داده شده‌اند.</li>
+</ul>
+<p>به‌طور پیش‌فرض، سامانهٔ build در Rust تغییرات کد منبع LLVM یا
+تنظیمات پیکربندی build آن را بررسی نمی‌کند.
+بنابراین اگر نیاز دارید LLVM‌ای را که به
+<code>rustc</code> لینک می‌شود دوباره build کنید، ابتدا فایل <code>.llvm-stamp</code> را که باید در
+<code>build/host/llvm/</code> باشد حذف کنید.</p>
+<p>خط لولهٔ کامپایل پیش‌فرض rustc چند codegen unit دارد، که
+بازتولید دستی آن دشوار است و یعنی LLVM چندین بار به‌صورت
+موازی فراخوانی می‌شود.  اگر می‌توانید از پسش بربیایید (یعنی اگر باگ شما را
+ناپدید نمی‌کند)، دادن <code>-C codegen-units=1</code> به rustc اشکال‌زدایی را آسان‌تر می‌کند.</p>
+<h3 id="get-your-hands-on-raw-llvm-input"><a class="header" href="#get-your-hands-on-raw-llvm-input">به ورودی خام LLVM دست پیدا کنید</a></h3>
+<p>برای اینکه rustc برای LLVM IR تولید کند، باید پرچم <code>--emit=llvm-ir</code> را بدهید.
+اگر از طریق cargo build می‌کنید،
+از متغیر محیطی <code>RUSTFLAGS</code> استفاده کنید (مثلاً <code>RUSTFLAGS='--emit=llvm-ir'</code>).
+این باعث می‌شود rustc LLVM IR را در پوشهٔ target بیرون بریزد.</p>
+<p><code>cargo llvm-ir [options] path</code> LLVM IR یک تابع مشخص را در <code>path</code> بیرون می‌ریزد.
+(<code>cargo install --locked cargo-asm</code> هم <code>cargo asm</code> و هم <code>cargo llvm-ir</code> را نصب می‌کند).
+<code>--build-type=debug</code> کد را برای buildهای debug تولید می‌کند.
+گزینه‌های مفید دیگری هم هست.
+همچنین، اطلاعات اشکال‌زدایی در LLVM IR می‌تواند خروجی را بسیار شلوغ کند:
+<code>RUSTFLAGS="-C debuginfo=0"</code> واقعاً مفید است.</p>
+<p><code>RUSTFLAGS="-C save-temps"</code> bitcode مربوط به LLVM را در
+مراحل مختلف حین کامپایل خروجی می‌دهد، که گاهی مفید است.
+bitcode خروجی LLVM در فایل‌های <code>.bc</code> در پوشهٔ خروجی کامپایلر خواهد بود که با آرگومان
+<code>--out-dir DIR</code> به <code>rustc</code> تنظیم می‌شود.</p>
+<ul>
+<li>
+<p>اگر هنگام فراخوانی خود <code>rustc</code> با شکست assertion یا segmentation fault از backend
+LLVM روبه‌رو می‌شوید، ایدهٔ خوبی است که هر کدام
+از این فایل‌های <code>.bc</code> را به دستور <code>llc</code> بدهید و ببینید همان شکست را می‌گیرید یا نه.
+(توسعه‌دهندگان LLVM اغلب باگی را که به یک فایل <code>.bc</code> کاهش یافته به باگی که
+برای بازتولید کمینه‌اش از یک crate ‏Rust استفاده می‌کند ترجیح می‌دهند.)</p>
+</li>
+<li>
+<p>برای گرفتن نسخه‌های خوانا برای انسان از bitcode مربوط به LLVM، فقط باید
+فایل‌های bitcode (<code>.bc</code>) را به فایل‌های <code>.ll</code> تبدیل کنید، با <code>llvm-dis</code> که باید در
+کامپایل محلی هدف rustc باشد.</p>
+</li>
+</ul>
+<p>توجه کنید که rustc بسته به فعال بودن <code>-O</code> حتی
+بدون بهینه‌سازی‌های LLVM، IR متفاوتی تولید می‌کند، پس اگر می‌خواهید با IRای که rustc تولید می‌کند ور بروید،
+باید:</p>
+<pre><code class="language-bash">$ rustc +local my-file.rs --emit=llvm-ir -O -C no-prepopulate-passes \
+    -C codegen-units=1
+$ OPT=build/$TRIPLE/llvm/bin/opt
+$ $OPT -S -O2 &lt; my-file.ll &gt; my
+</code></pre>
+<p>اگر فقط می‌خواهید LLVM IR را در حین خط لولهٔ LLVM بگیرید، مثلاً تا ببینید کدام
+IR باعث شکست یک assertion در زمان بهینه‌سازی می‌شود، یا ببینید LLVM چه زمانی
+بهینه‌سازی مشخصی را انجام می‌دهد، می‌توانید پرچم rustc ‏<code>-C llvm-args=-print-after-all</code> را بدهید و احتمالاً <code>-C llvm-args='-filter-print-funcs=EXACT_FUNCTION_NAME</code> را اضافه کنید (مثلاً  <code>-C llvm-args='-filter-print-funcs=_ZN11collections3str21_$LT$impl$u20$str$GT$\ 7replace17hbe10ea2e7c809b0bE'</code>).</p>
+<p>این خروجی زیادی در standard error تولید می‌کند، پس می‌خواهید آن را به فایلی pipe کنید.
+همچنین، اگر نه <code>-filter-print-funcs</code> و نه <code>-C codegen-units=1</code> را به کار می‌برید، آنگاه چون codegen unitهای متعدد به‌صورت موازی اجرا می‌شوند،
+چاپ‌ها با هم مخلوط می‌شوند و نمی‌توانید چیزی را بخوانید.</p>
+<ul>
+<li>
+<p>یک تذکر دربارهٔ روش‌شناسی یادشده: خانوادهٔ گزینه‌های <code>-print</code>
+در LLVM فقط واحد IRای را که pass روی آن اجرا می‌شود چاپ می‌کند (مثلاً فقط یک
+تابع) و شامل هیچ declaration ارجاع‌شده، global،
+metadata و غیره نیست. این یعنی عموماً نمی‌توانید خروجی <code>-print</code>
+را برای بازتولید یک مشکل به <code>llc</code> بدهید.</p>
+</li>
+<li>
+<p>درون خود LLVM، فراخوانی <code>F.getParent()-&gt;dump()</code> در ابتدای
+<code>SafeStackLegacyPass::runOnFunction</code> کل ماژول را dump می‌کند، که
+ممکن است پایهٔ بهتری برای بازتولید باشد.
+(اما باید بتوانید همان dump را از فایل‌های <code>.bc</code> که
+<code>-C save-temps</code> dump می‌کند بگیرید.)</p>
+</li>
+</ul>
+<p>اگر فقط IR یک تابع مشخص را می‌خواهید (مثلاً می‌خواهید ببینید چرا
+باعث assertion می‌شود یا درست بهینه نمی‌شود)، می‌توانید از <code>llvm-extract</code> استفاده کنید،
+مثلاً</p>
+<pre><code class="language-bash">$ ./build/$TRIPLE/llvm/bin/llvm-extract \
+    -func='_ZN11collections3str21_$LT$impl$u20$str$GT$7replace17hbe10ea2e7c809b0bE' \
+    -S \
+    &lt; unextracted.ll \
+    &gt; extracted.ll
+</code></pre>
+<h3 id="investigate-llvm-optimization-passes"><a class="header" href="#investigate-llvm-optimization-passes">passهای بهینه‌سازی LLVM را بررسی کنید</a></h3>
+<p>اگر به‌دلیل یک pass بهینه‌سازی رفتار نادرستی می‌بینید، یک گزینهٔ بسیار کاربردی
+LLVM ‏<code>-opt-bisect-limit</code> است که یک عدد صحیح می‌گیرد که اندیس
+بالاترین pass برای اجرا را نشان می‌دهد.
+مقادیر اندیس passهای انجام‌شده از
+اجرایی به اجرای دیگر پایدارند؛ با جفت کردن این با نرم‌افزاری که
+جستجوی دوبخشی فضای جستجو را بر اساس برنامهٔ حاصل خودکار می‌کند، می‌توان passِ خطاکار را سریع یافت.
+وقتی <code>-opt-bisect-limit</code> مشخص شود، همهٔ اجراها
+به standard error نمایش داده می‌شوند، همراه با اندیس و خروجی‌شان که نشان می‌دهد
+pass اجرا شده یا رد شده است.  تنظیم حد روی اندیس -1 (مثلاً
+<code>RUSTFLAGS="-C llvm-args=-opt-bisect-limit=-1"</code>) همهٔ passها و
+مقادیر اندیس متناظرشان را نشان می‌دهد.</p>
+<p>اگر می‌خواهید با خط لولهٔ بهینه‌سازی ور بروید، می‌توانید از ابزار <a href="https://llvm.org/docs/CommandGuide/opt.html"><code>opt</code></a>
+در <code>./build/host/llvm/bin/</code> با LLVM IR تولیدشده توسط rustc استفاده کنید.</p>
+<p>هنگام بررسی پیاده‌سازی خود LLVM، باید
+از <a href="https://llvm.org/docs/ProgrammersManual.html#the-llvm-debug-macro-and-debug-option">زیرساخت debug درونی</a> آن آگاه باشید.
+این در buildهای Debug مربوط به LLVM فراهم است، که برای buildهای LLVM
+مربوط به rustc با تغییر این تنظیم در bootstrap.toml فعال می‌کنید:</p>
+<pre><code># Indicates whether the LLVM assertions are enabled or not
+llvm.assertions = true
+
+# Indicates whether the LLVM build is a Release or Debug build
+llvm.optimize = false
+</code></pre>
+<p>خلاصهٔ سریع این است:</p>
+<ul>
+<li>تنظیم <code>assertions=true</code> پیام‌های debug درشت‌دانه را فعال می‌کند.
+<ul>
+<li>فراتر از آن، تنظیم <code>optimize=false</code> پیام‌های debug ریزدانه را فعال می‌کند.</li>
+</ul>
+</li>
+<li><code>LLVM_DEBUG(dbgs() &lt;&lt; msg)</code> در LLVM مانند <code>debug!(msg)</code> در <code>rustc</code> است.</li>
+<li>گزینهٔ <code>-debug</code> همهٔ پیام‌ها را روشن می‌کند؛ مانند تنظیم
+متغیر محیطی <code>RUSTC_LOG=debug</code> در <code>rustc</code> است.</li>
+<li>گونهٔ <code>-debug-only=&lt;pass1&gt;,&lt;pass2&gt;</code> گزینشی‌تر است؛ مانند
+تنظیم متغیر محیطی <code>RUSTC_LOG=path1,path2</code> در <code>rustc</code> است.</li>
+</ul>
+<h3 id="getting-help-and-asking-questions"><a class="header" href="#getting-help-and-asking-questions">گرفتن کمک و پرسیدن سؤال</a></h3>
+<p>اگر سؤالی دارید، به <a href="https://rust-lang.zulipchat.com/">Zulip مربوط به rust-lang</a> و
+به‌طور مشخص کانال <code>#t-compiler/wg-llvm</code> سر بزنید.</p>
+<h3 id="compiler-options-to-know-and-love"><a class="header" href="#compiler-options-to-know-and-love">گزینه‌های کامپایلر که باید شناخت و دوست داشت</a></h3>
+<p>سوئیچ‌های کامپایلر <code>-C help</code> و <code>-Z help</code> انواعی از
+گزینه‌های جالب را که ممکن است مفید بیابید فهرست می‌کنند.
+در اینجا چند مورد از رایج‌ترین‌هایی که به توسعهٔ LLVM مربوط‌اند آمده است (برخی از آن‌ها در
+آموزش بالا به کار رفته‌اند):</p>
+<ul>
+<li>گزینهٔ <code>--emit llvm-ir</code> فایل <code>&lt;filename&gt;.ll</code> را با LLVM IR در قالب متنی تولید می‌کند
+<ul>
+<li>گزینهٔ <code>--emit llvm-bc</code> در قالب بایت‌کد (<code>&lt;filename&gt;.bc</code>) تولید می‌کند</li>
+</ul>
+</li>
+<li>دادن <code>-C llvm-args=&lt;foo&gt;</code> اجازه می‌دهد تقریباً همهٔ
+گزینه‌هایی را که ابزارهایی مانند llc و opt می‌پذیرند بدهید؛
+مثلاً <code>-C llvm-args=-print-before-all</code> برای چاپ IR پیش از هر
+pass در LLVM.</li>
+<li><code>-C no-prepopulate-passes</code> از پر کردن اولیهٔ مدیر pass در LLVM
+با فهرستی از passها جلوگیری می‌کند.
+این به شما اجازه می‌دهد LLVM
+IRای را که rustc تولید می‌کند ببینید، نه LLVM IR پس از بهینه‌سازی‌ها.</li>
+<li>گزینهٔ <code>-C passes=val</code> اجازه می‌دهد فهرستی جداشده با فاصله از passهای اضافی LLVM را برای اجرا بدهید</li>
+<li>گزینهٔ <code>-C save-temps</code> همهٔ فایل‌های خروجی موقت را حین کامپایل ذخیره می‌کند</li>
+<li>گزینهٔ <code>-Z print-llvm-passes</code> passهای بهینه‌سازی LLVM را که اجرا می‌شوند چاپ می‌کند</li>
+<li>گزینهٔ <code>-Z time-llvm-passes</code> زمان هر pass در LLVM را اندازه می‌گیرد</li>
+<li>گزینهٔ <code>-Z verify-llvm-ir</code> درستی LLVM IR را بررسی می‌کند</li>
+<li><code>--jobs-backend=1</code> کامپایل موازی واحدهای کامپایل متمایز را غیرفعال می‌کند</li>
+<li>گزینهٔ <code>-Z llvm-time-trace</code> فایل JSON سازگار با Chrome profiler را خروجی می‌دهد
+که جزئیات و زمان‌بندی passهای LLVM را دارد.</li>
+<li>گزینهٔ <code>-C llvm-args=-opt-bisect-limit=&lt;index&gt;</code> امکان جستجوی دوبخشی در بهینه‌سازی‌های LLVM را می‌دهد.</li>
+</ul>
+<h3 id="filing-llvm-bug-reports"><a class="header" href="#filing-llvm-bug-reports">ثبت گزارش باگ LLVM</a></h3>
+<p>هنگام ثبت گزارش باگ LLVM، احتمالاً یک مثال کارکردی کمینه
+می‌خواهید که مشکل را نشان دهد.
+Godbolt compiler explorer برای این واقعاً مفید است.</p>
+<ol>
+<li>
+<p>وقتی LLVM IR کد مشکل‌دار را دارید (بالا را ببینید)، می‌توانید
+با Godbolt یک مثال کارکردی کمینه بسازید.
+به <a href="https://llvm.godbolt.org">llvm.godbolt.org</a> بروید.</p>
+</li>
+<li>
+<p><code>LLVM-IR</code> را به‌عنوان زبان برنامه‌نویسی انتخاب کنید.</p>
+</li>
+<li>
+<p>از <code>llc</code> برای کامپایل IR به یک هدف مشخص به همان شکل استفاده کنید:</p>
+<ul>
+<li>چند پرچم مفید هست: <code>-mattr</code> ویژگی‌های هدف را فعال می‌کند، <code>-march=</code>
+هدف را انتخاب می‌کند، <code>-mcpu=</code> CPU را انتخاب می‌کند و غیره.</li>
+<li>دستورهایی مانند <code>llc -march=help</code> همهٔ معماری‌های موجود را خروجی می‌دهند، که
+مفید است چون گاهی نام معماری‌ها در Rust و نام‌های LLVM یکی نیستند.</li>
+<li>اگر خودتان rustc را جایی کامپایل کرده‌اید، در پوشهٔ target
+باینری‌های <code>llc</code>، <code>opt</code> و غیره را دارید.</li>
+</ul>
+</li>
+<li>
+<p>اگر می‌خواهید LLVM-IR را بهینه کنید، می‌توانید از <code>opt</code> برای دیدن اینکه بهینه‌سازی‌های LLVM
+آن را چگونه تبدیل می‌کنند استفاده کنید.</p>
+</li>
+<li>
+<p>وقتی پیوند godbolt‌ای دارید که مشکل را نشان می‌دهد، پر کردن یک باگ LLVM
+کاملاً آسان است.
+فقط به <a href="https://github.com/llvm/llvm-project/issues">صفحهٔ issueهای github</a> آن‌ها سر بزنید.</p>
+</li>
+</ol>
+<h3 id="porting-bug-fixes-from-llvm"><a class="header" href="#porting-bug-fixes-from-llvm">انتقال رفع باگ‌ها از LLVM</a></h3>
+<p>وقتی باگ را به‌عنوان باگ LLVM شناسایی کردید، گاهی
+متوجه می‌شوید که از پیش در LLVM گزارش و رفع شده، اما ما هنوز
+رفع را دریافت نکرده‌ایم (یا شاید به‌اندازهٔ کافی با LLVM آشنا هستید که خودتان آن را رفع کنید).</p>
+<p>در آن صورت، گاهی می‌توانیم رفع باگ را
+مستقیماً به fork خودمان از LLVM منتقل کنیم تا rustc بتواند آسان‌تر از آن استفاده کند.
+fork ما از LLVM در <a href="https://github.com/rust-lang/llvm-project/">rust-lang/llvm-project</a> نگهداری می‌شود.
+وقتی رفع را در آنجا land کردید، باید یک PR هم land کنید که
+commitهای submodule ما را تغییر دهد – برای کمک در Zulip بپرسید.</p><nav class="page-nav"><a href="updating-llvm.html">→ به‌روزرسانی LLVM</a><a href="backend-agnostic.html">تولید کد مستقل از بک‌اند ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

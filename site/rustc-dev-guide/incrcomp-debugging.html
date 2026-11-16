@@ -1,0 +1,89 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>اشکال‌زدایی و آزمودن — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="incrcomp-debugging"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="debugging-and-testing-dependencies"><a class="header" href="#debugging-and-testing-dependencies">اشکال‌زدایی و تست وابستگی‌ها</a></h1>
+<h2 id="testing-the-dependency-graph"><a class="header" href="#testing-the-dependency-graph">تست گراف وابستگی</a></h2>
+<p>راه‌های مختلفی برای نوشتن تست روی گراف وابستگی هست.
+ساده‌ترین سازوکارها annotationهای <code>#[rustc_if_this_changed]</code> و
+<code>#[rustc_then_this_would_need]</code> هستند.
+این‌ها در تست‌های <a href="tests/ui.html">ui</a> برای آزمودن
+اینکه آیا مجموعهٔ مورد انتظار مسیرها در گراف وابستگی وجود دارد استفاده می‌شوند.</p>
+<p>برای مثال، <a href="https://github.com/rust-lang/rust/blob/HEAD/tests/ui/dep-graph/dep-graph-caller-callee.rs"><code>tests/ui/dep-graph/dep-graph-caller-callee.rs</code></a> یا تست‌های زیر را ببینید.</p>
+<pre><code class="language-rust ignore">#[rustc_if_this_changed]
+fn foo() { }
+
+#[rustc_then_this_would_need(TypeckTables)] //~ ERROR OK
+fn bar() { foo(); }</code></pre>
+<p>این باید این‌طور خوانده شود</p>
+<blockquote>
+<p>اگر این (<code>foo</code>) تغییر کند، آن‌گاه TypeckTables مربوط به این (یعنی <code>bar</code>) باید تغییر کند.</p>
+</blockquote>
+<p>از نظر فنی، آنچه رخ می‌دهد این است که انتظار می‌رود تست رشتهٔ «OK» را روی
+stderr، مرتبط با همین خط، صادر کند.</p>
+<p>همچنین می‌توانید خطوط زیر را اضافه کنید</p>
+<pre><code class="language-rust ignore">#[rustc_then_this_would_need(TypeckTables)] //~ ERROR no path
+fn baz() { }</code></pre>
+<p>که معنایش این است</p>
+<blockquote>
+<p>اگر <code>foo</code> تغییر کند، آن‌گاه TypeckTables مربوط به <code>baz</code> لازم نیست تغییر کند.
+ماکرو باید خطا صادر کند و پیام خطا باید «no path» را در بر داشته باشد.</p>
+</blockquote>
+<p>به یاد داشته باشید <code>//~ ERROR OK</code> از دید کد Rust‌ای که تست می‌کنیم کامنت است،
+اما از دید خود تست معنادار است.</p>
+<h2 id="debugging-the-dependency-graph"><a class="header" href="#debugging-the-dependency-graph">اشکال‌زدایی گراف وابستگی</a></h2>
+<h3 id="dumping-the-graph"><a class="header" href="#dumping-the-graph">dump‌کردن گراف</a></h3>
+<p>کامپایلر می‌تواند برای لذت اشکال‌زدایی شما گراف وابستگی را هم dump کند.
+برای این کار، پرچم <code>-Z dump-dep-graph</code> را بدهید.
+گراف در <code>dep_graph.{txt,dot}</code> در پوشهٔ فعلی
+dump می‌شود.
+می‌توانید نام فایل را با متغیر محیطی <code>RUST_DEP_GRAPH</code> بازنویسی کنید.</p>
+<p>اما اغلب، گراف کامل وابستگی بسیار طاقت‌فرساست و چندان مفید نیست.
+بنابراین کامپایلر اجازهٔ فیلترکردن گراف را هم می‌دهد.
+سه راه برای فیلترکردن دارید:</p>
+<ol>
+<li>همهٔ یال‌هایی که از مجموعهٔ مشخصی از گره‌ها (معمولاً یک گره) شروع می‌شوند.</li>
+<li>همهٔ یال‌هایی که به مجموعهٔ مشخصی از گره‌ها می‌رسند.</li>
+<li>همهٔ یال‌هایی که بین گره‌های شروع و پایان داده‌شده قرار دارند.</li>
+</ol>
+<p>برای فیلترکردن از متغیر محیطی <code>RUST_DEP_GRAPH_FILTER</code> استفاده کنید که باید
+شبیه یکی از این‌ها باشد:</p>
+<pre><code class="language-text">source_filter     // nodes originating from source_filter
+-&gt; target_filter  // nodes that can reach target_filter
+source_filter -&gt; target_filter // nodes in between source_filter and target_filter
+</code></pre>
+<p><code>source_filter</code> و <code>target_filter</code> فهرستی از رشته‌ها هستند که با <code>&amp;</code> جدا شده‌اند.
+گره وقتی با فیلتر مطابقت دارد که همهٔ آن رشته‌ها در برچسبش ظاهر شوند.
+برای مثال:</p>
+<pre><code class="language-text">RUST_DEP_GRAPH_FILTER='-&gt; TypeckTables'
+</code></pre>
+<p>مقدم‌های (predecessor) همهٔ گره‌های <code>TypeckTables</code> را انتخاب می‌کند.
+اما معمولاً گرهٔ <code>TypeckTables</code> برای تابع مشخصی را می‌خواهید، پس ممکن است بنویسید:</p>
+<pre><code class="language-text">RUST_DEP_GRAPH_FILTER='-&gt; TypeckTables &amp; bar'
+</code></pre>
+<p>این فقط مقدم‌های گره‌های <code>TypeckTables</code> را برای توابعی
+که <code>bar</code> در نامشان دارند انتخاب می‌کند.</p>
+<p>شاید می‌بینید وقتی <code>foo</code> را تغییر می‌دهید باید <code>bar</code> را دوباره type-check کنید،
+اما فکر نمی‌کنید باید این‌طور باشد.
+در آن صورت می‌توانید این کار را بکنید:</p>
+<pre><code class="language-text">RUST_DEP_GRAPH_FILTER='Hir &amp; foo -&gt; TypeckTables &amp; bar'
+</code></pre>
+<p>این همهٔ گره‌هایی را که از <code>Hir(foo)</code> به
+<code>TypeckTables(bar)</code> می‌رسند dump می‌کند، که از آن‌ها (امیدواریم) می‌توانید منبع یال اشتباه را ببینید.</p>
+<h3 id="tracking-down-incorrect-edges"><a class="header" href="#tracking-down-incorrect-edges">ردیابی یال‌های نادرست</a></h3>
+<p>گاهی پس از dump‌کردن گراف وابستگی، مسیری می‌یابید که نباید وجود داشته باشد، اما مطمئن نیستید چگونه پدید آمده.
+<strong>وقتی کامپایلر با debug assertions ساخته شده باشد،</strong> می‌تواند در ردیابی آن کمک کند.
+فقط متغیر محیطی <code>RUST_FORBID_DEP_GRAPH_EDGE</code> را روی یک فیلتر تنظیم کنید.
+هر یالی که در dep-graph ساخته شود
+با آن فیلتر آزمایش می‌شود — اگر مطابقت داشت، <code>bug!</code>
+گزارش می‌شود تا به‌آسانی backtrace را ببینید (<code>RUST_BACKTRACE=1</code>).</p>
+<p>نحو این فیلترها همان است که در بخش قبل شرح داده شد.
+اما توجه کنید این فیلتر برخلاف بخش قبل روی هر <strong>یال</strong> اعمال می‌شود
+و مسیرهای طولانی‌تر در گراف را مدیریت نمی‌کند.</p>
+<p>Example:</p>
+<p>می‌یابید مسیری از <code>Hir</code> مربوط به <code>foo</code> به type check مربوط به <code>bar</code> هست و فکر نمی‌کنید باید باشد.
+گراف وابستگی را همان‌طور که در بخش قبل شرح داده شد dump می‌کنید و <code>dep-graph.txt</code> را باز می‌کنید
+تا چیزی شبیه این ببینید:</p>
+<pre><code class="language-text">Hir(foo) -&gt; Collect(bar)
+Collect(bar) -&gt; TypeckTables(bar)
+</code></pre>
+<p>آن یال اول برایتان مشکوک است.
+پس <code>RUST_FORBID_DEP_GRAPH_EDGE</code> را روی <code>Hir&amp;foo -&gt; Collect&amp;bar</code> تنظیم می‌کنید، دوباره اجرا می‌کنید و
+سپس backtrace را می‌بینید.
+بفرمایید، باگ رفع شد!</p><nav class="page-nav"><a href="queries/incremental-compilation-in-detail.html">→ کامپایل افزایشی به تفصیل</a><a href="queries/salsa.html">Salsa ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,190 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>هدف‌ها و بندها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="traits/goals-and-clauses"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="goals-and-clauses"><a class="header" href="#goals-and-clauses">goalها و clauseها</a></h1>
+<p>در اصطلاحات برنامه‌نویسی منطقی، <strong>goal</strong> چیزی است که باید
+اثبات کنید و <strong>clause</strong> چیزی است که می‌دانید درست است. همان‌طور که در فصل
+<a href="./lowering-to-logic.html">تبدیل به منطق (lowering to logic)</a>
+توضیح داده شد، حل‌کنندهٔ صفت Rust بر پایهٔ گسترشی از clauseهای
+harrop ارثی (HH) است که clauseهای Horn سنتی Prolog را با
+چند ابرقدرت تازه گسترش می‌دهند.</p>
+<h2 id="goals-and-clauses-meta-structure"><a class="header" href="#goals-and-clauses-meta-structure">فراساختار goalها و clauseها</a></h2>
+<p>در حل‌کنندهٔ Rust، <strong>goalها</strong> و <strong>clauseها</strong> شکل‌های زیر را دارند
+(توجه کنید که این دو تعریف به یکدیگر ارجاع می‌دهند):</p>
+<pre><code class="language-text">Goal = DomainGoal           // defined in the section below
+        | Goal &amp;&amp; Goal
+        | Goal || Goal
+        | exists&lt;K&gt; { Goal }   // existential quantification
+        | forall&lt;K&gt; { Goal }   // universal quantification
+        | if (Clause) { Goal } // implication
+        | true                 // something that's trivially true
+        | ambiguous            // something that's never provable
+
+Clause = DomainGoal
+        | Clause :- Goal     // if can prove Goal, then Clause is true
+        | Clause &amp;&amp; Clause
+        | forall&lt;K&gt; { Clause }
+
+K = &lt;type&gt;     // a "kind"
+    | &lt;lifetime&gt;
+</code></pre>
+<p>روش اثبات برای این نوع goalها در واقع کاملاً
+سرراست است.  اساساً نوعی جستجوی عمق‌اول است. مقالهٔ
+<a href="https://rust-lang.github.io/chalk/book/bibliography.html#pphhf">“A Proof Procedure for the Logic of Hereditary Harrop Formulas”</a>
+جزئیات را ارائه می‌دهد.</p>
+<p>از نظر کد، این نوع‌ها در
+<a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_middle/src/traits/mod.rs"><code>rustc_middle/src/traits/mod.rs</code></a> در rustc، و در
+<a href="https://github.com/rust-lang/chalk/blob/master/chalk-ir/src/lib.rs"><code>chalk-ir/src/lib.rs</code></a> در chalk تعریف شده‌اند.</p>
+<p><a id="domain-goals"></a></p>
+<h2 id="domain-goals"><a class="header" href="#domain-goals">goalهای دامنه (Domain goals)</a></h2>
+<p><em>goalهای دامنه</em> اتم‌های منطق صفت‌اند. همان‌طور که از
+تعریف‌های بالا پیداست، goalهای عمومی اساساً از ترکیبی از
+goalهای دامنه تشکیل می‌شوند.</p>
+<p>افزون بر این، با کمی هموار کردن تعریف clauseها که پیش‌تر داده شد، می‌توان
+دید که clauseها همیشه به این شکل‌اند:</p>
+<pre><code class="language-text">forall&lt;K1, ..., Kn&gt; { DomainGoal :- Goal }
+</code></pre>
+<p>بنابراین goalهای دامنه در واقع سمت چپ (LHS) clauseها هستند. یعنی در ریزترین سطح،
+goalهای دامنه چیزهایی‌اند که حل‌کنندهٔ صفت در نهایت می‌کوشد اثبات کند.</p>
+<p><a id="trait-ref"></a></p>
+<p>برای تعریف مجموعهٔ goalهای دامنه در سامانهٔ خود، ابتدا باید
+چند صورت‌بندی ساده معرفی کنیم. یک <strong>ارجاع صفت (trait reference)</strong> شامل
+نام یک صفت به‌همراه مجموعهٔ مناسبی از ورودی‌های P0..Pn است:</p>
+<pre><code class="language-text">TraitRef = P0: TraitName&lt;P1..Pn&gt;
+</code></pre>
+<p>پس برای مثال، <code>u32: Display</code> یک ارجاع صفت است، همان‌طور که <code>Vec&lt;T&gt;: IntoIterator</code> هم هست. توجه کنید که نحو ظاهری Rust چیزهای اضافه‌ای هم مجاز می‌داند،
+مانند مقیدسازی نوع وابسته (<code>Vec&lt;T&gt;: IntoIterator&lt;Item = T&gt;</code>) که بخشی از ارجاع صفت نیستند.</p>
+<p><a id="projection"></a></p>
+<p>یک <strong>projection</strong> شامل ارجاع به یک آیتم وابسته به‌همراه
+ورودی‌های آن P0..Pm است:</p>
+<pre><code class="language-text">Projection = &lt;P0 as TraitName&lt;P1..Pn&gt;&gt;::AssocItem&lt;Pn+1..Pm&gt;
+</code></pre>
+<p>با داشتن این‌ها، می‌توانیم <code>DomainGoal</code> را چنین تعریف کنیم:</p>
+<pre><code class="language-text">DomainGoal = Holds(WhereClause)
+            | FromEnv(TraitRef)
+            | FromEnv(Type)
+            | WellFormed(TraitRef)
+            | WellFormed(Type)
+            | Normalize(Projection -&gt; Type)
+
+WhereClause = Implemented(TraitRef)
+            | ProjectionEq(Projection = Type)
+            | Outlives(Type: Region)
+            | Outlives(Region: Region)
+</code></pre>
+<p><code>WhereClause</code> به یک <code>where</code> clause اشاره دارد که کاربر Rust واقعاً می‌تواند
+در برنامهٔ Rust بنویسد. این انتزاع فقط برای راحتی وجود دارد، چون
+گاهی می‌خواهیم فقط با goalهای دامنه‌ای سروکار داشته باشیم که عملاً در
+Rust قابل نوشتن‌اند.</p>
+<p>بیایید هر یک از این‌ها را یکی‌یکی بشکافیم.</p>
+<h4 id="implementedtraitref"><a class="header" href="#implementedtraitref">Implemented(TraitRef)</a></h4>
+<p>مثلاً <code>Implemented(i32: Copy)</code></p>
+<p>درست است اگر صفت داده‌شده برای نوع‌ها و طول عمرهای ورودی داده‌شده پیاده‌سازی شده باشد.</p>
+<h4 id="projectioneqprojection--type"><a class="header" href="#projectioneqprojection--type">ProjectionEq(Projection = Type)</a></h4>
+<p>مثلاً <code>ProjectionEq&lt;T as Iterator&gt;::Item = u8</code></p>
+<p>نوع وابستهٔ داده‌شدهٔ <code>Projection</code> با <code>Type</code> برابر است؛ این را می‌توان
+با نرمال‌سازی یا با استفاده از نوع‌های وابستهٔ جانگهدار (placeholder) ثابت کرد. ببینید
+<a href="https://rust-lang.github.io/chalk/book/clauses/type_equality.html">بخش مربوط به نوع‌های وابسته در Chalk Book</a>.</p>
+<h4 id="normalizeprojection---type"><a class="header" href="#normalizeprojection---type">Normalize(Projection -&gt; Type)</a></h4>
+<p>مثلاً <code>ProjectionEq&lt;T as Iterator&gt;::Item -&gt; u8</code></p>
+<p>نوع وابستهٔ داده‌شدهٔ <code>Projection</code> را می‌توان به <code>Type</code> <a href="https://rust-lang.github.io/chalk/book/clauses/type_equality.html#normalize">نرمال‌سازی</a> کرد.</p>
+<p>همان‌طور که در <a href="https://rust-lang.github.io/chalk/book/clauses/type_equality.html">بخش مربوط به نوع‌های
+وابسته در Chalk Book</a> بحث شد، <code>Normalize</code> مستلزم <code>ProjectionEq</code> است،
+اما برعکس نه. در حالت کلی، اثبات <code>Normalize(&lt;T as Trait&gt;::Item -&gt; U)</code>
+مستلزم اثبات <code>Implemented(T: Trait)</code> هم هست.</p>
+<h4 id="fromenvtraitref"><a class="header" href="#fromenvtraitref">FromEnv(TraitRef)</a></h4>
+<p>مثلاً <code>FromEnv(Self: Add&lt;i32&gt;)</code></p>
+<p>درست است اگر <code>TraitRef</code> درونی <em>فرض شده</em> درست باشد،
+یعنی اگر بتوان آن را از where clauseهای در دسترس استنتاج کرد.</p>
+<p>برای مثال، تابع زیر را در نظر بگیرید:</p>
+<pre><code class="language-rust">fn loud_clone&lt;T: Clone&gt;(stuff: &amp;T) -&gt; T {
+    println!("cloning!");
+    stuff.clone()
+}</code></pre>
+<p>درون بدنهٔ تابع ما، <code>FromEnv(T: Clone)</code> را خواهیم داشت. where clauseهای در دسترس
+تودرتو می‌شوند، پس بدنهٔ یک تابع درون بدنهٔ یک impl، where clauseهای
+بدنهٔ impl را هم به ارث می‌برد.</p>
+<p>این قاعده و قاعدهٔ بعدی برای پیاده‌سازی <a href="https://rust-lang.github.io/chalk/book/clauses/implied_bounds.html#implied-bounds">کران‌های ضمنی (implied bounds)</a> به کار می‌روند. همان‌طور که
+در بخش lowering خواهیم دید، <code>FromEnv(TraitRef)</code> مستلزم <code>Implemented(TraitRef)</code> است،
+اما برعکس نه. این تمایز برای کران‌های ضمنی حیاتی است.</p>
+<h4 id="fromenvtype"><a class="header" href="#fromenvtype">FromEnv(Type)</a></h4>
+<p>مثلاً <code>FromEnv(HashSet&lt;K&gt;)</code></p>
+<p>درست است اگر <code>Type</code> درونی <em>فرض شده</em> well-formed باشد، یعنی اگر
+نوع ورودی یک تابع یا یک impl باشد.</p>
+<p>برای مثال، کد زیر را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">struct HashSet&lt;K&gt; where K: Hash { ... }
+
+fn loud_insert&lt;K&gt;(set: &amp;mut HashSet&lt;K&gt;, item: K) {
+    println!("inserting!");
+    set.insert(item);
+}</code></pre>
+<p><code>HashSet&lt;K&gt;</code> نوع ورودی تابع <code>loud_insert</code> است. بنابراین فرض می‌کنیم
+well-formed است، پس درون بدنهٔ تابع خود <code>FromEnv(HashSet&lt;K&gt;)</code> را خواهیم داشت. همان‌طور که در بخش lowering خواهیم دید، <code>FromEnv(HashSet&lt;K&gt;)</code> مستلزم
+<code>Implemented(K: Hash)</code> است، زیرا
+اعلان <code>HashSet</code> با یک where clause به شکل <code>K: Hash</code> نوشته شده بود. بنابراین لازم نیست
+آن کران را روی تابع <code>loud_insert</code> تکرار کنیم: بلکه به‌طور خودکار
+فرض می‌کنیم درست است.</p>
+<h4 id="wellformeditem"><a class="header" href="#wellformeditem">WellFormed(Item)</a></h4>
+<p>این goalها دلالت دارند که آیتم داده‌شده <em>well-formed</em> است.</p>
+<p>می‌توانیم دربارهٔ well-formed بودن انواع مختلف آیتم‌ها صحبت کنیم:</p>
+<ul>
+<li>
+<p><em>نوع‌ها</em>، مانند <code>WellFormed(Vec&lt;i32&gt;)</code> که در Rust درست است، یا
+<code>WellFormed(Vec&lt;str&gt;)</code> که درست نیست (زیرا <code>str</code> برابر <code>Sized</code> نیست.)</p>
+</li>
+<li>
+<p><em>TraitRefها</em>، مانند <code>WellFormed(Vec&lt;i32&gt;: Clone)</code>.</p>
+</li>
+</ul>
+<p>well-formed بودن برای <a href="https://rust-lang.github.io/chalk/book/clauses/implied_bounds.html#implied-bounds">کران‌های ضمنی</a> مهم است. به‌ویژه، دلیل اینکه
+فرض <code>FromEnv(T: Clone)</code> در مثال <code>loud_clone</code> اشکالی ندارد این است که
+<em>همچنین</em> <code>WellFormed(T: Clone)</code> را برای هر محل فراخوانی <code>loud_clone</code> وارسی می‌کنیم.
+به‌همین‌ترتیب، فرض <code>FromEnv(HashSet&lt;K&gt;)</code> در مثال <code>loud_insert</code>
+اشکالی ندارد، زیرا <code>WellFormed(HashSet&lt;K&gt;)</code> را برای هر محل فراخوانی
+<code>loud_insert</code> وارسی خواهیم کرد.</p>
+<h4 id="outlivestype-region-outlivesregion-region"><a class="header" href="#outlivestype-region-outlivesregion-region">Outlives(Type: Region), Outlives(Region: Region)</a></h4>
+<p>مثلاً <code>Outlives(&amp;'a str: 'b)</code>، <code>Outlives('a: 'static)</code></p>
+<p>درست است اگر نوع یا ناحیهٔ داده‌شدهٔ سمت چپ از ناحیهٔ سمت راست بیشتر عمر کند (outlive).</p>
+<p><a id="coinductive"></a></p>
+<h2 id="coinductive-goals"><a class="header" href="#coinductive-goals">goalهای هم‌استقرایی (Coinductive)</a></h2>
+<p>بیشتر goalها در سامانهٔ ما «استقرایی (inductive)» هستند. در یک goal استقرایی،
+استدلال دوری مجاز نیست. این clause نمونه را در نظر بگیرید:</p>
+<pre><code class="language-text">    Implemented(Foo: Bar) :-
+        Implemented(Foo: Bar).
+</code></pre>
+<p>اگر استقرایی در نظر بگیریم، این clause بی‌فایده است: اگر بخواهیم
+<code>Implemented(Foo: Bar)</code> را اثبات کنیم، آن‌گاه باید به‌صورت بازگشتی
+<code>Implemented(Foo: Bar)</code> را اثبات کنیم و این چرخه تا بی‌نهایت ادامه می‌یابد
+(حل‌کنندهٔ صفت اینجا متوقف می‌شود، و صرفاً
+<code>Implemented(Foo: Bar)</code> را «شناخته‌شده به‌عنوان درست» نمی‌پندارد).</p>
+<p>با این حال، برخی goalها <em>هم‌استقرایی (co-inductive)</em> هستند. به زبان ساده، یعنی
+چرخه‌ها مشکلی ندارند. پس اگر <code>Bar</code> یک صفت هم‌استقرایی بود، قاعدهٔ
+بالا کاملاً معتبر می‌بود و نشان می‌داد
+<code>Implemented(Foo: Bar)</code> درست است.</p>
+<p><em>صفت‌های خودکار (Auto traits)</em> یک نمونه در Rust هستند که در آن‌ها goalهای هم‌استقرایی به کار می‌روند.
+صفت <code>Send</code> را در نظر بگیرید و تصور کنید این struct را داریم:</p>
+<pre><code class="language-rust">struct Foo {
+    next: Option&lt;Box&lt;Foo&gt;&gt;
+}</code></pre>
+<p>قواعد پیش‌فرض صفت‌های خودکار می‌گویند <code>Foo</code> برابر <code>Send</code> است اگر
+نوع فیلدهایش <code>Send</code> باشند. بنابراین قاعده‌ای مانند این خواهیم داشت</p>
+<pre><code class="language-text">Implemented(Foo: Send) :-
+    Implemented(Option&lt;Box&lt;Foo&gt;&gt;: Send).
+</code></pre>
+<p>همان‌طور که احتمالاً می‌توانید تصور کنید، اثبات اینکه <code>Option&lt;Box&lt;Foo&gt;&gt;: Send</code>
+به‌صورت دوری دوباره ما را ملزم می‌کند ثابت کنیم <code>Foo: Send</code>.
+پس این نمونه‌ای است که در آن به یک چرخه می‌رسیم – اما
+اشکالی ندارد، ما <em>واقعاً</em> <code>Foo: Send</code> را برقرار می‌دانیم، هرچند
+به خودش ارجاع می‌دهد.</p>
+<p>به‌طور کلی، صفت‌های هم‌استقرایی در حل صفت Rust وقتی به کار می‌روند که
+بخواهیم مجموعهٔ ثابتی از امکان‌ها را برشماریم. در مورد صفت‌های
+خودکار، مجموعهٔ نوع‌های قابل دسترس از یک نقطهٔ شروع مفروض را برمی‌شماریم
+(یعنی <code>Foo</code> می‌تواند به مقادیری از نوع
+<code>Option&lt;Box&lt;Foo&gt;&gt;</code> برسد، که یعنی می‌تواند به مقادیری از نوع
+<code>Box&lt;Foo&gt;</code> و سپس از نوع <code>Foo</code> برسد، و بعد چرخه کامل می‌شود).</p>
+<p>افزون بر صفت‌های خودکار، گزاره‌های <code>WellFormed</code> هم‌استقرایی‌اند.
+این‌ها برای رسیدن به الگوی مشابهی از «برشمردن همهٔ حالت‌ها» به کار می‌روند،
+همان‌طور که در بخش <a href="https://rust-lang.github.io/chalk/book/clauses/implied_bounds.html#implied-bounds">کران‌های ضمنی</a> توضیح داده شد.</p>
+<h2 id="incomplete-chapter"><a class="header" href="#incomplete-chapter">فصل ناتمام</a></h2>
+<p>برخی مباحث که هنوز نوشته نشده‌اند:</p>
+<ul>
+<li>تفصیل روش اثبات</li>
+<li>حل SLG – معرفی استدلال منفی</li>
+</ul><nav class="page-nav"><a href="lowering-to-logic.html">→ پایین‌آوردن به منطق</a><a href="canonical-queries.html">queryهای متعارف ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,119 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>Fuchsia — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="tests/ecosystem-test-jobs/fuchsia"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="fuchsia-integration-tests"><a class="header" href="#fuchsia-integration-tests">Fuchsia integration tests</a></h1>
+<p><a href="https://fuchsia.dev">Fuchsia</a> یک سیستم‌عامل متن‌باز با حدود ۲
+میلیون خط کد Rust است.<sup class="footnote-reference" id="fr-loc-1"><a href="#footnote-loc">1</a></sup> این پروژه در گذشته تعداد زیادی <a href="https://gist.github.com/tmandry/7103eba4bd6a6fb0c439b5a90ae355fa">رگرسیون</a> را گرفته
+و سپس در CI گنجانده شد.</p>
+<h2 id="what-to-do-if-the-fuchsia-job-breaks"><a class="header" href="#what-to-do-if-the-fuchsia-job-breaks">اگر job مربوط به Fuchsia شکست خورد چه کنیم؟</a></h2>
+<p>لطفاً با گروه ping با نام <a href="../../notification-groups/fuchsia.html">fuchsia</a> تماس بگیرید و از آن‌ها کمک بخواهید.</p>
+<pre><code class="language-text">@rustbot ping fuchsia
+</code></pre>
+<h2 id="building-fuchsia-in-ci"><a class="header" href="#building-fuchsia-in-ci">ساخت Fuchsia در CI</a></h2>
+<p>Fuchsia به‌عنوان بخشی از مجموعهٔ تست‌های bors که پیش از merge شدن pull request اجرا می‌شوند ساخته می‌شود.</p>
+<p>اگر نگران هستید یک pull request ممکن است builder مربوط به Fuchsia را بشکند و می‌خواهید
+پیش از ارسال آن به صف bors تستش کنید،
+فقط از bors بخواهید job از نوع try را اجرا کند که یکپارچگی Fuchsia را می‌سازد:</p>
+<pre><code class="language-text">@bors try jobs=test-x86_64-fuchsia
+</code></pre>
+<h2 id="building-fuchsia-locally"><a class="header" href="#building-fuchsia-locally">Building Fuchsia locally</a></h2>
+<p>چون Fuchsia از زبان‌هایی غیر از Rust استفاده می‌کند، از Cargo به‌عنوان سامانهٔ ساخت استفاده نمی‌کند.
+همچنین لازم است ساخت toolchain به <a href="https://fuchsia.dev/fuchsia-src/development/build/rust_toolchain">شکل مشخصی</a> پیکربندی شود.</p>
+<p>روش توصیه‌شده برای ساخت Fuchsia استفاده از اسکریپت‌های Docker است که checkout
+و ساخت Fuchsia را برایتان انجام می‌دهند.
+اگر قبلاً تست‌های Docker را اجرا کرده‌اید،
+می‌توانید این دستور را از checkout مربوط به Rust اجرا کنید تا Fuchsia را
+با toolchain محلی Rust خود دانلود و بسازید.</p>
+<pre><code>src/ci/docker/run.sh test-x86_64-fuchsia
+</code></pre>
+<p>برای جزئیات بیشتر دربارهٔ نحوهٔ اجرا و اشکال‌زدایی jobها با Docker فصل <a href="../docker.html">تست با Docker</a> را ببینید.</p>
+<p>توجه کنید که checkout مربوط به Fuchsia <em>بزرگ</em> است — در زمان نگارش، checkout و
+ساخت بیش از ۶۷ گیگابایت فضا می‌گیرد — و همان‌طور که می‌توانید تصور کنید، تمام‌شدنش مدتی طول می‌کشد.</p>
+<h3 id="modifying-the-fuchsia-checkout"><a class="header" href="#modifying-the-fuchsia-checkout">تغییر checkout مربوط به Fuchsia</a></h3>
+<p>دلیل اصلی که می‌خواهید Fuchsia را به‌صورت محلی بسازید این است که باید
+یک رگرسیون را بررسی کنید.
+پس از اجرای ساخت Docker،
+checkout مربوط به Fuchsia را درون پوشهٔ <code>obj/test-x86_64-fuchsia/fuchsia</code> در checkout مربوط به Rust خود می‌یابید.
+اگر خط <code>KEEP_CHECKOUT</code> را در اسکریپت <a href="https://github.com/rust-lang/rust/blob/main/src/ci/docker/host-x86_64/test-x86_64-fuchsia/build-fuchsia.sh">build-fuchsia.sh</a> به <code>KEEP_CHECKOUT=1</code> تغییر دهید،
+می‌توانید checkout را هر طور لازم است تغییر دهید و دستور ساخت بالا را دوباره اجرا کنید.
+این همهٔ نتایج ساخت قبلی را دوباره به‌کار می‌برد.</p>
+<p>گزینه‌های بیشتری برای سفارشی‌سازی checkout مربوط به Fuchsia را در اسکریپت <a href="https://github.com/rust-lang/rust/blob/main/src/ci/docker/host-x86_64/test-x86_64-fuchsia/build-fuchsia.sh">build-fuchsia.sh</a> می‌یابید.</p>
+<h3 id="customizing-the-fuchsia-build"><a class="header" href="#customizing-the-fuchsia-build">سفارشی‌سازی ساخت Fuchsia</a></h3>
+<p>اطلاعات بیشتر دربارهٔ گزینه‌های مورد استفاده برای ساخت Fuchsia در Rust CI را در اسکریپت
+<a href="https://cs.opensource.google/fuchsia/fuchsia/+/main:scripts/rust/build_fuchsia_from_rust_ci.sh">build_fuchsia_from_rust_ci.sh</a> که توسط <a href="https://github.com/rust-lang/rust/blob/main/src/ci/docker/host-x86_64/test-x86_64-fuchsia/build-fuchsia.sh">build-fuchsia.sh</a> فراخوانی می‌شود می‌یابید.</p>
+<p>سامانهٔ ساخت Fuchsia از <a href="https://gn.googlesource.com/gn/+/main#gn">GN</a> استفاده می‌کند، یک سامانهٔ metabuild که فایل‌های <a href="https://ninja-build.org/">Ninja</a> تولید می‌کند
+و سپس کار اجرای ساخت را به Ninja می‌سپارد.</p>
+<p>توسعه‌دهندگان Fuchsia از <code>fx</code> برای اجرای ساخت‌ها و انجام کارهای توسعهٔ دیگر استفاده می‌کنند.
+این ابزار در <code>.jiri_root/bin</code> در checkout مربوط به Fuchsia قرار دارد؛ ممکن است برای برخی گردش‌کارها لازم باشد
+آن را به <code>$PATH</code> اضافه کنید.</p>
+<p>چند زیردستور <code>fx</code> مرتبط‌اند، از جمله:</p>
+<ul>
+<li><code>fx set</code> آرگومان‌های ساخت را می‌پذیرد، آن‌ها را در <code>out/default/args.gn</code> می‌نویسد و GN را اجرا می‌کند.</li>
+<li><code>fx build</code> پروژهٔ Fuchsia را با Ninja می‌سازد.
+تغییرات آرگومان‌های ساخت را به‌طور خودکار می‌گیرد و GN را دوباره اجرا می‌کند.
+به‌طور پیش‌فرض همه‌چیز را می‌سازد،
+اما مسیرهای هدف را هم می‌پذیرد تا هدف‌های مشخص را بسازد (در ادامه ببینید).</li>
+<li><code>fx clippy</code> Clippy را روی هدف‌های مشخص Rust (یا همه) اجرا می‌کند.
+ما از این در ساخت Rust CI برای پرهیز از اجرای codegen روی بیشتر هدف‌های Rust استفاده می‌کنیم.
+در زیر، مثل <code>fx build</code> Ninja را فراخوانی می‌کند.
+نتایج clippy پیش از چاپ در فایل‌های json
+درون پوشهٔ خروجی ساخت ذخیره می‌شوند.</li>
+</ul>
+<h4 id="target-paths"><a class="header" href="#target-paths">Target paths</a></h4>
+<p>GN از مسیرهایی مثل زیر برای شناسایی هدف‌های ساخت استفاده می‌کند:</p>
+<pre><code>//src/starnix/kernel:starnix_core
+</code></pre>
+<p><code>//</code> ابتدایی یعنی ریشهٔ checkout، و اسلش‌های باقی‌مانده نام پوشه‌ها هستند.
+رشتهٔ بعد از <code>:</code> <em>نام هدف</em> یک هدف است که
+در فایل <code>BUILD.gn</code> آن پوشه تعریف شده است.</p>
+<p>اگر نام هدف با نام پوشه یکی باشد می‌توان آن را حذف کرد.
+به عبارت دیگر <code>//src/starnix/kernel</code> همان <code>//src/starnix/kernel:kernel</code> است.</p>
+<p>این مسیرهای هدف درون فایل‌های <code>BUILD.gn</code> برای ارجاع به وابستگی‌ها به‌کار می‌روند،
+و در <code>fx build</code> هم می‌توان از آن‌ها استفاده کرد.</p>
+<h4 id="modifying-compiler-flags"><a class="header" href="#modifying-compiler-flags">Modifying compiler flags</a></h4>
+<p>می‌توانید پرچم‌های سفارشی کامپایلر را درون <code>config</code> در GN بگذارید که به یک هدف اضافه می‌شود.
+به‌عنوان مثال ساده:</p>
+<pre><code>config("everybody_loops") {
+    rustflags = [ "-Zeverybody-loops" ]
+}
+
+rustc_binary("example") {
+    crate_root = "src/bin.rs"
+    # ...existing keys here...
+    configs += [ ":everybody_loops" ]
+}
+</code></pre>
+<p>این پرچم <code>-Zeverybody-loops</code> را هنگام ساخت هدف <code>example</code> به rustc اضافه می‌کند.
+توجه کنید که می‌توانید از <a href="https://gn.googlesource.com/gn/+/main/docs/reference.md#var_public_configs"><code>public_configs</code></a> هم برای افزودن config
+به هر هدفی که به آن هدف وابسته است استفاده کنید.</p>
+<p>اگر می‌خواهید پرچمی را به هر هدف Rust در ساخت اضافه کنید،
+می‌توانید rustflags را به config با نام <a href="https://cs.opensource.google/fuchsia/fuchsia/+/main:build/config/BUILD.gn;l=121;drc=c26c473bef93b33117ae417893118907a026fec7"><code>//build/config:compiler</code></a> یا به
+configهای مخصوص سیستم‌عامل که در آن فایل ارجاع شده‌اند اضافه کنید.
+توجه کنید که <code>cflags</code> و <code>ldflags</code> روی هدف‌های Rust نادیده گرفته می‌شوند.</p>
+<h4 id="running-ninja-and-rustc-commands-directly"><a class="header" href="#running-ninja-and-rustc-commands-directly">اجرای مستقیم دستورهای ninja و rustc</a></h4>
+<p>یک لایه پایین‌تر، <code>fx build</code> دستور <code>ninja</code> را فراخوانی می‌کند که آن هم در نهایت <code>rustc</code> را فراخوانی می‌کند.
+همهٔ اقدامات ساخت درون پوشهٔ out اجرا می‌شوند،
+که معمولاً <code>out/default</code> درون checkout مربوط به Fuchsia است.</p>
+<p>می‌توانید با اجبار دستور به شکست، ninja را وادار کنید دستور واقعی‌ای را که فراخوانی می‌کند چاپ کند، مثلاً
+با افزودن خطای نحوی به یکی از فایل‌های منبع هدف.
+وقتی دستور را داشتید می‌توانید آن را از درون پوشهٔ خروجی اجرا کنید.</p>
+<p>پس از تغییر خود toolchain، تنظیم ساخت <code>rustc_version_string</code> در
+<code>out/default/args.gn</code> باید تغییر کند تا <code>fx build</code> یا <code>ninja</code>
+همهٔ هدف‌های Rust را دوباره بسازد.
+این را می‌توان در یک ویرایشگر متن انجام داد، و محتوای رشته مهم نیست،
+مادامی که از یک ساخت به ساخت بعدی تغییر کند.
+اسکریپت <a href="https://cs.opensource.google/fuchsia/fuchsia/+/main:scripts/rust/build_fuchsia_from_rust_ci.sh">build_fuchsia_from_rust_ci.sh</a> این کار را با هش‌کردن پوشهٔ toolchain برایتان انجام می‌دهد.</p>
+<p>وب‌سایت Fuchsia مستندات مفصل‌تری از <a href="https://fuchsia.dev/fuchsia-src/development/build/build_system">سامانهٔ ساخت</a> دارد.</p>
+<h4 id="other-tips-and-tricks"><a class="header" href="#other-tips-and-tricks">نکات و ترفندهای دیگر</a></h4>
+<p>هنگام استفاده از <code>build_fuchsia_from_rust_ci.sh</code> می‌توانید دستور <code>fx set</code> را پس از اجرای اول
+کامنت کنید تا GN هر بار دوباره اجرا نشود.
+اگر این کار را کردید، می‌توانید خط version_string را هم کامنت کنید تا چند ثانیه صرفه‌جویی شود.</p>
+<p><code>export NINJA_PERSISTENT_MODE=1</code> را اجرا کنید تا پس از ساخت اولیه، راه‌اندازی ninja سریع‌تر شود.</p>
+<h2 id="fuchsia-target-support"><a class="header" href="#fuchsia-target-support">Fuchsia target support</a></h2>
+<p>برای آشنایی بیشتر با پشتیبانی از هدف Fuchsia،
+فصل Fuchsia را در <a href="../../../rustc/platform-support/fuchsia.html">کتاب rustc</a> ببینید.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-loc">
+<p>تا ژوئن 2024، Fuchsia حدود ۲ میلیون خط کد Rust درجه‌یک (first-party) داشت و تقریباً
+همین مقدار کد شخص ثالث،
+به‌شمارش tokei (بدون کامنت‌ها و خطوط خالی). <a href="#fr-loc-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="../crater.html">→ Crater</a><a href="rust-for-linux.html">Rust برای Linux ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../rustc-dev-guide/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

@@ -1,0 +1,510 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>آزمون‌های UI — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tests/ui"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="ui-tests"><a class="header" href="#ui-tests">UI tests</a></h1>
+<p>تست‌های UI یک <a href="compiletest.html#test-suites">مجموعهٔ تست</a> مشخص از compiletest هستند.</p>
+<h2 id="introduction"><a class="header" href="#introduction">Introduction</a></h2>
+<p>تست‌های <a href="https://github.com/rust-lang/rust/blob/HEAD/tests/ui"><code>tests/ui</code></a> مجموعه‌ای از تست‌های همه‌منظوره‌اند که
+عمدتاً بر اعتبارسنجی خروجی کنسول کامپایلر تمرکز دارند،
+اما برای بسیاری کارهای دیگر هم می‌توان از آن‌ها استفاده کرد.
+برای مثال، می‌توان تست‌ها را طوری هم پیکربندی کرد که
+<a href="#controlling-passfail-expectations">برنامهٔ حاصل را اجرا کنند</a> تا رفتارش را تأیید کنند.</p>
+<p>برای مرور هدف هر زیرپوشه در <code>tests/ui</code>،
+<a href="https://github.com/rust-lang/rust/tree/HEAD/tests/ui/README.md">README.md</a> را ببینید.
+این وقتی مفید است که تست جدیدی می‌نویسید و به دنبال دسته‌ای برای قراردادن آن هستید.</p>
+<p>اگر باید با تست‌های cross-compile از نوع <code>#![no_std]</code> کار کنید،
+فصل <a href="./minicore.html">تست کمکی <code>minicore</code></a> را ببینید.</p>
+<h2 id="general-structure-of-a-test"><a class="header" href="#general-structure-of-a-test">ساختار کلی یک تست</a></h2>
+<p>یک تست شامل فایل منبع Rust است که در پوشهٔ <code>tests/ui</code> قرار دارد.
+<strong>تست‌ها باید در زیرپوشهٔ مناسب قرار بگیرند</strong> بر اساس هدف
+و دستهٔ تست — قراردادن تست مستقیماً در <code>tests/ui</code> مجاز نیست.</p>
+<p>Compiletest از <code>rustc</code> برای کامپایل تست استفاده می‌کند و خروجی را با
+خروجی مورد انتظار که در فایل <code>.stdout</code> یا <code>.stderr</code> کنار تست ذخیره شده مقایسه می‌کند.
+برای اطلاعات بیشتر <a href="#output-comparison">مقایسهٔ خروجی</a> را ببینید.</p>
+<p>علاوه بر این، خطاها و هشدارها باید با کامنت‌هایی در فایل منبع annotate شوند.
+برای اطلاعات بیشتر <a href="#error-annotations">annotationهای خطا</a> را ببینید.</p>
+<p><a href="directives.html">directiveهای</a> compiletest به شکل کامنت‌های ویژه با پیشوند <code>//@</code>
+نحوهٔ کامپایل تست و رفتار مورد انتظار را کنترل می‌کنند.</p>
+<p>انتظار می‌رود تست‌ها در کامپایل شکست بخورند، چون بیشتر تست‌ها خطاهای کامپایلر را می‌آزمایند.
+می‌توانید این رفتار را با یک directive تغییر دهید،
+به <a href="#controlling-passfail-expectations">کنترل انتظارات pass/fail</a> نگاه کنید.</p>
+<p>به‌طور پیش‌فرض، یک تست به‌صورت فایل دودویی اجرایی ساخته می‌شود.
+اگر نوع crate دیگری لازم دارید، می‌توانید با attribute با نام <code>#![crate_type]</code> آن را مطابق نیاز تنظیم کنید.</p>
+<h2 id="output-comparison"><a class="header" href="#output-comparison">Output comparison</a></h2>
+<p>تست‌های UI خروجی مورد انتظار کامپایلر را در snapshotهای <code>.stderr</code> و <code>.stdout</code>
+کنار تست ذخیره می‌کنند.
+معمولاً این فایل‌ها را با گزینهٔ خط فرمان <code>--bless</code> تولید می‌کنید،
+و سپس دستی بررسی می‌کنید تا ببینید آنچه انتظار دارید را در بر دارند.</p>
+<p>خروجی نرمال‌سازی می‌شود تا تفاوت‌های ناخواسته نادیده گرفته شوند،
+بخش <a href="#normalization">نرمال‌سازی</a> را ببینید.
+اگر فایل وجود نداشته باشد، compiletest انتظار دارد خروجی متناظر خالی باشد.</p>
+<p>دلیل رایج استفاده از نرمال‌سازی، revisionها و بیشتر ابزارهای بعدی،
+در نظر‌گرفتن تفاوت‌های پلتفرم است.
+جایگزین‌های این ابزارها را در نظر بگیرید، مثلاً
+استفاده از ABI با نام <code>extern "rust-invalid"</code> که روی هر پلتفرم نامعتبر است،
+به‌جای اینکه تست را طوری اصلاح کنید که از cross-compilation استفاده کند و هر ABI نامعتبر ممکن را تست کند.</p>
+<p>می‌تواند چند فایل stdout/stderr وجود داشته باشد.
+شکل کلی آن این است:</p>
+<pre><code class="language-text">*test-name*`.`*revision*`.`*compare_mode*`.`*extension*
+</code></pre>
+<ul>
+<li><em>test-name</em> نمی‌تواند نقطه داشته باشد.
+دلیلش این است که شکل کلی نام فایل‌های خروجی تست
+پیش‌بینی‌پذیر باشد و بتوانیم برای ردیابی فایل‌های خروجی سرگردان تست الگو را تطبیق دهیم.</li>
+<li><em>revision</em> نام <a href="#cfg-revisions">revision</a> است.
+اگر از revision استفاده نشود، این بخش گنجانده نمی‌شود.</li>
+<li><em>compare_mode</em> <a href="#compare-modes">حالت مقایسه</a> است.
+این فقط وقتی بررسی می‌شود که حالت مقایسهٔ داده‌شده فعال باشد.
+اگر فایل وجود نداشته باشد،
+compiletest فایل بدون حالت مقایسه را بررسی می‌کند.</li>
+<li><em>extension</em> is the kind of output being checked:
+<ul>
+<li><code>stderr</code> — compiler stderr</li>
+<li><code>stdout</code> — compiler stdout</li>
+<li><code>run.stderr</code> — stderr هنگام اجرای تست</li>
+<li><code>run.stdout</code> — stdout هنگام اجرای تست</li>
+<li><code>64bit.stderr</code> — stderr کامپایلر با directive با نام <code>stderr-per-bitwidth</code> روی هدف ۶۴ بیتی</li>
+<li><code>32bit.stderr</code> — stderr کامپایلر با directive با نام <code>stderr-per-bitwidth</code> روی هدف ۳۲ بیتی</li>
+</ul>
+</li>
+</ul>
+<p>یک مثال ساده <code>foo.stderr</code> کنار تست <code>foo.rs</code> است.
+مثال پیچیده‌تر <code>foo.my-revision.polonius.stderr</code> است.</p>
+<p>چند <a href="directives.html">directive</a> هست که نحوهٔ بررسی فایل‌های خروجی توسط compiletest را تغییر می‌دهند:</p>
+<ul>
+<li><code>stderr-per-bitwidth</code> — فایل‌های خروجی جداگانه را بر اساس پهنای اشاره‌گر هدف بررسی می‌کند.
+استفاده از directive با نام <code>normalize-stderr</code> را به‌جای آن در نظر بگیرید (<a href="#normalization">نرمال‌سازی</a> را ببینید).</li>
+<li><code>dont-check-compiler-stderr</code> — stderr کامپایلر را نادیده می‌گیرد.</li>
+<li><code>dont-check-compiler-stdout</code> — stdout کامپایلر را نادیده می‌گیرد.</li>
+<li><code>compare-output-by-lines</code> — برخی تست‌ها ترتیب خروجی غیرقطعی دارند،
+پس باید خط به خط مقایسه کنیم.</li>
+</ul>
+<p>تست‌های UI با پرچم <code>-Zdeduplicate-diagnostics=no</code> اجرا می‌شوند،
+که سازوکار داخلی حذف تکرار پیام‌های تشخیصی در rustc را غیرفعال می‌کند.
+یعنی ممکن است در خروجی چند پیام تکراری ببینید.
+این به روشن‌شدن موقعیت‌هایی که پیام‌های تشخیصی تکراری تولید می‌شوند کمک می‌کند.</p>
+<h3 id="normalization"><a class="header" href="#normalization">Normalization</a></h3>
+<p>خروجی کامپایلر نرمال‌سازی می‌شود تا تفاوت‌های خروجی بین پلتفرم‌ها،
+عمدتاً دربارهٔ نام فایل‌ها، حذف شود.</p>
+<p>Compiletest جایگزینی‌های زیر را روی خروجی کامپایلر انجام می‌دهد:</p>
+<ul>
+<li>پوشه‌ای که تست در آن تعریف شده با <code>$DIR</code> جایگزین می‌شود.
+مثال: <code>/path/to/rust/tests/ui/error-codes</code></li>
+<li>پوشهٔ منبع کتابخانهٔ استاندارد با <code>$SRC_DIR</code> جایگزین می‌شود.
+مثال: <code>/path/to/rust/library</code></li>
+<li>شمارهٔ خط و ستون برای مسیرهای درون <code>$SRC_DIR</code> با <code>LL:COL</code> جایگزین می‌شود.
+این کمک می‌کند تغییر در چیدمان کتابخانهٔ استاندارد باعث
+تغییرات گسترده در فایل‌های <code>.stderr</code> نشود.
+مثال: <code>$SRC_DIR/alloc/src/sync.rs:53:46</code></li>
+<li>پوشهٔ پایه‌ای که خروجی تست در آن می‌رود با <code>$TEST_BUILD_DIR</code> جایگزین می‌شود.
+این فقط در چند شرایط نادر پیش می‌آید.
+مثال: <code>/path/to/rust/build/x86_64-unknown-linux-gnu/test/ui</code></li>
+<li>پوشهٔ واقعی منبع کتابخانهٔ استاندارد با <code>$SRC_DIR_REAL</code> جایگزین می‌شود.</li>
+<li>پوشهٔ واقعی منبع کامپایلر با <code>$COMPILER_DIR_REAL</code> جایگزین می‌شود.</li>
+<li>tabها با <code>\t</code> جایگزین می‌شوند.</li>
+<li>بک‌اسلش‌ها (<code>\</code>) درون مسیرها به اسلش (<code>/</code>) تبدیل می‌شوند (با یک heuristic).
+این به نرمال‌سازی تفاوت‌ها با مسیرهای سبک Windows کمک می‌کند.</li>
+<li>خطوط جدید CRLF به LF تبدیل می‌شوند.</li>
+<li>annotationهای خط خطا مثل <code>//~ ERROR some message</code> حذف می‌شوند.</li>
+<li>هش‌های مختلف نمادهای v0 و legacy با جانگهدارهایی مثل
+<code>[HASH]</code> یا <code>&lt;SYMBOL_HASH&gt;</code> جایگزین می‌شوند.</li>
+</ul>
+<p>علاوه بر این، کامپایلر با پرچم <code>-Z ui-testing</code> اجرا می‌شود که باعث می‌شود
+خود کامپایلر برخی تغییرات را روی خروجی تشخیصی اعمال کند تا
+برای تست UI مناسب‌تر باشد.</p>
+<p>برای مثال، شمارهٔ خطوط را در خروجی ناشناس می‌کند (شمارهٔ خطوطی که
+قبل از هر خط منبع می‌آیند با <code>LL</code> جایگزین می‌شوند).
+در موقعیت‌های بسیار نادر،
+این حالت را می‌توان با directive با نام <code>//@ compile-flags: -Z ui-testing=no</code> غیرفعال کرد.</p>
+<p>هنگام استفاده از <code>-Z ui-testing=no</code>، آرگومان <code>--diagnostic-width</code> هم باید
+تنظیم شود تا از اینکه تست‌ها بسته به پهنای ترمینالی که مجموعهٔ تست UI در آن اجرا می‌شود بگذرند یا شکست بخورند جلوگیری شود.</p>
+<p>نکته: شمارهٔ خط و ستون در خطوط <code>--&gt;</code> که به تست اشاره می‌کنند <em>نرمال‌سازی نمی‌شوند</em>
+و همان‌طور که هستند باقی می‌مانند.
+این تضمین می‌کند کامپایلر همچنان به مکان درست اشاره کند،
+و فایل‌های stderr خوانا می‌مانند.
+ایده‌آل این است که همهٔ اطلاعات خط/ستون حفظ شوند، اما تغییرات کوچک در منبع
+باعث diffهای بزرگ و تعارض‌های merge و خطاهای تست بیشتری می‌شود.</p>
+<p>گاهی این نرمال‌سازی‌های داخلی کافی نیستند.
+در چنین مواردی، می‌توانید با directiveهای <code>normalize-*</code> قواعد نرمال‌سازی سفارشی بدهید، مثلاً</p>
+<pre><code class="language-rust ignore">//@ normalize-stdout: "foo" -&gt; "bar"
+//@ normalize-stderr: "foo" -&gt; "bar"
+//@ normalize-stderr-32bit: "fn\(\) \(32 bits\)" -&gt; "fn\(\) \($$PTR bits\)"
+//@ normalize-stderr-64bit: "fn\(\) \(64 bits\)" -&gt; "fn\(\) \($$PTR bits\)"</code></pre>
+<p>این به تست می‌گوید روی پلتفرم‌های ۳۲ بیتی، هر وقت کامپایلر <code>fn() (32 bits)</code> را در stderr می‌نویسد،
+باید به‌جای آن به <code>fn() ($PTR bits)</code> نرمال‌سازی شود.
+برای ۶۴ بیتی هم مشابه است.
+جایگزینی با regexها و با نوع regex پیش‌فرض ارائه‌شده توسط crate با نام <code>regex</code> انجام می‌شود.</p>
+<p>فایل مرجع متناظر از خروجی نرمال‌سازی‌شده استفاده می‌کند تا هم
+پلتفرم‌های ۳۲ بیتی و هم ۶۴ بیتی را تست کند:</p>
+<pre><code class="language-text">...
+   |
+   = note: source type: fn() ($PTR bits)
+   = note: target type: u16 (16 bits)
+...
+</code></pre>
+<p>برای یک نمونهٔ کاربرد عینی <a href="https://github.com/rust-lang/rust/blob/HEAD/tests/ui/transmute/main.rs"><code>ui/transmute/main.rs</code></a> و <a href="https://github.com/rust-lang/rust/blob/HEAD/tests/ui/transmute/main.stderr"><code>main.stderr</code></a> را ببینید.</p>
+<h2 id="error-annotations"><a class="header" href="#error-annotations">Error annotations</a></h2>
+<p>annotationهای خطا خطاهایی را مشخص می‌کنند که انتظار می‌رود کامپایلر صادر کند.
+آن‌ها به خطی از منبع که خطا در آن است «متصل» می‌شوند.</p>
+<pre><code class="language-rust ignore">fn main() {
+    boom  //~ ERROR cannot find value `boom` in this scope [E0425]
+}</code></pre>
+<p>هرچند تست‌های UI فایل <code>.stderr</code> دارند که کل خروجی کامپایلر را شامل می‌شود،
+تست‌های UI لازم دارند خطاها درون منبع هم annotate شوند.
+این افزونگی به پرهیز از اشتباه کمک می‌کند، چون فایل‌های <code>.stderr</code> معمولاً خودکار تولید می‌شوند.
+همچنین با نگاه‌کردن به یک فایل به‌جای مقایسهٔ فایل <code>.stderr</code> با منبع،
+کمک می‌کند ببینیم span خطا کجا باید اشاره کند.
+در نهایت تضمین می‌کنند هیچ خطای غیرمنتظرهٔ اضافه‌ای تولید نمی‌شود.</p>
+<p>چند شکل دارند، اما عموماً کامنتی هستند با سطح پیام تشخیصی
+(مثل <code>ERROR</code>) و زیررشته‌ای از خروجی خطای مورد انتظار.
+لازم نیست کل پیام را بنویسید،
+اما حتماً بخش مهم پیام را بگنجانید تا مستندسازی خودکار باشد.</p>
+<p>بیشتر annotationهای خطا باید با خط پیام تشخیصی تطبیق داده شوند.
+چند راه برای تطبیق پیام با خط هست (مثال‌ها را در ادامه ببینید):</p>
+<ul>
+<li><code>~</code>: سطح خطا و پیام را با خط <em>فعلی</em> مرتبط می‌کند</li>
+<li><code>~^</code>: سطح خطا و پیام را با خط annotation خطای <em>قبلی</em> مرتبط می‌کند.
+هر caret (<code>^</code>) که اضافه کنید یک خط به این می‌افزاید،
+پس <code>~^^^</code> سه خط بالاتر از خط annotation خطاست.</li>
+<li><code>~|</code>: سطح خطا و پیام را با <em>همان</em> خطِ
+<em>کامنت قبلی</em> مرتبط می‌کند.
+این وقتی چند پیام با یک خط مرتبط‌اند از استفاده از چند caret راحت‌تر است.</li>
+<li><code>~v</code>: سطح خطا و پیام را با خط annotation خطای <em>بعدی</em> مرتبط می‌کند.
+هر نماد (<code>v</code>) که اضافه کنید یک خط به این می‌افزاید،
+پس <code>~vvv</code> سه خط پایین‌تر از خط annotation خطاست.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-rust ignore">let _ = same_line; //~ ERROR undeclared variable
+fn meow(_: [u8]) {}
+//~^ ERROR unsized
+//~| ERROR anonymous parameters</code></pre>
+<p>نویسهٔ فاصله بین <code>//~</code> (یا شکل‌های دیگر آن) و متن بعدی
+بی‌اهمیت است (یعنی تفاوت معنایی بین <code>//~ ERROR</code> و
+<code>//~ERROR</code> وجود ندارد، هرچند اولی در کدبیس رایج‌تر است).</p>
+<p><code>~? &lt;diagnostic kind&gt;</code> (مثلاً <code>~? ERROR</code>)
+برای تطبیق پیام‌های تشخیصی <em>بدون</em> اطلاعات خط به‌کار می‌رود،
+یا آن‌هایی که اطلاعات خطشان بیرون از فایل تست اصلی است<sup class="footnote-reference" id="fr-main test file-1"><a href="#footnote-main test file">1</a></sup>.
+این annotationها را می‌توان روی هر خطی از فایل تست گذاشت.</p>
+<h3 id="error-annotation-examples"><a class="header" href="#error-annotation-examples">Error annotation examples</a></h3>
+<p>در ادامه مثال‌هایی از annotationهای خطا روی خطوط مختلف منبع تست UI آمده است.</p>
+<h4 id="positioned-on-error-line"><a class="header" href="#positioned-on-error-line">قرارگرفته روی خط خطا</a></h4>
+<p>از اصطلاح <code>//~ ERROR</code> استفاده کنید:</p>
+<pre><code class="language-rust ignore">fn main() {
+    let x = (1, 2, 3);
+    match x {
+        (_a, _x @ ..) =&gt; {} //~ ERROR `_x @` is not allowed in a tuple
+        _ =&gt; {}
+    }
+}</code></pre>
+<h4 id="positioned-below-error-line"><a class="header" href="#positioned-below-error-line">قرارگرفته زیر خط خطا</a></h4>
+<p>از اصطلاح <code>//~^</code> با تعداد caret در رشته برای نشان‌دادن تعداد خطوط بالاتر استفاده کنید.
+در مثال زیر، خط خطا چهار خط بالاتر از
+خط annotation خطاست، پس چهار caret در annotation گنجانده شده است.</p>
+<pre><code class="language-rust ignore">fn main() {
+    let x = (1, 2, 3);
+    match x {
+        (_a, _x @ ..) =&gt; {}  // &lt;- the error is on this line
+        _ =&gt; {}
+    }
+}
+//~^^^^ ERROR `_x @` is not allowed in a tuple</code></pre>
+<h4 id="use-same-error-line-as-defined-on-error-annotation-line-above"><a class="header" href="#use-same-error-line-as-defined-on-error-annotation-line-above">استفاده از همان خط خطای تعریف‌شده در خط annotation خطای بالا</a></h4>
+<p>از اصطلاح <code>//~|</code> برای تعریف همان خط خطای
+خط annotation خطای بالا استفاده کنید:</p>
+<pre><code class="language-rust ignore">struct Binder(i32, i32, i32);
+
+fn main() {
+    let x = Binder(1, 2, 3);
+    match x {
+        Binder(_a, _x @ ..) =&gt; {}  // &lt;- the error is on this line
+        _ =&gt; {}
+    }
+}
+//~^^^^ ERROR `_x @` is not allowed in a tuple struct
+//~| ERROR this pattern has 1 field, but the corresponding tuple struct has 3 fields [E0023]</code></pre>
+<h4 id="positioned-above-error-line"><a class="header" href="#positioned-above-error-line">قرارگرفته بالای خط خطا</a></h4>
+<p>از اصطلاح <code>//~v</code> با تعداد v در رشته برای نشان‌دادن تعداد خطوط پایین‌تر استفاده کنید.
+این معمولاً در تست‌های lexer یا parser برای تطبیق خطاهایی مثل delimiter بسته‌نشده یا literal بسته‌نشده که در پایان فایل رخ می‌دهند به‌کار می‌رود.</p>
+<pre><code class="language-rust ignore">// ignore-tidy-trailing-newlines
+//~v ERROR this file contains an unclosed delimiter
+fn main((ؼ</code></pre>
+<h4 id="error-without-line-information"><a class="header" href="#error-without-line-information">خطا بدون اطلاعات خط</a></h4>
+<p>از <code>//~?</code> برای تطبیق خطا بدون اطلاعات خط استفاده کنید.
+<code>//~?</code> دقیق است و اگر اطلاعات خط خطا در دسترس باشد آن را تطبیق نمی‌دهد.
+برای تست‌هایی که می‌خواهند پیام‌های تشخیصی کامپایلر را تطبیق دهند باید بر <code>//@ error-pattern</code> ترجیح داده شود،
+چون <code>//@ error-pattern</code> نادقیق و غیرجامع است.</p>
+<pre><code class="language-rust ignore">//@ compile-flags: --print yyyy
+
+//~? ERROR unknown print request: `yyyy`</code></pre>
+<h3 id="error-pattern"><a class="header" href="#error-pattern"><code>error-pattern</code></a></h3>
+<p><a href="directives.html">directive</a> با نام <code>error-pattern</code> را می‌توان برای پیام‌های زمان اجرا که
+span مشخصی ندارند، یا در موارد استثنایی برای پیام‌های زمان کامپایل به‌کار برد.</p>
+<p>این تست را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">fn main() {
+    let a: *const [_] = &amp;[1, 2, 3];
+    unsafe {
+        let _b = (*a)[3];
+    }
+}</code></pre>
+<p>می‌خواهیم مطمئن شویم این «index out of bounds» نشان می‌دهد،
+اما نمی‌توانیم از annotation با نام <code>ERROR</code> استفاده کنیم چون خطای زمان اجرا span ندارد.
+آن‌گاه وقت استفاده از directive با نام <code>error-pattern</code> است:</p>
+<pre><code class="language-rust ignore">//@ error-pattern: index out of bounds
+fn main() {
+    let a: *const [_] = &amp;[1, 2, 3];
+    unsafe {
+        let _b = (*a)[3];
+    }
+}</code></pre>
+<p>برای تست سخت‌گیرانهٔ خروجی زمان کامپایل، تا جای ممکن از annotationهای خط <code>//~</code> استفاده کنید،
+از جمله annotationهای <code>//~?</code> برای پیام‌های تشخیصی بدون span.</p>
+<p>اگر خروجی زمان کامپایل به هدف وابسته یا بیش‌ازحد مفصل است،
+از directive با نام <code>//@ dont-require-annotations: &lt;diagnostic-kind&gt;</code> استفاده کنید تا بررسی annotationهای خط
+غیرجامع شود.
+در این حالت برخی پیام‌های کامپایلر ممکن است بدون annotation بمانند.</p>
+<p>برای بررسی خروجی زمان اجرا، <code>//@ check-run-results</code> ممکن است ترجیح داده شود.</p>
+<p>فقط وقتی هیچ‌یک از موارد بالا کار نمی‌کند از <code>error-pattern</code> استفاده کنید،
+مثل وقتی که یک الگوی رشته‌ای مشخص را در خروجی panic زمان اجرا می‌یابید.</p>
+<p>annotationهای خط <code>//~</code> و <code>error-pattern</code> سازگارند و می‌توان در یک تست با هم به‌کار برد.</p>
+<h3 id="diagnostic-kinds-error-levels"><a class="header" href="#diagnostic-kinds-error-levels">انواع پیام‌های تشخیصی (سطوح خطا)</a></h3>
+<p>انواع پیام تشخیصی‌ای که می‌توانید داشته باشید این‌هاست:</p>
+<ul>
+<li><code>ERROR</code></li>
+<li><code>WARN</code> (یا <code>WARNING</code>)</li>
+<li><code>NOTE</code></li>
+<li><code>HELP</code></li>
+<li><code>SUGGESTION</code></li>
+<li><code>RAW</code></li>
+</ul>
+<p>نوع <code>SUGGESTION</code> برای مشخص‌کردن متن جایگزین مورد انتظار برای یک پیشنهاد تشخیصی
+به‌کار می‌رود.
+نوع <code>RAW</code> را می‌توان برای تطبیق خطوط خروجی غیرساختاریافته‌ای به‌کار برد که گاهی کامپایلر به‌جای یا علاوه بر JSON ساختاریافته صادر می‌کند.</p>
+<p>انواع <code>ERROR</code> و <code>WARN</code> به‌طور پیش‌فرض باید با annotationهای خط <code>//~</code>
+به‌طور جامع پوشش داده شوند.</p>
+<p>انواع دیگر فقط وقتی باید annotate شوند که دست‌کم یک annotation از آن نوع
+در فایل تست ظاهر شود.
+برای مثال،
+یک <code>//~ NOTE</code> لازم می‌کند همهٔ <code>//~ NOTE</code>های دیگر در فایل هم صراحتاً نوشته شوند.</p>
+<p>از directive با نام <code>//@ dont-require-annotations</code> برای انصراف از annotationهای جامع استفاده کنید.
+مثلاً از <code>//@ dont-require-annotations: NOTE</code> برای annotate‌کردن انتخابی noteها استفاده کنید.
+از استفاده از این directive برای <code>ERROR</code>ها و <code>WARN</code>ing‌ها پرهیز کنید، مگر اینکه دلیل جدی باشد،
+مثل خروجی کامپایلر وابسته به هدف.</p>
+<p>برخی پیام‌های تشخیصی هرگز لازم نیست annotate شوند، صرف‌نظر از نوع یا directiveها.
+نمونه‌ها خطوط ثانویهٔ پیام‌های تشخیصی چندخطی،
+یا پیام‌های فراگیر مثل <code>aborting due to N previous errors</code> هستند.</p>
+<p>تست‌های UI به‌طور پیش‌فرض از پرچم <code>-A unused</code> برای نادیده‌گرفتن همهٔ هشدارهای unused استفاده می‌کنند،
+چون هشدارهای unused معمولاً کانون تست نیستند.
+اما نمونه‌کدهای ساده اغلب هشدار unused دارند.
+اگر تست به‌طور مشخص هشدار unused را می‌آزماید،
+فقط attribute با نام <code>#![warn(unused)]</code> مناسب را در صورت نیاز اضافه کنید.</p>
+<h3 id="cfg-revisions"><a class="header" href="#cfg-revisions"><code>cfg</code> revisions</a></h3>
+<p>هنگام استفاده از <a href="compiletest.html#revisions">revisionها</a>،
+می‌توان پیام‌های مختلف را بسته به revision فعلی به‌طور شرطی بررسی کرد.
+این کار با قرار‌دادن نام cfg مربوط به revision در قلاب انجام می‌شود، مثل این:</p>
+<pre><code class="language-rust ignore">//@ edition:2018
+//@ revisions: mir thir
+//@[thir] compile-flags: -Z thir-unsafeck
+
+async unsafe fn f() {}
+
+async fn g() {
+    f(); //~ ERROR call to unsafe function is unsafe
+}
+
+fn main() {
+    f(); //[mir]~ ERROR call to unsafe function is unsafe
+}</code></pre>
+<p>در این مثال، پیام خطای دوم فقط در revision با نام <code>mir</code> صادر می‌شود.
+revision با نام <code>thir</code> فقط خطای اول را صادر می‌کند.</p>
+<p>اگر <code>cfg</code> باعث شود کامپایلر خروجی متفاوتی صادر کند،
+یک تست می‌تواند چند فایل <code>.stderr</code> برای خروجی‌های مختلف داشته باشد.
+در مثال بالا،
+یک فایل <code>.mir.stderr</code> و یک فایل <code>.thir.stderr</code> با خروجی‌های متفاوت
+revisionهای مختلف وجود خواهد داشت.</p>
+<blockquote>
+<p>نکته: revisionهای cfg درون کد منبع با attributeهای <code>#[cfg]</code> هم کار می‌کنند.</p>
+<p>طبق قرارداد، cfg با نام <code>FALSE</code> برای داشتن پیکربندی همیشه‌نادرست به‌کار می‌رود.</p>
+</blockquote>
+<h2 id="controlling-passfail-expectations"><a class="header" href="#controlling-passfail-expectations">کنترل انتظارات pass/fail</a></h2>
+<p>به‌طور پیش‌فرض، انتظار می‌رود یک تست UI <strong>خطای کامپایل تولید کند</strong> چون بیشتر
+تست‌ها ورودی نامعتبر و پیام‌های تشخیصی خطا را بررسی می‌کنند.
+اما می‌توانید تست‌های UI‌ای هم بسازید که انتظار می‌رود کامپایل در آن‌ها موفق شود،
+و حتی می‌توانید برنامهٔ حاصل را اجرا کنید.
+فقط یکی از <a href="directives.html">directiveهای</a> زیر را اضافه کنید:</p>
+<ul>
+<li>Pass directives:
+<ul>
+<li><code>//@ check-pass</code> — کامپایل باید موفق شود اما codegen را رد می‌کند
+(که گران است و در بیشتر موارد نباید شکست بخورد).</li>
+<li><code>//@ build-pass</code> — کامپایل و لینک باید موفق شوند اما
+فایل دودویی حاصل را اجرا نمی‌کند.</li>
+<li><code>//@ run-pass</code> — کامپایل باید موفق شود و اجرای فایل دودویی حاصل
+باید با کد 0 خارج شود که نشان‌دهندهٔ موفقیت است.</li>
+</ul>
+</li>
+<li>Fail directives:
+<ul>
+<li><code>//@ check-fail</code> — کامپایل باید شکست بخورد (فاز codegen رد می‌شود).
+این پیش‌فرض تست‌های UI است.</li>
+<li><code>//@ build-fail</code> — compilation should fail during the codegen phase.
+This will run <code>rustc</code> twice:
+<ul>
+<li>بار اول برای اطمینان از موفقیت کامپایل بدون فاز codegen است</li>
+<li>بار دوم برای اطمینان از شکست کامپایل کامل است</li>
+</ul>
+</li>
+<li><code>//@ run-fail</code> — کامپایل باید موفق شود،
+اما اجرای فایل دودویی حاصل باید با کدی در بازهٔ <code>1..=127</code> خارج شود که
+نشان‌دهندهٔ شکست عادی است.
+روی هدف‌های بدون پشتیبانی از unwind، crashها هم پذیرفته می‌شوند.</li>
+<li><code>//@ run-crash</code> — compilation should succeed,
+but running the resulting binary should fail with a crash.
+Crashing is defined as “not exiting with a code in the range <code>0..=127</code>”.
+<ul>
+<li>مثال در لینوکس: خاتمه با <code>SIGABRT</code> یا <code>SIGSEGV</code>.</li>
+<li>مثال در ویندوز: خروج با کد <code>STATUS_ILLEGAL_INSTRUCTION</code> (<code>0xC000001D</code>).</li>
+</ul>
+</li>
+<li><code>//@ run-fail-or-crash</code> — کامپایل باید موفق شود،
+اما اجرای فایل دودویی حاصل باید یا <code>run-fail</code> یا <code>run-crash</code> باشد.
+وقتی مفید است که تستی روی برخی هدف‌ها crash کند اما روی بقیه فقط شکست بخورد.</li>
+</ul>
+</li>
+</ul>
+<p>برای تست‌های <code>run-pass</code>، <code>run-fail</code>، <code>run-crash</code> و <code>run-fail-or-crash</code>،
+خروجی خود برنامه به‌طور پیش‌فرض بررسی نمی‌شود.</p>
+<p>اگر می‌خواهید خروجی اجرای برنامه را بررسی کنید، directive با نام <code>check-run-results</code> را بگنجانید.
+این فایل‌های <code>.run.stderr</code> و
+<code>.run.stdout</code> را برای مقایسه با خروجی واقعی برنامه بررسی می‌کند.</p>
+<p>تست‌هایی که directiveهای <code>*-pass</code> دارند را می‌توان با گزینهٔ خط فرمان <code>--pass</code> بازنویسی کرد:</p>
+<pre><code class="language-sh">./x test tests/ui --pass check
+</code></pre>
+<p>گزینهٔ <code>--pass</code> فقط بر تست‌های UI اثر می‌گذارد.
+استفاده از <code>--pass check</code> می‌تواند مجموعهٔ تست UI را بسیار سریع‌تر اجرا کند (روی سیستم من تقریباً دو برابر سریع‌تر)،
+هرچند بدیهی است به همان اندازه چیز را نمی‌آزماید.</p>
+<p>directive با نام <code>no-pass-override</code> را می‌توان برای نادیده‌گرفتن پرچم خط فرمان <code>--pass</code> به‌کار برد اگر
+تست با آن بازنویسی درست کار نکند.</p>
+<h2 id="known-bugs"><a class="header" href="#known-bugs">Known bugs</a></h2>
+<p>directive با نام <code>known-bug</code> را می‌توان برای تست‌هایی به‌کار برد که باگ شناخته‌شده‌ای را نشان می‌دهند
+که هنوز رفع نشده است.
+افزودن تست برای باگ‌های شناخته‌شده به چند دلیل مفید است، از جمله:</p>
+<ol>
+<li>نگه‌داشتن تست کارا که وقتی باگ رفع شد به‌راحتی می‌توان دوباره از آن استفاده کرد.</li>
+<li>فراهم‌کردن نگهبانی (sentinel) که اگر باگ به‌طور اتفاقی رفع شود شکست می‌خورد.
+این می‌تواند به توسعه‌دهنده هشدار دهد تا بداند issue مرتبط رفع شده
+و احتمالاً می‌توان آن را بست.</li>
+</ol>
+<p>این directive شمارهٔ issueهای جداشده با ویرگول را به‌عنوان آرگومان می‌گیرد، یا <code>"unknown"</code>:</p>
+<ul>
+<li><code>//@ known-bug: #123, #456</code> (وقتی issueها در rust-lang/rust هستند)</li>
+<li><code>//@ known-bug: rust-lang/chalk#123456</code> (اجازه می‌دهد قبل از <code>#</code> متن دلخواه باشد،
+که وقتی issue در مخزن دیگری است مفید است)</li>
+<li><code>//@ known-bug: unknown</code>
+(وقتی هنوز issue شناخته‌شده‌ای نیست؛ ترجیحاً اگر وجود ندارد یکی باز کنید)</li>
+</ul>
+<p>در تست دارای <code>known-bug</code> <a href="#error-annotations">annotationهای خطا</a> نگذارید.
+تست همچنان باید directiveهای عادی دیگر و فایل‌های stdout/stderr را داشته باشد.</p>
+<h2 id="test-organization"><a class="header" href="#test-organization">Test organization</a></h2>
+<p>هنگام تصمیم دربارهٔ محل قرارگرفتن فایل تست،
+لطفاً سعی کنید زیرپوشه‌ای بیابید که بهترین تطابق را با آنچه می‌آزمایید دارد.
+تمام تلاش خود را بکنید تا همه‌چیز سازمان‌یافته بماند.
+باید اذعان کرد که می‌تواند دشوار باشد چون برخی تست‌ها ممکن است با دسته‌های مختلف همپوشانی داشته باشند،
+و چیدمان موجود ممکن است خوب جور نباشد.</p>
+<p>تست را با توصیف مختصری از آنچه بررسی می‌کند نام‌گذاری کنید.
+از گنجاندن شمارهٔ issue در نام تست پرهیز کنید.
+برای بحث عمیق‌تر <a href="best-practices.html">بهترین روش‌ها</a> را ببینید.</p>
+<p>ایده‌آل این است که تست به پوشه‌ای اضافه شود که به شناسایی اینکه چه بخشی
+از کد در اینجا تست می‌شود کمک کند (مثلاً
+<code>tests/ui/borrowck/reject-move-out-of-borrow-via-pat.rs</code>)</p>
+<p>هنگام نوشتن قابلیت جدید، ممکن است بخواهید <strong>زیرپوشه‌ای برای ذخیرهٔ تست‌های خود بسازید</strong>.
+برای مثال، اگر RFC 1234 («Widgets») را پیاده‌سازی می‌کنید،
+شاید منطقی باشد تست‌ها را در پوشه‌ای مثل <code>tests/ui/rfc1234-widgets/</code> بگذارید.</p>
+<p>در موارد دیگر ممکن است از قبل پوشهٔ مناسبی وجود داشته باشد.</p>
+<p>با گذشت زمان پوشهٔ <a href="https://github.com/rust-lang/rust/blob/HEAD/tests/ui"><code>tests/ui</code></a> بسیار سریع رشد کرده است.
+بررسی‌ای در <a href="intro.html#tidy">tidy</a> هست که تضمین می‌کند هیچ زیرپوشه‌ای بیش از
+۱۰۰۰ ورودی نداشته باشد.
+داشتن فایل‌های بسیار زیاد مشکل ایجاد می‌کند چون با ویرایشگر/IDE
+سازگار نیست و رابط GitHub بیش از ۱۰۰۰ ورودی نمایش نمی‌دهد.
+اما چون <code>tests/ui</code> (پوشهٔ ریشهٔ تست UI) و پوشهٔ <code>tests/ui/issues</code> بیش از
+۱۰۰۰ ورودی دارند، برای آن پوشه‌ها حد دیگری تعیین کرده‌ایم.
+پس لطفاً از قراردادن تست جدید در آنجا پرهیز کنید و سعی کنید مکان مرتبط‌تری بیابید.</p>
+<p>برای مثال، اگر تست شما به closureها مربوط است، باید آن را در <code>tests/ui/closures</code> بگذارید.
+وقتی به حد رسیدید، می‌توانید با تغییر <a href="https://github.com/rust-lang/rust/blob/HEAD/src/tools/tidy/src/ui_tests.rs">اینجا</a> آن را افزایش دهید.</p>
+<h2 id="rustfix-tests"><a class="header" href="#rustfix-tests">Rustfix tests</a></h2>
+<p>تست‌های UI می‌توانند اعتبارسنجی کنند که پیشنهادهای تشخیصی درست اعمال می‌شوند و
+تغییرات حاصل درست کامپایل می‌شوند.
+این کار با directive با نام <code>run-rustfix</code> ممکن است:</p>
+<pre><code class="language-rust ignore">//@ run-rustfix
+//@ check-pass
+#![crate_type = "lib"]
+
+pub struct not_camel_case {}
+//~^ WARN `not_camel_case` should have an upper camel case name
+//~| HELP convert the identifier to upper camel case
+//~| SUGGESTION NotCamelCase</code></pre>
+<p>تست‌های rustfix باید فایلی با پسوند <code>.fixed</code> داشته باشند که
+منبع را پس از اعمال پیشنهاد در بر دارد.</p>
+<ul>
+<li>وقتی تست اجرا می‌شود، compiletest ابتدا بررسی می‌کند lint/هشدار درست تولید شده باشد.</li>
+<li>سپس پیشنهاد را اعمال می‌کند و با <code>.fixed</code> مقایسه می‌کند (باید مطابق باشند).</li>
+<li>در نهایت منبع اصلاح‌شده کامپایل می‌شود و این کامپایل باید موفق شود.</li>
+</ul>
+<p>معمولاً هنگام ساخت تست rustfix فایل <code>.fixed</code> را
+به‌طور خودکار با گزینهٔ <code>x test --bless</code> تولید می‌کنید.</p>
+<p>directive با نام <code>run-rustfix</code> باعث می‌شود <em>همهٔ</em> پیشنهادها اعمال شوند،
+حتی اگر <a href="../diagnostics.html#suggestions"><code>MachineApplicable</code></a> نباشند.
+اگر این مشکل‌ساز است،
+می‌توانید علاوه بر <code>run-rustfix</code> directive با نام <code>rustfix-only-machine-applicable</code> را هم اضافه کنید.
+این باید وقتی به‌کار رود که ترکیبی از سطوح مختلف پیشنهاد وجود دارد،
+و برخی از آن‌هایی که machine-applicable نیستند به‌درستی اعمال نمی‌شوند.</p>
+<h2 id="compare-modes"><a class="header" href="#compare-modes">Compare modes</a></h2>
+<p><a href="compiletest.html#compare-modes">حالت‌های مقایسه</a> را می‌توان برای اجرای همهٔ تست‌ها با
+پرچم‌هایی متفاوت از آنچه معمولاً با آن‌ها کامپایل می‌شوند به‌کار برد.
+در برخی موارد این می‌تواند باعث خروجی متفاوتی از کامپایلر شود.
+برای پشتیبانی از این،
+می‌توان فایل‌های خروجی مختلفی ذخیره کرد که خروجی را بر اساس حالت مقایسه در بر دارند.</p>
+<p>برای مثال، هنگام استفاده از حالت Polonius، تست <code>foo.rs</code> ابتدا خروجی
+مورد انتظار را در <code>foo.polonius.stderr</code> جست‌وجو می‌کند و اگر پیدا نکند به <code>foo.stderr</code> معمول برمی‌گردد.
+این مفید است چون حالت‌های مختلف گاهی می‌توانند به پیام‌های تشخیصی و رفتار متفاوتی بینجامند.
+این می‌تواند به ردیابی اینکه کدام تست‌ها بین حالت‌ها تفاوت دارند،
+و بررسی بصری آن تفاوت‌های تشخیصی کمک کند.</p>
+<p>اگر در مورد نادری با تستی روبه‌رو شدید که رفتار متفاوتی دارد،
+می‌توانید چیزی شبیه این را اجرا کنید تا فایل stderr جایگزین تولید شود:</p>
+<pre><code class="language-sh">./x test tests/ui --compare-mode=polonius --bless
+</code></pre>
+<p>فعلاً هیچ‌یک از حالت‌های مقایسه برای تست‌های UI در CI بررسی نمی‌شوند.</p>
+<h2 id="rustc_-test-attributes"><a class="header" href="#rustc_-test-attributes"><code>rustc_*</code> TEST attributes</a></h2>
+<p>کامپایلر چند attribute با نام <code>#[rustc_*]</code> دائماً ناپایدار تعریف می‌کند که پشت
+قابلیت داخلی <code>rustc_attrs</code> قرار دارند و اطلاعات اضافی داخلی کامپایلر را dump می‌کنند.
+برای جزئیات بیشتر زیربخش متناظر در <a href="../compiler-debugging.html#rustc_-test-attributes">اشکال‌زدایی کامپایلر</a> را ببینید.</p>
+<p>می‌توان از آن‌ها در تست‌ها برای آزمودن دقیق‌تر، خواناتر و آسان‌تر حالت داخلی کامپایلر
+در مواردی استفاده کرد که انجام همان کار فقط با Rust «رو به کاربر» بسیار دشوار می‌بود.
+در واقع می‌توان گفت این کار اندکی از
+اصطلاح «UI» (رابط <em>کاربر</em>) سوءاستفاده می‌کند و چنین تست‌های UI را از جعبه‌سیاه به جعبه‌سفید تبدیل می‌کند.
+با احتیاط و کم از آن‌ها استفاده کنید.</p>
+<h2 id="ui-test-mode-preset-lint-levels"><a class="header" href="#ui-test-mode-preset-lint-levels">سطوح lint از پیش تنظیم‌شده در حالت تست UI</a></h2>
+<p>به‌طور پیش‌فرض، مجموعه‌های تست در حالت تست UI (<code>tests/ui</code>، <code>tests/ui-fulldeps</code>،
+اما نه <code>tests/rustdoc-ui</code>) این‌ها را مشخص می‌کنند</p>
+<ul>
+<li><code>-A unused</code></li>
+<li><code>-W unused_attributes</code> (چون این‌ها معمولاً برای تست‌های UI جالب‌اند)</li>
+<li><code>-A internal_features</code></li>
+<li><code>-A incomplete_features</code></li>
+<li><code>-A unused_parens</code></li>
+<li><code>-A unused_braces</code></li>
+</ul>
+<p>برای جزئیات بیشتر <a href="https://github.com/rust-lang/rust/blob/HEAD/src/tools/compiletest/src/runtest.rs">runtest</a> را ببینید.</p>
+<p>If:</p>
+<ul>
+<li>حالت pass تست UI پایین‌تر از <code>run</code> است (یعنی check یا build).</li>
+<li>هیچ حالت مقایسه‌ای مشخص نشده است.</li>
+</ul>
+<p>چون در تست‌های UI می‌توانند بسیار پرسروصدا باشند.</p>
+<p>می‌توانید آن‌ها را با پرچم‌های سطح lint در <code>compile-flags</code> یا
+attributeهای سطح lint درون منبع در صورت نیاز بازنویسی کنید.</p>
+<p>توجه کنید که نسخهٔ <code>rustfix</code> پرچم <code>-A unused</code> را <em>نخواهد</em> داشت،
+یعنی ممکن است برای سرکوب lintهای <code>unused</code> روی فایل rustfix‌شده مجبور شوید <code>#[allow(unused)]</code> بگذارید (چون ممکن است خود rustfix را روی lintهای <code>unused</code> تست کنیم).</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-main test file">
+<p>این فایلی است که annotationهای <code>~?</code> دارد،
+برخلاف فایل‌های aux یا منابعی که کنترلی بر آن‌ها نداریم. <a href="#fr-main test file-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="compiletest.html">→ Compiletest</a><a href="directives.html">دستورالعمل‌های آزمون ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

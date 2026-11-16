@@ -1,0 +1,139 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>استفاده از Box&lt;T&gt; برای اشاره به داده‌ها در heap — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch15-01-box"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="using-boxt-to-point-to-data-on-the-heap"><a class="header" href="#using-boxt-to-point-to-data-on-the-heap">استفاده از <code>Box&lt;T&gt;</code> برای اشاره به داده‌ها در Heap</a></h2>
+<p>ساده‌ترین اشاره‌گر (Pointer) هوشمند یک <em>جعبه</em> است که نوع آن به صورت <code>Box&lt;T&gt;</code> نوشته می‌شود. جعبه‌ها به شما امکان می‌دهند داده‌ها را در heap ذخیره کنید به جای stack. چیزی که در stack باقی می‌ماند، اشاره‌گر (Pointer)ی به داده‌های heap است. برای مرور تفاوت بین stack و heap به فصل ۴ مراجعه کنید.</p>
+<p>جعبه‌ها هیچ سربار عملکردی ندارند، به‌جز ذخیره داده‌های خود در heap به جای stack. اما آن‌ها قابلیت‌های اضافی زیادی ندارند. شما اغلب آن‌ها را در این موقعیت‌ها استفاده خواهید کرد:</p>
+<ul>
+<li>هنگامی که نوعی دارید که اندازه آن در زمان کامپایل مشخص نیست و می‌خواهید از مقداری از آن نوع در محیطی که نیاز به اندازه دقیق دارد استفاده کنید.</li>
+<li>هنگامی که مقدار زیادی داده دارید و می‌خواهید مالکیت را انتقال دهید، اما اطمینان حاصل کنید که داده‌ها هنگام انجام این کار کپی نمی‌شوند.</li>
+<li>هنگامی که می‌خواهید مالک یک مقدار باشید و فقط اهمیت می‌دهید که آن نوع، یک صفت خاص را پیاده‌سازی کرده باشد نه اینکه از یک نوع خاص باشد.</li>
+</ul>
+<p>اولین حالت را در بخش <a href="#enabling-recursive-types-with-boxes">“فعال‌سازی انواع بازگشتی با استفاده از جعبه‌ها”</a><!-- ignore --> بررسی خواهیم کرد. در حالت دوم، انتقال مالکیت مقدار زیادی داده می‌تواند زمان زیادی بگیرد زیرا داده‌ها در stack کپی می‌شوند. برای بهبود عملکرد در این حالت، می‌توانیم مقدار زیادی داده را در heap و در یک جعبه ذخیره کنیم. سپس، تنها مقدار کمی از داده‌های اشاره‌گر (Pointer) در stack کپی می‌شود، در حالی که داده‌هایی که به آن‌ها اشاره می‌کند در یک مکان در heap باقی می‌مانند. حالت سوم به نام <em>شیء صفت</em> شناخته می‌شود و فصل ۱۸ بخشی کامل به نام <a href="ch18-02-trait-objects.html#using-trait-objects-to-abstract-over-shared-behavior">“استفاده از اشیای صفت که به شما اجازه می‌دهند مقادیر از انواع مختلف داشته باشید”</a><!-- ignore --> به این موضوع اختصاص داده است. بنابراین چیزی که اینجا یاد می‌گیرید، دوباره در فصل ۱۸ استفاده خواهید کرد!</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="using-boxt-to-store-data-on-the-heap"></a></p>
+<h3 id="storing-data-on-the-heap"><a class="header" href="#storing-data-on-the-heap">ذخیرهٔ داده‌ها در Heap</a></h3>
+<p>قبل از اینکه مورد استفاده ذخیره در heap برای <code>Box&lt;T&gt;</code> را بحث کنیم، نحو و نحوه تعامل با مقادیر ذخیره‌شده در یک <code>Box&lt;T&gt;</code> را پوشش خواهیم داد.</p>
+<p>لیستینگ ۱۵-۱ نشان می‌دهد چگونه می‌توان از یک جعبه برای ذخیره مقدار <code>i32</code> در heap استفاده کرد:</p>
+<figure class="listing" id="listing-15-1">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let b = Box::new(5);
+    println!("b = {b}");
+}</code></pre>
+<figcaption><a href="#listing-15-1">لیست ۱۵-۱</a>: ذخیره مقدار &lt;code&gt;&lt;/x-listing&gt;i32&lt;/code&gt; در heap با استفاده از یک جعبه</figcaption>
+</figure>
+<p>ما متغیر <code>b</code> را تعریف می‌کنیم تا مقدار یک <code>Box</code> که به مقدار <code>5</code> اشاره می‌کند را داشته باشد، که در heap تخصیص داده شده است. این برنامه <code>b = 5</code> را چاپ می‌کند؛ در این حالت، می‌توانیم به داده‌های موجود در جعبه دسترسی داشته باشیم، مشابه حالتی که این داده‌ها در stack بودند. درست مثل هر مقدار مالک، وقتی یک جعبه از دامنه خارج می‌شود، همان طور که <code>b</code> در پایان <code>main</code> این کار را می‌کند، آزاد می‌شود. آزادسازی هم برای جعبه (ذخیره‌شده در stack) و هم داده‌هایی که به آن اشاره می‌کند (ذخیره‌شده در heap) اتفاق می‌افتد.</p>
+<p>قرار دادن یک مقدار واحد در heap خیلی مفید نیست، بنابراین جعبه‌ها را به‌تنهایی به این شکل خیلی استفاده نخواهید کرد. داشتن مقادیری مانند یک <code>i32</code> در stack، جایی که به‌طور پیش‌فرض ذخیره می‌شوند، در اکثر موارد مناسب‌تر است. بیایید به حالتی نگاه کنیم که جعبه‌ها به ما امکان می‌دهند انواعی را تعریف کنیم که بدون آن‌ها نمی‌توانستیم.</p>
+<h3 id="enabling-recursive-types-with-boxes"><a class="header" href="#enabling-recursive-types-with-boxes">فعال‌سازی انواع بازگشتی با استفاده از جعبه‌ها</a></h3>
+<p>یک مقدار از نوع <em>بازگشتی</em> می‌تواند مقدار دیگری از همان نوع را به‌عنوان بخشی از خود داشته باشد. انواع بازگشتی یک مسئله ایجاد می‌کنند زیرا در زمان کامپایل، Rust باید بداند یک نوع چقدر فضا اشغال می‌کند. با این حال، تودرتویی مقادیر انواع بازگشتی می‌تواند به‌طور نظری بی‌نهایت ادامه یابد، بنابراین Rust نمی‌تواند بداند که مقدار چقدر فضا نیاز دارد. چون جعبه‌ها یک اندازه مشخص دارند، می‌توانیم انواع بازگشتی را با قرار دادن یک جعبه در تعریف نوع بازگشتی فعال کنیم.</p>
+<p>به‌عنوان مثالی از یک نوع بازگشتی، بیایید به <em>لیست cons</em> نگاه کنیم. این یک نوع داده است که معمولاً در زبان‌های برنامه‌نویسی تابعی یافت می‌شود. نوع لیست cons که تعریف خواهیم کرد ساده است به جز بازگشت؛ بنابراین، مفاهیم موجود در مثالی که با آن کار خواهیم کرد، هر زمان که وارد موقعیت‌های پیچیده‌تری با انواع بازگشتی شوید مفید خواهند بود.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="more-information-about-the-cons-list"></a></p>
+<h4 id="understanding-the-cons-list"><a class="header" href="#understanding-the-cons-list">اطلاعات بیشتر درباره لیست Cons</a></h4>
+<p>یک <em>لیست cons</em> یک ساختار داده‌ای است که از زبان برنامه‌نویسی Lisp و گویش‌های آن می‌آید و از جفت‌های تودرتو تشکیل شده است و نسخه Lisp از یک لیست پیوندی است. نام آن از تابع <code>cons</code> (مخفف “تابع ساخت” یا Construct Function) در Lisp گرفته شده است که یک جفت جدید را از دو آرگومان خود می‌سازد. با فراخوانی <code>cons</code> روی یک جفت که شامل یک مقدار و یک جفت دیگر است، می‌توانیم لیست‌های cons ساخته‌شده از جفت‌های بازگشتی را ایجاد کنیم.</p>
+<p>برای مثال، در اینجا نمایشی شبه‌کد از یک لیست cons شامل لیست <code>1, 2, 3</code> آمده است که هر جفت در داخل پرانتز قرار دارد:</p>
+<pre><code class="language-text">(1, (2, (3, Nil)))
+</code></pre>
+<p>هر آیتم در یک لیست cons شامل دو عنصر است: مقدار آیتم فعلی و آیتم بعدی. آخرین آیتم در لیست تنها شامل مقداری به نام <code>Nil</code> است و آیتم بعدی ندارد. یک لیست cons با فراخوانی بازگشتی تابع <code>cons</code> تولید می‌شود. نام متعارف برای نشان دادن حالت پایه بازگشت، <code>Nil</code> است. توجه داشته باشید که این با مفهوم “null” یا “nil” در فصل ۶ که یک مقدار نامعتبر یا غایب است، متفاوت است.</p>
+<p>لیست cons یک ساختار داده‌ای نیست که به‌طور معمول در Rust استفاده شود. در اکثر مواقع وقتی یک لیست از آیتم‌ها در Rust دارید، استفاده از <code>Vec&lt;T&gt;</code> انتخاب بهتری است. سایر انواع بازگشتی پیچیده‌تر <em>در</em> موقعیت‌های مختلف مفید هستند، اما با شروع از لیست cons در این فصل، می‌توانیم بررسی کنیم که چگونه جعبه‌ها به ما اجازه می‌دهند یک نوع داده بازگشتی را بدون حواس‌پرتی زیاد تعریف کنیم.</p>
+<p>لیستینگ ۱۵-۲ حاوی یک تعریف enum برای یک لیست cons است. توجه داشته باشید که این کد هنوز کامپایل نمی‌شود زیرا نوع <code>List</code> اندازه شناخته‌شده‌ای ندارد، که آن را توضیح خواهیم داد.</p>
+<figure class="listing" id="listing-15-2">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">enum List {
+    Cons(i32, List),
+    Nil,
+}
+<span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+<figcaption><a href="#listing-15-2">لیست ۱۵-۲</a>: اولین تلاش برای تعریف یک enum برای نمایش یک ساختار داده‌ای لیست cons از مقادیر &lt;code&gt;&lt;/x-listing&gt;i32&lt;/code&gt;</figcaption>
+</figure>
+<blockquote>
+<p>توجه: ما در حال پیاده‌سازی یک لیست cons هستیم که تنها مقادیر <code>i32</code> را نگه می‌دارد، برای اهداف این مثال. می‌توانستیم آن را با استفاده از جنریک‌ها، همان‌طور که در فصل ۱۰ بحث کردیم، پیاده‌سازی کنیم تا یک نوع لیست cons تعریف کنیم که بتواند مقادیر هر نوعی را ذخیره کند.</p>
+</blockquote>
+<p>استفاده از نوع <code>List</code> برای ذخیره لیست <code>1, 2, 3</code> شبیه به کدی خواهد بود که در لیستینگ ۱۵-۳ آورده شده است:</p>
+<figure class="listing" id="listing-15-3">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">enum List {
+</span><span class="boring">    Cons(i32, List),
+</span><span class="boring">    Nil,
+</span><span class="boring">}
+</span><span class="boring">
+</span>// --snip--
+
+use crate::List::{Cons, Nil};
+
+fn main() {
+    let list = Cons(1, Cons(2, Cons(3, Nil)));
+}</code></pre>
+<figcaption><a href="#listing-15-3">لیست ۱۵-۳</a>: Using the &lt;code&gt;&lt;/x-listing&gt;List&lt;/code&gt; enum to store the list &lt;code&gt;1, 2, 3&lt;/code&gt;</figcaption>
+</figure>
+<p>اولین مقدار <code>Cons</code> مقدار <code>1</code> و یک مقدار دیگر از نوع <code>List</code> را نگه می‌دارد. این مقدار <code>List</code> یک مقدار دیگر از نوع <code>Cons</code> است که مقدار <code>2</code> و یک مقدار دیگر از نوع <code>List</code> را نگه می‌دارد. این مقدار <code>List</code> یک مقدار دیگر از نوع <code>Cons</code> را نگه می‌دارد که مقدار <code>3</code> و یک مقدار دیگر از نوع <code>List</code> را دارد که در نهایت <code>Nil</code>، متغیر غیر بازگشتی که پایان لیست را نشان می‌دهد، است.</p>
+<p>اگر سعی کنیم کد در لیستینگ ۱۵-۳ را کامپایل کنیم، خطایی را دریافت می‌کنیم که در لیستینگ ۱۵-۴ نشان داده شده است:</p>
+<figure class="listing" id="listing-15-4">
+<pre><code class="language-console">$ cargo run
+   Compiling cons-list v0.1.0 (file:///projects/cons-list)
+error[E0072]: recursive type `List` has infinite size
+ --&gt; src/main.rs:1:1
+  |
+1 | enum List {
+  | ^^^^^^^^^
+2 |     Cons(i32, List),
+  |               ---- recursive without indirection
+  |
+help: insert some indirection (e.g., a `Box`, `Rc`, or `&amp;`) to break the cycle
+  |
+2 |     Cons(i32, Box&lt;List&gt;),
+  |               ++++    +
+
+For more information about this error, try `rustc --explain E0072`.
+error: could not compile `cons-list` (bin "cons-list") due to 1 previous error
+</code></pre>
+<figcaption><a href="#listing-15-4">لیست ۱۵-۴</a>: خطایی که هنگام تلاش برای تعریف یک enum بازگشتی دریافت می‌کنیم</figcaption>
+</figure>
+<p>خطا نشان می‌دهد که این نوع “اندازه بی‌نهایت” دارد. دلیل این است که ما <code>List</code> را با یک متغیر تعریف کرده‌ایم که بازگشتی است: به‌طور مستقیم یک مقدار دیگر از نوع خود را نگه می‌دارد. در نتیجه، Rust نمی‌تواند بفهمد چقدر فضا نیاز دارد تا یک مقدار از نوع <code>List</code> را ذخیره کند. بیایید بررسی کنیم چرا این خطا را دریافت می‌کنیم. ابتدا، نگاهی به این می‌اندازیم که Rust چگونه تصمیم می‌گیرد چه مقدار فضا برای ذخیره یک مقدار از نوع غیر بازگشتی نیاز دارد.</p>
+<h4 id="computing-the-size-of-a-non-recursive-type"><a class="header" href="#computing-the-size-of-a-non-recursive-type">محاسبه اندازه یک نوع غیر بازگشتی</a></h4>
+<p>ساختار <code>Message</code> را که در لیستینگ ۶-۲ تعریف کرده‌ایم، به‌خاطر بیاورید وقتی که در فصل ۶ در مورد تعریف‌های enum بحث کردیم:</p>
+<pre><code class="language-rust">enum Message {
+    Quit,
+    Move { x: i32, y: i32 },
+    Write(String),
+    ChangeColor(i32, i32, i32),
+}
+<span class="boring">
+</span><span class="boring">fn main() {}</span></code></pre>
+<p>برای تعیین اینکه چقدر فضا برای یک مقدار از نوع <code>Message</code> اختصاص داده شود، Rust هر یک از متغیرها را بررسی می‌کند تا ببیند کدام متغیر بیشترین فضا را نیاز دارد. Rust می‌بیند که <code>Message::Quit</code> نیازی به فضا ندارد، <code>Message::Move</code> نیاز به فضای کافی برای ذخیره دو مقدار <code>i32</code> دارد، و همین‌طور ادامه می‌دهد. چون تنها یک متغیر استفاده خواهد شد، بیشترین فضای مورد نیاز برای یک مقدار <code>Message</code> فضایی است که بزرگ‌ترین متغیر آن اشغال می‌کند.</p>
+<p>این را با حالتی مقایسه کنید که Rust سعی می‌کند تعیین کند چه مقدار فضا برای یک نوع بازگشتی مانند enum <code>List</code> در لیستینگ ۱۵-۲ نیاز است. کامپایلر با نگاه کردن به متغیر <code>Cons</code> شروع می‌کند که یک مقدار از نوع <code>i32</code> و یک مقدار از نوع <code>List</code> را نگه می‌دارد. بنابراین، <code>Cons</code> به فضایی معادل اندازه یک <code>i32</code> به‌علاوه اندازه یک <code>List</code> نیاز دارد. برای فهمیدن اینکه نوع <code>List</code> به چه مقدار حافظه نیاز دارد، کامپایلر متغیرها را بررسی می‌کند و از متغیر <code>Cons</code> شروع می‌کند. متغیر <code>Cons</code> یک مقدار از نوع <code>i32</code> و یک مقدار از نوع <code>List</code> را نگه می‌دارد، و این فرآیند به‌طور بی‌نهایت ادامه می‌یابد، همان‌طور که در شکل ۱۵-۱ نشان داده شده است.</p>
+<img alt="یک لیست Cons بی‌نهایت: مستطیلی با برچسب «Cons» که به دو مستطیل کوچک‌تر تقسیم شده است. مستطیل کوچک اول برچسب «i32» دارد و مستطیل کوچک دوم برچسب «Cons» و نسخه‌ای کوچک‌تر از مستطیل بیرونی «Cons» را در بر دارد. مستطیل‌های «Cons» همین‌طور نسخه‌های کوچک‌تر و کوچک‌تری از خودشان را در بر می‌گیرند تا اینکه کوچک‌ترین مستطیل ممکن نماد بی‌نهایت را نگه می‌دارد، که نشان می‌دهد این تکرار تا ابد ادامه دارد." src="img/trpl15-01.svg" class="center" style="width: 50%;" />
+<p><span class="caption">شکل ۱۵-۱: یک <code>List</code> بی‌نهایت شامل متغیرهای <code>Cons</code> بی‌نهایت</span></p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="using-boxt-to-get-a-recursive-type-with-a-known-size"></a></p>
+<h4 id="getting-a-recursive-type-with-a-known-size"><a class="header" href="#getting-a-recursive-type-with-a-known-size">به‌دست آوردن یک نوع بازگشتی با اندازهٔ مشخص</a></h4>
+<p>چون Rust نمی‌تواند بفهمد چه مقدار فضا باید برای انواع تعریف‌شده به‌صورت بازگشتی تخصیص دهد، کامپایلر با این پیشنهاد کمکی خطا می‌دهد:</p>
+<!-- manual-regeneration
+after doing automatic regeneration, look at listings/ch15-smart-pointers/listing-15-03/output.txt and copy the relevant line
+-->
+<pre><code class="language-text">help: insert some indirection (e.g., a `Box`, `Rc`, or `&amp;`) to break the cycle
+  |
+2 |     Cons(i32, Box&lt;List&gt;),
+  |               ++++    +
+</code></pre>
+<p>در این پیشنهاد، “غیرمستقیم‌سازی” به این معنا است که به‌جای ذخیره مستقیم یک مقدار، باید ساختار داده را تغییر دهیم تا مقدار را به‌صورت غیرمستقیم با ذخیره یک اشاره‌گر (Pointer) به مقدار ذخیره کند.</p>
+<p>چون <code>Box&lt;T&gt;</code> یک اشاره‌گر (Pointer) است، Rust همیشه می‌داند که یک <code>Box&lt;T&gt;</code> به چه مقدار فضا نیاز دارد: اندازه یک اشاره‌گر (Pointer) بر اساس مقدار داده‌ای که به آن اشاره می‌کند تغییر نمی‌کند. این بدان معنا است که می‌توانیم یک <code>Box&lt;T&gt;</code> را در متغیر <code>Cons</code> قرار دهیم به‌جای یک مقدار دیگر از نوع <code>List</code>. <code>Box&lt;T&gt;</code> به مقدار بعدی <code>List</code> اشاره می‌کند که روی heap خواهد بود به‌جای داخل متغیر <code>Cons</code>. به‌صورت مفهومی، ما همچنان یک لیست داریم که از لیست‌های دیگری تشکیل شده است، اما این پیاده‌سازی اکنون بیشتر شبیه قرار دادن آیتم‌ها در کنار یکدیگر است تا داخل یکدیگر.</p>
+<p>ما می‌توانیم تعریف enum <code>List</code> در لیستینگ ۱۵-۲ و استفاده از <code>List</code> در لیستینگ ۱۵-۳ را به کد موجود در لیستینگ ۱۵-۵ تغییر دهیم، که کامپایل خواهد شد:</p>
+<figure class="listing" id="listing-15-5">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">enum List {
+    Cons(i32, Box&lt;List&gt;),
+    Nil,
+}
+
+use crate::List::{Cons, Nil};
+
+fn main() {
+    let list = Cons(1, Box::new(Cons(2, Box::new(Cons(3, Box::new(Nil))))));
+}</code></pre>
+<figcaption><a href="#listing-15-5">لیست ۱۵-۵</a>: تعریف &lt;code&gt;&lt;/x-listing&gt;List&lt;/code&gt; که از &lt;code&gt;Box&lt;T&gt;&lt;/code&gt; استفاده می‌کند تا اندازه مشخصی داشته باشد</figcaption>
+</figure>
+<p>متغیر <code>Cons</code> به اندازه‌ای برابر با یک <code>i32</code> به‌علاوه فضای لازم برای نگه‌داری داده‌های اشاره‌گر <code>Box</code> نیاز دارد. متغیر <code>Nil</code> هیچ مقداری را ذخیره نمی‌کند، بنابراین به فضای کمتری روی پشته نسبت به <code>Cons</code> نیاز دارد. اکنون می‌دانیم که هر مقدار از نوع <code>List</code> فضایی برابر با اندازه‌ی یک <code>i32</code> به‌علاوه اندازه‌ی داده‌ی اشاره‌گر <code>Box</code> اشغال می‌کند. با استفاده از یک <code>Box</code>، زنجیره بازگشتی بی‌نهایت را شکسته‌ایم، بنابراین کامپایلر می‌تواند اندازه مورد نیاز برای ذخیره یک مقدار <code>List</code> را محاسبه کند. شکل 15-2 نشان می‌دهد که متغیر <code>Cons</code> اکنون چگونه به نظر می‌رسد.</p>
+<img alt="مستطیلی با برچسب «Cons» که به دو مستطیل کوچک‌تر تقسیم شده است. مستطیل کوچک اول برچسب «i32» دارد و مستطیل کوچک دوم برچسب «Box» دارد و یک مستطیل داخلی با برچسب «usize» در آن است که اندازهٔ محدود اشاره‌گر box را نشان می‌دهد." src="img/trpl15-02.svg" class="center" />
+<p><span class="caption">شکل ۱۵-۲: یک <code>List</code> که بی‌نهایت نیست زیرا <code>Cons</code> یک <code>Box</code> نگه می‌دارد</span></p>
+<p>جعبه‌ها تنها غیرمستقیم‌سازی و تخصیص heap را فراهم می‌کنند؛ آن‌ها هیچ قابلیت خاص دیگری ندارند، مانند آنچه با دیگر انواع اشاره‌گر (Pointer) هوشمند خواهیم دید. آن‌ها همچنین سربار عملکردی که این قابلیت‌های خاص ایجاد می‌کنند را ندارند، بنابراین می‌توانند در مواردی مانند لیست cons مفید باشند که غیرمستقیم‌سازی تنها ویژگی مورد نیاز است. ما موارد استفاده بیشتری از جعبه‌ها را نیز در فصل ۱۸ بررسی خواهیم کرد.</p>
+<p>نوع <code>Box&lt;T&gt;</code> یک اشاره‌گر (Pointer) هوشمند است زیرا ویژگی <code>Deref</code> را پیاده‌سازی می‌کند، که به مقادیر <code>Box&lt;T&gt;</code> اجازه می‌دهد مانند ارجاعات رفتار کنند. وقتی یک مقدار <code>Box&lt;T&gt;</code> از دامنه خارج می‌شود، داده‌های heap که جعبه به آن اشاره می‌کند نیز به دلیل پیاده‌سازی ویژگی <code>Drop</code> پاک‌سازی می‌شود. این دو ویژگی برای عملکرد انواع دیگر اشاره‌گر (Pointer)های هوشمند که در بقیه این فصل مورد بحث قرار می‌دهیم، اهمیت بیشتری خواهند داشت. بیایید این دو ویژگی را با جزئیات بیشتری بررسی کنیم.</p><nav class="page-nav"><a href="ch15-00-smart-pointers.html">→ اشاره‌گرهای هوشمند</a><a href="ch15-02-deref.html">رفتار با اشاره‌گرهای هوشمند مانند ارجاع‌های معمولی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

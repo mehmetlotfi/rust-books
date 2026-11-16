@@ -1,0 +1,151 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>ذخیرهٔ کلیدها همراه با مقادیر وابسته در نقشه‌های هش — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch08-03-hash-maps"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="storing-keys-with-associated-values-in-hash-maps"><a class="header" href="#storing-keys-with-associated-values-in-hash-maps">ذخیره کلیدها با مقادیر مرتبط در هش مپ‌ها</a></h2>
+<p>آخرین مورد از مجموعه‌های رایج ما، <em>هش مپ</em> است. نوع <code>HashMap&lt;K, V&gt;</code> یک نگاشت از کلیدهایی با نوع <code>K</code> به مقادیری با نوع <code>V</code> را با استفاده از یک <em>تابع هش</em> ذخیره می‌کند، که تعیین می‌کند چگونه این کلیدها و مقادیر در حافظه قرار بگیرند. بسیاری از زبان‌های برنامه‌نویسی از این نوع ساختار داده پشتیبانی می‌کنند، اما اغلب از نام‌های متفاوتی مانند <em>هش</em>، <em>مپ</em>، <em>شیء</em>، <em>جدول هش</em>، <em>دایرکتوری</em>، یا <em>آرایه ارتباطی</em> برای اشاره به آن استفاده می‌کنند.</p>
+<p>هش مپ‌ها زمانی مفید هستند که بخواهید داده‌ها را نه با استفاده از یک اندیس، مانند بردارها، بلکه با استفاده از یک کلید که می‌تواند هر نوعی باشد، جستجو کنید. برای مثال، در یک بازی، می‌توانید امتیاز هر تیم را در یک هش مپ ذخیره کنید که هر کلید نام یک تیم و هر مقدار امتیاز آن تیم باشد. با داشتن نام یک تیم، می‌توانید امتیاز آن را بازیابی کنید.</p>
+<p>در این بخش، به API اصلی هش مپ‌ها می‌پردازیم، اما امکانات بیشتری در توابع تعریف شده روی <code>HashMap&lt;K, V&gt;</code> در کتابخانه استاندارد وجود دارد. مانند همیشه، مستندات کتابخانه استاندارد را برای اطلاعات بیشتر بررسی کنید.</p>
+<h3 id="creating-a-new-hash-map"><a class="header" href="#creating-a-new-hash-map">ایجاد یک هش مپ جدید</a></h3>
+<p>یکی از راه‌های ایجاد یک هش مپ خالی استفاده از <code>new</code> و افزودن عناصر با <code>insert</code> است. در لیست ۸-۲۰، ما امتیازات دو تیم به نام‌های <em>Blue</em> و <em>Yellow</em> را پیگیری می‌کنیم. تیم آبی با ۱۰ امتیاز و تیم زرد با ۵۰ امتیاز شروع می‌کنند.</p>
+<figure class="listing" id="listing-8-20">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    use std::collections::HashMap;
+
+    let mut scores = HashMap::new();
+
+    scores.insert(String::from("Blue"), 10);
+    scores.insert(String::from("Yellow"), 50);
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-20">لیست ۸-۲۰</a>: ایجاد یک هش مپ جدید و درج تعدادی کلید و مقدار</figcaption>
+</figure>
+<p>توجه داشته باشید که ابتدا باید <code>HashMap</code> را از بخش مجموعه‌های کتابخانه استاندارد <code>use</code> کنیم. از میان سه مجموعه رایج ما، این یکی کمتر مورد استفاده قرار می‌گیرد، بنابراین به طور پیش‌فرض در محدوده وارد نمی‌شود. همچنین، هش مپ‌ها از حمایت کمتری از کتابخانه استاندارد برخوردارند؛ برای مثال، هیچ ماکروی داخلی برای ساخت آن‌ها وجود ندارد.</p>
+<p>همانند بردارها، هش مپ‌ها داده‌های خود را روی heap ذخیره می‌کنند. این <code>HashMap</code> دارای کلیدهایی از نوع <code>String</code> و مقادیری از نوع <code>i32</code> است. مانند بردارها، هش مپ‌ها همگن هستند: تمام کلیدها باید از یک نوع باشند و تمام مقادیر نیز باید از یک نوع باشند.</p>
+<h3 id="accessing-values-in-a-hash-map"><a class="header" href="#accessing-values-in-a-hash-map">دسترسی به مقادیر در یک هش مپ</a></h3>
+<p>می‌توانیم یک مقدار را با ارائه کلید آن به متد <code>get</code> از هش مپ دریافت کنیم، همانطور که در لیست ۸-۲۱ نشان داده شده است.</p>
+<figure class="listing" id="listing-8-21">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    use std::collections::HashMap;
+
+    let mut scores = HashMap::new();
+
+    scores.insert(String::from("Blue"), 10);
+    scores.insert(String::from("Yellow"), 50);
+
+    let team_name = String::from("Blue");
+    let score = scores.get(&amp;team_name).copied().unwrap_or(0);
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-21">لیست ۸-۲۱</a>: دسترسی به امتیاز تیم Blue ذخیره شده در هش مپ</figcaption>
+</figure>
+<p>اینجا، مقدار <code>score</code> برابر با مقداری خواهد بود که به تیم Blue مرتبط است، و نتیجه <code>10</code> خواهد بود. متد <code>get</code> یک <code>Option&lt;&amp;V&gt;</code> را بازمی‌گرداند؛ اگر هیچ مقداری برای آن کلید در هش مپ وجود نداشته باشد، <code>get</code> مقدار <code>None</code> را بازمی‌گرداند. این برنامه مقدار <code>Option</code> را با فراخوانی <code>copied</code> برای دریافت یک <code>Option&lt;i32&gt;</code> به جای <code>Option&lt;&amp;i32&gt;</code> مدیریت می‌کند، سپس با استفاده از <code>unwrap_or</code> مقدار <code>score</code> را به صفر تنظیم می‌کند اگر <code>scores</code> یک ورودی برای کلید نداشته باشد.</p>
+<p>می‌توانیم روی هر جفت کلید-مقدار در یک <code>hash map</code> به‌روشی مشابه با <code>vector</code>ها پیمایش کنیم،<br> با استفاده از یک حلقه‌ی <code>for</code>:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    use std::collections::HashMap;
+
+    let mut scores = HashMap::new();
+
+    scores.insert(String::from("Blue"), 10);
+    scores.insert(String::from("Yellow"), 50);
+
+    for (key, value) in &amp;scores {
+        println!("{key}: {value}");
+    }
+<span class="boring">}</span></code></pre>
+<p>این کد هر جفت را با ترتیبی دلخواه چاپ می‌کند:</p>
+<pre><code class="language-text">Yellow: 50
+Blue: 10
+</code></pre>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="hash-maps-and-ownership"></a></p>
+<h3 id="managing-ownership-in-hash-maps"><a class="header" href="#managing-ownership-in-hash-maps">مدیریت مالکیت در هش‌مپ‌ها</a></h3>
+<p>برای انواعی که ویژگی <code>Copy</code> را پیاده‌سازی می‌کنند، مانند <code>i32</code>، مقادیر درون هش مپ کپی می‌شوند. برای مقادیر مالک مانند <code>String</code>، مقادیر منتقل شده و هش مپ مالک آن‌ها خواهد شد، همانطور که در لیست ۸-۲۲ نشان داده شده است.</p>
+<figure class="listing" id="listing-8-22">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    use std::collections::HashMap;
+
+    let field_name = String::from("Favorite color");
+    let field_value = String::from("Blue");
+
+    let mut map = HashMap::new();
+    map.insert(field_name, field_value);
+    // field_name and field_value are invalid at this point, try using them and
+    // see what compiler error you get!
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-22">لیست ۸-۲۲</a>: نشان دادن اینکه کلیدها و مقادیر پس از وارد شدن به هش مپ، متعلق به آن می‌شوند</figcaption>
+</figure>
+<p>پس از انتقال متغیرهای <code>field_name</code> و <code>field_value</code> به هش مپ با فراخوانی <code>insert</code>، دیگر نمی‌توانیم از آن‌ها استفاده کنیم.</p>
+<p>اگر رفرنس‌هایی به مقادیر را درون <code>hash map</code> قرار دهیم، آن مقادیر به درون <code>hash map</code> منتقل نخواهند شد (moved نمی‌شوند).<br> مقدارهایی که این رفرنس‌ها به آن‌ها اشاره می‌کنند، باید حداقل تا زمانی معتبر باشند که <code>hash map</code> معتبر است.<br> در فصل ۱۰، در بخش <a href="ch10-03-lifetime-syntax.html#validating-references-with-lifetimes">“اعتبارسنجی رفرنس‌ها با استفاده از lifetime”</a><!-- ignore -->،<br> بیشتر درباره‌ی این مسائل صحبت خواهیم کرد.</p>
+<h3 id="updating-a-hash-map"><a class="header" href="#updating-a-hash-map">به‌روزرسانی یک هش مپ</a></h3>
+<p>اگرچه تعداد جفت‌های کلید و مقدار قابل افزایش است، هر کلید یکتا فقط می‌تواند یک مقدار مرتبط داشته باشد (اما نه بالعکس: برای مثال، هر دو تیم Blue و Yellow می‌توانند مقدار <code>10</code> را در هش مپ <code>scores</code> ذخیره کنند).</p>
+<p>وقتی می‌خواهید داده‌ها را در یک هش مپ تغییر دهید، باید تصمیم بگیرید چگونه با حالتی که یک کلید قبلاً دارای مقدار است برخورد کنید. می‌توانید مقدار قدیمی را با مقدار جدید جایگزین کنید و مقدار قدیمی را کاملاً نادیده بگیرید. می‌توانید مقدار قدیمی را نگه دارید و مقدار جدید را نادیده بگیرید، فقط مقدار جدید را اضافه کنید اگر کلید <em>ندارد</em> قبلاً یک مقدار. یا می‌توانید مقدار قدیمی و مقدار جدید را با هم ترکیب کنید. بیایید ببینیم چگونه هر یک از این کارها را انجام دهیم!</p>
+<h4 id="overwriting-a-value"><a class="header" href="#overwriting-a-value">بازنویسی یک مقدار</a></h4>
+<p>اگر یک کلید و مقدار را درون یک <code>hash map</code> قرار دهیم و سپس همان کلید را با یک مقدار متفاوت دوباره وارد کنیم، مقدار مرتبط با آن کلید جایگزین خواهد شد. حتی با این‌که کد در لیستینگ 8-23 دوبار تابع <code>insert</code> را فراخوانی می‌کند، <code>hash map</code> تنها شامل یک جفت کلید-مقدار خواهد بود، زیرا هر دو بار مقدار مربوط به کلید تیم Blue را وارد می‌کنیم.</p>
+<figure class="listing" id="listing-8-23">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    use std::collections::HashMap;
+
+    let mut scores = HashMap::new();
+
+    scores.insert(String::from("Blue"), 10);
+    scores.insert(String::from("Blue"), 25);
+
+    println!("{scores:?}");
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-23">لیست ۸-۲۳</a>: جایگزینی یک مقدار ذخیره شده با یک کلید خاص</figcaption>
+</figure>
+<p>این کد مقدار <code>{"Blue": 25}</code> را چاپ خواهد کرد. مقدار اصلی <code>10</code> بازنویسی شده است.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="only-inserting-a-value-if-the-key-has-no-value"></a></p>
+<h4 id="adding-a-key-and-value-only-if-a-key-isnt-present"><a class="header" href="#adding-a-key-and-value-only-if-a-key-isnt-present">اضافه کردن یک کلید و مقدار فقط اگر کلید وجود ندارد</a></h4>
+<p>بررسی اینکه آیا یک کلید خاص در هش مپ دارای مقدار است یا خیر و سپس انجام اقدامات زیر رایج است: اگر کلید در هش مپ وجود دارد، مقدار موجود باید همانطور که هست باقی بماند؛ اگر کلید وجود ندارد، آن را به همراه یک مقدار وارد کنید.</p>
+<p>هش مپ‌ها یک API خاص برای این کار دارند که به نام <code>entry</code> شناخته می‌شود و کلیدی که می‌خواهید بررسی کنید را به عنوان پارامتر می‌گیرد. مقدار بازگشتی متد <code>entry</code> یک enum به نام <code>Entry</code> است که نشان‌دهنده مقداری است که ممکن است وجود داشته باشد یا نداشته باشد. فرض کنید می‌خواهیم بررسی کنیم که آیا کلید تیم Yellow دارای مقدار مرتبط است یا خیر. اگر ندارد، می‌خواهیم مقدار <code>50</code> را وارد کنیم، و همینطور برای تیم Blue. با استفاده از API <code>entry</code>، کد به شکل لیست ۸-۲۴ خواهد بود.</p>
+<figure class="listing" id="listing-8-24">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    use std::collections::HashMap;
+
+    let mut scores = HashMap::new();
+    scores.insert(String::from("Blue"), 10);
+
+    scores.entry(String::from("Yellow")).or_insert(50);
+    scores.entry(String::from("Blue")).or_insert(50);
+
+    println!("{scores:?}");
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-24">لیست ۸-۲۴</a>: استفاده از متد &lt;code&gt;&lt;/x-listing&gt;entry&lt;/code&gt; برای وارد کردن مقدار فقط در صورتی که کلید قبلاً مقدار ندارد</figcaption>
+</figure>
+<p>متد <code>or_insert</code> روی <code>Entry</code> به گونه‌ای تعریف شده است که یک مرجع قابل تغییر به مقدار مرتبط با کلید <code>Entry</code> برمی‌گرداند اگر آن کلید وجود داشته باشد، و اگر نه، پارامتر را به عنوان مقدار جدید برای این کلید وارد کرده و یک مرجع قابل تغییر به مقدار جدید بازمی‌گرداند. این تکنیک بسیار تمیزتر از نوشتن منطق به صورت دستی است و علاوه بر این، با بررسی‌کننده قرض بهتر کار می‌کند.</p>
+<p>اجرای کد در لیست ۸-۲۴ مقدار <code>{"Yellow": 50, "Blue": 10}</code> را چاپ خواهد کرد. اولین فراخوانی به <code>entry</code> کلید تیم Yellow را با مقدار <code>50</code> وارد می‌کند زیرا تیم Yellow قبلاً مقداری ندارد. دومین فراخوانی به <code>entry</code> هش مپ را تغییر نمی‌دهد زیرا تیم Blue قبلاً مقدار <code>10</code> را دارد.</p>
+<h4 id="updating-a-value-based-on-the-old-value"><a class="header" href="#updating-a-value-based-on-the-old-value">به‌روزرسانی یک مقدار بر اساس مقدار قدیمی</a></h4>
+<p>یکی دیگر از موارد استفاده رایج برای هش مپ‌ها این است که مقدار یک کلید را جستجو کرده و سپس بر اساس مقدار قدیمی آن را به‌روزرسانی کنیم. برای مثال، لیست ۸-۲۵ کدی را نشان می‌دهد که تعداد دفعات ظاهر شدن هر کلمه در یک متن را می‌شمارد. ما از یک هش مپ با کلمات به عنوان کلید و مقدار برای نگهداری تعداد دفعات ظاهر شدن هر کلمه استفاده می‌کنیم. اگر این اولین بار باشد که یک کلمه را مشاهده می‌کنیم، ابتدا مقدار <code>0</code> را وارد می‌کنیم.</p>
+<figure class="listing" id="listing-8-25">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    use std::collections::HashMap;
+
+    let text = "hello world wonderful world";
+
+    let mut map = HashMap::new();
+
+    for word in text.split_whitespace() {
+        let count = map.entry(word).or_insert(0);
+        *count += 1;
+    }
+
+    println!("{map:?}");
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-8-25">لیست ۸-۲۵</a>: شمارش تعداد وقوع کلمات با استفاده از یک هش مپ که کلمات و تعداد دفعات آن‌ها را ذخیره می‌کند</figcaption>
+</figure>
+<p>این کد مقدار <code>{"world": 2, "hello": 1, "wonderful": 1}</code> را چاپ خواهد کرد.<br> ممکن است همین جفت‌های کلید-مقدار را به ترتیب متفاوتی ببینید:<br> به یاد داشته باشید از بخش <a href="#accessing-values-in-a-hash-map">“دسترسی به مقادیر در یک Hash Map”</a><!-- ignore --><br> که پیمایش در یک <code>hash map</code> به‌صورت ترتیبی دلخواه (arbitrary order) انجام می‌شود.</p>
+<p>متد <code>split_whitespace</code> یک iterator بر روی زیررشته‌هایی که با فضای خالی جدا شده‌اند از مقدار موجود در <code>text</code> بازمی‌گرداند. متد <code>or_insert</code> یک مرجع قابل تغییر (<code>&amp;mut V</code>) به مقدار مرتبط با کلید مشخص برمی‌گرداند. اگر آن کلید وجود داشته باشد، مقدار بازگشتی همان مقدار موجود است؛ و اگر نه، پارامتر را به عنوان مقدار جدید برای این کلید وارد می‌کند و مرجع قابل تغییر به مقدار جدید را بازمی‌گرداند. در اینجا، ما این مرجع قابل تغییر را در متغیر <code>count</code> ذخیره می‌کنیم، بنابراین برای تخصیص مقدار به آن، باید ابتدا <code>count</code> را با استفاده از عملگر ستاره (<code>*</code>) dereference کنیم. مرجع قابل تغییر در انتهای حلقه <code>for</code> از محدوده خارج می‌شود، بنابراین تمام این تغییرات ایمن هستند و قوانین قرض‌گیری را نقض نمی‌کنند.</p>
+<h3 id="hashing-functions"><a class="header" href="#hashing-functions">توابع هش</a></h3>
+<p>به طور پیش‌فرض، <code>HashMap</code> از یک تابع هش به نام <em>SipHash</em> استفاده می‌کند که مقاومت در برابر حملات انکار سرویس (DoS) مربوط به جداول هش<sup class="footnote-reference" id="fr-siphash-1"><a href="#footnote-siphash">1</a></sup><!-- ignore --> را فراهم می‌کند. این سریع‌ترین الگوریتم هش موجود نیست، اما مبادله برای امنیت بهتر با کاهش عملکرد ارزشمند است. اگر کد خود را پروفایل کنید و متوجه شوید که تابع هش پیش‌فرض برای اهداف شما بسیار کند است، می‌توانید با مشخص کردن یک هش‌کننده دیگر آن را تغییر دهید. یک <em>هش‌کننده</em> نوعی است که ویژگی <code>BuildHasher</code> را پیاده‌سازی می‌کند. درباره ویژگی‌ها (traits) و نحوه پیاده‌سازی آن‌ها در <a href="ch10-02-traits.html">فصل ۱۰</a><!-- ignore --> صحبت خواهیم کرد. نیازی نیست حتماً هش‌کننده خود را از ابتدا پیاده‌سازی کنید؛ در <a href="https://crates.io/">crates.io</a><!-- ignore --> کتابخانه‌هایی موجود هستند که توسط کاربران Rust به اشتراک گذاشته شده‌اند و هش‌کننده‌هایی با بسیاری از الگوریتم‌های هش رایج ارائه می‌دهند.</p>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<p>بردارها، رشته‌ها، و هش مپ‌ها مقدار زیادی از قابلیت‌های مورد نیاز برای ذخیره، دسترسی، و تغییر داده‌ها در برنامه‌ها را فراهم می‌کنند. در اینجا چند تمرین وجود دارد که اکنون باید قادر به حل آن‌ها باشید:</p>
+<ol>
+<li>با داشتن یک لیست از اعداد صحیح، از یک بردار استفاده کرده و میانه (وقتی مرتب‌سازی شود، مقداری که در موقعیت وسط قرار دارد) و مد (مقداری که بیشترین بار ظاهر می‌شود؛ یک هش مپ در اینجا مفید خواهد بود) لیست را بازگردانید.</li>
+<li>رشته‌ها را به زبان لاتین خوکی تبدیل کنید. اولین صامت هر کلمه به انتهای کلمه منتقل شده و <em>ay</em> به آن اضافه می‌شود، بنابراین <em>first</em> به <em>irst-fay</em> تبدیل می‌شود. کلماتی که با یک حرف صدادار شروع می‌شوند، <em>hay</em> به انتهای آن‌ها اضافه می‌شود (<em>apple</em> به <em>apple-hay</em> تبدیل می‌شود). جزئیات مربوط به کدگذاری UTF-8 را در نظر داشته باشید!</li>
+<li>با استفاده از یک هش مپ و بردارها، یک رابط متنی ایجاد کنید تا به کاربر امکان اضافه کردن نام کارمندان به یک دپارتمان در شرکت را بدهد؛ برای مثال، “Add Sally to Engineering” یا “Add Amir to Sales”. سپس به کاربر اجازه دهید لیستی از تمام افراد در یک دپارتمان یا تمام افراد در شرکت بر اساس دپارتمان، مرتب شده به صورت حروف الفبا، بازیابی کند.</li>
+</ol>
+<p>مستندات API کتابخانه استاندارد متدهایی را که بردارها، رشته‌ها، و هش مپ‌ها دارند و برای این تمرین‌ها مفید خواهند بود توصیف می‌کنند!</p>
+<p>ما وارد برنامه‌های پیچیده‌تری شده‌ایم که در آن‌ها عملیات ممکن است با شکست مواجه شوند، بنابراین زمان مناسبی است تا درباره مدیریت خطا صحبت کنیم. این کار را در ادامه انجام خواهیم داد!</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-siphash">
+<p><a href="https://en.wikipedia.org/wiki/SipHash">https://en.wikipedia.org/wiki/SipHash</a> <a href="#fr-siphash-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="ch08-02-strings.html">→ ذخیرهٔ متن با کدگذاری UTF-8 با String</a><a href="ch09-00-error-handling.html">مدیریت خطا ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

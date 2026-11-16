@@ -1,0 +1,156 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>طول عمرها — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="lifetimes"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="lifetimes"><a class="header" href="#lifetimes">طول عمرها (Lifetimes)</a></h1>
+<p>Rust این قواعد را از طریق <em>طول عمرها</em> اعمال می‌کند. طول عمرها نواحی نام‌دار از کد هستند که یک ارجاع باید برای آن‌ها معتبر باشد. این نواحی می‌توانند نسبتاً پیچیده باشند، چون با مسیرهای اجرا در برنامه متناظرند. حتی ممکن است در این مسیرهای اجرا حفره‌هایی وجود داشته باشد، چون می‌توان یک ارجاع را نامعتبر کرد، به شرط آنکه پیش از استفادهٔ دوباره از آن دوباره مقداردهی شود. انواعی که شامل ارجاع هستند (یا وانمود می‌کنند که هستند) نیز ممکن است با طول عمر برچسب بخورند تا Rust بتواند از نامعتبر شدن آن‌ها هم جلوگیری کند.</p>
+<p>در بیشتر مثال‌های ما، طول عمرها با حوزه‌ها (scope) هم‌خوانی دارند. این به این دلیل است که مثال‌های ما ساده‌اند. موارد پیچیده‌تری که در آن‌ها هم‌خوانی ندارند در ادامه توضیح داده می‌شوند.</p>
+<p>درون بدنهٔ یک تابع، Rust معمولاً اجازه نمی‌دهد طول عمرهای درگیر را به‌صراحت نام ببرید. دلیلش این است که در یک زمینهٔ محلی معمولاً واقعاً لازم نیست دربارهٔ طول عمرها صحبت کنیم؛ Rust همهٔ اطلاعات را دارد و می‌تواند همه‌چیز را تا حد ممکن بهینه استنباط کند. بسیاری از حوزه‌های ناشناس و موقت‌ها که در غیر این صورت باید خودتان می‌نوشتید اغلب معرفی می‌شوند تا کد شما فقط کار کند.</p>
+<p>با این حال، به‌محض عبور از مرز تابع، باید شروع به صحبت دربارهٔ طول عمرها کنید. طول عمرها با آپوستروف نشان داده می‌شوند: <code>'a</code>، <code>'static</code>. برای آشنایی اولیه با طول عمرها، وانمود می‌کنیم که واقعاً اجازه داریم حوزه‌ها را با طول عمر برچسب بزنیم و مثال‌های ابتدای این فصل را desugar می‌کنیم.</p>
+<p>در ابتدا، مثال‌های ما از قند نحوی <em>تهاجمی</em> – حتی شربت ذرت با فروکتوز بالا – دربارهٔ حوزه‌ها و طول عمرها استفاده می‌کردند، چون نوشتن همه‌چیز به‌صراحت <em>فوق‌العاده شلوغ</em> است. همهٔ کد Rust بر استنباط تهاجمی و حذف چیزهای «بدیهی» تکیه دارد.</p>
+<p>یکی از قندهای نحوی بسیار جالب این است که هر دستور <code>let</code> به‌طور ضمنی یک حوزه معرفی می‌کند. در بیشتر موارد این واقعاً اهمیتی ندارد. اما برای متغیرهایی که به یکدیگر ارجاع می‌دهند اهمیت دارد. به‌عنوان یک مثال ساده، بیایید این قطعه کد ساده Rust را کاملاً desugar کنیم:</p>
+<pre><code class="language-rust">let x = 0;
+let y = &amp;x;
+let z = &amp;y;</code></pre>
+<p>borrow checker همیشه سعی می‌کند وسعت یک طول عمر را کمینه کند، بنابراین احتمالاً به شکل زیر desugar می‌شود:</p>
+<!-- ignore: desugared code -->
+<pre><code class="language-rust ignore">// NOTE: `'a: {` and `&amp;'b x` is not valid syntax!
+'a: {
+    let x: i32 = 0;
+    'b: {
+        // lifetime used is 'b because that's good enough.
+        let y: &amp;'b i32 = &amp;'b x;
+        'c: {
+            // ditto on 'c
+            let z: &amp;'c &amp;'b i32 = &amp;'c y; // "a reference to a reference to an i32" (with lifetimes annotated)
+        }
+    }
+}</code></pre>
+<p>وای. این… وحشتناک است. بیایید همگی لحظه‌ای از Rust تشکر کنیم که این کار را آسان‌تر کرده است.</p>
+<p>در واقع، فرستادن ارجاع‌ها به حوزه‌های بیرونی‌تر باعث می‌شود Rust طول عمر بزرگ‌تری استنباط کند:</p>
+<pre><code class="language-rust">let x = 0;
+let z;
+let y = &amp;x;
+z = y;</code></pre>
+<!-- ignore: desugared code -->
+<pre><code class="language-rust ignore">'a: {
+    let x: i32 = 0;
+    'b: {
+        let z: &amp;'b i32;
+        'c: {
+            // Must use 'b here because the reference to x is
+            // being passed to the scope 'b.
+            let y: &amp;'b i32 = &amp;'b x;
+            z = y;
+        }
+    }
+}</code></pre>
+<h2 id="example-references-that-outlive-referents"><a class="header" href="#example-references-that-outlive-referents">مثال: ارجاع‌هایی که از مرجع‌شان بیشتر عمر می‌کنند</a></h2>
+<p>بسیار خوب، بیایید به برخی از آن مثال‌های قبلی نگاهی بیندازیم:</p>
+<pre><code class="language-rust compile_fail">fn as_str(data: &amp;u32) -&gt; &amp;str {
+    let s = format!("{}", data);
+    &amp;s
+}</code></pre>
+<p>که desugar می‌شود به:</p>
+<!-- ignore: desugared code -->
+<pre><code class="language-rust ignore">fn as_str&lt;'a&gt;(data: &amp;'a u32) -&gt; &amp;'a str {
+    'b: {
+        let s = format!("{}", data);
+        return &amp;'a s;
+    }
+}</code></pre>
+<p>این امضای <code>as_str</code> یک ارجاع به u32 با <em>یک</em> طول عمر می‌گیرد و قول می‌دهد که بتواند ارجاعی به str تولید کند که <em>به همان اندازه</em> زنده بماند. همین حالا می‌توانیم ببینیم چرا این امضا ممکن است دردسرساز باشد. این اساساً به این معنا است که قرار است یک str را جایی در حوزه‌ای پیدا کنیم که ارجاع به u32 در آن پدید آمده، یا جایی <em>حتی زودتر</em>. این کمی انتظار زیادی است.</p>
+<p>سپس به محاسبهٔ رشتهٔ <code>s</code> می‌پردازیم و ارجاعی به آن برمی‌گردانیم. چون قرارداد تابع ما می‌گوید ارجاع باید بیشتر از <code>'a</code> عمر کند، این همان طول عمری است که برای ارجاع استنباط می‌کنیم. متأسفانه <code>s</code> در حوزهٔ <code>'b</code> تعریف شده است، پس تنها راهی که این صحیح باشد آن است که <code>'b</code> شامل <code>'a</code> باشد – که به‌وضوح نادرست است، چون <code>'a</code> باید خود فراخوانی تابع را در بر بگیرد. بنابراین ارجاعی ساخته‌ایم که طول عمرش از مرجعش بیشتر است، که <em>به معنای واقعی کلمه</em> اولین کاری است که گفتیم ارجاع‌ها نمی‌توانند انجام دهند. کامپایلر به‌حق جلوی چشممان منفجر می‌شود.</p>
+<p>برای روشن‌تر شدن، می‌توانیم مثال را بسط دهیم:</p>
+<!-- ignore: desugared code -->
+<pre><code class="language-rust ignore">fn as_str&lt;'a&gt;(data: &amp;'a u32) -&gt; &amp;'a str {
+    'b: {
+        let s = format!("{}", data);
+        return &amp;'a s
+    }
+}
+
+fn main() {
+    'c: {
+        let x: u32 = 0;
+        'd: {
+            // An anonymous scope is introduced because the borrow does not
+            // need to last for the whole scope x is valid for. The return
+            // of as_str must find a str somewhere before this function
+            // call. Obviously not happening.
+            println!("{}", as_str::&lt;'d&gt;(&amp;'d x));
+        }
+    }
+}</code></pre>
+<p>لعنت!</p>
+<p>البته راه درست نوشتن این تابع به این صورت است:</p>
+<pre><code class="language-rust">fn to_string(data: &amp;u32) -&gt; String {
+    format!("{}", data)
+}</code></pre>
+<p>باید درون تابع یک مقدار مالک تولید کنیم تا بتوانیم آن را برگردانیم! تنها راهی که می‌توانستیم <code>&amp;'a str</code> را برگردانیم این بود که در یکی از فیلدهای <code>&amp;'a u32</code> باشد، که آشکارا چنین نیست.</p>
+<p>(در واقع می‌توانستیم فقط یک لیترال رشته‌ای هم برگردانیم که به‌عنوان یک سراسری می‌توان آن را ساکن در پایین پشته دانست؛ هرچند این کار پیاده‌سازی ما را <em>کمی</em> محدود می‌کند.)</p>
+<h2 id="example-aliasing-a-mutable-reference"><a class="header" href="#example-aliasing-a-mutable-reference">مثال: alias کردن یک ارجاع تغییرپذیر</a></h2>
+<p>مثال دیگر چطور؟</p>
+<pre><code class="language-rust compile_fail">let mut data = vec![1, 2, 3];
+let x = &amp;data[0];
+data.push(4);
+println!("{}", x);</code></pre>
+<!-- ignore: desugared code -->
+<pre><code class="language-rust ignore">'a: {
+    let mut data: Vec&lt;i32&gt; = vec![1, 2, 3];
+    'b: {
+        // 'b is as big as we need this borrow to be
+        // (just need to get to `println!`)
+        let x: &amp;'b i32 = Index::index::&lt;'b&gt;(&amp;'b data, 0);
+        'c: {
+            // Temporary scope because we don't need the
+            // &amp;mut to last any longer.
+            Vec::push(&amp;'c mut data, 4);
+        }
+        println!("{}", x);
+    }
+}</code></pre>
+<p>مشکل در اینجا کمی ظریف‌تر و جالب‌تر است. می‌خواهیم Rust این برنامه را به این دلیل رد کند: وقتی می‌خواهیم برای <code>push</code> یک ارجاع تغییرپذیر به <code>data</code> بگیریم، یک ارجاع مشترک زندهٔ <code>x</code> به یکی از فرزندان <code>data</code> داریم. این کار یک ارجاع تغییرپذیر alias شده ایجاد می‌کند که <em>قاعدهٔ دوم</em> ارجاع‌ها را نقض می‌کند.</p>
+<p>با این حال Rust به‌هیچ وجه این‌گونه استدلال نمی‌کند که این برنامه بد است. Rust نمی‌فهمد که <code>x</code> ارجاعی به یک زیرمسیر از <code>data</code> است. اصلاً <code>Vec</code> را نمی‌فهمد. چیزی که <em>می‌بیند</em> این است که <code>x</code> برای چاپ شدن باید تا <code>'b</code> زنده بماند. امضای <code>Index::index</code> در ادامه می‌خواهد که ارجاعی که به <code>data</code> می‌گیریم باید تا <code>'b</code> دوام بیاورد. وقتی می‌خواهیم <code>push</code> را فراخوانی کنیم، می‌بیند که می‌خواهیم یک <code>&amp;'c mut data</code> بسازیم. Rust می‌داند که <code>'c</code> درون <code>'b</code> قرار دارد و برنامهٔ ما را رد می‌کند، چون <code>&amp;'b data</code> هنوز باید زنده باشد!</p>
+<p>در اینجا می‌بینیم که سیستم طول عمر بسیار درشت‌دانه‌تر از معناشناسی ارجاعی است که واقعاً می‌خواهیم حفظ کنیم. در بیشتر موارد، <em>این کاملاً اشکالی ندارد</em>، چون مانع می‌شود تمام روز را صرف توضیح دادن برنامه‌مان به کامپایلر کنیم. با این حال، این یعنی چندین برنامه که نسبت به معناشناسی <em>واقعی</em> Rust کاملاً درست‌اند رد می‌شوند، چون طول عمرها بیش از حد ساده‌لوح‌اند.</p>
+<h2 id="the-area-covered-by-a-lifetime"><a class="header" href="#the-area-covered-by-a-lifetime">ناحیه‌ای که یک طول عمر پوشش می‌دهد</a></h2>
+<p>یک ارجاع (که گاهی <em>قرض (borrow)</em> نامیده می‌شود) از جایی که ساخته می‌شود تا آخرین استفاده‌اش <em>زنده</em> است. مقدار قرض‌گرفته‌شده فقط باید بیشتر از قرض‌هایی عمر کند که زنده‌اند. این ساده به نظر می‌رسد، اما چند ظرافت دارد.</p>
+<p>قطعه کد زیر کامپایل می‌شود، چون پس از چاپ <code>x</code> دیگر به آن نیازی نیست، پس مهم نیست که معلق (dangling) یا alias شده باشد (هرچند متغیر <code>x</code> <em>از نظر فنی</em> تا انتهای حوزه وجود دارد).</p>
+<pre><code class="language-rust">let mut data = vec![1, 2, 3];
+let x = &amp;data[0];
+println!("{}", x);
+// This is OK, x is no longer needed
+data.push(4);</code></pre>
+<p>با این حال، اگر مقدار نابودگر داشته باشد، نابودگر در پایان حوزه اجرا می‌شود. و اجرای نابودگر یک استفاده به حساب می‌آید ‒ آشکارا آخرین استفاده. بنابراین این یکی کامپایل <em>نمی‌شود</em>.</p>
+<pre><code class="language-rust compile_fail">#[derive(Debug)]
+struct X&lt;'a&gt;(&amp;'a i32);
+
+impl Drop for X&lt;'_&gt; {
+    fn drop(&amp;mut self) {}
+}
+
+let mut data = vec![1, 2, 3];
+let x = X(&amp;data[0]);
+println!("{:?}", x);
+data.push(4);
+// Here, the destructor is run and therefore this'll fail to compile.</code></pre>
+<p>یک راه برای متقاعد کردن کامپایلر که <code>x</code> دیگر معتبر نیست، استفاده از <code>drop(x)</code> پیش از <code>data.push(4)</code> است.</p>
+<p>علاوه بر این، ممکن است چندین آخرین استفادهٔ ممکن از قرض وجود داشته باشد، برای مثال در هر شاخهٔ یک شرط.</p>
+<pre><code class="language-rust"><span class="boring">fn some_condition() -&gt; bool { true }
+</span>let mut data = vec![1, 2, 3];
+let x = &amp;data[0];
+
+if some_condition() {
+    println!("{}", x); // This is the last use of `x` in this branch
+    data.push(4);      // So we can push here
+} else {
+    // There's no use of `x` in here, so effectively the last use is the
+    // creation of x at the top of the example.
+    data.push(5);
+}</code></pre>
+<p>و یک طول عمر می‌تواند یک وقفه داشته باشد. یا می‌توانید آن را دو قرض متمایز ببینید که فقط به یک متغیر محلی یکسان گره خورده‌اند. این اغلب پیرامون حلقه‌ها رخ می‌دهد (نوشتن مقدار جدید یک متغیر در انتهای حلقه و استفاده از آن برای آخرین بار در ابتدای تکرار بعدی).</p>
+<pre><code class="language-rust">let mut data = vec![1, 2, 3];
+// This mut allows us to change where the reference points to
+let mut x = &amp;data[0];
+
+println!("{}", x); // Last use of this borrow
+data.push(4);
+x = &amp;data[3]; // We start a new borrow here
+println!("{}", x);</code></pre>
+<p>از نظر تاریخی، Rust قرض را تا پایان حوزه زنده نگه می‌داشت، پس این مثال‌ها ممکن است با کامپایلرهای قدیمی‌تر کامپایل نشوند. همچنین هنوز چند حالت مرزی وجود دارد که Rust نمی‌تواند بخش زندهٔ قرض را به‌درستی کوتاه کند و حتی وقتی به نظر می‌رسد باید کامپایل شود، کامپایل نمی‌شود. این‌ها با گذر زمان حل خواهند شد.</p><nav class="page-nav"><a href="aliasing.html">→ هم‌نامی</a><a href="lifetime-mismatch.html">محدودیت‌های طول عمر ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,139 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>نمونه‌سازی Binderها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="ty-module/instantiating-binders"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="instantiating-binders"><a class="header" href="#instantiating-binders">Instantiating <code>Binder</code>s</a></h1>
+<p>درست مثل <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.EarlyBinder.html"><code>EarlyBinder</code></a>، هنگام دسترسی به درون یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.Binder.html"><code>Binder</code></a> باید ابتدا آن را با جایگزینی متغیرهای bound با مقدار دیگری discharge کنیم.
+دلیلش تقریباً همان <code>EarlyBinder</code> است، نوع‌هایی که به پارامترهای معرفی‌شده توسط <code>Binder</code> ارجاع می‌دهند بیرون آن binder معنایی ندارند.
+مثال خطادار زیر را ببینید:</p>
+<pre><code class="language-rust ignore">fn foo&lt;'a&gt;(a: &amp;'a u32) -&gt; &amp;'a u32 {
+    a
+}
+fn bar&lt;T&gt;(a: fn(&amp;u32) -&gt; T) -&gt; T {
+    a(&amp;10)
+}
+
+fn main() {
+    let higher_ranked_fn_ptr = foo as for&lt;'a&gt; fn(&amp;'a u32) -&gt; &amp;'a u32;
+    // Attempt to infer `T=for&lt;'a&gt; &amp;'a u32` which is not satsifiable
+    let references_bound_vars = bar(higher_ranked_fn_ptr);
+}</code></pre>
+<p>در این مثال به <code>bar</code> آرگومانی از نوع <code>for&lt;'a&gt; fn(&amp;'^0 u32) -&gt; &amp;'^0 u32</code> می‌دهیم.
+نمی‌خواهیم اجازه دهیم <code>T</code> به نوع <code>&amp;'^0 u32</code> استنتاج شود چون کاملاً بی‌معنا می‌شد (و اگر اتفاقاً ICE نمی‌شد احتمالاً unsound بود).
+<code>main</code> از <code>'a</code> خبر ندارد پس borrow checker نمی‌توانست borrow با طول‌عمر <code>'a</code> را مدیریت کند.</p>
+<p>برخلاف <code>EarlyBinder</code>، معمولاً <code>Binder</code> را با مجموعهٔ مشخصی از آرگومان‌های کاربر نمونه‌سازی نمی‌کنیم، یعنی <code>['b, 'static]</code> به‌عنوان آرگومان‌های <code>for&lt;'a1, 'a2&gt; fn(&amp;'a1 u32, &amp;'a2 u32)</code>. به‌جای آن معمولاً binder را با متغیرهای استنتاج یا placeholderها نمونه‌سازی می‌کنیم.</p>
+<h2 id="instantiating-with-inference-variables"><a class="header" href="#instantiating-with-inference-variables">نمونه‌سازی با متغیرهای استنتاج</a></h2>
+<p>وقتی می‌خواهیم نمونه‌سازی ممکن binder را استنتاج کنیم، مثلاً فراخوانی اشاره‌گرهای تابع مرتبهٔ بالاتر یا تلاش برای استفاده از بند where مرتبهٔ بالاتر برای اثبات یک bound، binderها را با متغیرهای استنتاج نمونه‌سازی می‌کنیم. برای مثال، با <code>higher_ranked_fn_ptr</code> از مثال بالا، اگر آن را با <code>&amp;10_u32</code> فراخوانی کنیم:</p>
+<ul>
+<li>binder را با infer varها نمونه‌سازی می‌کنیم که امضای <code>fn(&amp;'?0 u32) -&gt; &amp;'?0 u32)</code> می‌دهد</li>
+<li>نوع آرگومان داده‌شده <code>&amp;10_u32</code> (&amp;’static u32) را با نوع در امضا، <code>&amp;'?0 u32</code>، برابر می‌کنیم و <code>'?0 = 'static</code> را استنتاج می‌کنیم</li>
+<li>آرگومان‌های داده‌شده درست بودند چون توانستیم نوع آرگومان‌ها را با نوع آرگومان‌ها در امضای اشاره‌گر تابع یکپارچه (unify) کنیم</li>
+</ul>
+<p>مثال دیگر نمونه‌سازی با infer varها: با بند where مثل <code>for&lt;'a&gt; T: Trait&lt;'a&gt;</code>، اگر بخواهیم ثابت کنیم <code>T: Trait&lt;'static&gt;</code> برقرار است:</p>
+<ul>
+<li>binder را با infer varها نمونه‌سازی می‌کنیم که بند where برابر <code>T: Trait&lt;'?0&gt;</code> می‌دهد</li>
+<li>هدف <code>T: Trait&lt;'static&gt;</code> را با بند where نمونه‌سازی‌شده برابر می‌کنیم و <code>'?0 = 'static</code> را استنتاج می‌کنیم</li>
+<li>هدف برقرار است چون توانستیم <code>T: Trait&lt;'static&gt;</code> را با <code>T: Trait&lt;'?0&gt;</code> یکپارچه کنیم</li>
+</ul>
+<p>نمونه‌سازی binderها با متغیرهای استنتاج را می‌توان با متد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/infer/struct.InferCtxt.html#method.instantiate_binder_with_fresh_vars"><code>instantiate_binder_with_fresh_vars</code></a> روی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/infer/struct.InferCtxt.html"><code>InferCtxt</code></a> انجام داد.
+وقتی فقط به یک نمونه‌سازی مشخص از binder اهمیت می‌دهیم باید با infer varها نمونه‌سازی شود؛ اگر به‌جای آن بخواهیم دربارهٔ همهٔ نمونه‌سازی‌های ممکن binder استدلال کنیم باید از placeholderها استفاده شود.</p>
+<h2 id="instantiating-with-placeholders"><a class="header" href="#instantiating-with-placeholders">نمونه‌سازی با placeholderها</a></h2>
+<p>Placeholderها بسیار شبیه <code>Ty/ConstKind::Param</code>/<code>ReEarlyParam</code> هستند؛ نوع ناشناخته‌ای را نشان می‌دهند که فقط با خودش برابر است.
+<code>Ty</code>/<code>Const</code> و <code>Region</code> همگی variantی به نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Placeholder.html"><code>Placeholder</code></a> دارند که از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.UniverseIndex.html"><code>Universe</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.BoundVar.html"><code>BoundVar</code></a> تشکیل شده است.</p>
+<p><code>Universe</code> ردیابی می‌کند placeholder از کدام binder سرچشمه گرفته، و <code>BoundVar</code> ردیابی می‌کند با کدام پارامتر آن binder متناظر است.
+برابری placeholderها صرفاً با برابربودن universeها و برابربودن <code>BoundVar</code>ها تعیین می‌شود.
+برای اطلاعات بیشتر <a href="../borrow-check/region-inference/placeholders-and-universes.html">فصل Placeholderها و Universeها</a> را ببینید.</p>
+<p>هنگام صحبت با توسعه‌دهندگان rustc یا دیدن <code>Ty</code>/<code>Const</code>/<code>Region</code>های با قالب <code>Debug</code>، <code>Placeholder</code> اغلب به شکل <code>'!UNIVERSE_BOUNDVARS</code> نوشته می‌شود.
+برای مثال، با نوع <code>for&lt;'a&gt; fn(&amp;'a u32, for&lt;'b&gt; fn(&amp;'b &amp;'a u32))</code>،
+پس از نمونه‌سازی هر دو binder (با فرض اینکه <code>Universe</code> در <code>InferCtxt</code> فعلی پیش‌تر <code>U0</code> بوده)،
+نوع <code>&amp;'b &amp;'a u32</code> به‌صورت <code>&amp;'!2_0 &amp;!1_0 u32</code> نمایش داده می‌شود.</p>
+<p>وقتی universe مربوط به placeholder برابر <code>0</code> باشد، کاملاً از خروجی debug حذف می‌شود، یعنی <code>!0_2</code> به‌صورت <code>!2</code> چاپ می‌شود.
+اما این در عمل به‌ندرت رخ می‌دهد چون هنگام نمونه‌سازی binder با placeholderها universe را در <code>InferCtxt</code> افزایش می‌دهیم،
+پس معمولاً پایین‌ترین universe قابل‌مواجهه برای placeholderها <code>U1</code> است.</p>
+<p><code>Binder</code>ها را می‌توان با متد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_trait_selection/infer/struct.InferCtxt.html#method.enter_forall"><code>enter_forall</code></a> روی <code>InferCtxt</code> با placeholderها نمونه‌سازی کرد.
+هر وقت کامپایلر باید به هر نمونه‌سازی ممکن binder اهمیت دهد نه یک نمونه‌سازی مشخص باید از آن استفاده کرد.</p>
+<p>نکته: در مثال اصلی این فصل گفته شد نباید متغیر محلی را به نوع <code>&amp;'^0 u32</code> استنتاج کنیم.
+این کد با universeها از کامپایل‌شدن بازداشته می‌شود (همان‌طور که در فصل پیوندخورده توضیح داده شده)</p>
+<h3 id="why-have-both-replaceholder-and-rebound"><a class="header" href="#why-have-both-replaceholder-and-rebound">چرا هم <code>RePlaceholder</code> و هم <code>ReBound</code> داریم؟</a></h3>
+<p>ممکن است تعجب کنید چرا هر دو variant را داریم؛ بالاخره داده ذخیره‌شده در <code>Placeholder</code> عملاً معادل <code>ReBound</code> است: چیزی برای ردیابی اینکه کدام binder و اندیسی برای ردیابی اینکه <code>Binder</code> کدام پارامتر را معرفی کرده.</p>
+<p>دلیل اصلی این است که <code>Bound</code> نمایش نحوی‌تری از متغیرهای bound است در حالی که <code>Placeholder</code> نمایش معنایی‌تری است.
+به‌عنوان مثال عینی:</p>
+<pre><code class="language-rust">impl&lt;'a&gt; Other&lt;'a&gt; for &amp;'a u32 { }
+
+impl&lt;T&gt; Trait for T
+where
+    for&lt;'a&gt; T: Other&lt;'a&gt;,
+{ ... }
+
+impl&lt;T&gt; Bar for T
+where
+    for&lt;'a&gt; &amp;'a T: Trait
+{ ... }</code></pre>
+<p>با این پیاده‌سازی‌های trait، <code>u32: Bar</code> نباید برقرار باشد.
+<code>&amp;'a u32</code> فقط وقتی <code>Other&lt;'a&gt;</code> را پیاده می‌کند که طول‌عمر borrow و طول‌عمر روی trait برابر باشند.
+اما اگر فقط از <code>ReBound</code> استفاده می‌کردیم و placeholder نداشتیم، ممکن است به‌آسانی به‌اشتباه باور کنیم آن trait bound برقرار است.
+برای توضیح این، بیایید مثالی از تلاش برای اثبات <code>u32: Bar</code> را در دنیایی که rustc placeholder نداشت مرور کنیم:</p>
+<ul>
+<li>با تلاش برای اثبات <code>u32: Bar</code> شروع می‌کنیم</li>
+<li>impl با نام <code>impl&lt;T&gt; Bar for T</code> را می‌یابیم، <code>EarlyBinder</code> را با <code>u32</code> نمونه‌سازی می‌کنیم (نکته: این <em>کاملاً</em> دقیق نیست چون ابتدا binder را با متغیر استنتاج نمونه‌سازی می‌کنیم که سپس <code>u32</code> استنتاج می‌شود، اما این تمایز اینجا چندان مهم نیست)</li>
+<li>بند where با نام <code>for&lt;'a&gt; &amp;'^0 T: Trait</code> روی impl هست، چون early binder را با <code>u32</code> نمونه‌سازی کردیم واقعاً باید <code>for&lt;'a&gt; &amp;'^0 u32: Trait</code> را ثابت کنیم</li>
+<li>impl با نام <code>impl&lt;T&gt; Trait for T</code> را می‌یابیم، <code>EarlyBinder</code> را با <code>&amp;'^0 u32</code> نمونه‌سازی می‌کنیم</li>
+<li>بند where با نام <code>for&lt;'a&gt; T: Other&lt;'^0&gt;</code> هست، چون early binder را با <code>&amp;'^0 u32</code> نمونه‌سازی کردیم واقعاً باید <code>for&lt;'a&gt; &amp;'^0 u32: Other&lt;'^0&gt;</code> را ثابت کنیم</li>
+<li><code>impl&lt;'a&gt; Other&lt;'a&gt; for &amp;'a u32</code> را می‌یابیم و این impl برای اثبات bound کافی است چون طول‌عمر borrow و trait هر دو <code>'^0</code> هستند</li>
+</ul>
+<p>این نتیجهٔ نهایی نادرست است چون دو binder جداگانه داشتیم که پارامترهای جنریک خودشان را معرفی می‌کردند، trait bound باید به چیزی شبیه <code>for&lt;'a1, 'a2&gt; &amp;'^1 u32: Other&lt;'^0&gt;</code> می‌رسید که توسط <code>impl&lt;'a&gt; Other&lt;'a&gt; for &amp;'a u32</code> برآورده <em>نمی‌شود</em>.</p>
+<p>در حالی که در تئوری می‌توانستیم این را کار بیندازیم، بسیار درگیرکننده و پیچیده‌تر از چینش فعلی بود، باید:</p>
+<ul>
+<li>متغیرهای bound را «بازنویسی» کنیم تا هر بار که <code>Binder</code>/<code>EarlyBinder</code> را با نوع/ثابت/region از نوع <code>Bound</code> نمونه‌سازی می‌کنیم <code>DebruijnIndex</code> بالاتری داشته باشند</li>
+<li>هنگام استنتاج متغیر استنتاج به متغیر bound، اگر آن متغیر bound از binderی باشد که پس از ساخت infer var وارد شده‌ایم، باید <code>DebruijnIndex</code> متغیر را پایین بیاوریم.</li>
+<li>جداگانه ردیابی کنیم متغیر استنتاج درون کدام binder ساخته شده، و همچنین درونی‌ترین binder که می‌تواند پارامترها را از آن نام ببرد (فعلاً فقط مورد دوم را باید ردیابی کنیم)</li>
+<li>هنگام حل متغیرهای استنتاج، هر متغیر bound را بر اساس عمق فعلی binder در infcx بازنویسی کنیم</li>
+<li>احتمالاً بیشتر (هنگام نوشتن این فهرست موارد مدام اضافه می‌شدند پس ساده‌لوحانه است فکر کنیم جامع است)</li>
+</ul>
+<p>اساساً، همهٔ این پیچیدگی به این دلیل است که نوع/ثابت/regionهای <code>Bound</code> برای پارامتر مشخصی روی <code>Binder</code> بسته به اینکه چند <code>Binder</code> دیگر بین binderی که پارامتر را معرفی می‌کند و محل استفاده‌اش هست نمایش متفاوتی دارند.
+برای مثال، با کد زیر:</p>
+<pre><code class="language-rust">fn foo&lt;T&gt;()
+where
+    for&lt;'a&gt; T: Trait&lt;'a, for&lt;'b&gt; fn(&amp;'b T, &amp;'a u32)&gt;
+{ ... }</code></pre>
+<p>آن بند where به‌صورت <code>for&lt;'a&gt; T: Trait&lt;'^0, for&lt;'b&gt; fn(&amp;'^0 T, &amp;'^1_0 u32)&gt;</code> نوشته می‌شود.
+با اینکه دو ارجاع به پارامتر <code>'a</code> هست،
+هر دو متفاوت نمایش داده می‌شوند، <code>^0</code> و <code>^1_0</code>،
+به‌دلیل اینکه استفادهٔ دومی زیر <code>Binder</code> دوم برای نوع اشاره‌گر تابع درونی تو در تو است.</p>
+<p>این برخلاف نوع/ثابت/regionهای <code>Placeholder</code> است که این محدودیت را ندارند چون <code>Universe</code>ها مخصوص <code>InferCtxt</code> فعلی‌اند نه محل استفادهٔ پارامتر.</p>
+<p>نمونه‌سازی <code>EarlyBinder</code>ها و یکپارچه‌کردن متغیرهای استنتاج با <code>Placeholder</code>های موجود بدیهی است چون صرف‌نظر از زمینه‌ای که <code>Placeholder</code> در آن است، نمایش یکسانی دارد.
+به‌عنوان مثال، اگر binder روی بند where مرتبهٔ بالاتر بالا را نمونه‌سازی کنیم، به این شکل نمایش داده می‌شود:
+<code>T: Trait&lt;'!1_0, for&lt;'b&gt; fn(&amp;'^0 T, &amp;'!1_0 u32)&gt;</code>.
+نمایش <code>RePlaceholder</code> برای هر دو استفاده از <code>'a</code> یکسان است با اینکه یکی زیر <code>Binder</code> دیگری است.</p>
+<p>اگر سپس binder روی اشاره‌گر تابع را نمونه‌سازی کنیم نوعی شبیه این می‌گیریم:
+<code>fn(&amp;'!2_0 T, ^'!1_0 u32)</code>
+<code>RePlaceholder</code> برای پارامتر <code>'b</code> در universe بالاتری است تا نشان دهد binder آن پس از binder مربوط به <code>'a</code> نمونه‌سازی شده است.</p>
+<h2 id="instantiating-with-relateparam"><a class="header" href="#instantiating-with-relateparam">نمونه‌سازی با <code>ReLateParam</code></a></h2>
+<p>همان‌طور که در <a href="param-ty-const-regions.html">فصل مربوط به نمایش نوع‌ها</a> بحث شد، <code>RegionKind</code> دو variant برای نمایش پارامترهای جنریک دارد، <code>ReLateParam</code> و <code>ReEarlyParam</code>.
+<code>ReLateParam</code> از نظر مفهومی <code>Placeholder</code>ای است که همیشه در universe ریشه (<code>U0</code>) قرار دارد.
+هنگام نمونه‌سازی پارامترهای late bound توابع/closureها در حالی که درون آن‌ها هستیم به‌کار می‌رود.
+نمایش واقعی‌اش نسبتاً با <code>ReEarlyParam</code> و <code>RePlaceholder</code> متفاوت است:</p>
+<ul>
+<li><code>DefId</code> برای آیتمی که پارامتر جنریک late bound را معرفی کرده</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.BoundRegionKind.html"><code>BoundRegionKind</code></a> که یا <code>DefId</code> پارامتر جنریک و نامش (از طریق <code>Symbol</code>) را مشخص می‌کند، یا اینکه این placeholder طول‌عمر ناشناس (anonymous) borrow مربوط به self در closure از نوع <code>Fn</code>/<code>FnMut</code> را نمایش می‌دهد.
+variantی برای <code>BrAnon</code> هم هست اما برای <code>ReLateParam</code> استفاده نمی‌شود.</li>
+</ul>
+<p>برای مثال، با کد زیر:</p>
+<pre><code class="language-rust ignore">impl Trait for Whatever {
+    fn foo&lt;'a&gt;(a: &amp;'a u32) -&gt; &amp;'a u32 {
+        let b: &amp;'a u32 = a;
+        b
+    }
+}</code></pre>
+<p>طول‌عمر <code>'a</code> در نوع <code>&amp;'a u32</code> در بدنهٔ تابع به‌صورت زیر نمایش داده می‌شود:</p>
+<pre><code>ReLateParam(
+    {impl#0}::foo,
+    BoundRegionKind::BrNamed({impl#0}::foo::'a, "'a")
+)
+</code></pre>
+<p>در این حالت مشخص ارجاع به پارامترهای جنریک late bound یک تابع از درون بدنه،
+این کار ضمنی هنگام <code>hir_ty_lowering</code> انجام می‌شود،
+نه به‌صورت صریح هنگام نمونه‌سازی <code>Binder</code> در جایی.
+اما در برخی موارد <code>Binder</code> را صراحتاً با <code>ReLateParam</code>ها نمونه‌سازی می‌کنیم.</p>
+<p>عموماً هر وقت <code>Binder</code> برای پارامترهای late bound روی تابع/closure داشته باشیم،
+و مفهوماً از قبل درون binder باشیم،
+از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/context/struct.TyCtxt.html#method.liberate_late_bound_regions"><code>liberate_late_bound_regions</code></a> برای نمونه‌سازی با <code>ReLateParam</code>ها استفاده می‌کنیم.
+این باعث می‌شود این عملیات معادل <code>Binder</code> برای <code>instantiate_identity</code> در <code>EarlyBinder</code> باشد.</p>
+<p>به‌عنوان مثال عینی، دسترسی به امضای تابعی که در حال type check آن هستیم به‌صورت <code>EarlyBinder&lt;Binder&lt;FnSig&gt;&gt;</code> نمایش داده می‌شود.
+چون از قبل «درون» این binderها هستیم، <code>instantiate_identity</code> و سپس <code>liberate_late_bound_regions</code> را فراخوانی می‌کنیم.</p><nav class="page-nav"><a href="binders.html">→ Binderها و ناحیه‌های مرتبهٔ بالاتر</a><a href="../early-late-parameters.html">پارامترهای Early در برابر Late bound ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

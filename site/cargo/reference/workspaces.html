@@ -1,0 +1,205 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>Workspaceها — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/workspaces"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="workspaces"><a class="header" href="#workspaces">Workspaceها</a></h1>
+<p>یک <em>workspace</em> مجموعه‌ای از یک یا چند بسته است که <em>اعضای workspace</em> نامیده می‌شوند و با هم مدیریت می‌شوند.</p>
+<p>نکات کلیدی workspaceها عبارت‌اند از:</p>
+<ul>
+<li>دستورهای رایج را می‌توان روی همهٔ اعضای workspace اجرا کرد، مانند <code>cargo check --workspace</code>.</li>
+<li>همهٔ بسته‌ها یک فایل <a href="../guide/cargo-toml-vs-cargo-lock.html"><code>Cargo.lock</code></a> مشترک دارند که در <em>ریشهٔ workspace</em> قرار دارد.</li>
+<li>همهٔ بسته‌ها یک <a href="build-cache.html">دایرکتوری خروجی</a> مشترک دارند که به‌طور پیش‌فرض دایرکتوری‌ای به نام <code>target</code> در <em>ریشهٔ workspace</em> است.</li>
+<li>اشتراک‌گذاری فرادادهٔ بسته، مانند <a href="#the-package-table"><code>workspace.package</code></a>.</li>
+<li>بخش‌های <a href="overriding-dependencies.html#the-patch-section"><code>[patch]</code></a>، <a href="overriding-dependencies.html#the-replace-section"><code>[replace]</code></a> و <a href="profiles.html"><code>[profile.*]</code></a> در <code>Cargo.toml</code> فقط در مانیفست <em>ریشه</em> شناخته می‌شوند و در مانیفست crateهای عضو نادیده گرفته می‌شوند.</li>
+</ul>
+<p>فایل <code>Cargo.toml</code> ریشهٔ یک workspace از بخش‌های زیر پشتیبانی می‌کند:</p>
+<ul>
+<li><a href="#the-workspace-section"><code>[workspace]</code></a> — یک workspace را تعریف می‌کند.
+<ul>
+<li><a href="resolver.html#resolver-versions"><code>resolver</code></a> — حل‌کنندهٔ وابستگی (resolver) مورد استفاده را تعیین می‌کند.</li>
+<li><a href="#the-members-and-exclude-fields"><code>members</code></a> — بسته‌هایی که در workspace گنجانده می‌شوند.</li>
+<li><a href="#the-members-and-exclude-fields"><code>exclude</code></a> — بسته‌هایی که از workspace کنار گذاشته می‌شوند.</li>
+<li><a href="#the-default-members-field"><code>default-members</code></a> — بسته‌هایی که وقتی بستهٔ مشخصی انتخاب نشده باشد روی آن‌ها عمل می‌شود.</li>
+<li><a href="#the-package-table"><code>package</code></a> — کلیدهایی برای ارث‌بری در بسته‌ها.</li>
+<li><a href="#the-dependencies-table"><code>dependencies</code></a> — کلیدهایی برای ارث‌بری در وابستگی‌های بسته.</li>
+<li><a href="#the-lints-table"><code>lints</code></a> — کلیدهایی برای ارث‌بری در lintهای بسته.</li>
+<li><a href="#the-metadata-table"><code>metadata</code></a> — تنظیمات اضافی برای ابزارهای خارجی.</li>
+</ul>
+</li>
+<li><a href="overriding-dependencies.html#the-patch-section"><code>[patch]</code></a> — بازنویسی وابستگی‌ها.</li>
+<li><a href="overriding-dependencies.html#the-replace-section"><code>[replace]</code></a> — بازنویسی وابستگی‌ها (منسوخ‌شده).</li>
+<li><a href="profiles.html"><code>[profile]</code></a> — تنظیمات و بهینه‌سازی‌های کامپایلر.</li>
+</ul>
+<h2 id="the-workspace-section"><a class="header" href="#the-workspace-section">بخش <code>[workspace]</code></a></h2>
+<p>برای ایجاد یک workspace، جدول <code>[workspace]</code> را به یک <code>Cargo.toml</code> اضافه می‌کنید:</p>
+<pre><code class="language-toml">[workspace]
+# ...
+</code></pre>
+<p>یک workspace دست‌کم باید یک عضو داشته باشد، یا با یک بستهٔ ریشه یا به‌صورت مانیفست مجازی.</p>
+<h3 id="root-package"><a class="header" href="#root-package">بستهٔ ریشه</a></h3>
+<p>اگر <a href="#the-workspace-section">بخش <code>[workspace]</code></a> به <code>Cargo.toml</code>ای اضافه شود که از قبل یک <code>[package]</code> تعریف کرده است، آن بسته <em>بستهٔ ریشه</em> workspace است. <em>ریشهٔ workspace</em> دایرکتوری‌ای است که <code>Cargo.toml</code> مربوط به workspace در آن قرار دارد.</p>
+<pre><code class="language-toml">[workspace]
+
+[package]
+name = "hello_world" # the name of the package
+version = "0.1.0"    # the current version, obeying semver
+</code></pre>
+<h3 id="virtual-workspace"><a class="header" href="#virtual-workspace">Workspace مجازی</a></h3>
+<p>به‌طور جایگزین، می‌توان یک فایل <code>Cargo.toml</code> با بخش <code>[workspace]</code> اما بدون <a href="manifest.html#the-package-section">بخش <code>[package]</code></a> ایجاد کرد. این را <em>مانیفست مجازی</em> می‌نامند. این روش معمولاً زمانی مفید است که «بستهٔ اصلی» وجود ندارد یا می‌خواهید همهٔ بسته‌ها را در دایرکتوری‌های جداگانه سازمان‌دهی کنید.</p>
+<pre><code class="language-toml"># [PROJECT_DIR]/Cargo.toml
+[workspace]
+members = ["hello_world"]
+resolver = "3"
+</code></pre>
+<pre><code class="language-toml"># [PROJECT_DIR]/hello_world/Cargo.toml
+[package]
+name = "hello_world" # the name of the package
+version = "0.1.0"    # the current version, obeying semver
+edition = "2024"     # the edition, will have no effect on a resolver used in the workspace
+</code></pre>
+<p>با داشتن workspace بدون بستهٔ ریشه،</p>
+<ul>
+<li><a href="resolver.html#resolver-versions"><code>resolver</code></a> باید در workspaceهای مجازی به‌صراحت تنظیم شود، زیرا آن‌ها <a href="manifest.html#the-edition-field"><code>package.edition</code></a> ندارند تا <a href="resolver.html#resolver-versions">نسخهٔ resolver</a> از آن استنباط شود.</li>
+<li>دستورهایی که در ریشهٔ workspace اجرا می‌شوند به‌طور پیش‌فرض روی همهٔ اعضای workspace اجرا می‌شوند؛ <a href="#the-default-members-field"><code>default-members</code></a> را ببینید.</li>
+</ul>
+<h2 id="the-members-and-exclude-fields"><a class="header" href="#the-members-and-exclude-fields">فیلدهای <code>members</code> و <code>exclude</code></a></h2>
+<p>فیلدهای <code>members</code> و <code>exclude</code> مشخص می‌کنند کدام بسته‌ها عضو workspace هستند:</p>
+<pre><code class="language-toml">[workspace]
+members = ["member1", "path/to/member2", "crates/*"]
+exclude = ["crates/foo", "path/to/other"]
+</code></pre>
+<p>همهٔ وابستگی‌های <code>path</code> که در دایرکتوری workspace قرار دارند به‌طور خودکار عضو می‌شوند. اعضای اضافی را می‌توان با کلید <code>members</code> فهرست کرد، که باید آرایه‌ای از رشته‌ها شامل دایرکتوری‌هایی با فایل <code>Cargo.toml</code> باشد.</p>
+<p>فهرست <code>members</code> از <a href="https://docs.rs/glob/0.3.0/glob/struct.Pattern.html">globها</a> نیز برای تطبیق چند مسیر پشتیبانی می‌کند و از الگوهای رایج glob نام فایل مانند <code>*</code> و <code>?</code> استفاده می‌کند.</p>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>همهٔ بسته‌های عضو را در یک دایرکتوری تخت (معمولاً <code>crates/</code>) نگه دارید و برای فیلد <code>members</code> از الگوی glob استفاده کنید، مثلاً <code>members = ["crates/*"]</code>. این کار تغییرات لازم برای نگهداری فهرست <code>members</code> را به حداقل می‌رساند.</p>
+</blockquote>
+<p>کلید <code>exclude</code> را می‌توان برای جلوگیری از گنجانده‌شدن مسیرها در یک workspace به کار برد. این زمانی مفید است که برخی وابستگی‌های مسیری اصلاً نباید در workspace باشند، یا از الگوی glob استفاده می‌کنید و می‌خواهید یک دایرکتوری را حذف کنید.</p>
+<p>وقتی درون یک زیردایرکتوری از workspace هستید، Cargo به‌طور خودکار دایرکتوری‌های بالادست را برای یافتن یک فایل <code>Cargo.toml</code> دارای تعریف <code>[workspace]</code> جست‌وجو می‌کند تا مشخص کند از کدام workspace استفاده کند. کلید مانیفست <a href="manifest.html#the-workspace-field"><code>package.workspace</code></a> را می‌توان در crateهای عضو به کار برد تا به ریشهٔ یک workspace اشاره کند و این جست‌وجوی خودکار را بازنویسی کند. این تنظیم دستی زمانی مفید است که عضو درون یک زیردایرکتوری از ریشهٔ workspace نباشد.</p>
+<h3 id="package-selection"><a class="header" href="#package-selection">انتخاب بسته</a></h3>
+<p>در یک workspace، دستورهای Cargo مرتبط با بسته مانند <a href="../commands/cargo-build.html"><code>cargo build</code></a> می‌توانند از پرچم‌های خط فرمان <code>-p</code> / <code>--package</code> یا <code>--workspace</code> استفاده کنند تا مشخص شود روی کدام بسته‌ها عمل شود. اگر هیچ‌یک از این پرچم‌ها مشخص نشده باشد، Cargo از بستهٔ موجود در دایرکتوری کاری فعلی استفاده می‌کند. اما اگر دایرکتوری فعلی ریشهٔ workspace باشد، از <a href="#the-default-members-field"><code>default-members</code></a> استفاده می‌شود.</p>
+<h2 id="the-default-members-field"><a class="header" href="#the-default-members-field">فیلد <code>default-members</code></a></h2>
+<p>فیلد <code>default-members</code> مسیر <a href="#the-members-and-exclude-fields">اعضایی</a> را مشخص می‌کند که هنگام قرار داشتن در ریشهٔ workspace و بدون استفاده از پرچم‌های انتخاب بسته روی آن‌ها عمل می‌شود:</p>
+<pre><code class="language-toml">[workspace]
+members = ["path/to/member1", "path/to/member2", "path/to/member3/*"]
+default-members = ["path/to/member2", "path/to/member3/foo"]
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>وقتی <a href="#root-package">بستهٔ ریشه</a> وجود دارد، فقط با پرچم‌های <code>--package</code> و <code>--workspace</code> می‌توانید روی آن عمل کنید.</p>
+</blockquote>
+<p>وقتی مشخص نشده باشد، از <a href="#root-package">بستهٔ ریشه</a> استفاده می‌شود. در مورد <a href="#virtual-workspace">workspace مجازی</a>، همهٔ اعضا استفاده می‌شوند (انگار <code>--workspace</code> در خط فرمان مشخص شده است).</p>
+<h2 id="the-package-table"><a class="header" href="#the-package-table">جدول <code>package</code></a></h2>
+<p>جدول <code>workspace.package</code> جایی است که کلیدهایی را تعریف می‌کنید که اعضای workspace می‌توانند آن‌ها را به ارث ببرند. این کلیدها را می‌توان با تعریف‌کردن آن‌ها در بستهٔ عضو به‌صورت <code>{key}.workspace = true</code> به ارث برد.</p>
+<p>کلیدهای پشتیبانی‌شده:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th></th></tr>
+</thead>
+<tbody>
+<tr><td><code>authors</code></td><td><code>categories</code></td></tr>
+<tr><td><code>description</code></td><td><code>documentation</code></td></tr>
+<tr><td><code>edition</code></td><td><code>exclude</code></td></tr>
+<tr><td><code>homepage</code></td><td><code>include</code></td></tr>
+<tr><td><code>keywords</code></td><td><code>license</code></td></tr>
+<tr><td><code>license-file</code></td><td><code>publish</code></td></tr>
+<tr><td><code>readme</code></td><td><code>repository</code></td></tr>
+<tr><td><code>rust-version</code></td><td><code>version</code></td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li><code>license-file</code> و <code>readme</code> نسبت به ریشهٔ workspace هستند</li>
+<li><code>include</code> و <code>exclude</code> نسبت به ریشهٔ بستهٔ شما هستند</li>
+</ul>
+<p>مثال:</p>
+<pre><code class="language-toml"># [PROJECT_DIR]/Cargo.toml
+[workspace]
+members = ["bar"]
+
+[workspace.package]
+version = "1.2.3"
+authors = ["Nice Folks"]
+description = "A short description of my package"
+documentation = "https://example.com/bar"
+</code></pre>
+<pre><code class="language-toml"># [PROJECT_DIR]/bar/Cargo.toml
+[package]
+name = "bar"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+</code></pre>
+<blockquote>
+<p><strong>MSRV:</strong> به 1.64+ نیاز دارد</p>
+</blockquote>
+<h2 id="the-dependencies-table"><a class="header" href="#the-dependencies-table">جدول <code>dependencies</code></a></h2>
+<p>جدول <code>workspace.dependencies</code> جایی است که وابستگی‌هایی را تعریف می‌کنید تا اعضای workspace آن‌ها را به ارث ببرند.</p>
+<p>مشخص‌کردن یک وابستگی workspace شبیه <a href="specifying-dependencies.html">وابستگی‌های بسته</a> است، با این تفاوت‌ها:</p>
+<ul>
+<li>وابستگی‌های این جدول را نمی‌توان <code>optional</code> اعلام کرد</li>
+<li><a href="features.html"><code>features</code></a> اعلام‌شده در این جدول با <code>features</code> در <code>[dependencies]</code> جمع می‌شوند</li>
+<li><code>default-features</code> اعلام‌شده روی وابستگی یک بسته، مقدار تنظیم‌شده در اینجا را در بسته‌های Edition 2024 بازنویسی می‌کند (به Rust 1.99+ نیاز دارد). پیش از Rust 1.99 یا در editionهای قدیمی‌تر، ممکن است <code>default-features = false</code> در سطح بسته نادیده گرفته شود یا رد شود، مگر اینکه وابستگی workspace نیز ویژگی‌های پیش‌فرض را غیرفعال کرده باشد.</li>
+</ul>
+<p>سپس می‌توانید <a href="specifying-dependencies.html#inheriting-a-dependency-from-a-workspace">وابستگی workspace را به‌عنوان وابستگی بسته به ارث ببرید</a></p>
+<p>مثال:</p>
+<pre><code class="language-toml"># [PROJECT_DIR]/Cargo.toml
+[workspace]
+members = ["bar"]
+
+[workspace.dependencies]
+cc = "1.0.73"
+rand = "0.8.5"
+regex = { version = "1.6.0", default-features = false, features = ["std"] }
+serde = { version = "1.0.190", default-features = true }
+</code></pre>
+<pre><code class="language-toml"># [PROJECT_DIR]/bar/Cargo.toml
+[package]
+name = "bar"
+version = "0.2.0"
+edition = "2024"
+
+[dependencies]
+regex = { workspace = true, features = ["unicode"] }
+serde = { workspace = true, default-features = false }
+
+[build-dependencies]
+cc.workspace = true
+
+[dev-dependencies]
+rand.workspace = true
+</code></pre>
+<blockquote>
+<p><strong>MSRV:</strong> به 1.64+ نیاز دارد</p>
+</blockquote>
+<h2 id="the-lints-table"><a class="header" href="#the-lints-table">جدول <code>lints</code></a></h2>
+<p>جدول <code>workspace.lints</code> جایی است که پیکربندی lint را تعریف می‌کنید تا اعضای workspace آن را به ارث ببرند.</p>
+<p>مشخص‌کردن پیکربندی lint در workspace شبیه <a href="manifest.html#the-lints-section">lintهای بسته</a> است.</p>
+<p>مثال:</p>
+<pre><code class="language-toml"># [PROJECT_DIR]/Cargo.toml
+[workspace]
+members = ["crates/*"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+</code></pre>
+<pre><code class="language-toml"># [PROJECT_DIR]/crates/bar/Cargo.toml
+[package]
+name = "bar"
+version = "0.1.0"
+
+[lints]
+workspace = true
+</code></pre>
+<blockquote>
+<p><strong>MSRV:</strong> از 1.74 رعایت می‌شود</p>
+</blockquote>
+<h2 id="the-metadata-table"><a class="header" href="#the-metadata-table">جدول <code>metadata</code></a></h2>
+<p>جدول <code>workspace.metadata</code> توسط Cargo نادیده گرفته می‌شود و دربارهٔ آن هشداری داده نخواهد شد. این بخش را می‌توان برای ابزارهایی به کار برد که می‌خواهند پیکربندی workspace را در <code>Cargo.toml</code> ذخیره کنند. برای مثال:</p>
+<pre><code class="language-toml">[workspace]
+members = ["member1", "member2"]
+
+[workspace.metadata.webcontents]
+root = "path/to/webproject"
+tool = ["npm", "run", "build"]
+# ...
+</code></pre>
+<p>مجموعه‌ای مشابه از جدول‌ها در سطح بسته در <a href="manifest.html#the-metadata-table"><code>package.metadata</code></a> وجود دارد. اگرچه cargo قالبی برای محتوای هیچ‌یک از این دو جدول تعیین نمی‌کند، پیشنهاد می‌شود ابزارهای خارجی از آن‌ها به شیوه‌ای یکدست استفاده کنند، مثلاً اگر داده‌ای در <code>package.metadata</code> وجود نداشت، به داده‌های <code>workspace.metadata</code> مراجعه کنند، البته اگر برای ابزار موردنظر منطقی باشد.</p><nav class="page-nav"><a href="rust-version.html">→ نسخهٔ Rust</a><a href="specifying-dependencies.html">مشخص‌کردن وابستگی‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

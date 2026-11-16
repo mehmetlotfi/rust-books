@@ -1,0 +1,34 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>وقفه‌ها — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="start/interrupts"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="interrupts"><a class="header" href="#interrupts">وقفه‌ها</a></h1>
+<p>وقفه‌ها از جنبه‌های مختلفی با استثناها تفاوت دارند، اما نحوهٔ کار و استفاده‌شان تا حد زیادی شبیه است و کنترلر وقفهٔ واحدی هم آن‌ها را مدیریت می‌کند. استثناها را معماری Cortex-M تعریف می‌کند، اما وقفه‌ها همواره پیاده‌سازی‌هایی مختص سازنده (و اغلب حتی مختص تراشه) هستند، چه در نام‌گذاری و چه در عملکرد.</p>
+<p>وقفه‌ها انعطاف زیادی در اختیار می‌گذارند که هنگام استفادهٔ پیشرفته از آن‌ها باید مدنظر قرار گیرد. ما این کاربردها را در این کتاب پوشش نمی‌دهیم، اما خوب است نکات زیر را به خاطر داشته باشید:</p>
+<ul>
+<li>وقفه‌ها اولویت‌های قابل‌برنامه‌ریزی دارند که ترتیب اجرای کنترل‌گرهایشان را تعیین می‌کند</li>
+<li>وقفه‌ها می‌توانند تودرتو شوند و پیش‌دستی کنند؛ یعنی اجرای یک کنترل‌گر وقفه ممکن است با وقفهٔ دیگری که اولویت بالاتری دارد قطع شود</li>
+<li>به‌طور کلی، دلیلی که باعث فعال شدن وقفه شده است باید پاک شود تا کنترل‌گر وقفه بی‌پایان دوباره فراخوانی نشود</li>
+</ul>
+<p>گام‌های کلی مقداردهی اولیه در زمان اجرا همیشه یکسان است:</p>
+<ul>
+<li>دستگاه(های) جانبی را طوری تنظیم کنید که در زمان‌های دلخواه درخواست وقفه تولید کنند</li>
+<li>اولویت دلخواه کنترل‌گر وقفه را در کنترلر وقفه تنظیم کنید</li>
+<li>کنترل‌گر وقفه را در کنترلر وقفه فعال کنید</li>
+</ul>
+<p>مشابه استثناها، crate با نام cortex-m-rt هم یک attribute به نام <a href="https://docs.rs/cortex-m-rt-macros/0.1.5/cortex_m_rt_macros/attr.interrupt.html"><code>interrupt</code></a> برای تعریف کنترل‌گرهای وقفه فراهم می‌کند. با این حال، این attribute فقط زمانی در دسترس است که feature با نام device فعال باشد. به بیان دیگر، قرار نیست این attribute مستقیماً استفاده شود؛ چنین کاری به خطای کامپایل می‌انجامد.</p>
+<p>در عوض، باید از نسخهٔ صادرشدهٔ مجدد (re-exported) attribute با نام interrupt استفاده کنید که crate دستگاه فراهم می‌کند (معمولاً با svd2rust تولید می‌شود). این کار تضمین می‌کند که کامپایلر می‌تواند بررسی کند وقفهٔ موردنظر واقعاً روی دستگاه هدف وجود دارد. فهرست وقفه‌های موجود، و جایگاه آن‌ها در جدول بردار وقفه، معمولاً به‌طور خودکار از یک فایل SVD توسط svd2rust تولید می‌شود.</p>
+<pre><code class="language-rust ignore">use lm3s6965::interrupt; // Re-exported attribute from the device crate
+
+// Interrupt handler for the Timer2 interrupt
+#[interrupt]
+fn TIMER2A() {
+    // ..
+    // Clear reason for the generated interrupt request
+}</code></pre>
+<p>کنترل‌گرهای وقفه، مانند کنترل‌گرهای استثنا، شبیه تابع‌های معمولی‌اند (جز اینکه آرگومان ندارند). با این حال، به‌دلیل قراردادهای فراخوانی ویژه، بخش‌های دیگر firmware نمی‌توانند آن‌ها را مستقیماً فراخوانی کنند. اما می‌توان در نرم‌افزار درخواست وقفه تولید کرد تا انحراف به کنترل‌گر وقفه فعال شود.</p>
+<p>مانند کنترل‌گرهای استثنا، می‌توان داخل کنترل‌گرهای وقفه نیز متغیرهای <code>static mut</code> تعریف کرد تا حالت برنامه به‌صورت <em>امن</em> نگه داشته شود.</p>
+<pre><code class="language-rust ignore">#[interrupt]
+fn TIMER2A() {
+    static mut COUNT: u32 = 0;
+
+    // `COUNT` has type `&amp;mut u32` and it's safe to use
+    *COUNT += 1;
+}</code></pre>
+<p>برای توضیح دقیق‌تر دربارهٔ سازوکارهایی که در اینجا نشان داده شد، به <a href="./exceptions.html">بخش استثناها</a> مراجعه کنید.</p><nav class="page-nav"><a href="../../embedded/start/exceptions.html">→ استثناها</a><a href="../../embedded/peripherals/index.html">پیرامونی‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

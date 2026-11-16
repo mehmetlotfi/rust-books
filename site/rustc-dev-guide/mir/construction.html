@@ -1,0 +1,86 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>ساخت MIR — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="mir/construction"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="mir-construction"><a class="header" href="#mir-construction">MIR construction</a></h1>
+<p>lower‌شدن <a href="../hir.html">HIR</a> به <a href="./index.html">MIR</a> برای فهرست زیر (که احتمالاً ناقص است) از آیتم‌ها رخ می‌دهد:</p>
+<ul>
+<li>بدنهٔ توابع و closureها</li>
+<li>مقداردهی‌های اولیهٔ آیتم‌های <code>static</code> و <code>const</code></li>
+<li>مقداردهی‌های اولیهٔ discriminantهای enum</li>
+<li>Glue and shims of any kind
+<ul>
+<li>توابع مقداردهی اولیهٔ tuple struct</li>
+<li>کد drop (تابع <code>Drop::drop</code> مستقیماً فراخوانی نمی‌شود)</li>
+<li>پیاده‌سازی‌های drop برای نوع‌هایی که پیاده‌سازی صریح <code>Drop</code> ندارند</li>
+</ul>
+</li>
+</ul>
+<p>lowering با فراخوانی کوئری <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/fn.mir_built.html"><code>mir_built</code></a> فعال می‌شود.
+سازندهٔ MIR در واقع از HIR استفاده نمی‌کند،
+بلکه به‌جای آن روی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_build/thir/index.html">THIR</a> عمل می‌کند و عبارت‌های THIR را به‌صورت بازگشتی پردازش می‌کند.</p>
+<p>lowering برای هر آرگومان طبق امضا متغیر محلی می‌سازد.
+سپس برای هر binding مشخص‌شده متغیر محلی می‌سازد (مثلاً <code>(a, b): (i32, String)</code> سه binding تولید می‌کند، یکی برای آرگومان و دو تا برای bindingها).
+سپس دسترسی‌های فیلد را تولید می‌کند که فیلدها را از آرگومان می‌خوانند و مقدار را در متغیر binding می‌نویسند.</p>
+<p>پس از انجام این مقداردهی اولیه، lowering فراخوانی بازگشتی به تابعی را فعال می‌کند که MIR بدنه (عبارت <code>Block</code>) را تولید می‌کند و نتیجه را در <code>RETURN_PLACE</code> می‌نویسد.</p>
+<h2 id="unpack-all-the-things"><a class="header" href="#unpack-all-the-things">همه‌چیز را <code>unpack!</code> کنید</a></h2>
+<p>توابعی که MIR تولید می‌کنند معمولاً در یکی از دو الگو قرار می‌گیرند.
+اول، اگر تابع فقط دستور تولید کند، basic blockی را به‌عنوان آرگومان می‌گیرد که آن دستورها باید به آن افزوده شوند.
+سپس می‌تواند نتیجه را مثل همیشه برگرداند:</p>
+<pre><code class="language-rust ignore">fn generate_some_mir(&amp;mut self, block: BasicBlock) -&gt; ResultType {
+   ...
+}</code></pre>
+<p>اما توابع دیگری هم هستند که ممکن است basic blockهای جدید هم تولید کنند.
+برای مثال، lower‌کردن عبارتی مثل <code>if foo { 22 } else { 44 }</code> نیاز به تولید «گراف الماسی‌شکل» کوچکی دارد.
+در این مورد، توابع basic blockی را می‌گیرند که کدشان از آن شروع می‌شود و basic block (بالقوه) جدیدی را برمی‌گردانند که تولید کد در آن پایان می‌یابد.
+نوع <code>BlockAnd</code> برای نمایش این به‌کار می‌رود:</p>
+<pre><code class="language-rust ignore">fn generate_more_mir(&amp;mut self, block: BasicBlock) -&gt; BlockAnd&lt;ResultType&gt; {
+    ...
+}</code></pre>
+<p>وقتی این توابع را فراخوانی می‌کنید، معمول است متغیر محلی <code>block</code> داشته باشید که عملاً «نشانگر (cursor)» است.
+نقطه‌ای را نشان می‌دهد که MIR جدید را در آن می‌افزاییم.
+وقتی <code>generate_more_mir</code> را فراخوانی می‌کنید، می‌خواهید این cursor را به‌روز کنید.
+می‌توانید دستی انجام دهید، اما خسته‌کننده است:</p>
+<pre><code class="language-rust ignore">let mut block;
+let v = match self.generate_more_mir(..) {
+    BlockAnd { block: new_block, value: v } =&gt; {
+        block = new_block;
+        v
+    }
+};</code></pre>
+<p>به همین دلیل ماکرویی ارائه می‌دهیم که اجازه می‌دهد بنویسید
+<code>let v = unpack!(block = self.generate_more_mir(...))</code>.
+این فقط بلوک جدید را استخراج می‌کند و متغیر <code>block</code> را که در <code>unpack!</code> نام برده‌اید بازنویسی می‌کند.</p>
+<h2 id="lowering-expressions-into-the-desired-mir"><a class="header" href="#lowering-expressions-into-the-desired-mir">lower‌کردن عبارت‌ها به MIR مطلوب</a></h2>
+<p>اساساً چهار نوع بازنمایی هست که ممکن است از یک عبارت بخواهید:</p>
+<ul>
+<li><code>Place</code> به مکان حافظهٔ از پیش موجود (یا بخشی از آن) ارجاع می‌دهد (local، static، promoted)</li>
+<li><code>Rvalue</code> چیزی است که می‌توان به <code>Place</code> منتسب کرد</li>
+<li><code>Operand</code> آرگومان مثلاً عملیات <code>+</code> یا فراخوانی تابع است</li>
+<li>متغیر موقتی که کپی مقدار را در بر دارد</li>
+</ul>
+<p>تصویر زیر نمای کلی تعامل‌های بین بازنمایی‌ها را نشان می‌دهد:</p>
+<img src="mir_overview.svg">
+<p><a href="mir_detailed.svg">برای نمای دقیق‌تر اینجا کلیک کنید</a></p>
+<p>با lower‌کردن بدنهٔ تابع به <code>Rvalue</code> شروع می‌کنیم تا بتوانیم انتسابی به <code>RETURN_PLACE</code> بسازیم، این lowering به <code>Rvalue</code> به نوبهٔ خود lowering به <code>Operand</code> را برای آرگومان‌هایش (در صورت وجود) فعال می‌کند.
+lowering به <code>Operand</code> یا operand از نوع <code>const</code> تولید می‌کند،
+یا از یک <code>Place</code> move/copy می‌کند، که lowering به <code>Place</code> را فعال می‌کند.
+عبارتی که به <code>Place</code> lower می‌شود می‌تواند به نوبهٔ خود باعث ساخت temporary شود اگر عبارت در حال lower‌شدن عملیات داشته باشد.
+اینجاست که مار دم خودش را گاز می‌گیرد و باید lowering به <code>Rvalue</code> را برای عبارتی که باید در local نوشته شود فعال کنیم.</p>
+<h2 id="operator-lowering"><a class="header" href="#operator-lowering">Operator lowering</a></h2>
+<p>عملگرها روی نوع‌های داخلی به فراخوانی تابع lower نمی‌شوند (که به فراخوانی‌های بازگشتی بی‌نهایت می‌انجامید، چون implهای trait دوباره خود عملیات را در بر دارند).
+به‌جای آن <code>Rvalue</code>هایی برای عملگرهای دوتایی و یگانی و عملیات اندیس هست.
+این <code>Rvalue</code>ها بعداً به عملیات اولیهٔ LLVM یا intrinsicهای LLVM codegen می‌شوند.</p>
+<p>عملگرها روی همهٔ نوع‌های دیگر به فراخوانی تابع به <code>impl</code> آن‌ها از trait متناظر عملگر lower می‌شوند.</p>
+<p>صرف‌نظر از نوع lowering، آرگومان‌های عملگر به <code>Operand</code> lower می‌شوند.
+یعنی همهٔ آرگومان‌ها یا ثابت هستند یا به مقداری که از قبل در جایی در local یا static وجود دارد ارجاع می‌دهند.</p>
+<h2 id="method-call-lowering"><a class="header" href="#method-call-lowering">Method call lowering</a></h2>
+<p>فراخوانی متدها به همان <code>TerminatorKind</code> فراخوانی توابع lower می‌شوند.
+در <a href="./index.html">MIR</a> دیگر تفاوتی بین فراخوانی متد و فراخوانی تابع نیست.</p>
+<h2 id="conditions"><a class="header" href="#conditions">Conditions</a></h2>
+<p>شرط‌های <code>if</code> و دستورهای <code>match</code> برای <code>enum</code>هایی با variantهای بدون فیلد به <code>TerminatorKind::SwitchInt</code> lower می‌شوند.
+هر مقدار ممکن (یعنی <code>0</code> و <code>1</code> برای شرط‌های <code>if</code>) یک <code>BasicBlock</code> متناظر دارد که کد به آن ادامه می‌یابد.
+آرگومانی که روی آن شاخه می‌شود (باز هم) <code>Operand</code>ی است که مقدار شرط if را نشان می‌دهد.</p>
+<h3 id="pattern-matching"><a class="header" href="#pattern-matching">Pattern matching</a></h3>
+<p>دستورهای <code>match</code> برای <code>enum</code>هایی با variantهای دارای فیلد هم به <code>TerminatorKind::SwitchInt</code> lower می‌شوند، اما <code>Operand</code> به <code>Place</code>ای ارجاع می‌دهد که discriminant مقدار در آن یافت می‌شود.
+این اغلب شامل خواندن discriminant به یک متغیر موقت جدید است.</p>
+<h2 id="aggregate-construction"><a class="header" href="#aggregate-construction">Aggregate construction</a></h2>
+<p>مقادیر ترکیبی (aggregate) از هر نوع (مثلاً struct یا tuple) از طریق <code>Rvalue::Aggregate</code> ساخته می‌شوند.
+همهٔ فیلدها به <code>Operator</code> lower می‌شوند.
+این اساساً معادل یک دستور انتساب برای هر فیلد aggregate است، به‌علاوهٔ انتساب به discriminant در مورد <code>enum</code>ها.</p><nav class="page-nav"><a href="index.html">→ MIR (بازنمایی میانی سطح میانی)</a><a href="visitor.html">بازدیدکننده و پیمایش MIR ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

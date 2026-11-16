@@ -1,0 +1,95 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>طول عمر ایستا — Rust با مثال</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="scope/lifetime/static_lifetime"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../../rbe/index.html" style="color:inherit;text-decoration:none">Rust با مثال</a><small class="en-title" dir="ltr">Rust By Example</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="static"><a class="header" href="#static">ایستا (Static)</a></h1>
+<p>راست چند نام رزروشده برای طول عمر دارد که یکی از آن‌ها <code>'static</code> است. ممکن است آن را در دو موقعیت ببینید:</p>
+<pre><code class="language-rust ignore">// A reference with 'static lifetime:
+let s: &amp;'static str = "hello world";
+
+// 'static as part of a trait bound:
+fn generic&lt;T&gt;(x: T) where T: 'static {}</code></pre>
+<p>این دو کاربرد به هم مرتبط‌اند اما تفاوت ظریفی دارند و هنگام یادگیری راست معمولاً باعث سردرگمی می‌شوند. برای هر موقعیت چند مثال می‌بینیم.</p>
+<h2 id="reference-lifetime"><a class="header" href="#reference-lifetime">طول عمر ارجاع</a></h2>
+<p>وقتی <code>'static</code> طول عمر یک ارجاع باشد، نشان می‌دهد دادهٔ مورد اشاره تا پایان باقی‌ماندهٔ اجرای برنامه زنده است. این طول عمر همچنان می‌تواند به طول عمری کوتاه‌تر تبدیل شود.</p>
+<p>دو راه رایج برای ساخت متغیر با طول عمر <code>'static</code> وجود دارد که هر دو در حافظهٔ فقط‌خواندنی فایل اجرایی ذخیره می‌شوند:</p>
+<ul>
+<li>ساخت ثابت با اعلان <code>static</code>؛</li>
+<li>یک لفظ <code>string</code> با نوع <code>&amp;'static str</code> بسازید.</li>
+</ul>
+<p>برای مشاهدهٔ هر روش، مثال زیر را ببینید:</p>
+<pre><code class="language-rust editable">// Make a constant with `'static` lifetime.
+static NUM: i32 = 18;
+
+// Returns a reference to `NUM` where its `'static`
+// lifetime is coerced to that of the input argument.
+fn coerce_static&lt;'a&gt;(_: &amp;'a i32) -&gt; &amp;'a i32 {
+    &amp;NUM
+}
+
+fn main() {
+    {
+        // Make a `string` literal and print it:
+        let static_string = "I'm in read-only memory";
+        println!("static_string: {}", static_string);
+
+        // When `static_string` goes out of scope, the reference
+        // can no longer be used, but the data remains in the binary.
+    }
+
+    {
+        // Make an integer to use for `coerce_static`:
+        let lifetime_num = 9;
+
+        // Coerce `NUM` to lifetime of `lifetime_num`:
+        let coerced_static = coerce_static(&amp;lifetime_num);
+
+        println!("coerced_static: {}", coerced_static);
+    }
+
+    println!("NUM: {} stays accessible!", NUM);
+}</code></pre>
+<p>چون ارجاع‌های <code>'static</code> فقط باید برای <em>باقی‌ماندهٔ</em> عمر برنامه معتبر باشند، می‌توان آن‌ها را هنگام اجرای برنامه ساخت. برای نمایش این موضوع، مثال زیر از <a href="https://doc.rust-lang.org/std/boxed/struct.Box.html#method.leak"><code>Box::leak</code></a> برای ساخت پویای ارجاع‌های <code>'static</code> استفاده می‌کند. در این حالت ارجاع از آغاز برنامه زنده نبوده و فقط از نقطهٔ نشت به بعد معتبر است.</p>
+<pre><code class="language-rust editable compile_fail">extern crate rand;
+use rand::Fill;
+
+fn random_vec() -&gt; &amp;'static [u64; 100] {
+    let mut rng = rand::rng();
+    let mut boxed = Box::new([0; 100]);
+    boxed.fill(&amp;mut rng);
+    Box::leak(boxed)
+}
+
+fn main() {
+    let first: &amp;'static [u64; 100] = random_vec();
+    let second: &amp;'static [u64; 100] = random_vec();
+    assert_ne!(first, second)
+}</code></pre>
+<h2 id="trait-bound"><a class="header" href="#trait-bound">قید صفت</a></h2>
+<p>به‌عنوان قید صفت (trait bound)، به این معناست که نوع هیچ ارجاع غیرایستایی (non-static) در خود ندارد. برای مثال، دریافت‌کننده می‌تواند تا هر زمان که بخواهد نوع را نگه دارد و تا وقتی آن را drop نکرده، هرگز نامعتبر نمی‌شود.</p>
+<p>نکتهٔ مهم این است که هر دادهٔ تحت مالکیت همواره قید طول عمر <code>'static</code> را برآورده می‌کند، اما ارجاع به آن داده معمولاً چنین نیست:</p>
+<pre><code class="language-rust editable compile_fail">use std::fmt::Debug;
+
+fn print_it(input: impl Debug + 'static) {
+    println!("'static value passed in is: {:?}", input);
+}
+
+fn main() {
+    // i is owned and contains no references, thus it's 'static:
+    let i = 5;
+    print_it(i);
+
+    // oops, &amp;i only has the lifetime defined by the scope of
+    // main(), so it's not 'static:
+    print_it(&amp;i);
+}</code></pre>
+<p>کامپایلر پیام زیر را نمایش می‌دهد:</p>
+<pre><code class="language-ignore">error[E0597]: `i` does not live long enough
+  --&gt; src/lib.rs:15:15
+   |
+15 |     print_it(&amp;i);
+   |     ---------^^--
+   |     |         |
+   |     |         borrowed value does not live long enough
+   |     argument requires that `i` is borrowed for `'static`
+16 | }
+   | - `i` dropped here while still borrowed
+</code></pre>
+<h3 id="see-also"><a class="header" href="#see-also">بیشتر بخوانید</a></h3>
+<p><a href="../../custom_types/constants.html">ثابت‌های <code>'static</code></a></p><nav class="page-nav"><a href="../../../rbe/scope/lifetime/lifetime_coercion.html">→ تبدیل طول عمر</a><a href="../../../rbe/scope/lifetime/elision.html">حذف ضمنی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../rbe/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

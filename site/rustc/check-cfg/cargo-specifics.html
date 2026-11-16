@@ -1,0 +1,41 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>ویژگی‌های مخصوص Cargo — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="check-cfg/cargo-specifics"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="cargo-specifics---checking-conditional-configurations"><a class="header" href="#cargo-specifics---checking-conditional-configurations">ویژگی‌های مخصوص Cargo - بررسی پیکربندی‌های شرطی</a></h1>
+<!--
+This page is currently (as of May 2024) the canonical place for describing the interaction
+between Cargo and --check-cfg. It is placed in the rustc book rather than the Cargo book
+since check-cfg is primarily a Rust/rustc feature and is therefore considered by T-cargo to
+be an implementation detail, at least --check-cfg and the unexpected_cfgs are owned by
+rustc, not Cargo.
+-->
+<p>این سند برای خلاصه‌کردن مهم‌ترین شیوه‌هایی است که Cargo با lint به نام <code>unexpected_cfgs</code> و پرچم <code>--check-cfg</code> تعامل می‌کند. برای جزئیات هر مورد، به <a href="../check-cfg.html">مستندات <code>--check-cfg</code></a> و <a href="../../cargo/index.html">کتاب Cargo</a> مراجعه کنید.</p>
+<blockquote>
+<p>فهرست کامل cfgهای شناخته‌شده (یا همان درون‌ساخت‌ها) را می‌توانید در <a href="../check-cfg.html#well-known-names-and-values">بررسی پیکربندی‌های شرطی / نام‌ها و مقادیر شناخته‌شده</a> بیابید.</p>
+</blockquote>
+<h2 id="cargo-feature"><a class="header" href="#cargo-feature">ویژگی Cargo (Cargo feature)</a></h2>
+<p><em>برای جزئیات بیشتر، <a href="../../cargo/reference/features.html">بخش <code>[features]</code> در کتاب Cargo</a> را ببینید.</em></p>
+<p>Cargo با جدول <code>[features]</code> سازوکاری برای بیان کامپایل شرطی و وابستگی‌های اختیاری فراهم می‌کند. Cargo <em>به‌طور خودکار</em> cfgهای متناظر با هر feature را به‌عنوان مورد انتظار اعلام می‌کند.</p>
+<p><code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[features]
+serde = ["dep:serde"]
+my_feature = []
+</code></pre>
+<h2 id="check-cfg-in-lintsrust-table"><a class="header" href="#check-cfg-in-lintsrust-table"><code>check-cfg</code> در جدول <code>[lints.rust]</code></a></h2>
+<!-- Note that T-Cargo considers `lints.rust.unexpected_cfgs.check-cfg` to be an
+implementation detail and is therefore documented here and not in Cargo. -->
+<p><em>برای جزئیات بیشتر، <a href="../../cargo/reference/manifest.html#the-lints-section">بخش <code>[lints]</code> در کتاب Cargo</a> را ببینید.</em></p>
+<p>هنگام استفاده از یک پیکربندی سفارشی که به‌صورت ایستا شناخته می‌شود (یعنی به build-script وابسته نیست)، Cargo پیکربندی lint سفارشی <code>check-cfg</code> را در <code>[lints.rust.unexpected_cfgs]</code> فراهم می‌کند.</p>
+<p>این پیکربندی را می‌توان برای تعیین آرگومان‌های ایستای سفارشی <a href="../check-cfg.html"><code>--check-cfg</code></a> به کار برد و بیشتر زمانی مفید است که فهرست cfgهای مورد انتظار از پیش معلوم باشد.</p>
+<p><code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_foo)'] }
+</code></pre>
+<h2 id="cargorustc-check-cfg-for-buildrsbuild-script"><a class="header" href="#cargorustc-check-cfg-for-buildrsbuild-script"><code>cargo::rustc-check-cfg</code> برای <code>build.rs</code>/build-script</a></h2>
+<p><em>برای جزئیات بیشتر، <a href="../../cargo/reference/build-scripts.html#rustc-check-cfg">بخش <code>cargo::rustc-check-cfg</code> در کتاب Cargo</a> را ببینید.</em></p>
+<p>هنگام تنظیم یک پیکربندی سفارشی با <a href="../../cargo/reference/build-scripts.html#rustc-cfg"><code>cargo::rustc-cfg</code></a>، Cargo دستور متناظر آن را فراهم می‌کند: <a href="../../cargo/reference/build-scripts.html#rustc-check-cfg"><code>cargo::rustc-check-cfg</code></a> برای اعلام انتظار پیکربندی‌های سفارشی.</p>
+<p><code>build.rs</code>:</p>
+<pre><code class="language-rust ignore (cannot-test-this-because-has_foo-isnt-declared)">fn main() {
+    println!("cargo::rustc-check-cfg=cfg(has_foo)");
+    //        ^^^^^^^^^^^^^^^^^^^^^^ new with Cargo 1.80
+    if has_foo() {
+        println!("cargo::rustc-cfg=has_foo");
+    }
+}</code></pre><nav class="page-nav"><a href="../check-cfg.html">→ بررسی پیکربندی‌های شرطی</a><a href="../remap-source-paths.html">نگاشت مجدد مسیرهای منبع ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

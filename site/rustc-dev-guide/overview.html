@@ -1,0 +1,367 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>مروری بر کامپایلر — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="overview"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="overview-of-the-compiler"><a class="header" href="#overview-of-the-compiler">نمای کلی کامپایلر</a></h1>
+<p>این فصل دربارهٔ فرایند کلی کامپایل یک برنامه است — اینکه همه‌چیز چگونه به هم می‌خورد.</p>
+<p>کامپایلر Rust از دو جهت خاص است: کارهایی روی کد شما انجام می‌دهد که
+کامپایلرهای دیگر انجام نمی‌دهند (مثلاً borrow-checking) و انتخاب‌های پیاده‌سازی
+غیرمتعارف زیادی دارد (مثلاً کوئری‌ها). در این فصل به ترتیب دربارهٔ این‌ها صحبت می‌کنیم، و در بقیهٔ راهنما،
+بخش‌های جداگانه را با جزئیات بیشتر بررسی می‌کنیم.</p>
+<h2 id="what-the-compiler-does-to-your-code"><a class="header" href="#what-the-compiler-does-to-your-code">کامپایلر با کد شما چه می‌کند</a></h2>
+<p>پس ابتدا ببینیم کامپایلر با کد شما چه می‌کند.
+فعلاً از ذکر نحوهٔ پیاده‌سازی این گام‌ها توسط کامپایلر پرهیز می‌کنیم مگر در حد لازم.</p>
+<h3 id="invocation"><a class="header" href="#invocation">Invocation</a></h3>
+<p>کامپایل وقتی شروع می‌شود که کاربر برنامهٔ منبع Rust را به‌صورت متن بنویسد و
+کامپایلر <code>rustc</code> را روی آن فراخوانی کند.
+کاری که کامپایلر باید انجام دهد با گزینه‌های خط فرمان تعریف می‌شود.
+برای مثال، می‌توان قابلیت‌های nightly را فعال کرد
+(پرچم‌های <code>-Z</code>)، ساخت‌های فقط <code>check</code> انجام داد، یا Intermediate Representation مربوط به LLVM (<code>LLVM-IR</code>) را به‌جای کد ماشین اجرایی تولید کرد.
+فراخوانی فایل اجرایی <code>rustc</code> ممکن است با استفاده از <code>cargo</code> غیرمستقیم باشد.</p>
+<p>تجزیهٔ آرگومان‌های خط فرمان در <a href="rustc-driver/intro.html"><code>rustc_driver</code></a> رخ می‌دهد.
+این crate پیکربندی کامپایلی را که کاربر درخواست کرده تعریف می‌کند و آن را به‌صورت <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_interface/interface/struct.Config.html"><code>rustc_interface::Config</code></a> به بقیهٔ فرایند کامپایل می‌دهد.</p>
+<h3 id="lexing-and-parsing"><a class="header" href="#lexing-and-parsing">Lexing و parsing</a></h3>
+<p>متن خام منبع Rust توسط یک <em>lexer</em> سطح پایین در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lexer/index.html"><code>rustc_lexer</code></a> تحلیل می‌شود.
+در این مرحله، متن منبع به جریانی از
+واحدهای اتمی کد منبع به نام <em>توکن</em> تبدیل می‌شود.
+<code>lexer</code> از کدگذاری نویسه‌های یونیکد پشتیبانی می‌کند.</p>
+<p>جریان توکن از lexer سطح بالاتری در
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/index.html"><code>rustc_parse</code></a> عبور می‌کند تا برای مرحلهٔ بعدی فرایند کامپایل آماده شود.
+<code>struct</code> با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/lexer/struct.Lexer.html"><code>Lexer</code></a> در این مرحله برای انجام مجموعه‌ای اعتبارسنجی
+و تبدیل رشته‌ها به نمادهای intern‌شده (<em>interning</em> بعداً بحث می‌شود) به‌کار می‌رود.
+<a href="https://en.wikipedia.org/wiki/String_interning">String interning</a> راهی برای ذخیرهٔ فقط یک نسخهٔ تغییرناپذیر از هر مقدار رشتهٔ متمایز است.</p>
+<p>lexer رابط کوچکی دارد و مستقیماً به زیرساخت پیام‌های تشخیصی در <code>rustc</code> وابسته نیست.
+به‌جای آن پیام‌های تشخیصی را به‌صورت داده‌های ساده فراهم می‌کند که
+در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/lexer/index.html"><code>rustc_parse::lexer</code></a> به‌صورت پیام‌های تشخیصی واقعی صادر می‌شوند.
+<code>lexer</code> اطلاعات با وفاداری کامل را هم برای IDEها و هم برای ماکروهای رویه‌ای (procedural)
+(گاهی «proc-macro» نامیده می‌شوند) حفظ می‌کند.</p>
+<p><em>parser</em> <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/index.html">جریان توکن <code>lexer</code> را به درخت نحو انتزاعی (AST) ترجمه می‌کند</a>.
+از رویکرد recursive descent (بالا به پایین) برای تحلیل نحو استفاده می‌کند.
+نقاط ورود crate برای <code>parser</code>
+متدهای <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/parser/struct.Parser.html#method.parse_crate_mod"><code>Parser::parse_crate_mod</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/parser/struct.Parser.html#method.parse_mod"><code>Parser::parse_mod</code></a>
+در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/parser/struct.Parser.html"><code>rustc_parse::parser::Parser</code></a> هستند.
+نقطهٔ ورود تجزیهٔ ماژول خارجی
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/module/fn.parse_external_mod.html"><code>rustc_expand::module::parse_external_mod</code></a> است.
+و نقطهٔ ورود <code>parser</code> ماکرو <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/parser/struct.Parser.html#method.parse_nonterminal"><code>Parser::parse_nonterminal</code></a> است.</p>
+<p>تجزیه با مجموعه‌ای از متدهای کمکی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/parser/struct.Parser.html"><code>parser</code></a> از جمله <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/parser/struct.Parser.html#method.bump"><code>bump</code></a>،
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/parser/struct.Parser.html#method.check"><code>check</code></a>، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/parser/struct.Parser.html#method.eat"><code>eat</code></a>، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/parser/struct.Parser.html#method.expect"><code>expect</code></a>، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/parser/struct.Parser.html#method.look_ahead"><code>look_ahead</code></a> انجام می‌شود.</p>
+<p>تجزیه بر اساس ساختار معنایی سازمان‌دهی شده است.
+متدهای <code>parse_*</code> جداگانه را می‌توان در پوشهٔ <a href="https://github.com/rust-lang/rust/tree/HEAD/compiler/rustc_parse/src/parser"><code>rustc_parse</code></a> یافت.
+نام فایل منبع از نام ساختار پیروی می‌کند.
+برای مثال، فایل‌های زیر در <code>parser</code> هستند:</p>
+<ul>
+<li><a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_parse/src/parser/expr.rs"><code>expr.rs</code></a></li>
+<li><a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_parse/src/parser/pat.rs"><code>pat.rs</code></a></li>
+<li><a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_parse/src/parser/ty.rs"><code>ty.rs</code></a></li>
+<li><a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_parse/src/parser/stmt.rs"><code>stmt.rs</code></a></li>
+</ul>
+<p>این طرح نام‌گذاری در بسیاری از مراحل کامپایلر به‌کار می‌رود.
+فایل یا پوشه‌ای با همین نام را در منابع parsing، lowering، type
+checking، lowering مربوط به <a href="./thir.html">Typed High-level Intermediate Representation (<code>THIR</code>)</a> و
+ساخت <a href="mir/index.html">Mid-level Intermediate Representation (<code>MIR</code>)</a> می‌یابید.</p>
+<p>گسترش ماکرو، اعتبارسنجی <code>AST</code>، name-resolution و linting اولیه هم
+در مرحلهٔ lexing و parsing رخ می‌دهند.</p>
+<p>گره‌های <code>AST</code> مثل <a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_ast/index.html"><code>rustc_ast::ast</code></a>::{<a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_ast/ast/struct.Crate.html"><code>Crate</code></a>، <a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_ast/ast/struct.Expr.html"><code>Expr</code></a>، <a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_ast/ast/struct.Pat.html"><code>Pat</code></a>، …} از parser برگردانده می‌شوند
+در حالی که API استاندارد <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_errors/struct.Diag.html"><code>Diag</code></a> برای مدیریت خطا به‌کار می‌رود.
+عموماً کامپایلر Rust سعی می‌کند با تجزیهٔ ابرمجموعه‌ای از گرامر Rust
+از خطاها بازیابی کند، در حالی که یک نوع خطا هم صادر می‌کند.</p>
+<h3 id="ast-lowering"><a class="header" href="#ast-lowering"><code>AST</code> lowering</a></h3>
+<p>سپس <code>AST</code> به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/index.html">بازنمایی میانی سطح بالا
+(<code>HIR</code>)</a> تبدیل می‌شود، که نمایشی مناسب‌تر برای کامپایلر از <code>AST</code> است.
+این فرایند «lowering» نامیده می‌شود و شامل desugaring زیاد (گسترش و
+رسمی‌سازی ساختارهای نحوی کوتاه‌شده یا مخفف) برای چیزهایی مثل حلقه‌ها و <code>async fn</code> است.</p>
+<p>سپس از <code>HIR</code> برای <a href="type-inference.html"><em>استنتاج نوع</em></a> (فرایند تشخیص خودکار نوع یک عبارت)، <a href="traits/resolution.html"><em>حل trait</em></a> (فرایند
+جفت‌کردن یک impl با هر ارجاع به <code>trait</code>) و <a href="hir-typeck/summary.html"><em>بررسی نوع</em></a> استفاده می‌کنیم.
+بررسی نوع فرایند تبدیل نوع‌هایی است که در <code>HIR</code> یافت می‌شوند (<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/struct.Ty.html"><code>hir::Ty</code></a>)
+و آنچه را کاربر نوشته نشان می‌دهند به نمایش داخلی‌ای که کامپایلر استفاده می‌کند
+(<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html"><code>Ty&lt;'tcx&gt;</code></a>).
+به آن بررسی نوع می‌گویند چون اطلاعات
+برای تأیید ایمنی نوع، درستی و انسجام نوع‌های به‌کاررفته در برنامه استفاده می‌شود.</p>
+<h3 id="mir-lowering"><a class="header" href="#mir-lowering"><code>MIR</code> lowering</a></h3>
+<p><code>HIR</code> بیشتر به <code>MIR</code>
+(که برای <a href="borrow-check.html">borrow checking</a> به‌کار می‌رود) lower می‌شود، با ساخت <code>THIR</code> (<code>HIR</code> با desugaring بیشتر که برای
+بررسی الگو و جامع‌بودن به‌کار می‌رود) برای تبدیل به <code>MIR</code>.</p>
+<p><a href="mir/optimizations.html">بهینه‌سازی‌های بسیاری روی MIR</a> انجام می‌دهیم چون جنریک است
+و این تولید کد و سرعت کامپایل بعدی را بهبود می‌دهد.
+انجام برخی بهینه‌سازی‌ها در سطح <code>MIR</code> آسان‌تر از سطح <code>LLVM-IR</code> است.
+برای مثال به نظر می‌رسد LLVM نمی‌تواند الگویی را که
+بهینه‌سازی <a href="https://github.com/rust-lang/rust/pull/66282"><code>simplify_try</code></a> در <code>MIR</code>-opt دنبال می‌کند بهینه کند.</p>
+<p>کد Rust هنگام تولید کد هم <a href="https://en.wikipedia.org/wiki/Monomorphization"><em>monomorphize</em></a> می‌شود، یعنی
+ساخت نسخه‌هایی از همهٔ کد جنریک که پارامترهای نوع با نوع‌های مشخص جایگزین می‌شوند.
+برای این کار باید فهرستی از نوع‌های مشخصی که باید برایشان کد تولید شود جمع کنیم.
+این <em>جمع‌آوری monomorphization</em> نامیده می‌شود و در سطح <code>MIR</code> رخ می‌دهد.</p>
+<h3 id="code-generation"><a class="header" href="#code-generation">Code generation</a></h3>
+<p>سپس چیزی را که به‌سادگی <em>تولید کد</em> یا <em>codegen</em> نامیده می‌شود شروع می‌کنیم.
+<a href="backend/codegen.html">مرحلهٔ تولید کد</a> وقتی است که نمایش‌های سطح بالاتر منبع
+به فایل دودویی اجرایی تبدیل می‌شوند.
+چون <code>rustc</code> از LLVM برای تولید کد استفاده می‌کند،
+گام اول تبدیل <code>MIR</code> به <code>LLVM-IR</code> است.
+اینجاست که <code>MIR</code> واقعاً monomorphize می‌شود.
+<code>LLVM-IR</code> به LLVM داده می‌شود که بهینه‌سازی‌های بسیار بیشتری روی آن انجام می‌دهد و کد ماشین تولید می‌کند، که اساساً کد assembly
+با نوع‌ها و annotationهای سطح پایین اضافه است (مثلاً یک شیء ELF یا
+<code>WASM</code>).
+سپس کتابخانه‌ها/فایل‌های دودویی مختلف به هم لینک می‌شوند تا فایل دودویی نهایی تولید شود.</p>
+<h2 id="how-it-does-it"><a class="header" href="#how-it-does-it">چگونه این کار را می‌کند</a></h2>
+<p>اکنون که نگاه سطح بالایی به کاری که کامپایلر با کد شما می‌کند داریم،
+نگاهی سطح بالا به اینکه <em>چگونه</em> همهٔ آن کارها را انجام می‌دهد می‌اندازیم.
+محدودیت‌ها و اهداف متعارض زیادی هست که کامپایلر باید برآورده/بهینه کند.
+برای مثال،</p>
+<ul>
+<li>Compilation speed: how fast is it to compile a program?
+More/better compile-time analyses often means compilation is slower.
+<ul>
+<li>Also, we want to support incremental compilation, so we need to take that into account.
+How can we keep track of what work needs to be redone and
+what can be reused if the user modifies their program?
+<ul>
+<li>همچنین نمی‌توانیم چیزهای زیادی را در cache افزایشی ذخیره کنیم چون
+بارگذاری آن از دیسک زمان زیادی می‌برد و می‌تواند فضای زیادی
+روی سیستم کاربر بگیرد…</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>مصرف حافظهٔ کامپایلر: هنگام کامپایل یک برنامه نمی‌خواهیم بیش از نیاز حافظه مصرف کنیم.</li>
+<li>سرعت برنامه: برنامهٔ کامپایل‌شدهٔ شما چقدر سریع است؟
+تحلیل‌های بیشتر/بهتر در زمان کامپایل اغلب یعنی کامپایلر می‌تواند بهینه‌سازی‌های بهتری انجام دهد.</li>
+<li>اندازهٔ برنامه: فایل دودویی کامپایل‌شده چقدر بزرگ است؟
+مشابه نکتهٔ قبلی.</li>
+<li>سرعت کامپایل خود کامپایلر: کامپایل‌کردن کامپایلر چقدر طول می‌کشد؟
+این بر مشارکت‌کنندگان و نگه‌داری کامپایلر اثر می‌گذارد.</li>
+<li>پیچیدگی پیاده‌سازی: ساخت کامپایلر یکی از سخت‌ترین کارهایی است که یک فرد/گروه می‌تواند انجام دهد، و Rust زبان بسیار سادهٔ نیست، پس چگونه
+codebase کامپایلر را قابل‌مدیریت نگه داریم؟</li>
+<li>درستی کامپایلر: فایل‌های دودویی تولیدشده توسط کامپایلر باید همان کاری را بکنند که
+برنامه‌های ورودی می‌گویند، و باید با وجود
+حجم عظیم تغییراتی که پیوسته در جریان است به این کار ادامه دهند.</li>
+<li>یکپارچگی: تعدادی ابزار دیگر باید از کامپایلر به شیوه‌های مختلف استفاده کنند (مثلاً <code>cargo</code>، <code>clippy</code>، <code>Miri</code>) که باید پشتیبانی شوند.</li>
+<li>پایداری کامپایلر: کامپایلر نباید روی کانال stable crash کند یا به‌طور ناشیانه شکست بخورد.</li>
+<li>پایداری Rust: کامپایلر باید تضمین‌های پایداری Rust را رعایت کند و
+برنامه‌هایی را که قبلاً کامپایل می‌شدند نشکند، با وجود تغییرات فراوانی که
+همیشه در پیاده‌سازی آن در جریان است.</li>
+<li>محدودیت‌های ابزارهای دیگر: <code>rustc</code> در backend خود از LLVM استفاده می‌کند و LLVM
+نقاط قوتی دارد که از آن‌ها بهره می‌بریم و جنبه‌هایی که باید دورشان بزنیم.</li>
+</ul>
+<p>پس هنگام ادامهٔ سفر خود در بقیهٔ راهنما این چیزها را در نظر داشته باشید.
+اغلب تصمیم‌هایی را که می‌گیریم آگاه می‌کنند.</p>
+<h3 id="intermediate-representations"><a class="header" href="#intermediate-representations">Intermediate representations</a></h3>
+<p>مثل بیشتر کامپایلرها، <code>rustc</code> از برخی بازنمایی‌های میانی (IR) برای
+تسهیل محاسبات استفاده می‌کند.
+عموماً کار مستقیم با کد منبع بسیار ناراحت و مستعد خطاست.
+کد منبع طوری طراحی شده که هم دوستانه برای انسان باشد و هم
+بدون ابهام، اما برای کاری
+مثل بررسی نوع کمتر راحت است.</p>
+<p>در عوض بیشتر کامپایلرها، از جمله <code>rustc</code>، نوعی IR از کد منبع می‌سازند که
+تحلیل آن آسان‌تر است.
+<code>rustc</code> چند IR دارد که هر کدام برای هدف متفاوتی بهینه شده‌اند:</p>
+<ul>
+<li>جریان توکن: lexer جریانی از توکن‌ها را مستقیماً از کد منبع تولید می‌کند.
+کار با این جریان توکن برای parser آسان‌تر از متن خام است.</li>
+<li>درخت نحو انتزاعی (<code>AST</code>): درخت نحو انتزاعی از جریان توکن‌های تولیدشده توسط lexer ساخته می‌شود.
+تقریباً دقیقاً آنچه را کاربر نوشته نشان می‌دهد.
+به انجام برخی بررسی‌های سلامت نحوی کمک می‌کند
+(مثلاً بررسی اینکه جایی که کاربر نوع نوشته، نوع انتظار می‌رفته).</li>
+<li>IR سطح بالا (HIR): نوعی <code>AST</code> desugar‌شده است.
+از نظر نحوی همچنان به آنچه کاربر نوشته نزدیک است، اما برخی چیزهای ضمنی
+مثل برخی طول‌عمرهای حذف‌شده و غیره را شامل می‌شود. این IR برای بررسی نوع مناسب است.</li>
+<li><code>HIR</code> نوع‌دار (THIR) <em>که پیش‌تر IR انتزاعی سطح بالا (HAIR) نام داشت</em>: این یک
+میانه بین <code>HIR</code> و MIR است.
+شبیه <code>HIR</code> است اما کاملاً نوع‌دار است
+و کمی بیشتر desugar شده (مثلاً فراخوانی متدها و dereferenceهای ضمنی
+کاملاً صریح می‌شوند).
+در نتیجه lower‌کردن به <code>MIR</code> از <code>THIR</code> آسان‌تر از HIR است.</li>
+<li>IR سطح میانی (<code>MIR</code>): این IR اساساً یک گراف جریان کنترل (CFG) است.
+CFG نوعی نمودار است که بلوک‌های پایهٔ برنامه و اینکه جریان کنترل چگونه می‌تواند بین آن‌ها برود را نشان می‌دهد.
+به همین ترتیب، <code>MIR</code> هم مجموعه‌ای از بلوک‌های پایه دارد
+با دستورهای ساده و نوع‌دار درون آن‌ها (مثلاً انتساب، محاسبات ساده
+و غیره) و یال‌های جریان کنترل به بلوک‌های پایهٔ دیگر (مثلاً فراخوانی‌ها، drop‌کردن
+مقادیر).
+<code>MIR</code> برای borrow checking و بررسی‌های مهم مبتنی بر جریان داده دیگر،
+مثل بررسی مقادیر مقداردهی‌نشده به‌کار می‌رود.
+همچنین برای مجموعه‌ای از بهینه‌سازی‌ها و ارزیابی ثابت (از طریق <code>Miri</code>) استفاده می‌شود.
+چون <code>MIR</code> هنوز جنریک است، می‌توانیم بسیاری از تحلیل‌ها را اینجا
+کارآمدتر از پس از monomorphization انجام دهیم.</li>
+<li><code>LLVM-IR</code>: این شکل استاندارد همهٔ ورودی‌های کامپایلر LLVM است.
+<code>LLVM-IR</code> نوعی زبان assembly نوع‌دار با annotationهای فراوان است.
+قالب استانداردی است که همهٔ کامپایلرهایی که از LLVM استفاده می‌کنند به‌کار می‌برند (مثلاً کامپایلر
+C با نام clang هم <code>LLVM-IR</code> خروجی می‌دهد).
+<code>LLVM-IR</code> طوری طراحی شده که تولید آن برای کامپایلرهای دیگر آسان و در عین حال
+برای اینکه LLVM مجموعه‌ای بهینه‌سازی روی آن اجرا کند به‌اندازهٔ کافی غنی باشد.</li>
+</ul>
+<p>نکتهٔ دیگر این است که بسیاری از مقادیر در کامپایلر <em>intern</em> می‌شوند.
+این بهینه‌سازی عملکرد و حافظه است که در آن مقادیر را در
+تخصیص‌دهندهٔ ویژه‌ای به نام <em><a href="https://en.wikipedia.org/wiki/Region-based_memory_management">arena</a></em> تخصیص می‌دهیم.
+سپس ارجاع‌هایی به مقادیر تخصیص‌یافته در arena را پاس می‌دهیم.
+این به ما اجازه می‌دهد مطمئن شویم مقادیر یکسان (مثلاً نوع‌های برنامهٔ شما) فقط یک بار تخصیص می‌یابند
+و می‌توان آن‌ها را با مقایسهٔ اشاره‌گرها به‌ارزانی مقایسه کرد.
+بسیاری از بازنمایی‌های میانی intern می‌شوند.</p>
+<h3 id="queries"><a class="header" href="#queries">Queries</a></h3>
+<p>اولین انتخاب بزرگ پیاده‌سازی استفادهٔ Rust از سامانهٔ <em>کوئری</em> در کامپایلر است.
+کامپایلر Rust <em>به‌صورت</em> مجموعه‌ای از گذرها روی کد که ترتیبی اجرا شوند سازمان‌دهی <em>نشده</em> است.
+کامپایلر Rust این کار را برای ممکن‌کردن
+کامپایل افزایشی می‌کند — یعنی اگر کاربر برنامه‌اش را تغییر دهد و دوباره کامپایل کند، می‌خواهیم
+کمترین کار اضافی ممکن را برای تولید فایل دودویی جدید انجام دهیم.</p>
+<p>در <code>rustc</code>، همهٔ گام‌های اصلی بالا به‌صورت مجموعه‌ای از کوئری‌ها که یکدیگر را فراخوانی می‌کنند سازمان‌دهی شده‌اند.
+برای مثال، کوئری‌ای هست که نوع چیزی را می‌پرسد
+و دیگری برای <code>MIR</code> بهینه‌شدهٔ یک تابع.
+این کوئری‌ها می‌توانند یکدیگر را فراخوانی کنند و همه از طریق سامانهٔ کوئری ردیابی می‌شوند.
+نتایج کوئری‌ها روی دیسک cache می‌شوند تا کامپایلر بتواند تشخیص دهد نتیجهٔ کدام کوئری‌ها
+از کامپایل قبلی تغییر کرده و فقط آن‌ها را دوباره انجام دهد.
+کامپایل افزایشی این‌طور کار می‌کند.</p>
+<p>در اصل، برای گام‌های کوئری‌شده، هر یک از موارد بالا را برای هر آیتم به‌طور جداگانه انجام می‌دهیم.
+برای مثال، <code>HIR</code> یک تابع را می‌گیریم و با کوئری‌ها
+<code>LLVM-IR</code> آن HIR را می‌پرسیم.
+این تولید <code>MIR</code> بهینه‌شده را پیش می‌برد، که borrow checker را پیش می‌برد، که تولید <code>MIR</code> را پیش می‌برد و به همین ترتیب.</p>
+<p>… جز اینکه این بسیار ساده‌شده است.
+در واقع برخی کوئری‌ها روی دیسک
+cache نمی‌شوند، و برخی بخش‌های کامپایلر برای درستی باید برای همهٔ کدها اجرا شوند حتی اگر کد مرده باشد (مثلاً borrow checker). برای
+مثال، <a href="https://github.com/rust-lang/rust/blob/e69c7306e2be08939d95f14229e3f96566fb206c/compiler/rustc_interface/src/passes.rs#L791">اکنون کوئری <code>mir_borrowck</code> ابتدا روی همهٔ توابع یک crate اجرا می‌شود.</a> سپس backend تولید کد
+کوئری <code>collect_and_partition_mono_items</code> را فراخوانی می‌کند که ابتدا به‌صورت بازگشتی
+<code>optimized_mir</code> را برای همهٔ توابع قابل‌دسترس درخواست می‌کند، که به نوبهٔ خود <code>mir_borrowck</code>
+را برای آن تابع اجرا می‌کند و سپس واحدهای codegen را می‌سازد.
+این نوع تقسیم باید حفظ شود تا مطمئن شویم توابع غیرقابل‌دسترس هم خطاهایشان صادر می‌شود.</p>
+<p>علاوه بر این، کامپایلر ابتدا برای استفاده از سامانهٔ کوئری ساخته نشده بود؛ سامانهٔ کوئری
+بعداً به کامپایلر افزوده شده، پس بخش‌هایی از آن هنوز کوئری‌شده نیستند.
+همچنین LLVM کد ما نیست، پس آن هم کوئری‌شده نیست.
+برنامه این است که در نهایت همهٔ گام‌های فهرست‌شده در بخش قبل کوئری‌شده شوند،
+اما از نوامبر 2022 <!-- date-check -->، فقط گام‌های بین <code>HIR</code> و
+<code>LLVM-IR</code> کوئری‌شده‌اند.
+یعنی lexing، parsing، name resolution و گسترش ماکرو برای کل برنامه یک‌جا انجام می‌شوند.</p>
+<p>یک چیز دیگر که باید اینجا ذکر شود «زمینهٔ نوع‌دهی» بسیار مهم یعنی
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html"><code>TyCtxt</code></a> است، که struct عظیمی است که در مرکز همهٔ چیزهاست.
+(توجه کنید این نام عمدتاً تاریخی است.
+این <em>نه</em> «زمینهٔ نوع‌دهی» به معنای <code>Γ</code> یا <code>Δ</code> در نظریهٔ نوع است.
+نام حفظ شده چون نام struct در کد منبع همین است.) همهٔ
+کوئری‌ها به‌صورت متد روی نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html"><code>TyCtxt</code></a> تعریف شده‌اند و cache درون‌حافظه‌ای کوئری هم آنجا ذخیره می‌شود.
+در کد معمولاً متغیری به نام <code>tcx</code> هست که دستگیره‌ای (handle) روی زمینهٔ نوع‌دهی است.
+همچنین طول‌عمرهایی با نام <code>'tcx</code> می‌بینید، که یعنی چیزی به طول عمر
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html"><code>TyCtxt</code></a> گره خورده (معمولاً آنجا ذخیره یا intern می‌شود).</p>
+<p>برای اطلاعات بیشتر دربارهٔ کوئری‌ها در کامپایلر، <a href="./query.html">فصل کوئری‌ها</a> را ببینید.</p>
+<h3 id="tyty"><a class="header" href="#tyty"><code>ty::Ty</code></a></h3>
+<p>نوع‌ها در Rust واقعاً مهم‌اند و هستهٔ بسیاری از تحلیل‌های کامپایلر را تشکیل می‌دهند.
+نوع اصلی (در کامپایلر) که نوع‌ها (در برنامهٔ کاربر) را نشان می‌دهد
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html"><code>rustc_middle::ty::Ty</code></a> است.
+این آن‌قدر مهم است که فصل کاملی دربارهٔ
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.Ty.html"><code>ty::Ty</code></a> داریم، اما فعلاً فقط می‌خواهیم ذکر کنیم که وجود دارد و راهی است که
+<code>rustc</code> نوع‌ها را نمایش می‌دهد!</p>
+<p>همچنین توجه کنید که ماژول <a href="https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/ty/index.html"><code>rustc_middle::ty</code></a> همان struct با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html"><code>TyCtxt</code></a> را که قبلاً ذکر کردیم تعریف می‌کند.</p>
+<h3 id="parallelism"><a class="header" href="#parallelism">Parallelism</a></h3>
+<p>عملکرد کامپایلر مسئله‌ای است که می‌خواهیم بهبودش دهیم (و همیشه روی آن کار می‌کنیم).
+یک جنبهٔ آن موازی‌سازی خود <code>rustc</code> است.</p>
+<p>فعلاً فقط یک بخش از rustc به‌طور پیش‌فرض موازی است:
+<a href="./parallel-rustc.html">تولید کد</a>.</p>
+<p>با این حال بقیهٔ کامپایلر هنوز موازی نیست.
+تلاش زیادی برای این صرف شده، اما عموماً مسئلهٔ دشواری است.
+رویکرد فعلی تبدیل <a href="https://doc.rust-lang.org/std/cell/struct.RefCell.html"><code>RefCell</code></a>ها به <a href="https://doc.rust-lang.org/std/sync/struct.Mutex.html"><code>Mutex</code></a>هاست — یعنی
+به تغییرپذیری داخلی thread-safe سوییچ می‌کنیم.
+با این حال چالش‌های مداومی با رقابت بر سر قفل (lock contention)، حفظ پایاهای سامانهٔ کوئری تحت
+همزمانی و پیچیدگی codebase هست.
+می‌توان کار فعلی را با فعال‌کردن کامپایل موازی در <code>bootstrap.toml</code> امتحان کرد.
+هنوز روزهای اولیه است،
+اما بهبودهای عملکردی امیدوارکننده‌ای دیده می‌شود.</p>
+<h3 id="bootstrapping"><a class="header" href="#bootstrapping">Bootstrapping</a></h3>
+<p>خود <code>rustc</code> به زبان Rust نوشته شده است.
+پس چگونه کامپایلر را کامپایل کنیم؟ از کامپایلر قدیمی‌تر برای کامپایل کامپایلر جدیدتر استفاده می‌کنیم.
+این <a href="https://en.wikipedia.org/wiki/Bootstrapping_(compilers)"><em>بوت‌استرپ (bootstrapping)</em></a> نامیده می‌شود.</p>
+<p>بوت‌استرپ پیامدهای جالب فراوانی دارد.
+برای مثال یعنی یکی از کاربران اصلی Rust خود کامپایلر Rust است، پس
+پیوسته نرم‌افزار خودمان را تست می‌کنیم («خوردن غذای سگ خودمان»).</p>
+<p>برای جزئیات بیشتر دربارهٔ بوت‌استرپ، <a href="building/bootstrapping/intro.html">بخش بوت‌استرپ راهنما</a> را ببینید.</p>
+<!--
+# Unresolved Questions
+
+- Does LLVM ever do optimizations in debug builds?
+- How do I explore phases of the compile process in my own sources (lexer,
+  parser, HIR, etc)? - e.g., `cargo rustc -- -Z unpretty=hir-tree` allows you to
+  view `HIR` representation
+- What is the main source entry point for `X`?
+- Where do phases diverge for cross-compilation to machine code across different platforms?
+-->
+<h1 id="references"><a class="header" href="#references">References</a></h1>
+<ul>
+<li>Command line parsing
+<ul>
+<li>راهنما: <a href="rustc-driver/intro.html">Rustc Driver و Interface</a></li>
+<li>Driver definition: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_driver/"><code>rustc_driver</code></a></li>
+<li>Main entry point: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_session/config/fn.build_session_options.html"><code>rustc_session::config::build_session_options</code></a></li>
+</ul>
+</li>
+<li>Lexical Analysis: Lex the user program to a stream of tokens
+<ul>
+<li>راهنما: <a href="the-parser.html">Lexing و Parsing</a></li>
+<li>Lexer definition: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lexer/index.html"><code>rustc_lexer</code></a></li>
+<li>Main entry point: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lexer/struct.Cursor.html#method.advance_token"><code>rustc_lexer::Cursor::advance_token</code></a></li>
+</ul>
+</li>
+<li>Parsing: Parse the stream of tokens to an Abstract Syntax Tree (AST)
+<ul>
+<li>راهنما: <a href="the-parser.html">Lexing و Parsing</a></li>
+<li>Guide: <a href="macro-expansion.html">Macro Expansion</a></li>
+<li>Guide: <a href="name-resolution.html">Name Resolution</a></li>
+<li>Parser definition: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/index.html"><code>rustc_parse</code></a></li>
+<li>Main entry points:
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_interface/passes/fn.parse.html">نقطهٔ ورود برای اولین فایل در crate</a></li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/module/fn.parse_external_mod.html">نقطهٔ ورود برای تجزیهٔ ماژول بیرونی (outline)</a></li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/parser/struct.Parser.html#method.parse_nonterminal">نقطهٔ ورود برای قطعه‌های ماکرو</a></li>
+</ul>
+</li>
+<li><code>AST</code> definition: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/ast/index.html"><code>rustc_ast</code></a></li>
+<li>Feature gating: <a href="feature-gate-check.html">بررسی Feature Gate</a></li>
+<li>Early linting: <strong>TODO</strong></li>
+</ul>
+</li>
+<li>The High Level Intermediate Representation (HIR)
+<ul>
+<li>راهنما: <a href="hir.html">HIR</a></li>
+<li>راهنما: <a href="hir.html#identifiers-in-the-hir">شناسه‌ها در HIR</a></li>
+<li>راهنما: <a href="hir.html">نقشهٔ <code>HIR</code> (HIR Map)</a></li>
+<li>راهنما: <a href="./hir/lowering.html">Lowering از <code>AST</code> به <code>HIR</code></a></li>
+<li>چگونه نمایش <code>HIR</code> را برای کد خود ببینیم: <code>cargo rustc -- -Z unpretty=hir-tree</code></li>
+<li>Rustc <code>HIR</code> definition: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/index.html"><code>rustc_hir</code></a></li>
+<li>نقطهٔ ورود اصلی: <strong>TODO</strong></li>
+<li>Late linting: <strong>TODO</strong></li>
+</ul>
+</li>
+<li>Type Inference
+<ul>
+<li>Guide: <a href="type-inference.html">Type Inference</a></li>
+<li>راهنما: <a href="ty.html">ماژول ty: نمایش نوع‌ها</a> (معناشناسی)</li>
+<li>نقطهٔ ورود اصلی (استنتاج نوع): <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_infer/infer/struct.InferCtxtBuilder.html#method.enter"><code>InferCtxtBuilder::enter</code></a></li>
+<li>Main entry point (type checking bodies): <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html#method.typeck">the <code>typeck</code> query</a>
+<ul>
+<li>این دو تابع را نمی‌توان از هم جدا کرد.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>The Mid Level Intermediate Representation (MIR)
+<ul>
+<li>راهنما: <a href="mir/index.html"><code>MIR</code> (IR سطح میانی)</a></li>
+<li>Definition: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/index.html"><code>rustc_middle/src/mir</code></a></li>
+<li>تعریف منابعی که MIR را دستکاری می‌کنند: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_build/index.html"><code>rustc_mir_build</code></a>، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_dataflow/index.html"><code>rustc_mir_dataflow</code></a>، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/index.html"><code>rustc_mir_transform</code></a></li>
+</ul>
+</li>
+<li>The Borrow Checker
+<ul>
+<li>راهنما: <a href="borrow-check.html">MIR Borrow Check</a></li>
+<li>Definition: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/index.html"><code>rustc_borrowck</code></a></li>
+<li>نقطهٔ ورود اصلی: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/fn.mir_borrowck.html">کوئری <code>mir_borrowck</code></a></li>
+</ul>
+</li>
+<li><code>MIR</code> Optimizations
+<ul>
+<li>Guide: <a href="mir/optimizations.html">MIR Optimizations</a></li>
+<li>Definition: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/index.html"><code>rustc_mir_transform</code></a></li>
+<li>نقطهٔ ورود اصلی: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/fn.optimized_mir.html">کوئری <code>optimized_mir</code></a></li>
+</ul>
+</li>
+<li>Code Generation
+<ul>
+<li>Guide: <a href="backend/codegen.html">Code Generation</a></li>
+<li>تولید کد ماشین از <code>LLVM-IR</code> با LLVM - <strong>TODO: ارجاع؟</strong></li>
+<li>Main entry point: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_codegen_ssa/base/fn.codegen_crate.html"><code>rustc_codegen_ssa::base::codegen_crate</code></a>
+<ul>
+<li>این monomorphize می‌کند و <code>LLVM-IR</code> را برای یک واحد codegen تولید می‌کند.
+سپس یک thread پس‌زمینه برای اجرای LLVM شروع می‌کند که باید بعداً join شود.</li>
+<li>Monomorphization به‌صورت lazy از طریق <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_codegen_ssa/mir/struct.FunctionCx.html#method.monomorphize"><code>FunctionCx::monomorphize</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_codegen_ssa/base/fn.codegen_instance.html"><code>rustc_codegen_ssa::base::codegen_instance </code></a> رخ می‌دهد</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul><nav class="page-nav"><a href="part-2-intro.html">→ پیشگفتار</a><a href="compiler-src.html">کد منبع کامپایلر ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

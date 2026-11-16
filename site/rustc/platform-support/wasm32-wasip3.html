@@ -1,0 +1,73 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>wasm32-wasip3 — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="platform-support/wasm32-wasip3"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="wasm32-wasip3"><a class="header" href="#wasm32-wasip3"><code>wasm32-wasip3</code></a></h1>
+<p><strong>سطح: 2</strong></p>
+<p>هدف <code>wasm32-wasip3</code> مرحلهٔ بعدیِ تکامل هدف <a href="./wasm32-wasip2.html"><code>wasm32-wasip2</code></a> است. هدف <code>wasm32-wasip3</code> به کتابخانهٔ استاندارد Rust امکان می‌دهد برای پیاده‌سازی بخش‌های مختلف قابلیت‌های خود از APIهای WASIp3 استفاده کند. WASIp3 نسبت به WASIp2 پشتیبانی بومی از async را به همراه می‌آورد که به‌خوبی با اکوسیستم <code>async</code> در Rust یکپارچه می‌شود. علاوه بر این، نسخه‌ای از هدف <code>wasm32-wasip3</code> در Rust در آینده از threadingِ همکارانه و APIهای <code>std::thread</code> پشتیبانی خواهد کرد.</p>
+<p>پیشنهاد اولیهٔ افزودن این هدف در <a href="https://github.com/rust-lang/compiler-team/issues/1001">rust-lang/compiler-team#1001</a> قابل مشاهده است و این هدف نخستین بار در Rust 1.100.0 روی نسخهٔ stable در دسترس است. یک تغییر عمدهٔ قابل‌توجه نسبت به اهداف تاریخی WebAssembly این است که ABI این هدف اندکی متفاوت است. اشاره‌گر پشتهٔ سایه (shadow stack) حافظهٔ خطی در یک slot از زمینهٔ وظیفه (task context) در component model ذخیره می‌شود، نه در یک <code>global</code> از WebAssembly. همچنین اشاره‌گر پایهٔ TLS به شیوه‌ای متفاوت از سایر اهداف مدیریت می‌شود. این تغییرات برای امکان‌پذیر کردن چندنخی همکارانه در این هدف انجام شده‌اند.</p>
+<blockquote>
+<p><strong>نکته</strong>: از تاریخ 2026-09-03، چندنخی همکارانه هنوز در Rust روی این هدف پشتیبانی نمی‌شود. مشخصات component model و کار روی پشتیبانی کتابخانه‌ای آن در حال توسعه است و هنوز کامل نشده، اما انتظار می‌رود پیش از پایان سال کامل شود. تا آن زمان، ایجاد یک نخ از طریق <code>std::thread</code> خطا برمی‌گرداند. با این حال توجه کنید که این پشتیبانی را می‌توان از طریق <a href="#testing-cooperative-multithreading">دستورالعمل‌های زیر</a> آزمایش کرد.</p>
+</blockquote>
+<h2 id="target-maintainers"><a class="header" href="#target-maintainers">نگهدارندگان هدف</a></h2>
+<p><a href="https://github.com/alexcrichton">@alexcrichton</a> <a href="https://github.com/yoshuawuyts">@yoshuawuyts</a></p>
+<h2 id="requirements"><a class="header" href="#requirements">الزامات</a></h2>
+<p>این هدف به‌صورت cross-compile ساخته می‌شود. این هدف از <code>std</code> به‌طور کامل پشتیبانی می‌کند. استفاده از این هدف به LLVM 23 نیاز دارد و علاوه بر آن، اگر آن را به‌صورت محلی می‌سازید یا به‌صورت خارجی به آن لینک می‌کنید، به <code>wasi-sdk-34</code> یا جدیدتر نیاز دارد.</p>
+<h2 id="platform-requirements"><a class="header" href="#platform-requirements">الزامات پلتفرم</a></h2>
+<p>زمان‌اجراهای WebAssembly که می‌خواهند componentهای کامپایل‌شده برای این هدف را اجرا کنند، باید از WASI 0.3.0 و قابلیت‌های لازمِ component model (به‌ویژه async) پشتیبانی کنند. دو نمونه زمان‌اجرا برای WASIp3 عبارت‌اند از <a href="https://wasmtime.dev/">Wasmtime</a> و <a href="https://github.com/bytecodealliance/jco">Jco</a>.</p>
+<h2 id="building-the-target"><a class="header" href="#building-the-target">ساخت هدف</a></h2>
+<p>برای ساخت این هدف ابتدا یک نسخه از <a href="https://github.com/WebAssembly/wasi-sdk/"><code>wasi-sdk</code></a> را تهیه کنید. در حال حاضر نسخهٔ 34 حداقل نسخهٔ لازم است.</p>
+<p>سپس متغیر محیطی <code>WASI_SDK_PATH</code> را طوری تنظیم کنید که به محل نصب آن اشاره کند. برای مثال:</p>
+<pre><code class="language-text">export WASI_SDK_PATH=/path/to/wasi-sdk-34.0
+</code></pre>
+<p>سپس هنگام ساخت Rust از روی سورس حتماً LLD را فعال کنید، زیرا برای لینک کردن کد WebAssembly به درایور <code>wasm-ld</code> از LLVM برای LLD نیاز است. سیستم ساخت Rust به‌طور خودکار هر باینری و برنامهٔ لازم را از <code>WASI_SDK_PATH</code> برمی‌دارد.</p>
+<h2 id="testing"><a class="header" href="#testing">آزمون</a></h2>
+<p>این هدف در حال حاضر در CI آزمون نمی‌شود. به‌صورت محلی می‌توان آن را با یک باینری <code>wasmtime</code> در <code>PATH</code> به این شکل آزمون کرد:</p>
+<pre><code class="language-text">./x.py test --target wasm32-wasip3 tests/ui
+</code></pre>
+<h2 id="conditionally-compiling-code"><a class="header" href="#conditionally-compiling-code">کامپایل شرطی کد</a></h2>
+<p>توصیه می‌شود کد را برای این هدف به این شکل به‌صورت شرطی کامپایل کنید:</p>
+<pre><code class="language-text">#[cfg(all(target_os = "wasi", target_env = "p3"))]
+</code></pre>
+<h2 id="enabled-webassembly-features"><a class="header" href="#enabled-webassembly-features">ویژگی‌های فعال WebAssembly</a></h2>
+<p>مجموعهٔ پیش‌فرض ویژگی‌های WebAssembly که برای کامپایل فعال است، در حال حاضر با <a href="./wasm32-unknown-unknown.html"><code>wasm32-unknown-unknown</code></a> یکسان است. برای اطلاعات بیشتر به مستندات آن‌جا مراجعه کنید.</p>
+<h2 id="testing-cooperative-multithreading"><a class="header" href="#testing-cooperative-multithreading">آزمایش چندنخی همکارانه</a></h2>
+<p><a href="https://github.com/webassembly/component-model">مشخصات component model</a> در حال افزودن intrinsicهایی برای پشتیبانی از چندنخی همکارانه در یک guest از نوع component است. این intrinsicها را می‌توان در <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/Explainer.md">explainer</a> یافت و همگی با ایموجی 🧵 قفل‌گذاری (gate) شده‌اند. پشتیبانی از چندنخی همکارانه در حال توسعه است و هنوز کامل نشده، اما افراد ماجراجو می‌توانند این هدف را پیکربندی کنند تا همین حالا آن را امتحان کنند.</p>
+<p>بیشتر تغییرات لازم برای راه‌اندازی چندنخی همکارانه در <a href="https://github.com/webassembly/wasi-libc">وابستگی wasi-libc</a> مربوط به Rust قرار دارد. این یعنی برای آزمایش چندنخی همکارانه باید از ساختی متفاوت از wasi-libc پیش‌فرض استفاده شود. از <a href="https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-34">wasi-sdk-34</a> به بعد یک sysroot موقت وجود دارد که شامل پشتیبانی از یک هدف wasip3 با چندنخی فعال در wasi-libc است. برای آزمایش هدف Rust یعنی <code>wasm32-wasip3</code> همراه با نخ‌ها، باید کامپایل شما طوری پیکربندی شود که از این sysroot استفاده کند.</p>
+<p>نمونه‌ای از این کار، برنامهٔ زیر است:</p>
+<pre><code class="language-rust">fn main() {
+    std::thread::spawn(|| {
+        println!("hi");
+    })
+    .join()
+    .unwrap();
+}</code></pre>
+<p>که به‌صورت پیش‌فرض این‌گونه کامپایل و اجرا می‌شود:</p>
+<pre><code class="language-console">$ rustc foo.rs --target wasm32-wasip3
+$ wasmtime foo.wasm
+
+thread 'main' (1) panicked at library/std/src/thread/functions.rs:131:29:
+failed to spawn thread: Os { code: 58, kind: Unsupported, message: "Not supported" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: failed to run main module `foo.wasm`
+
+...
+</code></pre>
+<p>و نشان می‌دهد که به‌صورت پیش‌فرض نمی‌توان نخ ایجاد کرد. اما با پیکربندی یک sysroot سفارشی:</p>
+<pre><code class="language-console">$ rustc foo.rs --target wasm32-wasip3 \
+    -Clink-self-contained=n \
+    -Clinker=$WASI_SDK_PATH/bin/wasm32-wasip3-clang \
+    -Clink-arg=--sysroot=$WASI_SDK_PATH/share/wasi-sysroot/experimental-coop-threads \
+    -Clink-arg=-Wl,--export=cabi_realloc
+$ wasmtime -W component-model-threading foo.wasm
+hi
+</code></pre>
+<p>در این‌جا <code>-Clink-self-contained=n</code> از فایل‌های vendor‌شدهٔ کتابخانهٔ استاندارد که از ساختی از wasi-libc ناسازگار با چندنخی همکارانه آمده‌اند جلوگیری می‌کند. پرچم <code>-Clinker</code> به استفاده از <code>clang</code> تغییر می‌کند تا بتوان آرگومان <code>--sysroot</code> سفارشی را پاس داد و از منطق آن برای شیءهای راه‌اندازی (startup objects) پیروی کرد. پرچم <code>--sysroot</code> سپس به sysroot آزمایشی برای نخ‌های همکارانه اشاره می‌کند و <code>--export</code> در حال حاضر به‌عنوان یک راه‌حل موقت جزئی لازم است.</p>
+<p>هنگام کامپایل با Cargo می‌توانید از این متغیرهای محیطی استفاده کنید:</p>
+<pre><code class="language-console">$ export CARGO_TARGET_WASM32_WASIP3_LINKER=$WASI_SDK_PATH/bin/wasm32-wasip3-clang
+$ export CARGO_TARGET_WASM32_WASIP3_RUNNER='wasmtime -W component-model-threading'
+$ export CARGO_TARGET_WASM32_WASIP3_RUSTFLAGS="\
+    -Clink-self-contained=n \
+    -Clink-arg=--sysroot=$WASI_SDK_PATH/share/wasi-sysroot/experimental-coop-threads \
+    -Clink-arg=-Wl,--export=cabi_realloc"
+$ cargo run --target wasm32-wasip3
+hi
+</code></pre>
+<p>ابزارهای همگام‌سازی استاندارد در <code>std::thread</code> و <code>std::sync</code> باید همگی روی این هدف با چندنخی همکارانه کار کنند. اگر با مشکلی روبه‌رو شدید، لطفاً بی‌درنگ یک issue ثبت کنید و نگهدارندگان هدف را cc کنید.</p>
+<p>توجه کنید که در حال حاضر قصد بر این است که تا پایان 2026 همهٔ این پشتیبانی به‌صورت پیش‌فرض فعال شود و این بخش از مستندات حذف گردد، چرا که کار با نخ‌ها باید «خودبه‌خود کار کند».</p><nav class="page-nav"><a href="wasm32-wasip2.html">→ wasm32-wasip2</a><a href="wasm32-wali-linux.html">wasm32-wali-linux-musl ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

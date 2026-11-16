@@ -1,0 +1,63 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>abi-cmse-nonsecure-call — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/abi-cmse-nonsecure-call"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="abi_cmse_nonsecure_call"><a class="header" href="#abi_cmse_nonsecure_call"><code>abi_cmse_nonsecure_call</code></a></h1>
+<p>issue ردیابی این قابلیت: <a href="https://github.com/rust-lang/rust/issues/81391">#81391</a></p>
+<hr>
+<p><a href="https://developer.arm.com/documentation/100690/latest/">قابلیت TrustZone-M</a> برای هدف‌هایی در دسترس است که پروفایل معماری Armv8-M دارند (در نام هدفشان <code>thumbv8m</code> آمده است). LLVM، کامپایلر Rust و لینکر از قابلیت TrustZone-M <a href="https://developer.arm.com/documentation/ecm0359818/latest/">پشتیبانی</a> می‌کنند.</p>
+<p>یکی از چیزهایی که این قابلیت ناپایدار فراهم می‌کند، ABI تابع با نام “cmse-nonsecure-call” است. این ABI روی اشاره‌گرهای تابع به کد non-secure به کار می‌رود تا یک فراخوانی تابع non-secure را مشخص کند (برای جزئیات <a href="https://developer.arm.com/documentation/ecm0359818/latest/">بخش ۵٫۵</a> را ببینید).</p>
+<p>با این ABI، کامپایلر برای انجام فراخوانی کارهای زیر را انجام می‌دهد:</p>
+<ul>
+<li>ثبات‌هایی را که پس از فراخوانی لازم‌اند در حافظهٔ Secure ذخیره می‌کند</li>
+<li>همهٔ ثبات‌هایی را که ممکن است اطلاعات محرمانه داشته باشند پاک می‌کند</li>
+<li>کم‌ارزش‌ترین بیت (Least Significant Bit) آدرس تابع را پاک می‌کند</li>
+<li>با دستور BLXNS پرش می‌کند</li>
+</ul>
+<p>برای پرهیز از استفاده از پشتهٔ non-secure، کامپایلر تعداد و نوع پارامترها/مقدار بازگشتی را محدود می‌کند.</p>
+<!-- NOTE(ignore) this example is specific to thumbv8m targets -->
+<pre><code class="language-rust ignore">#![no_std]
+#![feature(abi_cmse_nonsecure_call)]
+
+#[no_mangle]
+pub fn call_nonsecure_function(addr: usize) -&gt; u32 {
+    let non_secure_function =
+        unsafe { core::mem::transmute::&lt;usize, extern "cmse-nonsecure-call" fn() -&gt; u32&gt;(addr) };
+    non_secure_function()
+}</code></pre>
+<pre><code class="language-text">$ rustc --emit asm --crate-type lib --target thumbv8m.main-none-eabi function.rs
+
+call_nonsecure_function:
+        .fnstart
+        .save   {r7, lr}
+        push    {r7, lr}
+        .setfp  r7, sp
+        mov     r7, sp
+        .pad    #16
+        sub     sp, #16
+        str     r0, [sp, #12]
+        ldr     r0, [sp, #12]
+        str     r0, [sp, #8]
+        b       .LBB0_1
+.LBB0_1:
+        ldr     r0, [sp, #8]
+        push.w  {r4, r5, r6, r7, r8, r9, r10, r11}
+        bic     r0, r0, #1
+        mov     r1, r0
+        mov     r2, r0
+        mov     r3, r0
+        mov     r4, r0
+        mov     r5, r0
+        mov     r6, r0
+        mov     r7, r0
+        mov     r8, r0
+        mov     r9, r0
+        mov     r10, r0
+        mov     r11, r0
+        mov     r12, r0
+        msr     apsr_nzcvq, r0
+        blxns   r0
+        pop.w   {r4, r5, r6, r7, r8, r9, r10, r11}
+        str     r0, [sp, #4]
+        b       .LBB0_2
+.LBB0_2:
+        ldr     r0, [sp, #4]
+        add     sp, #16
+        pop     {r7, pc}
+</code></pre><nav class="page-nav"><a href="../../unstable/language-features.html">→ Language features</a><a href="../../unstable/language-features/abi-msp430-interrupt.html">abi-msp430-interrupt ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

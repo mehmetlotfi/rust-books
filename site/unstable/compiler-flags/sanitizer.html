@@ -1,0 +1,712 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>sanitizer — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="compiler-flags/sanitizer"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="sanitizer"><a class="header" href="#sanitizer"><code>sanitizer</code></a></h1>
+<p>sanitizerها ابزارهایی هستند که به شناسایی و پیشگیری از انواع مختلف باگ‌ها و آسیب‌پذیری‌ها در نرم‌افزار کمک می‌کنند. آن‌ها در کامپایلرها در دسترس‌اند و با ابزارمند کردن (instrumenting) کد و افزودن بررسی‌های اضافی در زمان اجرا کار می‌کنند. اگرچه ابزارهای قدرتمندی برای شناسایی باگ‌ها یا مشکلات امنیتی‌اند، باید توجه داشت که استفاده از sanitizerها می‌تواند سربار زمان اجرا ایجاد کند و ممکن است همهٔ مشکلات ممکن را پیدا نکند. بنابراین معمولاً در کنار دیگر روش‌های برتر توسعهٔ نرم‌افزار، مانند آزمون و fuzzing، به کار می‌روند تا بالاترین کیفیت و امنیت نرم‌افزار تضمین شود.</p>
+<p>issueهای پیگیری این قابلیت:</p>
+<ul>
+<li><a href="https://github.com/rust-lang/rust/issues/39699">#39699</a>.</li>
+<li><a href="https://github.com/rust-lang/rust/issues/89653">#89653</a>.</li>
+</ul>
+<hr>
+<p>این قابلیت امکان استفاده از یکی از sanitizerهای زیر را فراهم می‌کند:</p>
+<ul>
+<li>
+<p>آن‌هایی که برای آزمون یا fuzzing در نظر گرفته شده‌اند (اما برای استفاده در محیط تولید نه):</p>
+<ul>
+<li><a href="#addresssanitizer">AddressSanitizer</a> یک تشخیص‌دهندهٔ سریع خطاهای حافظه.</li>
+<li><a href="#hwaddresssanitizer">HWAddressSanitizer</a> یک تشخیص‌دهندهٔ خطاهای حافظه شبیه AddressSanitizer، اما مبتنی بر کمک سخت‌افزاری جزئی.</li>
+<li><a href="#kernelhwaddresssanitizer">KernelHWAddressSanitizer</a> گونه‌ای از HWAddressSanitizer که برای محیط‌های bare metal طراحی شده است.</li>
+<li><a href="#leaksanitizer">LeakSanitizer</a> یک تشخیص‌دهندهٔ نشت حافظه در زمان اجرا.</li>
+<li><a href="#memorysanitizer">MemorySanitizer</a> یک تشخیص‌دهندهٔ خواندن‌های مقداردهی‌نشده.</li>
+<li><a href="#realtimesanitizer">RealtimeSanitizer</a> یک تشخیص‌دهندهٔ فراخوانی توابعی با زمان اجرای غیرقطعی در بسترهای بی‌درنگ (realtime).</li>
+<li><a href="#threadsanitizer">ThreadSanitizer</a> یک تشخیص‌دهندهٔ سریع data race.</li>
+</ul>
+</li>
+<li>
+<p>آن‌هایی که جدا از آزمون، می‌توانند در محیط تولید نیز استفاده شوند:</p>
+<ul>
+<li><a href="#controlflowintegrity">ControlFlowIntegrity</a> یکپارچگی جریان کنترل (CFI) در LLVM حفاظت جریان کنترل لبهٔ رو‌به‌جلو (forward-edge) را فراهم می‌کند.</li>
+<li><a href="#dataflowsanitizer">DataFlowSanitizer</a> یک چارچوب عمومی تحلیل پویای جریان داده.</li>
+<li><a href="#kernelcontrolflowintegrity">KernelControlFlowIntegrity</a> یکپارچگی جریان کنترل هستهٔ LLVM (KCFI) حفاظت جریان کنترل لبهٔ رو‌به‌جلو را برای هستهٔ سیستم‌عامل‌ها فراهم می‌کند.</li>
+<li><a href="#memtagsanitizer">MemTagSanitizer</a> یک تشخیص‌دهندهٔ سریع خطاهای حافظه مبتنی بر افزونهٔ Memory Tagging در Armv8.5-A.</li>
+<li><a href="#safestack">SafeStack</a> با جدا کردن پشته به نواحی امن و ناامن، حفاظت جریان کنترل لبهٔ رو‌به‌عقب (backward-edge) را فراهم می‌کند.</li>
+<li><a href="#shadowcallstack">ShadowCallStack</a> حفاظت جریان کنترل لبهٔ رو‌به‌عقب را فراهم می‌کند (فقط aarch64).</li>
+</ul>
+</li>
+</ul>
+<p>برای فعال کردن یک sanitizer با <code>-Zsanitizer=address</code>، <code>-Zsanitizer=cfi</code>، <code>-Zsanitizer=dataflow</code>،<code>-Zsanitizer=hwaddress</code>، <code>-Zsanitizer=leak</code>، <code>-Zsanitizer=memory</code>، <code>-Zsanitizer=memtag</code>، <code>-Zsanitizer=realtime</code>، <code>-Zsanitizer=shadow-call-stack</code> یا <code>-Zsanitizer=thread</code> کامپایل کنید. ممکن است به پرچم‌های <code>--target</code> و <code>build-std</code> نیز نیاز داشته باشید. اگر با زبان‌های دیگری کار می‌کنید که آن‌ها نیز با sanitizerها ابزارمند شده‌اند، ممکن است به پرچم <code>external-clangrt</code> نیاز داشته باشید. بخش <a href="#working-with-other-languages">کار با زبان‌های دیگر</a> را ببینید.</p>
+<p>مثال:</p>
+<pre><code class="language-shell">$ RUSTFLAGS=-Zsanitizer=address cargo build -Zbuild-std --target x86_64-unknown-linux-gnu
+</code></pre>
+<p>گزینه‌های اضافی sanitizerها را می‌توان از طریق آرگومان‌های LLVM و با گزینهٔ codegen به نام <code>llvm-args</code> به پردازشگر آرگومان‌های خط فرمان LLVM ارسال کرد (برای مثال، <code>-Cllvm-args=-dfsan-combine-pointer-labels-on-load=false</code>). برای اطلاعات بیشتر دربارهٔ گزینه‌های اضافی، مستندات sanitizer را ببینید.</p>
+<h1 id="addresssanitizer"><a class="header" href="#addresssanitizer">AddressSanitizer</a></h1>
+<p>AddressSanitizer یک تشخیص‌دهندهٔ خطاهای حافظه است. این ابزار می‌تواند انواع زیر از باگ‌ها را شناسایی کند:</p>
+<ul>
+<li>دسترسی خارج از محدوده به heap، پشته و globalها</li>
+<li>استفاده پس از آزادسازی (use after free)</li>
+<li>استفاده پس از بازگشت (use after return) (پرچم زمان اجرا <code>ASAN_OPTIONS=detect_stack_use_after_return=1</code>)</li>
+<li>استفاده پس از پایان scope</li>
+<li>آزادسازی مضاعف (double-free) و آزادسازی نامعتبر</li>
+<li>نشت حافظه</li>
+</ul>
+<p>تشخیص نشت حافظه در لینوکس به‌طور پیش‌فرض فعال است و در macOS می‌توان آن را با پرچم زمان اجرا <code>ASAN_OPTIONS=detect_leaks=1</code> فعال کرد.</p>
+<p>AddressSanitizer روی هدف‌های زیر پشتیبانی می‌شود:</p>
+<ul>
+<li><code>aarch64-apple-darwin</code></li>
+<li><code>aarch64-unknown-fuchsia</code></li>
+<li><code>aarch64-unknown-linux-gnu</code></li>
+<li><code>x86_64-apple-darwin</code></li>
+<li><code>x86_64-unknown-fuchsia</code></li>
+<li><code>x86_64-unknown-freebsd</code></li>
+<li><code>x86_64-unknown-linux-gnu</code></li>
+</ul>
+<p>AddressSanitizer با کد ابزارمندنشده نیز کار می‌کند، هرچند توانایی آن در شناسایی برخی باگ‌ها را کاهش می‌دهد. انتظار نمی‌رود گزارش‌های مثبت کاذب تولید کند.</p>
+<p>برای جزئیات بیشتر <a href="https://clang.llvm.org/docs/AddressSanitizer.html">مستندات Clang AddressSanitizer</a> را ببینید.</p>
+<h2 id="examples"><a class="header" href="#examples">مثال‌ها</a></h2>
+<p>سرریز بافر روی پشته:</p>
+<pre><code class="language-rust">fn main() {
+    let xs = [0, 1, 2, 3];
+    let _y = unsafe { *xs.as_ptr().offset(4) };
+}</code></pre>
+<pre><code class="language-shell">$ export RUSTFLAGS=-Zsanitizer=address RUSTDOCFLAGS=-Zsanitizer=address
+$ cargo run -Zbuild-std --target x86_64-unknown-linux-gnu
+==37882==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7ffe400e6250 at pc 0x5609a841fb20 bp 0x7ffe400e6210 sp 0x7ffe400e6208
+READ of size 4 at 0x7ffe400e6250 thread T0
+    #0 0x5609a841fb1f in example::main::h628ffc6626ed85b2 /.../src/main.rs:3:23
+    ...
+
+Address 0x7ffe400e6250 is located in stack of thread T0 at offset 48 in frame
+    #0 0x5609a841f8af in example::main::h628ffc6626ed85b2 /.../src/main.rs:1
+
+  This frame has 1 object(s):
+    [32, 48) 'xs' (line 2) &lt;== Memory access at offset 48 overflows this variable
+HINT: this may be a false positive if your program uses some custom stack unwind mechanism, swapcontext or vfork
+      (longjmp and C++ exceptions *are* supported)
+SUMMARY: AddressSanitizer: stack-buffer-overflow /.../src/main.rs:3:23 in example::main::h628ffc6626ed85b2
+Shadow bytes around the buggy address:
+  0x100048014bf0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x100048014c00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x100048014c10: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x100048014c20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x100048014c30: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=&gt;0x100048014c40: 00 00 00 00 f1 f1 f1 f1 00 00[f3]f3 00 00 00 00
+  0x100048014c50: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x100048014c60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x100048014c70: f1 f1 f1 f1 00 00 f3 f3 00 00 00 00 00 00 00 00
+  0x100048014c80: 00 00 00 00 00 00 00 00 00 00 00 00 f1 f1 f1 f1
+  0x100048014c90: 00 00 f3 f3 00 00 00 00 00 00 00 00 00 00 00 00
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+  Shadow gap:              cc
+==37882==ABORTING
+</code></pre>
+<p>استفاده از یک شیء روی پشته پس از آنکه scope آن پایان یافته است:</p>
+<pre><code class="language-rust">static mut P: *mut usize = std::ptr::null_mut();
+
+fn main() {
+    unsafe {
+        {
+            let mut x = 0;
+            P = &amp;mut x;
+        }
+        std::ptr::write_volatile(P, 123);
+    }
+}</code></pre>
+<pre><code class="language-shell">$ export RUSTFLAGS=-Zsanitizer=address RUSTDOCFLAGS=-Zsanitizer=address
+$ cargo run -Zbuild-std --target x86_64-unknown-linux-gnu
+=================================================================
+==39249==ERROR: AddressSanitizer: stack-use-after-scope on address 0x7ffc7ed3e1a0 at pc 0x55c98b262a8e bp 0x7ffc7ed3e050 sp 0x7ffc7ed3e048
+WRITE of size 8 at 0x7ffc7ed3e1a0 thread T0
+    #0 0x55c98b262a8d in core::ptr::write_volatile::he21f1df5a82f329a /.../src/rust/src/libcore/ptr/mod.rs:1048:5
+    #1 0x55c98b262cd2 in example::main::h628ffc6626ed85b2 /.../src/main.rs:9:9
+    ...
+
+Address 0x7ffc7ed3e1a0 is located in stack of thread T0 at offset 32 in frame
+    #0 0x55c98b262bdf in example::main::h628ffc6626ed85b2 /.../src/main.rs:3
+
+  This frame has 1 object(s):
+    [32, 40) 'x' (line 6) &lt;== Memory access at offset 32 is inside this variable
+HINT: this may be a false positive if your program uses some custom stack unwind mechanism, swapcontext or vfork
+      (longjmp and C++ exceptions *are* supported)
+SUMMARY: AddressSanitizer: stack-use-after-scope /.../src/rust/src/libcore/ptr/mod.rs:1048:5 in core::ptr::write_volatile::he21f1df5a82f329a
+Shadow bytes around the buggy address:
+  0x10000fd9fbe0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x10000fd9fbf0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x10000fd9fc00: 00 00 00 00 00 00 00 00 00 00 00 00 f1 f1 f1 f1
+  0x10000fd9fc10: f8 f8 f3 f3 00 00 00 00 00 00 00 00 00 00 00 00
+  0x10000fd9fc20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=&gt;0x10000fd9fc30: f1 f1 f1 f1[f8]f3 f3 f3 00 00 00 00 00 00 00 00
+  0x10000fd9fc40: 00 00 00 00 00 00 00 00 00 00 00 00 f1 f1 f1 f1
+  0x10000fd9fc50: 00 00 f3 f3 00 00 00 00 00 00 00 00 00 00 00 00
+  0x10000fd9fc60: 00 00 00 00 00 00 00 00 f1 f1 f1 f1 00 00 f3 f3
+  0x10000fd9fc70: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x10000fd9fc80: 00 00 00 00 f1 f1 f1 f1 00 00 f3 f3 00 00 00 00
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+  Shadow gap:              cc
+==39249==ABORTING
+</code></pre>
+<h1 id="controlflowintegrity"><a class="header" href="#controlflowintegrity">ControlFlowIntegrity</a></h1>
+<p>پشتیبانی LLVM CFI در کامپایلر Rust حفاظت جریان کنترل لبهٔ رو‌به‌جلو را هم برای کدی که فقط با Rust کامپایل شده و هم برای باینری‌های چندزبانه‌ای که با C یا C++ و Rust کامپایل شده‌اند، که «باینری‌های مختلط» (mixed binaries) نیز نامیده می‌شوند (یعنی وقتی کد کامپایل‌شده با C یا C++ و Rust فضای آدرس مجازی یکسانی را به اشتراک می‌گذارند)، فراهم می‌کند؛ این کار با گروه‌بندی اشاره‌گرهای تابع بر اساس نوع بازگشتی و نوع پارامترهایشان انجام می‌شود.</p>
+<p>LLVM CFI را می‌توان با <code>-Zsanitizer=cfi</code> فعال کرد و به LTO نیاز دارد (یعنی <code>-Clinker-plugin-lto</code> یا <code>-Clto</code>). LLVM CFI میان‌زبانی را می‌توان با <code>-Zsanitizer=cfi</code> فعال کرد، و برای پشتیبانی از آن لازم است گزینهٔ <code>-Zsanitizer-cfi-normalize-integers</code> همراه با گزینهٔ <code>-fsanitize-cfi-icall-experimental-normalize-integers</code> در Clang استفاده شود، و LTO مناسب (یعنی غیر از rustc، با <code>-Clinker-plugin-lto</code>) به کار رود.</p>
+<p>هنگام فعال کردن CFI توصیه می‌شود کتابخانهٔ استاندارد با CFI فعال و با استفاده از قابلیت build-std در Cargo (یعنی <code>-Zbuild-std</code>) دوباره ساخته شود.</p>
+<p>برای جزئیات بیشتر <a href="https://clang.llvm.org/docs/ControlFlowIntegrity.html">مستندات Clang ControlFlowIntegrity</a> را ببینید.</p>
+<h2 id="divergence-from-the-rust-abi"><a class="header" href="#divergence-from-the-rust-abi">انحراف از ABI زبان Rust</a></h2>
+<p>به دلیل نحوهٔ پیاده‌سازی sanitizer مربوط به CFI، چند نکتهٔ مهم دربارهٔ <a href="https://doc.rust-lang.org/stable/std/primitive.fn.html#abi-compatibility">قواعد سازگاری ABI برای فراخوانی‌های Rust به Rust</a> وجود دارد. CFI ابزاری است که می‌توان از آن برای اعتبارسنجی اینکه فراخوانی‌های پویای تابع به ABI احترام می‌گذارند استفاده کرد، اما به دلیل خاستگاه C/C++ آن، در چند مورد با تضمین‌های مستندشدهٔ بالا مغایرت دارد که در ادامه آمده است. از آنجا که CFI ناپایدار است، جزئیات ممکن است در آینده تغییر کنند.</p>
+<p>هنگام اجرای sanitizer مربوط به CFI، نوع‌های اشاره‌گر فقط در صورتی از نظر ABI سازگارند که نوع هدف و تغییرپذیری یکسان باشد. یعنی <code>*mut String</code> و <code>*mut i32</code> هنگام استفاده از CFI ناسازگارند. همچنین یعنی <code>*mut i32</code> با <code>*const i32</code> ناسازگار است. نوع‌های اشاره‌گر <code>NonNull&lt;_&gt;</code> و <code>Box&lt;_&gt;</code> در حال حاضر تحت CFI تغییرناپذیر در نظر گرفته می‌شوند. برای نوع‌های هدف غیر اولیه، CFI برای بررسی سازگاری از نام نوع استفاده می‌کند.</p>
+<p>وقتی پرچم <code>-Zsanitizer-cfi-normalize-integers</code> به کار نرود، sanitizer مربوط به CFI قواعد را بیشتر محدود می‌کند و <code>usize</code>/<code>isize</code> را با نوع صحیح <code>uN</code>/<code>iN</code> هم‌اندازه ناسازگار می‌داند.</p>
+<p>برخلاف سایر مواردی که ABI تابع نقض می‌شود، فراخوانی‌هایی که قواعد سازگاری ABI ویژهٔ CFI را نقض می‌کنند رفتار تعریف‌نشده (undefined behavior) نیستند. تضمین می‌شود که یا درست کار کنند یا برنامه را از کار بیندازند.</p>
+<p>این بخش فقط مواردی را پوشش می‌دهد که در آن‌ها CFI با قواعد سازگاری ABI برای فراخوانی‌های Rust به Rust مغایرت دارد. قرار نیست توضیح کاملی از نحوهٔ کار CFI باشد، و جزئیات مهم برای فراخوانی‌های C به Rust یا Rust به C حذف شده‌اند.</p>
+<h2 id="example-1-redirecting-control-flow-using-an-indirect-branchcall-to-an-invalid-destination"><a class="header" href="#example-1-redirecting-control-flow-using-an-indirect-branchcall-to-an-invalid-destination">مثال 1: تغییر مسیر جریان کنترل با استفاده از پرش/فراخوانی غیرمستقیم به مقصدی نامعتبر</a></h2>
+<pre><code class="language-rust">fn add_one(x: i32) -&gt; i32 {
+    x + 1
+}
+
+#[unsafe(naked)]
+<span class="boring">#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+</span>pub extern "sysv64" fn add_two(x: i32) {
+    // x + 2 preceded by a landing pad/nop block
+    std::arch::naked_asm!(
+        "
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         nop
+         lea eax, [rdi+2]
+         ret
+        "
+    );
+}
+
+fn do_twice(f: fn(i32) -&gt; i32, arg: i32) -&gt; i32 {
+    f(arg) + f(arg)
+}
+
+fn main() {
+    let answer = do_twice(add_one, 5);
+
+    println!("The answer is: {}", answer);
+
+<span class="boring">  #[cfg(all(target_os = "linux", target_arch = "x86_64"))] {
+</span>        println!("With CFI enabled, you should not see the next answer");
+        let f: fn(i32) -&gt; i32 = unsafe {
+            // Offset 0 is a valid branch/call destination (i.e., the function entry
+            // point), but offsets 1-8 within the landing pad/nop block are invalid
+            // branch/call destinations (i.e., within the body of the function).
+            std::mem::transmute::&lt;*const u8, fn(i32) -&gt; i32&gt;((add_two as *const u8).offset(5))
+        };
+        let next_answer = do_twice(f, 5);
+
+        println!("The next answer is: {}", next_answer);
+<span class="boring">  }
+</span>}</code></pre>
+<p>شکل 1. تغییر مسیر جریان کنترل با استفاده از پرش/فراخوانی غیرمستقیم به مقصدی نامعتبر (یعنی درون بدنهٔ تابع).</p>
+<pre><code class="language-shell">$ cargo run --release
+   Compiling rust-cfi-1 v0.1.0 (/home/rcvalle/rust-cfi-1)
+    Finished release [optimized] target(s) in 0.42s
+     Running `target/release/rust-cfi-1`
+The answer is: 12
+With CFI enabled, you should not see the next answer
+The next answer is: 14
+$
+</code></pre>
+<p>شکل 2. ساخت و اجرای شکل 1 در حالی که LLVM CFI غیرفعال است.</p>
+<pre><code class="language-shell">$ RUSTFLAGS="-Clinker-plugin-lto -Clinker=clang -Clink-arg=-fuse-ld=lld -Zsanitizer=cfi" cargo run -Zbuild-std -Zbuild-std-features --release --target x86_64-unknown-linux-gnu
+   ...
+   Compiling rust-cfi-1 v0.1.0 (/home/rcvalle/rust-cfi-1)
+    Finished release [optimized] target(s) in 1m 08s
+     Running `target/x86_64-unknown-linux-gnu/release/rust-cfi-1`
+The answer is: 12
+With CFI enabled, you should not see the next answer
+Illegal instruction
+$
+</code></pre>
+<p>شکل 3. ساخت و اجرای شکل 1 در حالی که LLVM CFI فعال است.</p>
+<p>وقتی LLVM CFI فعال باشد، اگر هر تلاشی برای تغییر/ربودن جریان کنترل با استفاده از پرش/فراخوانی غیرمستقیم به مقصدی نامعتبر انجام شود، اجرا متوقف می‌شود (شکل 3 را ببینید).</p>
+<h2 id="example-2-redirecting-control-flow-using-an-indirect-branchcall-to-a-function-with-a-different-number-of-parameters"><a class="header" href="#example-2-redirecting-control-flow-using-an-indirect-branchcall-to-a-function-with-a-different-number-of-parameters">مثال 2: تغییر مسیر جریان کنترل با استفاده از پرش/فراخوانی غیرمستقیم به تابعی با تعداد پارامتر متفاوت</a></h2>
+<pre><code class="language-rust">use std::mem;
+
+fn add_one(x: i32) -&gt; i32 {
+    x + 1
+}
+
+fn add_two(x: i32, _y: i32) -&gt; i32 {
+    x + 2
+}
+
+fn do_twice(f: fn(i32) -&gt; i32, arg: i32) -&gt; i32 {
+    f(arg) + f(arg)
+}
+
+fn main() {
+    let answer = do_twice(add_one, 5);
+
+    println!("The answer is: {}", answer);
+
+    println!("With CFI enabled, you should not see the next answer");
+    let f: fn(i32) -&gt; i32 =
+        unsafe { mem::transmute::&lt;*const u8, fn(i32) -&gt; i32&gt;(add_two as *const u8) };
+    let next_answer = do_twice(f, 5);
+
+    println!("The next answer is: {}", next_answer);
+}</code></pre>
+<p>شکل 4. تغییر مسیر جریان کنترل با استفاده از پرش/فراخوانی غیرمستقیم به تابعی که تعداد پارامترهای آن با تعداد آرگومان‌های مورد نظر/ارسال‌شده در محل فراخوانی/پرش متفاوت است.</p>
+<pre><code class="language-shell">$ cargo run --release
+   Compiling rust-cfi-2 v0.1.0 (/home/rcvalle/rust-cfi-2)
+    Finished release [optimized] target(s) in 0.43s
+     Running `target/release/rust-cfi-2`
+The answer is: 12
+With CFI enabled, you should not see the next answer
+The next answer is: 14
+$
+</code></pre>
+<p>شکل 5. ساخت و اجرای شکل 4 در حالی که LLVM CFI غیرفعال است.</p>
+<pre><code class="language-shell">$ RUSTFLAGS="-Clinker-plugin-lto -Clinker=clang -Clink-arg=-fuse-ld=lld -Zsanitizer=cfi" cargo run -Zbuild-std -Zbuild-std-features --release --target x86_64-unknown-linux-gnu
+   ...
+   Compiling rust-cfi-2 v0.1.0 (/home/rcvalle/rust-cfi-2)
+    Finished release [optimized] target(s) in 1m 08s
+     Running `target/x86_64-unknown-linux-gnu/release/rust-cfi-2`
+The answer is: 12
+With CFI enabled, you should not see the next answer
+Illegal instruction
+$
+</code></pre>
+<p>شکل 6. ساخت و اجرای شکل 4 در حالی که LLVM CFI فعال است.</p>
+<p>وقتی LLVM CFI فعال باشد، اگر هر تلاشی برای تغییر/ربودن جریان کنترل با استفاده از پرش/فراخوانی غیرمستقیم به تابعی با تعداد پارامتر متفاوت از آرگومان‌های مورد نظر/ارسال‌شده در محل فراخوانی/پرش انجام شود، اجرا در این حالت نیز متوقف می‌شود (شکل 6 را ببینید).</p>
+<h2 id="example-3-redirecting-control-flow-using-an-indirect-branchcall-to-a-function-with-different-return-and-parameter-types"><a class="header" href="#example-3-redirecting-control-flow-using-an-indirect-branchcall-to-a-function-with-different-return-and-parameter-types">مثال 3: تغییر مسیر جریان کنترل با استفاده از پرش/فراخوانی غیرمستقیم به تابعی با نوع بازگشتی و نوع پارامترهای متفاوت</a></h2>
+<pre><code class="language-rust">use std::mem;
+
+fn add_one(x: i32) -&gt; i32 {
+    x + 1
+}
+
+fn add_two(x: i64) -&gt; i64 {
+    x + 2
+}
+
+fn do_twice(f: fn(i32) -&gt; i32, arg: i32) -&gt; i32 {
+    f(arg) + f(arg)
+}
+
+fn main() {
+    let answer = do_twice(add_one, 5);
+
+    println!("The answer is: {}", answer);
+
+    println!("With CFI enabled, you should not see the next answer");
+    let f: fn(i32) -&gt; i32 =
+        unsafe { mem::transmute::&lt;*const u8, fn(i32) -&gt; i32&gt;(add_two as *const u8) };
+    let next_answer = do_twice(f, 5);
+
+    println!("The next answer is: {}", next_answer);
+}</code></pre>
+<p>شکل 7. تغییر مسیر جریان کنترل با استفاده از پرش/فراخوانی غیرمستقیم به تابعی با نوع بازگشتی و نوع پارامترهایی متفاوت از نوع بازگشتی مورد انتظار و آرگومان‌های مورد نظر/ارسال‌شده در محل فراخوانی/پرش.</p>
+<pre><code class="language-shell">$ cargo run --release
+   Compiling rust-cfi-3 v0.1.0 (/home/rcvalle/rust-cfi-3)
+    Finished release [optimized] target(s) in 0.44s
+     Running `target/release/rust-cfi-3`
+The answer is: 12
+With CFI enabled, you should not see the next answer
+The next answer is: 14
+$
+</code></pre>
+<p>شکل 8. ساخت و اجرای شکل 7 در حالی که LLVM CFI غیرفعال است.</p>
+<pre><code class="language-shell">$ RUSTFLAGS="-Clinker-plugin-lto -Clinker=clang -Clink-arg=-fuse-ld=lld -Zsanitizer=cfi" cargo run -Zbuild-std -Zbuild-std-features --release --target x86_64-unknown-linux-gnu
+   ...
+   Compiling rust-cfi-3 v0.1.0 (/home/rcvalle/rust-cfi-3)
+    Finished release [optimized] target(s) in 1m 07s
+     Running `target/x86_64-unknown-linux-gnu/release/rust-cfi-3`
+The answer is: 12
+With CFI enabled, you should not see the next answer
+Illegal instruction
+$
+</code></pre>
+<p>شکل 9. ساخت و اجرای شکل 7 در حالی که LLVM CFI فعال است.</p>
+<p>وقتی LLVM CFI فعال باشد، اگر هر تلاشی برای تغییر/ربودن جریان کنترل با استفاده از پرش/فراخوانی غیرمستقیم به تابعی با نوع بازگشتی و نوع پارامترهایی متفاوت از نوع بازگشتی مورد انتظار و آرگومان‌های مورد نظر/ارسال‌شده در محل فراخوانی/پرش انجام شود، اجرا در این حالت نیز متوقف می‌شود (شکل 9 را ببینید).</p>
+<h2 id="example-4-redirecting-control-flow-using-an-indirect-branchcall-to-a-function-with-different-return-and-parameter-types-across-the-ffi-boundary"><a class="header" href="#example-4-redirecting-control-flow-using-an-indirect-branchcall-to-a-function-with-different-return-and-parameter-types-across-the-ffi-boundary">مثال 4: تغییر مسیر جریان کنترل با استفاده از پرش/فراخوانی غیرمستقیم به تابعی با نوع بازگشتی و نوع پارامترهای متفاوت در مرز FFI</a></h2>
+<pre><code class="language-ignore (cannot-test-this-because-uses-custom-build)">int
+do_twice(int (*fn)(int), int arg)
+{
+    return fn(arg) + fn(arg);
+}
+</code></pre>
+<p>شکل ۱۰. نمونهٔ کتابخانهٔ C.</p>
+<pre><code class="language-ignore (cannot-test-this-because-uses-custom-build)">use std::mem;
+
+#[link(name = "foo")]
+extern "C" {
+    fn do_twice(f: unsafe extern "C" fn(i32) -&gt; i32, arg: i32) -&gt; i32;
+}
+
+unsafe extern "C" fn add_one(x: i32) -&gt; i32 {
+    x + 1
+}
+
+unsafe extern "C" fn add_two(x: i64) -&gt; i64 {
+    x + 2
+}
+
+fn main() {
+    let answer = unsafe { do_twice(add_one, 5) };
+
+    println!("The answer is: {}", answer);
+
+    println!("With CFI enabled, you should not see the next answer");
+    let f: unsafe extern "C" fn(i32) -&gt; i32 = unsafe {
+        mem::transmute::&lt;*const u8, unsafe extern "C" fn(i32) -&gt; i32&gt;(add_two as *const u8)
+    };
+    let next_answer = unsafe { do_twice(f, 5) };
+
+    println!("The next answer is: {}", next_answer);
+}
+</code></pre>
+<p>شکل 11. تغییر مسیر جریان کنترل با استفاده از پرش/فراخوانی غیرمستقیم به تابعی با نوع بازگشتی و نوع پارامترهایی متفاوت از نوع بازگشتی مورد انتظار و آرگومان‌های مورد نظر/ارسال‌شده در محل فراخوانی/پرش، در مرز FFI.</p>
+<pre><code class="language-shell">$ make
+mkdir -p target/release
+clang -I. -Isrc -Wall -c src/foo.c -o target/release/libfoo.o
+llvm-ar rcs target/release/libfoo.a target/release/libfoo.o
+RUSTFLAGS="-L./target/release -Clinker=clang -Clink-arg=-fuse-ld=lld" cargo build --release
+   Compiling rust-cfi-4 v0.1.0 (/home/rcvalle/rust-cfi-4)
+    Finished release [optimized] target(s) in 0.49s
+$ ./target/release/rust-cfi-4
+The answer is: 12
+With CFI enabled, you should not see the next answer
+The next answer is: 14
+$
+</code></pre>
+<p>شکل 12. ساخت و اجرای شکل‌های 10 تا 11 در حالی که LLVM CFI غیرفعال است.</p>
+<pre><code class="language-shell">$ make
+mkdir -p target/release
+clang -I. -Isrc -Wall -flto -fsanitize=cfi -fsanitize-cfi-icall-experimental-normalize-integers -fvisibility=hidden -c -emit-llvm src/foo.c -o target/release/libfoo.bc
+llvm-ar rcs target/release/libfoo.a target/release/libfoo.bc
+RUSTFLAGS="-L./target/release -Clinker-plugin-lto -Clinker=clang -Clink-arg=-fuse-ld=lld -Zsanitizer=cfi -Zsanitizer-cfi-normalize-integers" cargo build -Zbuild-std -Zbuild-std-features --release --target x86_64-unknown-linux-gnu
+   ...
+   Compiling rust-cfi-4 v0.1.0 (/home/rcvalle/rust-cfi-4)
+    Finished release [optimized] target(s) in 1m 06s
+$ ./target/x86_64-unknown-linux-gnu/release/rust-cfi-4
+The answer is: 12
+With CFI enabled, you should not see the next answer
+Illegal instruction
+$
+</code></pre>
+<p>شکل 13. ساخت و اجرای شکل‌های 10 تا 11 در حالی که LLVM CFI فعال است.</p>
+<p>وقتی LLVM CFI فعال باشد، اگر هر تلاشی برای تغییر مسیر جریان کنترل با استفاده از پرش/فراخوانی غیرمستقیم به تابعی با نوع بازگشتی و نوع پارامترهایی متفاوت از نوع بازگشتی مورد انتظار و آرگومان‌های مورد نظر/ارسال‌شده در محل فراخوانی/پرش انجام شود، حتی در مرز FFI و برای نوع‌های تابع <code>extern "C"</code> که به‌طور غیرمستقیم (یعنی callbackها/اشاره‌گرهای تابع) در مرز FFI فراخوانی می‌شوند، اجرا در این حالت نیز متوقف می‌شود (شکل 13 را ببینید).</p>
+<h1 id="hwaddresssanitizer"><a class="header" href="#hwaddresssanitizer">HWAddressSanitizer</a></h1>
+<p>HWAddressSanitizer گونه‌ای جدیدتر از AddressSanitizer است که حافظهٔ بسیار کمتری مصرف می‌کند.</p>
+<p>HWAddressSanitizer روی هدف‌های زیر پشتیبانی می‌شود:</p>
+<ul>
+<li><code>aarch64-linux-android</code></li>
+<li><code>aarch64-unknown-linux-gnu</code></li>
+</ul>
+<p>برای جزئیات بیشتر <a href="https://clang.llvm.org/docs/HardwareAssistedAddressSanitizerDesign.html">مستندات Clang HWAddressSanitizer</a> را ببینید.</p>
+<h2 id="example"><a class="header" href="#example">مثال</a></h2>
+<p>سرریز بافر روی heap:</p>
+<pre><code class="language-rust">fn main() {
+    let xs = vec![0, 1, 2, 3];
+    let _y = unsafe { *xs.as_ptr().offset(4) };
+}</code></pre>
+<pre><code class="language-shell">$ rustc main.rs -Zsanitizer=hwaddress -Clinker=aarch64-linux-gnu-gcc
+-Clink-arg=-fuse-ld=lld --target aarch64-unknown-linux-gnu
+</code></pre>
+<pre><code class="language-shell">$ ./main
+==241==ERROR: HWAddressSanitizer: tag-mismatch on address 0xefdeffff0050 at pc 0xaaaae0ae4a98
+READ of size 4 at 0xefdeffff0050 tags: 2c/00 (ptr/mem) in thread T0
+    #0 0xaaaae0ae4a94  (/.../main+0x54a94)
+    ...
+
+[0xefdeffff0040,0xefdeffff0060) is a small allocated heap chunk; size: 32 offset: 16
+0xefdeffff0050 is located 0 bytes to the right of 16-byte region [0xefdeffff0040,0xefdeffff0050)
+allocated here:
+    #0 0xaaaae0acb80c  (/.../main+0x3b80c)
+    ...
+
+Thread: T0 0xeffe00002000 stack: [0xffffc28ad000,0xffffc30ad000) sz: 8388608 tls: [0xffffaa10a020,0xffffaa10a7d0)
+Memory tags around the buggy address (one tag corresponds to 16 bytes):
+  0xfefcefffef80: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefcefffef90: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefcefffefa0: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefcefffefb0: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefcefffefc0: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefcefffefd0: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefcefffefe0: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefcefffeff0: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+=&gt;0xfefceffff000: d7  d7  05  00  2c [00] 00  00  00  00  00  00  00  00  00  00
+  0xfefceffff010: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefceffff020: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefceffff030: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefceffff040: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefceffff050: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefceffff060: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefceffff070: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+  0xfefceffff080: 00  00  00  00  00  00  00  00  00  00  00  00  00  00  00  00
+Tags for short granules around the buggy address (one tag corresponds to 16 bytes):
+  0xfefcefffeff0: ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..
+=&gt;0xfefceffff000: ..  ..  8c  ..  .. [..] ..  ..  ..  ..  ..  ..  ..  ..  ..  ..
+  0xfefceffff010: ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..  ..
+See https://clang.llvm.org/docs/HardwareAssistedAddressSanitizerDesign.html#short-granules for a description of short granule tags
+Registers where the failure occurred (pc 0xaaaae0ae4a98):
+    x0  2c00efdeffff0050  x1  0000000000000004  x2  0000000000000004  x3  0000000000000000
+    x4  0000fffefc30ac37  x5  000000000000005d  x6  00000ffffc30ac37  x7  0000efff00000000
+    x8  2c00efdeffff0050  x9  0200efff00000000  x10 0000000000000000  x11 0200efff00000000
+    x12 0200effe00000310  x13 0200effe00000310  x14 0000000000000008  x15 5d00ffffc30ac360
+    x16 0000aaaae0ad062c  x17 0000000000000003  x18 0000000000000001  x19 0000ffffc30ac658
+    x20 4e00ffffc30ac6e0  x21 0000aaaae0ac5e10  x22 0000000000000000  x23 0000000000000000
+    x24 0000000000000000  x25 0000000000000000  x26 0000000000000000  x27 0000000000000000
+    x28 0000000000000000  x29 0000ffffc30ac5a0  x30 0000aaaae0ae4a98
+SUMMARY: HWAddressSanitizer: tag-mismatch (/.../main+0x54a94)
+</code></pre>
+<h1 id="kernelhwaddresssanitizer"><a class="header" href="#kernelhwaddresssanitizer">KernelHWAddressSanitizer</a></h1>
+<p>KernelHWAddressSanitizer نسخهٔ هسته (kernel) از <a href="#hwaddresssanitizer">HWAddressSanitizer</a> است که همان هدف را دنبال می‌کند اما برای محیط‌های bare-metal طراحی شده است.</p>
+<p>HWAddressSanitizer روی هدف‌های <code>aarch64*-unknown-none</code> و <code>aarch64*-unknown-none-softfloat</code> پشتیبانی می‌شود.</p>
+<p>برای جزئیات بیشتر <a href="https://clang.llvm.org/docs/HardwareAssistedAddressSanitizerDesign.html">مستندات Clang HWAddressSanitizer</a> را ببینید.</p>
+<h1 id="kernelcontrolflowintegrity"><a class="header" href="#kernelcontrolflowintegrity">KernelControlFlowIntegrity</a></h1>
+<p>پشتیبانی LLVM Kernel Control Flow Integrity (CFI) در کامپایلر Rust در ابتدا حفاظت جریان کنترل لبهٔ رو‌به‌جلو را برای هستهٔ سیستم‌عامل‌ها فقط برای کدی که با Rust کامپایل شده فراهم می‌کند، و این کار را با گروه‌بندی اشاره‌گرهای تابع بر اساس نوع بازگشتی و نوع پارامترهایشان انجام می‌دهد. (به <a href="https://github.com/llvm/llvm-project/commit/cff5bef948c91e4919de8a5fb9765e0edc13f3de">کامیت LLVM با شناسهٔ cff5bef با عنوان «KCFI sanitizer»</a> مراجعه کنید.)</p>
+<p>حفاظت جریان کنترل لبهٔ رو‌به‌جلو برای «باینری‌های مختلط» کامپایل‌شده با C یا C++ و Rust (یعنی وقتی کد کامپایل‌شده با C یا C++ و Rust فضای آدرس مجازی یکسانی را به اشتراک می‌گذارند) در کارهای بعدی و با تعریف و استفاده از شناسه‌های نوع سازگار فراهم خواهد شد (به Type metadata در سند طراحی در issue پیگیری <a href="https://github.com/rust-lang/rust/issues/89653">#89653</a> مراجعه کنید).</p>
+<p>LLVM KCFI را می‌توان با <code>-Zsanitizer=kcfi</code> فعال کرد.</p>
+<p>LLVM KCFI روی هدف‌های زیر پشتیبانی می‌شود:</p>
+<ul>
+<li><code>aarch64-linux-android</code></li>
+<li><code>aarch64-unknown-linux-gnu</code></li>
+<li><code>x86_64-linux-android</code></li>
+<li><code>x86_64-unknown-linux-gnu</code></li>
+</ul>
+<p>برای جزئیات بیشتر <a href="https://clang.llvm.org/docs/ControlFlowIntegrity.html#fsanitize-kcfi">مستندات Clang KernelControlFlowIntegrity</a> را ببینید.</p>
+<h1 id="dataflowsanitizer"><a class="header" href="#dataflowsanitizer">DataFlowSanitizer</a></h1>
+<p>DataFlowSanitizer یک تحلیل پویای عمومی جریان داده است.</p>
+<p>برخلاف سایر ابزارهای Sanitizer، این ابزار برای شناسایی یک دستهٔ مشخص از باگ‌ها به‌تنهایی طراحی نشده است. در عوض، یک چارچوب عمومی تحلیل پویای جریان داده فراهم می‌کند تا کلاینت‌ها از آن برای کمک به شناسایی مشکلات ویژهٔ برنامه در کد خودشان استفاده کنند.</p>
+<p>DataFlowSanitizer روی هدف‌های زیر پشتیبانی می‌شود:</p>
+<ul>
+<li><code>x86_64-unknown-linux-gnu</code></li>
+</ul>
+<p>برای جزئیات بیشتر <a href="https://clang.llvm.org/docs/DataFlowSanitizer.html">مستندات Clang DataFlowSanitizer</a> را ببینید.</p>
+<h1 id="kerneladdresssanitizer"><a class="header" href="#kerneladdresssanitizer">KernelAddressSanitizer</a></h1>
+<p>KernelAddressSanitizer (KASAN) نسخهٔ freestanding از AddressSanitizer است که برای شناسایی خطاهای حافظه در برنامه‌هایی که محیط اجرا (runtime) ندارند، مانند هستهٔ سیستم‌عامل‌ها، مناسب است. KernelAddressSanitizer نیازمند پیاده‌سازی دستی توابع زیربنایی است که برای ردیابی وضعیت KernelAddressSanitizer به کار می‌روند.</p>
+<p>KernelAddressSanitizer روی هدف‌های زیر پشتیبانی می‌شود:</p>
+<ul>
+<li><code>aarch64-unknown-none</code></li>
+<li><code>riscv64gc-unknown-none-elf</code></li>
+<li><code>riscv64imac-unknown-none-elf</code></li>
+<li><code>x86_64-unknown-none</code></li>
+</ul>
+<p>برای جزئیات بیشتر <a href="https://www.kernel.org/doc/html/latest/dev-tools/kasan.html">مستندات KernelAddressSanitizer در هستهٔ لینوکس</a> را ببینید.</p>
+<h1 id="leaksanitizer"><a class="header" href="#leaksanitizer">LeakSanitizer</a></h1>
+<p>LeakSanitizer یک تشخیص‌دهندهٔ نشت حافظه در زمان اجرا است.</p>
+<p>LeakSanitizer روی هدف‌های زیر پشتیبانی می‌شود:</p>
+<ul>
+<li><code>aarch64-unknown-linux-gnu</code></li>
+<li><code>x86_64-apple-darwin</code></li>
+<li><code>x86_64-unknown-linux-gnu</code></li>
+</ul>
+<p>برای جزئیات بیشتر <a href="https://clang.llvm.org/docs/LeakSanitizer.html">مستندات Clang LeakSanitizer</a> را ببینید.</p>
+<h1 id="memorysanitizer"><a class="header" href="#memorysanitizer">MemorySanitizer</a></h1>
+<p>MemorySanitizer یک تشخیص‌دهندهٔ خواندن‌های مقداردهی‌نشده است.</p>
+<p>MemorySanitizer روی هدف‌های زیر پشتیبانی می‌شود:</p>
+<ul>
+<li><code>aarch64-unknown-linux-gnu</code></li>
+<li><code>x86_64-unknown-freebsd</code></li>
+<li><code>x86_64-unknown-linux-gnu</code></li>
+</ul>
+<p>MemorySanitizer نیاز دارد که همهٔ کد برنامه ابزارمند شود. وابستگی‌های C/C++ باید با Clang و گزینهٔ <code>-fsanitize=memory</code> دوباره کامپایل شوند. در غیر این صورت گزارش‌های مثبت کاذب تولید می‌شود.</p>
+<p>برای جزئیات بیشتر <a href="https://clang.llvm.org/docs/MemorySanitizer.html">مستندات Clang MemorySanitizer</a> را ببینید.</p>
+<h2 id="example-1"><a class="header" href="#example-1">مثال</a></h2>
+<p>شناسایی استفاده از حافظهٔ مقداردهی‌نشده. پرچم <code>-Zbuild-std</code> کتابخانهٔ استاندارد را دوباره می‌سازد و ابزارمند می‌کند، و برای عملکرد صحیح ابزار کاملاً ضروری است. پرچم <code>-Zsanitizer-memory-track-origins</code> ردیابی منشأ حافظهٔ مقداردهی‌نشده را فعال می‌کند:</p>
+<pre><code class="language-rust">use std::mem::MaybeUninit;
+
+fn main() {
+    unsafe {
+        let a = MaybeUninit::&lt;[usize; 4]&gt;::uninit();
+        let a = a.assume_init();
+        println!("{}", a[2]);
+    }
+}</code></pre>
+<pre><code class="language-shell">$ export \
+  RUSTFLAGS='-Zsanitizer=memory -Zsanitizer-memory-track-origins' \
+  RUSTDOCFLAGS='-Zsanitizer=memory -Zsanitizer-memory-track-origins'
+$ cargo clean
+$ cargo run -Zbuild-std --target x86_64-unknown-linux-gnu
+==9416==WARNING: MemorySanitizer: use-of-uninitialized-value
+    #0 0x560c04f7488a in core::fmt::num::imp::fmt_u64::haa293b0b098501ca $RUST/build/x86_64-unknown-linux-gnu/stage1/lib/rustlib/src/rust/src/libcore/fmt/num.rs:202:16
+...
+  Uninitialized value was stored to memory at
+    #0 0x560c04ae898a in __msan_memcpy.part.0 $RUST/src/llvm-project/compiler-rt/lib/msan/msan_interceptors.cc:1558:3
+    #1 0x560c04b2bf88 in memory::main::hd2333c1899d997f5 $CWD/src/main.rs:6:16
+
+  Uninitialized value was created by an allocation of 'a' in the stack frame of function '_ZN6memory4main17hd2333c1899d997f5E'
+    #0 0x560c04b2bc50 in memory::main::hd2333c1899d997f5 $CWD/src/main.rs:3
+</code></pre>
+<h1 id="memtagsanitizer"><a class="header" href="#memtagsanitizer">MemTagSanitizer</a></h1>
+<p>MemTagSanitizer دستهٔ مشابهی از خطاها را شناسایی می‌کند که AddressSanitizer و HardwareAddressSanitizer شناسایی می‌کنند، اما با سربار کمتری که برای استفاده به‌عنوان سخت‌سازی (hardening) باینری‌های محیط تولید مناسب است.</p>
+<p>MemTagSanitizer روی هدف‌های زیر پشتیبانی می‌شود:</p>
+<ul>
+<li><code>aarch64-linux-android</code></li>
+<li><code>aarch64-unknown-linux-gnu</code></li>
+</ul>
+<p>MemTagSanitizer به پشتیبانی سخت‌افزاری و ویژگی هدف <code>mte</code> نیاز دارد. برای فعال کردن این ویژگی هدف با <code>-C target-feature="+mte"</code> کامپایل کنید.</p>
+<p>برای جزئیات بیشتر <a href="https://llvm.org/docs/MemTagSanitizer.html">مستندات LLVM MemTagSanitizer</a> را ببینید.</p>
+<h1 id="safestack"><a class="header" href="#safestack">SafeStack</a></h1>
+<p>SafeStack حفاظت جریان کنترل لبهٔ رو‌به‌عقب را با جدا کردن پشته به دادهٔ فقط‌ایمن‌قابل‌دسترس (پشتهٔ امن) و تمام دادهٔ دیگر (پشتهٔ ناامن) فراهم می‌کند.</p>
+<p>SafeStack را می‌توان با گزینهٔ <code>-Zsanitizer=safestack</code> فعال کرد و روی هدف‌های زیر پشتیبانی می‌شود:</p>
+<ul>
+<li><code>x86_64-unknown-linux-gnu</code></li>
+</ul>
+<p>برای جزئیات بیشتر <a href="https://clang.llvm.org/docs/SafeStack.html">مستندات Clang SafeStack</a> را ببینید.</p>
+<h1 id="shadowcallstack"><a class="header" href="#shadowcallstack">ShadowCallStack</a></h1>
+<p>ShadowCallStack حفاظت جریان کنترل لبهٔ رو‌به‌عقب را با ذخیرهٔ آدرس بازگشت تابع در یک «پشتهٔ فراخوانی سایه» (shadow call stack) که جداگانه تخصیص داده شده و بارگذاری آدرس بازگشت از آن فراهم می‌کند. هر دو معماری AArch64 و RISC-V در ABI خود یک رجیستر پلتفرم تعریف کرده‌اند، به‌ترتیب <code>x18</code> و <code>x3</code>/<code>gp</code>، که می‌توان آن را به‌طور اختیاری برای این منظور رزرو کرد. بسته به پلتفرم هدف، ممکن است پشتیبانی نرم‌افزاری از سوی سیستم‌عامل و runtime لازم باشد که در بخش‌های باقی‌مانده شرح داده شده است. برای جزئیات بیشتر <a href="https://clang.llvm.org/docs/ShadowCallStack.html">مستندات Clang ShadowCallStack</a> را ببینید.</p>
+<p>ShadowCallStack را می‌توان با گزینهٔ <code>-Zsanitizer=shadow-call-stack</code> فعال کرد و روی هدف‌های زیر پشتیبانی می‌شود:</p>
+<h2 id="aarch64-family"><a class="header" href="#aarch64-family">خانوادهٔ AArch64</a></h2>
+<p>ShadowCallStack نیازمند استفاده از رجیستر پلتفرم تعریف‌شده در ABI، یعنی <code>x18</code>، است که برای مقاصد تولید کد لازم است. وقتی <code>x18</code> رزرو نشده باشد و در عوض بعداً به‌عنوان رجیستر موقت (scratch) استفاده شود، فعال کردن ShadowCallStack به رفتار تعریف‌نشده می‌انجامد، زیرا آدرس بازگشت خراب می‌شود یا هنگامی که ابزارمندی مقدار رجیستر بازگشت را از رجیستر <code>x18</code> که قبلاً بازنویسی شده به رجیستر پیوند <code>lr</code> بازمی‌گرداند، دسترسی نامعتبر به حافظه رخ می‌دهد. به بیان دیگر، کدی که توابع ابزارمندشده با ShadowCallStack را فراخوانی می‌کند یا توسط آن‌ها فراخوانی می‌شود باید رجیستر <code>x18</code> را رزرو کند یا مقدار آن را حفظ کند.</p>
+<h3 id="aarch64-linux-android-and-aarch64-unknown-fuchsiaaarch64-fuchsia"><a class="header" href="#aarch64-linux-android-and-aarch64-unknown-fuchsiaaarch64-fuchsia"><code>aarch64-linux-android</code> و <code>aarch64-unknown-fuchsia</code>/<code>aarch64-fuchsia</code></a></h3>
+<p>این هدف از قبل رجیستر <code>x18</code> را رزرو می‌کند. یک runtime باید توسط برنامه یا سیستم‌عامل فراهم شود. اگر روی این هدف از <code>bionic</code> استفاده شود، پشتیبانی نرم‌افزاری فراهم است. در غیر این صورت، یک runtime باید ناحیه‌ای از حافظه را آماده کند و <code>x18</code> را به آن ناحیه که به‌عنوان پشتهٔ فراخوانی سایه عمل می‌کند اشاره دهد.</p>
+<h3 id="aarch64-unknown-none"><a class="header" href="#aarch64-unknown-none"><code>aarch64-unknown-none</code></a></h3>
+<p>علاوه بر پشتیبانی runtime از سوی برنامه یا سیستم‌عامل، پرچم <code>-Zfixed-x18</code> نیز اجباری است.</p>
+<h2 id="risc-v-64-family"><a class="header" href="#risc-v-64-family">خانوادهٔ RISC-V 64</a></h2>
+<p>ShadowCallStack برای پشتهٔ سایهٔ نرم‌افزاری از رجیستر <code>gp</code>، که <code>x3</code> نیز نامیده می‌شود، یا اگر افزونهٔ <a href="https://github.com/riscv/riscv-cfi/blob/3f8e450c481ac303bd5643444f7a89672f24476e/src/cfi_backward.adoc"><code>Zicfiss</code></a> در دسترس باشد از رجیستر <code>ssp</code> استفاده می‌کند. <code>gp</code>/<code>x3</code> در حال حاضر همیشه برای ابزارمندی ShadowCallStack رزرو و در دسترس است، و <code>ssp</code> در حالت <code>Zicfiss</code> فقط از طریق دستورهای اختصاصی پشتهٔ سایهٔ خود قابل دسترسی است.</p>
+<p>وقتی <code>gp</code>/<code>x3</code> برای پشتهٔ سایهٔ نرم‌افزاری استفاده شود، پشتیبانی runtime و سیستم‌عامل لازم است. یک runtime باید پیش از اجرای کد ناحیه‌ای از حافظه را آماده کند و <code>gp</code>/<code>x3</code> را به آن اشاره دهد.</p>
+<p>هدف‌های زیر از ShadowCallStack پشتیبانی می‌کنند.</p>
+<ul>
+<li><code>riscv64imac-unknown-none-elf</code></li>
+<li><code>riscv64gc-unknown-none-elf</code></li>
+<li><code>riscv64gc-unknown-fuchsia</code></li>
+</ul>
+<h1 id="threadsanitizer"><a class="header" href="#threadsanitizer">ThreadSanitizer</a></h1>
+<p>ThreadSanitizer ابزاری برای شناسایی data race است. روی هدف‌های زیر پشتیبانی می‌شود:</p>
+<ul>
+<li><code>aarch64-apple-darwin</code></li>
+<li><code>aarch64-unknown-linux-gnu</code></li>
+<li><code>x86_64-apple-darwin</code></li>
+<li><code>x86_64-unknown-freebsd</code></li>
+<li><code>x86_64-unknown-linux-gnu</code></li>
+</ul>
+<p>برای کار درست، ThreadSanitizer باید از همهٔ عملیات همگام‌سازی در برنامه «آگاه» باشد. این ابزار معمولاً این کار را با ترکیبی از رهگیری کتابخانه (برای مثال همگام‌سازی انجام‌شده از طریق <code>pthread_mutex_lock</code> / <code>pthread_mutex_unlock</code>) و ابزارمندی در زمان کامپایل (مثلاً عملیات اتمی) انجام می‌دهد. استفاده از آن بدون ابزارمند کردن همهٔ کد برنامه می‌تواند به گزارش‌های مثبت کاذب بینجامد.</p>
+<p>ThreadSanitizer از fenceهای اتمی <code>std::sync::atomic::fence</code> و همچنین همگام‌سازی انجام‌شده با کد اسمبلی درون‌خطی پشتیبانی نمی‌کند.</p>
+<p>برای جزئیات بیشتر <a href="https://clang.llvm.org/docs/ThreadSanitizer.html">مستندات Clang ThreadSanitizer</a> را ببینید.</p>
+<h2 id="example-2"><a class="header" href="#example-2">مثال</a></h2>
+<pre><code class="language-rust">static mut A: usize = 0;
+
+fn main() {
+    let t = std::thread::spawn(|| {
+        unsafe { A += 1 };
+    });
+    unsafe { A += 1 };
+
+    t.join().unwrap();
+}</code></pre>
+<pre><code class="language-shell">$ export RUSTFLAGS=-Zsanitizer=thread RUSTDOCFLAGS=-Zsanitizer=thread
+$ cargo run -Zbuild-std --target x86_64-unknown-linux-gnu
+==================
+WARNING: ThreadSanitizer: data race (pid=10574)
+  Read of size 8 at 0x5632dfe3d030 by thread T1:
+    #0 example::main::_$u7b$$u7b$closure$u7d$$u7d$::h23f64b0b2f8c9484 ../src/main.rs:5:18 (example+0x86cec)
+    ...
+
+  Previous write of size 8 at 0x5632dfe3d030 by main thread:
+    #0 example::main::h628ffc6626ed85b2 /.../src/main.rs:7:14 (example+0x868c8)
+    ...
+    #11 main &lt;null&gt; (example+0x86a1a)
+
+  Location is global 'example::A::h43ac149ddf992709' of size 8 at 0x5632dfe3d030 (example+0x000000bd9030)
+</code></pre>
+<h1 id="realtimesanitizer"><a class="header" href="#realtimesanitizer">RealtimeSanitizer</a></h1>
+<p>RealtimeSanitizer فراخوانی‌هایی با زمان اجرای غیرقطعی را در بسترهای بی‌درنگ (real-time) شناسایی می‌کند. توابعی که با attribute به نام <code>#[sanitize(realtime = "nonblocking")]</code> علامت‌گذاری شده‌اند، توابع بی‌درنگ محسوب می‌شوند. وقتی RTSan در حین اجرا در یک بستر بی‌درنگ فراخوانی تابعی با زمان اجرای غیرقطعی، مانند <code>malloc</code> یا <code>free</code>، را شناسایی کند، یک خطا گزارش می‌دهد.</p>
+<p>علاوه بر “nonblocking”، این attribute را می‌توان با “blocking” و “caller” نیز به کار برد.</p>
+<ul>
+<li>“blocking” به برنامه‌نویس اجازه می‌دهد توابع خودش را به‌عنوان توابعی با زمان اجرای غیرقطعی علامت‌گذاری کند. هنگام رسیدن به چنین تابعی در حالی که در بستر بی‌درنگ هستیم، یک تخلف گزارش می‌شود. یک مورد استفادهٔ معمول spinlock در فضای کاربر است.</li>
+<li>توابع علامت‌گذاری‌شده با “caller” در صورتی sanitize می‌شوند که از یک بستر بی‌درنگ فراخوانی شده باشند. اگر هیچ attribute ای تنظیم نشده باشد، این حالت پیش‌فرض است. از لحظهٔ ورود به یک تابع “nonblocking” تا لحظهٔ خروج دوبارهٔ از آن تابع، برنامه sanitize خواهد شد.</li>
+</ul>
+<p>بررسی‌های sanitizer را می‌توان با استفاده از توابع خارجی <code>__rtsan_disable()</code> و <code>__rtsan_enable()</code> غیرفعال کرد. هر فراخوانی <code>__rtsan_disable()</code> باید با یک فراخوانی بعدی <code>__rtsan_enable()</code> جفت شود، در غیر این صورت رفتار تعریف‌نشده است.</p>
+<pre><code class="language-rust">unsafe extern "C" {
+  fn __rtsan_disable();
+  fn __rtsan_enable();
+}</code></pre>
+<pre><code class="language-rust ignore (log is just a example and doesn&#39;t exist)">// in a real-time context
+#[cfg(debug_assertions)]
+{
+    unsafe { __rtsan_disable() };
+    log!("logging xyz");
+    unsafe { __rtsan_enable() };
+}</code></pre>
+<p>برای جزئیات بیشتر <a href="https://clang.llvm.org/docs/RealtimeSanitizer.html">مستندات Clang RealtimeSanitizer</a> را ببینید.</p>
+<h2 id="example-3"><a class="header" href="#example-3">مثال</a></h2>
+<pre><code class="language-rust no_run">#![feature(sanitize)]
+#[sanitize(realtime = "nonblocking")]
+fn real_time() {
+  let vec = vec![0, 1, 2]; // call to malloc is detected and reported as an error
+}</code></pre>
+<pre><code class="language-shell">==8670==ERROR: RealtimeSanitizer: unsafe-library-call
+Intercepted call to real-time unsafe function `malloc` in real-time context!
+    #0 0x00010107b0d8 in malloc rtsan_interceptors_posix.cpp:792
+    #1 0x000100d94e70 in alloc::alloc::Global::alloc_impl::h9e1fc3206c868eea+0xa0 (realtime_vec:arm64+0x100000e70)
+    #2 0x000100d94d90 in alloc::alloc::exchange_malloc::hd45b5788339eb5c8+0x48 (realtime_vec:arm64+0x100000d90)
+    #3 0x000100d95020 in realtime_vec::main::hea6bd69b03eb9ca1+0x24 (realtime_vec:arm64+0x100001020)
+    #4 0x000100d94a28 in core::ops::function::FnOnce::call_once::h493b6cb9dd87d87c+0xc (realtime_vec:arm64+0x100000a28)
+    #5 0x000100d949b8 in std::sys::backtrace::__rust_begin_short_backtrace::hfcddb06c73c19eea+0x8 (realtime_vec:arm64+0x1000009b8)
+    #6 0x000100d9499c in std::rt::lang_start::_$u7b$$u7b$closure$u7d$$u7d$::h202288c05a2064f0+0xc (realtime_vec:arm64+0x10000099c)
+    #7 0x000100d9fa34 in std::rt::lang_start_internal::h6c763158a05ac05f+0x6c (realtime_vec:arm64+0x10000ba34)
+    #8 0x000100d94980 in std::rt::lang_start::h1c29cc56df0598b4+0x38 (realtime_vec:arm64+0x100000980)
+    #9 0x000100d95118 in main+0x20 (realtime_vec:arm64+0x100001118)
+    #10 0x000183a46b94 in start+0x17b8 (dyld:arm64+0xfffffffffff3ab94)
+
+SUMMARY: RealtimeSanitizer: unsafe-library-call rtsan_interceptors_posix.cpp:792 in malloc
+</code></pre>
+<h1 id="instrumentation-of-external-dependencies-and-std"><a class="header" href="#instrumentation-of-external-dependencies-and-std">ابزارمند کردن وابستگی‌های خارجی و std</a></h1>
+<p>sanitizerها تا درجات مختلف با کد ابزارمندشدهٔ جزئی به‌درستی کار می‌کنند. در یک سو LeakSanitizer قرار دارد که از هیچ ابزارمندی در زمان کامپایل استفاده نمی‌کند، و در سوی دیگر MemorySanitizer است که نیاز دارد همهٔ کد برنامه ابزارمند شود (در غیر این صورت ناگزیر مثبت‌های کاذب پدید می‌آیند).</p>
+<p>به‌شدت توصیه می‌شود sanitizerها با کتابخانهٔ استاندارد دوباره‌کامپایل‌شده و ابزارمندشده ترکیب شوند، برای مثال با استفاده از <a href="../../cargo/reference/unstable.html#build-std">قابلیت <code>-Zbuild-std</code> در cargo</a>.</p>
+<h1 id="working-with-other-languages"><a class="header" href="#working-with-other-languages">کار با زبان‌های دیگر</a></h1>
+<p>sanitizerها برای عملکرد صحیح به کتابخانه‌های runtime کامپایلر متکی هستند. Rust runtime کامپایلر خودش را پیوند می‌دهد که ممکن است با runtimeهای مورد نیاز زبان‌هایی مانند C++ تداخل داشته باشد. از آنجا که runtime مربوط به Rust همیشه نمادهای مورد نیاز کد ابزارمندشدهٔ C++ را ندارد، ممکن است لازم باشد پیوند دادن آن را نادیده بگیرید تا runtime دیگری به جای آن پیوند شود.</p>
+<p>از گزینهٔ ناپایدار جداگانهٔ <code>-Zexternal-clangrt</code> می‌توان استفاده کرد تا rustc پیوند دادن runtime کامپایلر برای sanitizer را رد کند. این کار شما را ملزم می‌کند یک runtime خارجی، مثلاً از clang، را به جای آن پیوند دهید.</p>
+<h1 id="build-scripts-and-procedural-macros"><a class="header" href="#build-scripts-and-procedural-macros">اسکریپت‌های ساخت و ماکروهای رویه‌ای</a></h1>
+<p>استفاده از sanitizerها همراه با اسکریپت‌های ساخت (build script) و ماکروهای رویه‌ای (procedural macro) از نظر فنی ممکن است، اما در تقریباً همهٔ موارد بهتر است از آن اجتناب شود. این موضوع به‌ویژه دربارهٔ ماکروهای رویه‌ای صادق است که نیاز به نسخهٔ ابزارمندشده‌ای از rustc دارند.</p>
+<p>در عمل، هنگام استفاده از cargo همیشه به یاد داشته باشید که پرچم <code>--target</code> را ارسال کنید تا rustflags روی اسکریپت‌های ساخت و ماکروهای رویه‌ای اعمال نشود.</p>
+<h1 id="symbolizing-the-reports"><a class="header" href="#symbolizing-the-reports">نمادگذاری گزارش‌ها (Symbolizing)</a></h1>
+<p>sanitizerها وقتی فایل اجرایی llvm-symbolizer در <code>PATH</code> باشد، stack traceهای نمادگذاری‌شده تولید می‌کنند.</p>
+<h1 id="additional-information"><a class="header" href="#additional-information">اطلاعات بیشتر</a></h1>
+<ul>
+<li><a href="https://github.com/google/sanitizers/wiki/">صفحهٔ پروژهٔ Sanitizers</a></li>
+<li><a href="https://clang.llvm.org/docs/AddressSanitizer.html">AddressSanitizer در Clang</a></li>
+<li><a href="https://clang.llvm.org/docs/ControlFlowIntegrity.html">ControlFlowIntegrity در Clang</a></li>
+<li><a href="https://clang.llvm.org/docs/DataFlowSanitizer.html">DataFlowSanitizer در Clang</a></li>
+<li><a href="https://clang.llvm.org/docs/HardwareAssistedAddressSanitizerDesign.html">HWAddressSanitizer در Clang</a></li>
+<li><a href="https://www.kernel.org/doc/html/latest/dev-tools/kasan.html">مستندات KernelAddressSanitizer در هستهٔ لینوکس</a></li>
+<li><a href="https://clang.llvm.org/docs/LeakSanitizer.html">LeakSanitizer در Clang</a></li>
+<li><a href="https://clang.llvm.org/docs/MemorySanitizer.html">MemorySanitizer در Clang</a></li>
+<li><a href="https://llvm.org/docs/MemTagSanitizer.html">MemTagSanitizer در LLVM</a></li>
+<li><a href="https://clang.llvm.org/docs/ThreadSanitizer.html">ThreadSanitizer در Clang</a></li>
+<li><a href="https://clang.llvm.org/docs/RealtimeSanitizer.html">RealtimeSanitizer در Clang</a></li>
+</ul><nav class="page-nav"><a href="../../unstable/compiler-flags/report-time.html">→ report-time</a><a href="../../unstable/compiler-flags/self-profile-events.html">self-profile-events ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,83 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>تخصیص حافظه — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="vec/vec-alloc"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="allocating-memory"><a class="header" href="#allocating-memory">تخصیص حافظه</a></h1>
+<p>استفاده از <code>NonNull</code> مشکلی برای یکی از ویژگی‌های مهم Vec (و در واقع همهٔ مجموعه‌های std) ایجاد می‌کند: ساختن یک Vec خالی اصلاً چیزی تخصیص نمی‌دهد. این با تخصیص یک بلوک حافظهٔ با اندازهٔ صفر یکی نیست، که تخصیص‌دهندهٔ سراسری (global allocator) آن را مجاز نمی‌داند (به رفتار تعریف‌نشده می‌انجامد!). پس اگر نمی‌توانیم تخصیص بدهیم، و همچنین نمی‌توانیم اشاره‌گر null را در <code>ptr</code> بگذاریم، در <code>Vec::new</code> چه کنیم؟ خب، فقط یک مقدار بی‌اهمیت دیگر را آنجا می‌گذاریم!</p>
+<p>این کاملاً اشکالی ندارد، چون از قبل <code>cap == 0</code> را به‌عنوان نشانگر «بدون تخصیص» داریم. تقریباً در هیچ کدی لازم نیست آن را به‌طور ویژه مدیریت کنیم، چون معمولاً به‌هرحال باید بررسی کنیم که <code>cap &gt; len</code> یا <code>len &gt; 0</code> است. مقداری که Rust توصیه می‌کند اینجا قرار دهیم <code>mem::align_of::&lt;T&gt;()</code> است. <code>NonNull</code> برای این کار یک تابع کمکی فراهم می‌کند: <code>NonNull::dangling()</code>. جاهای زیادی هست که می‌خواهیم از <code>dangling</code> استفاده کنیم، چون تخصیص واقعی‌ای وجود ندارد که از آن حرف بزنیم، اما <code>null</code> باعث می‌شود کامپایلر کارهای بدی انجام دهد.</p>
+<p>پس:</p>
+<!-- ignore: explanation code -->
+<pre><code class="language-rust ignore">use std::mem;
+
+impl&lt;T&gt; Vec&lt;T&gt; {
+    pub fn new() -&gt; Self {
+        assert!(mem::size_of::&lt;T&gt;() != 0, "We're not ready to handle ZSTs");
+        Vec {
+            ptr: NonNull::dangling(),
+            len: 0,
+            cap: 0,
+        }
+    }
+}
+<span class="boring">fn main() {}</span></code></pre>
+<p>آن assert را آنجا گنجاندم چون نوع‌های با اندازهٔ صفر در سراسر کدمان به مدیریت ویژه نیاز خواهند داشت، و فعلاً می‌خواهم این موضوع را به تعویق بیندازم. بدون این assert، بعضی از پیش‌نویس‌های اولیهٔ ما کارهای خیلی بدی خواهند کرد.</p>
+<p>در مرحلهٔ بعد باید بفهمیم وقتی <em>واقعاً</em> فضا می‌خواهیم چه کار کنیم. برای این منظور از توابع تخصیص سراسری <a href="https://doc.rust-lang.org/alloc/alloc/fn.alloc.html"><code>alloc</code></a>، <a href="https://doc.rust-lang.org/alloc/alloc/fn.realloc.html"><code>realloc</code></a> و <a href="https://doc.rust-lang.org/alloc/alloc/fn.dealloc.html"><code>dealloc</code></a> استفاده می‌کنیم که در Rust پایدار در <a href="https://doc.rust-lang.org/alloc/alloc/index.html"><code>std::alloc</code></a> در دسترس‌اند. انتظار می‌رود پس از پایدار شدن نوع <a href="https://doc.rust-lang.org/std/alloc/struct.Global.html"><code>std::alloc::Global</code></a>، این توابع به نفع متدهای آن منسوخ شوند.</p>
+<p>همچنین به راهی برای رسیدگی به شرایط کمبود حافظه (OOM) نیاز داریم. کتابخانهٔ استاندارد تابعی به نام <a href="https://doc.rust-lang.org/alloc/alloc/fn.handle_alloc_error.html"><code>alloc::handle_alloc_error</code></a> فراهم می‌کند که برنامه را به شیوه‌ای وابسته به پلتفرم متوقف (abort) می‌کند. دلیل اینکه abort می‌کنیم و panic نمی‌کنیم این است که unwinding می‌تواند باعث انجام تخصیص‌هایی شود، و وقتی تخصیص‌دهندهٔ شما همین الان گفته «هی، دیگر حافظه ندارم»، این کار بد به نظر می‌رسد.</p>
+<p>البته این کمی احمقانه است، چون بیشتر پلتفرم‌ها در واقع به شیوهٔ مرسوم حافظه کم نمی‌آورند. اگر واقعاً شروع کنید به مصرف تمام حافظه، سیستم‌عامل شما احتمالاً برنامه را با روشی دیگر می‌کشد. محتمل‌ترین راه برای فعال کردن OOM این است که یک‌باره مقدار مضحکی حافظه درخواست کنیم (مثلاً نصف فضای آدرس نظری). به همین دلیل <em>احتمالاً</em> panic کردن اشکالی ندارد و اتفاق بدی نمی‌افتد. با این حال، ما سعی داریم تا حد امکان شبیه کتابخانهٔ استاندارد باشیم، پس کل برنامه را متوقف می‌کنیم.</p>
+<p>خب، حالا می‌توانیم رشد را بنویسیم. به‌طور کلی، می‌خواهیم این منطق را داشته باشیم:</p>
+<pre><code class="language-text">if cap == 0:
+    allocate()
+    cap = 1
+else:
+    reallocate()
+    cap *= 2
+</code></pre>
+<p>اما تنها API تخصیص‌دهندهٔ پشتیبانی‌شدهٔ Rust آن‌قدر سطح پایین است که باید مقدار قابل‌توجهی کار اضافه انجام دهیم. همچنین باید در برابر برخی شرایط خاص که با تخصیص‌های واقعاً بزرگ یا تخصیص‌های خالی رخ می‌دهند محافظت کنیم.</p>
+<p>به‌طور خاص، <code>ptr::offset</code> دردسر زیادی برایمان ایجاد می‌کند، چون معنایی مانند دستور GEP inbounds در LLVM دارد. اگر به اندازهٔ کافی خوش‌شانس بوده‌اید که با این دستور سروکار نداشته‌اید، داستان اصلی GEP این است: تحلیل نام‌های مستعار (alias analysis)، تحلیل نام‌های مستعار، تحلیل نام‌های مستعار. برای یک کامپایلر بهینه‌ساز بسیار مهم است که بتواند دربارهٔ وابستگی‌های داده و نام‌های مستعار استدلال کند.</p>
+<p>به‌عنوان یک مثال ساده، قطعه کد زیر را در نظر بگیرید:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">*x *= 7;
+*y *= 3;</code></pre>
+<p>اگر کامپایلر بتواند ثابت کند <code>x</code> و <code>y</code> به مکان‌های متفاوتی در حافظه اشاره می‌کنند، در تئوری این دو عملیات را می‌توان به‌صورت موازی اجرا کرد (مثلاً با بارگذاری آن‌ها در ثبات‌های مختلف و کار روی آن‌ها به‌طور مستقل). اما کامپایلر در حالت کلی نمی‌تواند این کار را بکند، چون اگر x و y به یک مکان در حافظه اشاره کنند، عملیات باید روی یک مقدار انجام شوند و بعداً نمی‌توان آن‌ها را صرفاً با هم ادغام کرد.</p>
+<p>وقتی از GEP inbounds استفاده می‌کنید، صراحتاً به LLVM می‌گویید که offset‌هایی که می‌خواهید انجام دهید درون محدودهٔ یک موجودیت «تخصیص‌یافتهٔ» واحد هستند. نتیجهٔ نهایی این است که LLVM می‌تواند فرض کند اگر معلوم باشد دو اشاره‌گر به دو شیء مجزا اشاره می‌کنند، همهٔ offset‌های آن اشاره‌گرها <em>نیز</em> نام مستعار یکدیگر نیستند (چون شما به‌سادگی به یک مکان تصادفی در حافظه نمی‌رسید). LLVM به‌شدت برای کار با offset‌های GEP بهینه شده است و offset‌های inbounds از همه بهترند، پس مهم است که تا حد ممکن از آن‌ها استفاده کنیم.</p>
+<p>پس GEP این است؛ چطور می‌تواند برایمان دردسر ایجاد کند؟</p>
+<p>مشکل اول این است که ما آرایه‌ها را با اعداد صحیح بدون علامت اندیس‌گذاری می‌کنیم، اما GEP (و در نتیجه <code>ptr::offset</code>) یک عدد صحیح علامت‌دار می‌گیرد. این یعنی نیمی از اندیس‌های به‌ظاهر معتبر یک آرایه باعث سرریز GEP می‌شوند و در واقع به جهت اشتباه می‌روند! بنابراین باید همهٔ تخصیص‌ها را به <code>isize::MAX</code> عنصر محدود کنیم. این در واقع یعنی فقط باید نگران اشیای یک‌بایتی باشیم، چون مثلاً <code>&gt; isize::MAX</code> عدد <code>u16</code> واقعاً تمام حافظهٔ سیستم را تمام می‌کند. با این حال، برای جلوگیری از موارد مرزی ظریفی که در آن‌ها کسی آرایه‌ای از اشیای <code>&lt; isize::MAX</code> را به‌صورت بایت بازتفسیر می‌کند، std همهٔ تخصیص‌ها را به <code>isize::MAX</code> بایت محدود می‌کند.</p>
+<p>در همهٔ هدف‌های ۶۴ بیتی‌ای که Rust فعلاً پشتیبانی می‌کند، ما به‌طور مصنوعی به مقداری بسیار کمتر از کل ۶۴ بیت فضای آدرس محدود هستیم (پلتفرم‌های x64 مدرن فقط آدرس‌دهی ۴۸ بیتی را در دسترس قرار می‌دهند)، پس می‌توانیم روی این حساب کنیم که ابتدا حافظه تمام می‌شود. اما در هدف‌های ۳۲ بیتی، به‌ویژه آن‌هایی که افزونه‌هایی برای استفادهٔ بیشتر از فضای آدرس دارند (PAE x86 یا x32)، از نظر تئوری ممکن است بتوان با موفقیت بیش از <code>isize::MAX</code> بایت حافظه تخصیص داد.</p>
+<p>با این حال، چون این یک آموزش است، قرار نیست اینجا خیلی بهینه عمل کنیم، و به‌جای استفاده از <code>cfg</code>‌های هوشمندانهٔ وابسته به پلتفرم، به‌طور بی‌قیدوشرط بررسی می‌کنیم.</p>
+<p>مورد مرزی دیگری که باید نگرانش باشیم تخصیص‌های خالی است. دو نوع تخصیص خالی وجود دارد که باید نگرانشان باشیم: <code>cap = 0</code> برای همهٔ T، و <code>cap &gt; 0</code> برای نوع‌های با اندازهٔ صفر.</p>
+<p>این موارد پیچیده‌اند چون به این برمی‌گردند که LLVM از «تخصیص‌یافته» چه منظوری دارد. مفهوم LLVM از تخصیص به‌طور قابل‌توجهی انتزاعی‌تر از شیوهٔ معمول استفادهٔ ماست. چون LLVM باید با معناشناسی زبان‌های مختلف و تخصیص‌دهنده‌های سفارشی کار کند، نمی‌تواند واقعاً تخصیص را عمیقاً درک کند. در عوض، ایدهٔ اصلی پشت تخصیص این است که «با چیزهای دیگر همپوشانی ندارد». یعنی تخصیص‌های هیپ، تخصیص‌های پشته و global‌ها به‌طور تصادفی همپوشانی ندارند. بله، موضوع تحلیل نام‌های مستعار است. به همین دلیل، Rust از نظر فنی می‌تواند با مفهوم تخصیص کمی آزادانه رفتار کند، به شرط اینکه <em>سازگار</em> باشد.</p>
+<p>برگردیم به حالت تخصیص خالی؛ چند جا هست که در نتیجهٔ کد جنریک می‌خواهیم به اندازهٔ ۰ offset بدهیم. پرسش این است: آیا انجام این کار سازگار است؟ برای نوع‌های با اندازهٔ صفر، به این نتیجه رسیده‌ایم که انجام یک offset از نوع GEP inbounds به تعداد دلخواه عنصر واقعاً سازگار است. این در زمان اجرا هیچ کاری نمی‌کند چون هر عنصر هیچ فضایی اشغال نمی‌کند، و اشکالی ندارد وانمود کنیم بی‌نهایت نوع با اندازهٔ صفر در <code>0x01</code> تخصیص یافته‌اند. هیچ تخصیص‌دهنده‌ای هرگز آن آدرس را تخصیص نخواهد داد، چون <code>0x00</code> را تخصیص نمی‌دهند و معمولاً با ترازی حداقلی بالاتر از یک بایت تخصیص می‌دهند. همچنین معمولاً کل صفحهٔ اول حافظه به‌هرحال از تخصیص یافتن محافظت می‌شود (در بسیاری از پلتفرم‌ها یک ۴ کیلوبایت کامل).</p>
+<p>اما در مورد نوع‌هایی با اندازهٔ مثبت چه؟ آن یکی کمی پیچیده‌تر است. در اصل، می‌توان استدلال کرد که offset دادن به اندازهٔ ۰ هیچ اطلاعاتی به LLVM نمی‌دهد: یا عنصری پیش از آن آدرس هست یا بعد از آن، اما LLVM نمی‌تواند بداند کدام. با این حال ما محافظه‌کارانه فرض کرده‌ایم که ممکن است کارهای بدی بکند. به همین دلیل صراحتاً در برابر این حالت محافظت می‌کنیم.</p>
+<p><em>اوف</em></p>
+<p>خب، حالا که از شر این مزخرفات خلاص شدیم، بیایید واقعاً مقداری حافظه تخصیص دهیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">use std::alloc::{self, Layout};
+
+impl&lt;T&gt; Vec&lt;T&gt; {
+    fn grow(&amp;mut self) {
+        let (new_cap, new_layout) = if self.cap == 0 {
+            (1, Layout::array::&lt;T&gt;(1))
+        } else {
+            // This can't overflow since self.cap &lt;= isize::MAX.
+            let new_cap = 2 * self.cap;
+            (new_cap, Layout::array::&lt;T&gt;(new_cap))
+        };
+
+        // `Layout::array` checks that the number of bytes allocated is
+        // in 1..=isize::MAX and will error otherwise.  An allocation of
+        // 0 bytes isn't possible thanks to the above condition.
+        let new_layout = new_layout.expect("Allocation too large");
+
+        let new_ptr = if self.cap == 0 {
+            unsafe { alloc::alloc(new_layout) }
+        } else {
+            let old_layout = Layout::array::&lt;T&gt;(self.cap).unwrap();
+            let old_ptr = self.ptr.as_ptr() as *mut u8;
+            unsafe { alloc::realloc(old_ptr, old_layout, new_layout.size()) }
+        };
+
+        // If allocation fails, `new_ptr` will be null, in which case we abort.
+        self.ptr = match NonNull::new(new_ptr as *mut T) {
+            Some(p) =&gt; p,
+            None =&gt; alloc::handle_alloc_error(new_layout),
+        };
+        self.cap = new_cap;
+    }
+}
+<span class="boring">fn main() {}</span></code></pre><nav class="page-nav"><a href="vec-layout.html">→ چیدمان</a><a href="vec-push-pop.html">Push و Pop ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../nomicon/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

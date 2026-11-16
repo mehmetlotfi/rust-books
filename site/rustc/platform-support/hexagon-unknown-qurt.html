@@ -1,0 +1,137 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>hexagon-unknown-qurt — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="platform-support/hexagon-unknown-qurt"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="hexagon-unknown-qurt"><a class="header" href="#hexagon-unknown-qurt"><code>hexagon-unknown-qurt</code></a></h1>
+<p><strong>سطح (Tier): ۳</strong></p>
+<p>Rust برای Hexagon QuRT (سیستم‌عامل بی‌درنگ شرکت Qualcomm).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>هدف</th><th>توضیحات</th></tr>
+</thead>
+<tbody>
+<tr><td>hexagon-unknown-qurt</td><td>Hexagon ۳۲ بیتی QuRT</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="target-maintainers"><a class="header" href="#target-maintainers">نگهدارندگان هدف</a></h2>
+<p><a href="https://github.com/androm3da">@androm3da</a></p>
+<h2 id="requirements"><a class="header" href="#requirements">الزامات</a></h2>
+<p>این هدف cross-compile می‌شود. از <code>std</code> پشتیبانی می‌شود. این هدف از کتابخانه استاندارد و runtime مربوط به QuRT استفاده می‌کند.</p>
+<p>به‌طور پیش‌فرض، کدی که با این هدف تولید می‌شود باید روی سخت‌افزار Hexagon DSP که سیستم‌عامل بی‌درنگ QuRT را اجرا می‌کند، اجرا شود.</p>
+<ul>
+<li><code>-Ctarget-cpu=hexagonv69</code> معماری Hexagon V69 را هدف می‌گیرد (پیش‌فرض)</li>
+<li><code>-Ctarget-cpu=hexagonv73</code> پشتیبانی از دستورهای تعریف‌شده تا Hexagon V73 را اضافه می‌کند</li>
+</ul>
+<p>توابعی که با <code>extern "C"</code> علامت‌گذاری شده‌اند از <a href="https://lists.llvm.org/pipermail/llvm-dev/attachments/20190916/21516a52/attachment-0001.pdf">قرارداد فراخوانی معماری Hexagon</a> استفاده می‌کنند.</p>
+<p>این هدف به‌طور پیش‌فرض فایل‌های دودویی ELF مستقل از موقعیت (position-independent) تولید می‌کند و به همین دلیل هم برای تصاویر ایستا و هم برای shared objectهای پویا مناسب است.</p>
+<p>برای ساخت برنامه‌ها برای این هدف، <a href="https://softwarecenter.qualcomm.com/catalog/item/Hexagon_SDK">Hexagon SDK</a> لازم است.</p>
+<h2 id="linking"><a class="header" href="#linking">لینک کردن</a></h2>
+<p>این هدف از <code>hexagon-clang</code> در Hexagon SDK به‌عنوان لینکر پیش‌فرض استفاده می‌کند. این لینکر در مسیرهایی مانند <code>/opt/Hexagon_SDK/6.4.0.2/tools/HEXAGON_Tools/19.0.04/Tools/bin/hexagon-clang</code> در دسترس است.</p>
+<p>لینکرهای جایگزین عبارت‌اند از:</p>
+<ul>
+<li><a href="https://github.com/qualcomm/eld">eld</a>، که هم همراه <a href="https://github.com/quic/toolchain_for_hexagon">toolchain متن‌باز hexagon</a> و هم همراه Hexagon SDK ارائه می‌شود</li>
+<li>با تعیین <code>-C linker=rust-lld</code> می‌توان از <code>rust-lld</code> استفاده کرد</li>
+</ul>
+<h2 id="building-the-target"><a class="header" href="#building-the-target">ساخت هدف</a></h2>
+<p>می‌توانید Rust را با پشتیبانی از این هدف بسازید؛ برای این کار آن را به فهرست <code>target</code> در <code>bootstrap.toml</code> اضافه کنید:</p>
+<pre><code class="language-toml">[build]
+build-stage = 1
+host = ["&lt;target for your host&gt;"]
+target = ["&lt;target for your host&gt;", "hexagon-unknown-qurt"]
+
+[target.hexagon-unknown-qurt]
+cc = "hexagon-clang"
+cxx = "hexagon-clang++"
+ranlib = "llvm-ranlib"
+ar = "llvm-ar"
+llvm-libunwind = 'in-tree'
+</code></pre>
+<p><code>&lt;target for your host&gt;</code> را با <code>x86_64-unknown-linux-gnu</code> یا هر مقدار مناسب دیگر برای ماشین میزبان خود جایگزین کنید.</p>
+<h2 id="building-rust-programs"><a class="header" href="#building-rust-programs">ساخت برنامه‌های Rust</a></h2>
+<p>Rust هنوز artifactهای از پیش کامپایل‌شده برای این هدف ارائه نمی‌دهد. برای کامپایل برای این هدف، یا باید Rust را با فعال‌بودن این هدف بسازید (بخش «ساخت هدف» را در بالا ببینید)، یا با استفاده از <code>build-std</code> یا روشی مشابه، نسخه خودتان از <code>core</code> را بسازید.</p>
+<h2 id="static-image-targeting"><a class="header" href="#static-image-targeting">هدف‌گیری تصویر ایستا (Static Image)</a></h2>
+<p>برای فایل‌های اجرایی ایستا که مستقیماً روی QuRT اجرا می‌شوند، از پیکربندی پیش‌فرض هدف همراه با پرچم‌های اضافی لینکر استفاده کنید:</p>
+<pre><code class="language-sh"># Build a static executable for QuRT
+cargo rustc --target hexagon-unknown-qurt -- \
+    -C link-args="-static -nostdlib" \
+    -C link-args="-L/opt/Hexagon_SDK/6.3.0.0/rtos/qurt/computev69/lib" \
+    -C link-args="-lqurt -lc"
+</code></pre>
+<p>این رویکرد برای موارد زیر مناسب است:</p>
+<ul>
+<li>برنامه‌های مستقل QuRT</li>
+<li>سرویس‌های سطح سیستم</li>
+<li>کد مقداردهی اولیه در زمان بوت</li>
+<li>برنامه‌هایی که به چیدمان حافظه قطعی نیاز دارند</li>
+</ul>
+<h2 id="user-loadable-shared-object-targeting"><a class="header" href="#user-loadable-shared-object-targeting">هدف‌گیری shared object قابل بارگذاری توسط کاربر</a></h2>
+<p>برای کتابخانه‌های مشترکی که برنامه‌های QuRT می‌توانند به‌صورت پویا بارگذاری‌شان کنند:</p>
+<pre><code class="language-sh"># Build a shared object for QuRT
+cargo rustc --target hexagon-unknown-qurt \
+    --crate-type=cdylib -- \
+    -C link-args="-shared -fPIC" \
+    -C link-args="-L/opt/Hexagon_SDK/6.3.0.0/rtos/qurt/computev69/lib"
+</code></pre>
+<p>این رویکرد برای موارد زیر مناسب است:</p>
+<ul>
+<li>معماری‌های مبتنی بر پلاگین</li>
+<li>ماژول‌های قابل بارگذاری در زمان اجرا</li>
+<li>کتابخانه‌های مشترک بین چند برنامه</li>
+<li>کدی که باید بدون راه‌اندازی مجدد سیستم به‌روزرسانی شود</li>
+</ul>
+<h2 id="configuration-options"><a class="header" href="#configuration-options">گزینه‌های پیکربندی</a></h2>
+<p>این هدف را می‌توان برای کاربردهای مختلف سفارشی کرد:</p>
+<h3 id="for-static-images"><a class="header" href="#for-static-images">برای تصاویر ایستا</a></h3>
+<pre><code class="language-toml"># In .cargo/config.toml
+[target.hexagon-unknown-qurt]
+rustflags = [
+    "-C", "link-args=-static",
+    "-C", "link-args=-nostdlib",
+    "-C", "target-feature=-small-data"
+]
+</code></pre>
+<h3 id="for-shared-objects"><a class="header" href="#for-shared-objects">برای Shared Objectها</a></h3>
+<pre><code class="language-toml"># In .cargo/config.toml
+[target.hexagon-unknown-qurt]
+rustflags = [
+    "-C", "link-args=-shared",
+    "-C", "link-args=-fPIC",
+    "-C", "relocation-model=pic"
+]
+</code></pre>
+<h2 id="testing"><a class="header" href="#testing">آزمون</a></h2>
+<p>از آنجا که <code>hexagon-unknown-qurt</code> به محیط runtime مربوط به QuRT نیاز دارد، آزمون به یکی از موارد زیر نیاز دارد:</p>
+<ul>
+<li>سخت‌افزار Hexagon همراه با QuRT</li>
+<li><code>hexagon-sim</code></li>
+<li>QEMU (<code>qemu-system-hexagon</code>)</li>
+</ul>
+<h2 id="cross-compilation-toolchains-and-c-code"><a class="header" href="#cross-compilation-toolchains-and-c-code">toolchainهای cross-compilation و کد C</a></h2>
+<p>این هدف به <a href="https://softwarecenter.qualcomm.com/catalog/item/Hexagon_SDK">toolchain اختصاصی Hexagon SDK برای تعامل با C</a> نیاز دارد:</p>
+<ul>
+<li><strong>مسیر نمونه SDK</strong>: <code>/opt/Hexagon_SDK/6.3.0.0/</code></li>
+<li><strong>Toolchain</strong>: از <code>hexagon-clang</code> در Hexagon SDK استفاده کنید</li>
+<li><strong>کتابخانه‌ها</strong>: در صورت نیاز، با کتابخانه‌های سیستمی QuRT لینک کنید</li>
+</ul>
+<h3 id="c-interoperability-example"><a class="header" href="#c-interoperability-example">نمونهٔ تعامل با C</a></h3>
+<pre><code class="language-rust">// lib.rs
+#![no_std]
+extern crate std;
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_function() -&gt; i32 {
+    // Your Rust code here
+    42
+}
+
+fn main() {
+    // Example usage
+    let result = rust_function();
+    assert_eq!(result, 42);
+}</code></pre>
+<pre><code class="language-c">// wrapper.c
+extern int rust_function(void);
+
+int main() {
+    return rust_function();
+}
+</code></pre>
+<p>این هدف هم از لینک ایستا برای برنامه‌های مستقل و هم از لینک پویا برای معماری‌های ماژولار پشتیبانی می‌کند، و همین آن را برای سناریوهای مختلف استقرار QuRT انعطاف‌پذیر می‌سازد.</p><nav class="page-nav"><a href="hexagon-unknown-none-elf.html">→ hexagon-unknown-none-elf</a><a href="illumos.html">illumos ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

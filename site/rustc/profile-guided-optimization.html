@@ -1,0 +1,154 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>بهینه‌سازی مبتنی بر پروفایل — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="profile-guided-optimization"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="profile-guided-optimization"><a class="header" href="#profile-guided-optimization">بهینه‌سازی مبتنی بر پروفایل (Profile-guided Optimization)</a></h1>
+<p><code>rustc</code> از بهینه‌سازی مبتنی بر پروفایل (PGO) پشتیبانی می‌کند. این فصل توضیح می‌دهد PGO چیست، چه کاربردی دارد و چگونه می‌توان از آن استفاده کرد.</p>
+<h2 id="what-is-profile-guided-optimization"><a class="header" href="#what-is-profile-guided-optimization">بهینه‌سازی مبتنی بر پروفایل چیست؟</a></h2>
+<p>ایدهٔ اصلی PGO این است که دادهٔ مربوط به اجرای معمول یک برنامه (مثلاً اینکه به احتمال زیاد کدام شاخه‌ها را طی می‌کند) جمع‌آوری شود و سپس از این داده برای هدایت بهینه‌سازی‌هایی مانند inlining، چیدمان کد ماشین، تخصیص رجیستر و مانند آن استفاده شود. برای استفاده از بهینه‌سازی مبتنی بر پروفایل، سطوح بهینه‌سازی <code>-Copt-level=2</code> و بالاتر توصیه می‌شوند.</p>
+<p><code>rustc</code> از بهینه‌سازی مبتنی بر پروفایل با دو نوع مختلف پروفایل‌گیری پشتیبانی می‌کند. یک پروفایلر نمونه‌برداری (sampling) می‌تواند پروفایلی با سربار بسیار کم در زمان اجرا تولید کند، یا می‌توانید نسخه‌ای ابزارگذاری‌شده (instrumented) از کد بسازید که اطلاعات پروفایل دقیق‌تری جمع می‌کند. هر دو نوع پروفایل می‌توانند تعداد اجرای دستورالعمل‌های کد و اطلاعاتی دربارهٔ شاخه‌های طی‌شده و فراخوانی تابع‌ها را فراهم کنند.</p>
+<p>روش‌های مختلفی برای جمع‌آوری داده دربارهٔ اجرای یک برنامه وجود دارد. یکی این است که برنامه درون یک پروفایلر (مانند <code>perf</code>) اجرا شود و دیگری ساخت یک باینری ابزارگذاری‌شده، یعنی باینری‌ای که جمع‌آوری داده در آن تعبیه شده است، و اجرای آن.</p>
+<h2 id="differences-between-instrumentation-and-sampling"><a class="header" href="#differences-between-instrumentation-and-sampling">تفاوت میان ابزارگذاری و نمونه‌برداری</a></h2>
+<p>اگرچه هر دو تکنیک برای اهداف مشابهی به کار می‌روند، تفاوت‌های مهمی میان آن‌ها وجود دارد:</p>
+<ol>
+<li>دادهٔ پروفایل تولیدشده با یکی را نمی‌توان با دیگری به کار برد و هیچ ابزار تبدیلی برای تبدیل یکی به دیگری وجود ندارد. بنابراین پروفایلی که با <code>-Cprofile-generate</code> تولید شده باید با <code>-Cprofile-use</code> به کار رود. به‌همین ترتیب، پروفایل‌های نمونه‌برداری تولیدشده توسط پروفایلرهای خارجی باید تبدیل شوند و با <code>-Cprofile-sample-use</code> به کار روند.</li>
+<li>پروفایل‌های نمونه‌برداری باید توسط یک ابزار خارجی تولید شوند. پروفایل تولیدشده توسط آن ابزار سپس باید به قالبی تبدیل شود که LLVM بتواند بخواند. بخش مربوط به پروفایلرهای نمونه‌برداری یکی از قالب‌های پروفایل نمونه‌برداری پشتیبانی‌شده را شرح می‌دهد.</li>
+</ol>
+<h2 id="profiling-with-instrumentation"><a class="header" href="#profiling-with-instrumentation">پروفایل‌گیری با ابزارگذاری</a></h2>
+<p>تولید یک برنامهٔ بهینه‌شده با PGO شامل پیروی از یک گردش کار چهارمرحله‌ای است:</p>
+<ol>
+<li>برنامه را با فعال‌بودن ابزارگذاری کامپایل کنید (مثلاً <code>rustc -Cprofile-generate=/tmp/pgo-data -O main.rs</code>)</li>
+<li>برنامهٔ ابزارگذاری‌شده را اجرا کنید (مثلاً <code>./main</code>) که یک فایل <code>default_&lt;id&gt;.profraw</code> تولید می‌کند</li>
+<li>فایل <code>.profraw</code> را با ابزار <code>llvm-profdata</code> از LLVM به یک فایل <code>.profdata</code> تبدیل کنید</li>
+<li>برنامه را دوباره کامپایل کنید، این بار با استفاده از دادهٔ پروفایل (مثلاً <code>rustc -Cprofile-use=merged.profdata -O main.rs</code>)</li>
+</ol>
+<p>یک برنامهٔ ابزارگذاری‌شده یک یا چند فایل <code>.profraw</code> ایجاد می‌کند، یکی برای هر باینری ابزارگذاری‌شده. مثلاً یک فایل اجرایی ابزارگذاری‌شده که در زمان اجرا دو کتابخانهٔ پویای ابزارگذاری‌شده را بارگذاری می‌کند، سه فایل <code>.profraw</code> تولید می‌کند. در مقابل، اجرای چندبارهٔ یک باینری ابزارگذاری‌شده از فایل‌های <code>.profraw</code> مربوط به خودش دوباره استفاده می‌کند و آن‌ها را درجا به‌روزرسانی می‌کند.</p>
+<p>این فایل‌های <code>.profraw</code> پیش از آنکه دوباره به کامپایلر داده شوند باید پس‌پردازش شوند. این کار با ابزار <code>llvm-profdata</code> انجام می‌شود. این ابزار به‌آسانی از این طریق نصب می‌شود</p>
+<pre><code class="language-bash">rustup component add llvm-tools-preview
+</code></pre>
+<p>توجه کنید که نصب مؤلفهٔ <code>llvm-tools-preview</code> ابزار <code>llvm-profdata</code> را به <code>PATH</code> اضافه نمی‌کند. در عوض، این ابزار در این مسیر یافت می‌شود:</p>
+<pre><code class="language-bash">~/.rustup/toolchains/&lt;toolchain&gt;/lib/rustlib/&lt;target-triple&gt;/bin/
+</code></pre>
+<p>به‌طور جایگزین، <code>llvm-profdata</code>ای که همراه نسخهٔ جدید LLVM یا Clang می‌آید معمولاً کار می‌کند.</p>
+<p>ابزار <code>llvm-profdata</code> چند فایل <code>.profraw</code> را در یک فایل <code>.profdata</code> ادغام می‌کند که سپس می‌توان آن را از طریق <code>-Cprofile-use</code> به کامپایلر برگرداند:</p>
+<pre><code class="language-bash"># STEP 1: Compile the binary with instrumentation
+rustc -Cprofile-generate=/tmp/pgo-data -O main.rs
+
+# STEP 2: Run the binary a few times, maybe with common sets of args.
+# Each run will create or update `.profraw` files in /tmp/pgo-data
+./main mydata1.csv
+./main mydata2.csv
+./main mydata3.csv
+
+# STEP 3: Merge and post-process all the `.profraw` files in /tmp/pgo-data
+llvm-profdata merge -o merged.profdata /tmp/pgo-data
+
+# STEP 4: Use the merged `.profdata` file during optimization. All `rustc`
+# flags have to be the same.
+rustc -Cprofile-use=./merged.profdata -O main.rs
+</code></pre>
+<h3 id="a-complete-cargo-workflow"><a class="header" href="#a-complete-cargo-workflow">یک گردش کار کامل با Cargo</a></h3>
+<p>استفاده از این قابلیت با Cargo بسیار شبیه استفادهٔ مستقیم از <code>rustc</code> است. دوباره یک باینری ابزارگذاری‌شده تولید می‌کنیم، آن را برای تولید داده اجرا می‌کنیم، داده‌ها را ادغام می‌کنیم و به کامپایلر برمی‌گردانیم. چند نکتهٔ قابل‌توجه:</p>
+<ul>
+<li>
+<p>از متغیر محیطی <code>RUSTFLAGS</code> استفاده می‌کنیم تا پرچم‌های کامپایلر مربوط به PGO به کامپایل همهٔ crateهای برنامه منتقل شوند.</p>
+</li>
+<li>
+<p>پرچم <code>--target</code> را به Cargo می‌دهیم که مانع از انتقال آرگومان‌های <code>RUSTFLAGS</code> به اسکریپت‌های ساخت Cargo می‌شود. نمی‌خواهیم اسکریپت‌های ساخت تعداد زیادی فایل <code>.profraw</code> تولید کنند.</p>
+</li>
+<li>
+<p><code>--release</code> را به Cargo می‌دهیم زیرا PGO بیشترین معنا را در همین حالت دارد. در تئوری، PGO را می‌توان روی ساخت‌های debug نیز انجام داد، اما دلیل چندانی برای این کار وجود ندارد.</p>
+</li>
+<li>
+<p>توصیه می‌شود برای آرگومان <code>-Cprofile-generate</code> و <code>-Cprofile-use</code> از <em>مسیرهای مطلق</em> استفاده شود. Cargo می‌تواند <code>rustc</code> را با دایرکتوری‌های کاری متفاوت فراخوانی کند، به این معنا که <code>rustc</code> نمی‌تواند فایل <code>.profdata</code> داده‌شده را پیدا کند. با مسیرهای مطلق این مشکل پیش نمی‌آید.</p>
+</li>
+<li>
+<p>تمرین خوبی است که مطمئن شوید هیچ دادهٔ پروفایل باقی‌مانده‌ای از نشست‌های کامپایل قبلی وجود ندارد. حذف دایرکتوری روشی ساده برای این کار است (<code>STEP 0</code> را در ادامه ببینید).</p>
+</li>
+</ul>
+<p>کل گردش کار این‌گونه به نظر می‌رسد:</p>
+<pre><code class="language-bash"># STEP 0: Make sure there is no left-over profiling data from previous runs
+rm -rf /tmp/pgo-data
+
+# STEP 1: Build the instrumented binaries
+RUSTFLAGS="-Cprofile-generate=/tmp/pgo-data" \
+    cargo build --release --target=x86_64-unknown-linux-gnu
+
+# STEP 2: Run the instrumented binaries with some typical data
+./target/x86_64-unknown-linux-gnu/release/myprogram mydata1.csv
+./target/x86_64-unknown-linux-gnu/release/myprogram mydata2.csv
+./target/x86_64-unknown-linux-gnu/release/myprogram mydata3.csv
+
+# STEP 3: Merge the `.profraw` files into a `.profdata` file
+llvm-profdata merge -o /tmp/pgo-data/merged.profdata /tmp/pgo-data
+
+# STEP 4: Use the `.profdata` file for guiding optimizations
+RUSTFLAGS="-Cprofile-use=/tmp/pgo-data/merged.profdata" \
+    cargo build --release --target=x86_64-unknown-linux-gnu
+</code></pre>
+<h3 id="troubleshooting"><a class="header" href="#troubleshooting">عیب‌یابی</a></h3>
+<ul>
+<li>
+<p>توصیه می‌شود در مرحلهٔ <code>-Cprofile-use</code> گزینهٔ <code>-Cllvm-args=-pgo-warn-missing-function</code> را بدهید. LLVM به‌طور پیش‌فرض در صورت نیافتن دادهٔ پروفایل برای یک تابع هشدار نمی‌دهد. فعال‌کردن این هشدار تشخیص خطاهای پیکربندی شما را آسان‌تر می‌کند.</p>
+</li>
+<li>
+<p>یک <a href="https://github.com/rust-lang/cargo/issues/7416">مشکل شناخته‌شده</a> در Cargo پیش از نسخهٔ 1.39 وجود دارد که مانع از درست کار کردن PGO می‌شود. هنگام استفاده از PGO حتماً از Cargo 1.39 یا جدیدتر استفاده کنید.</p>
+</li>
+</ul>
+<h2 id="profiling-with-sampling"><a class="header" href="#profiling-with-sampling">پروفایل‌گیری با نمونه‌برداری</a></h2>
+<p>پروفایلرهای نمونه‌برداری برای جمع‌آوری اطلاعات زمان اجرا، مانند شمارنده‌های سخت‌افزاری، هنگام اجرای برنامهٔ شما به کار می‌روند. این پروفایلرها معمولاً بسیار کارآمدند و سربار زمان اجرای زیادی ایجاد نمی‌کنند. دادهٔ نمونه‌ای که پروفایلر جمع می‌کند می‌تواند هنگام کامپایل برای تشخیص پراجراترین بخش‌های کد به کار رود.</p>
+<p>استفاده از دادهٔ یک پروفایلر نمونه‌برداری مستلزم تغییراتی در شیوهٔ ساخت برنامه است. پیش از آنکه کامپایلر بتواند از اطلاعات پروفایل استفاده کند، کد باید تحت پروفایلر اجرا شود. در ادامه چرخهٔ ساخت معمول هنگام استفاده از پروفایلرهای نمونه‌برداری برای بهینه‌سازی آمده است:</p>
+<ol>
+<li>کد را با اطلاعات جدول خطوط منبع بسازید. می‌توانید از همهٔ پرچم‌های ساخت معمولی که همیشه برنامهٔ خود را با آن‌ها می‌سازید استفاده کنید. تنها الزام این است که اطلاعات اشکال‌زدایی DWARF شامل اطلاعات خطوط منبع تولید شود. این اطلاعات DWARF برای آنکه پروفایلر بتواند دستورالعمل‌ها را به موقعیت خطوط منبع نگاشت کند اهمیت دارد. دقت این اطلاعات DWARF را می‌توان با گزینهٔ ناپایدار <code>-Zdebuginfo-for-profiling</code> بهبود داد. برای مثال:</li>
+</ol>
+<pre><code class="language-bash">rustc -Cdebuginfo=line-tables-only -Zdebuginfo-for-profiling -O main.rs
+</code></pre>
+<p>اطلاعات اضافی که <code>debuginfo-for-profiling</code> تولید می‌کند به کامپایلر کمک می‌کند در طول بهینه‌سازی بلوک‌های پایهٔ مختلف را حتی در صورت داشتن موقعیت خط منبع یکسان از هم تشخیص دهد، که در نتیجه دقت بهینه‌سازی مبتنی بر پروفایل را بهبود می‌بخشد.</p>
+<ol start="2">
+<li>فایل اجرایی را تحت یک پروفایلر نمونه‌برداری اجرا کنید. اینکه دقیقاً از کدام پروفایلر استفاده می‌کنید اهمیت چندانی ندارد، به شرط آنکه خروجی آن قابل تبدیل به قالبی باشد که بهینه‌ساز LLVM آن را بفهمد.</li>
+</ol>
+<p>دو نمونه از چنین پروفایلرهایی <a href="https://perf.wiki.kernel.org/">پروفایلر</a> Linux Perf و Sampling Enabling Product (SEP) شرکت Intel هستند که بخشی از Intel VTune است. در حالی که Perf مختص Linux است، SEP را می‌توان روی Linux، Windows و FreeBSD به کار برد.</p>
+<p>ابزار LLVM به نام <code>llvm-profgen</code> می‌تواند خروجی Perf یا SEP را تبدیل کند. یک پروژهٔ خارجی به نام <a href="https://github.com/google/autofdo">AutoFDO</a> نیز ابزاری به نام <code>create_llvm_prof</code> ارائه می‌کند که از خروجی Linux Perf پشتیبانی می‌کند.</p>
+<p>هنگام استفاده از Perf:</p>
+<pre><code class="language-bash">perf record -b -e BR_INST_RETIRED.NEAR_TAKEN:uppp ./main
+</code></pre>
+<p>اگر رویداد بالا در دسترس نباشد، <code>branches:u</code> احتمالاً گزینهٔ بعدی و بهترین است.</p>
+<p>به استفاده از پرچم <code>-b</code> توجه کنید. این پرچم به Perf می‌گوید از Last Branch Record (LBR) برای ثبت زنجیرهٔ فراخوانی‌ها استفاده کند. اگرچه این کار الزاماً لازم نیست، اطلاعات فراخوانی بهتری فراهم می‌کند که دقت دادهٔ پروفایل را بهبود می‌دهد.</p>
+<p>هنگام استفاده از SEP:</p>
+<pre><code class="language-bash">sep -start -out code.tb7 -ec BR_INST_RETIRED.NEAR_TAKEN:precise=yes:pdir \
+    -lbr no_filter:usr -perf-script brstack -app ./main
+</code></pre>
+<p>این کار یک خروجی <code>code.perf.data.script</code> تولید می‌کند که می‌توان آن را با گزینهٔ ورودی <code>--perfscript</code> در <code>llvm-profgen</code> به کار برد.</p>
+<ol start="3">
+<li>دادهٔ پروفایل جمع‌آوری‌شده را به قالب پروفایل نمونه‌ای LLVM تبدیل کنید. این کار در حال حاضر از طریق مبدل AutoFDO یعنی <code>create_llvm_prof</code> پشتیبانی می‌شود. پس از ساخت و نصب، می‌توانید فایل <code>perf.data</code> را با این دستور به LLVM تبدیل کنید:</li>
+</ol>
+<pre><code class="language-bash">create_llvm_prof --binary=./main --out=main.prof
+</code></pre>
+<p>این دستور <code>perf.data</code> و فایل باینری <code>./main</code> را می‌خواند و دادهٔ پروفایل را در <code>main.prof</code> تولید می‌کند. توجه کنید که اگر <code>perf</code> را بدون پرچم <code>-b</code> اجرا کرده‌اید، باید هنگام فراخوانی <code>create_llvm_prof</code> از <code>--use_lbr=false</code> استفاده کنید.</p>
+<p>به‌طور جایگزین، ابزار LLVM به نام <code>llvm-profgen</code> نیز می‌تواند برای تولید پروفایل نمونه‌ای LLVM به کار رود:</p>
+<pre><code class="language-bash">llvm-profgen --binary=./main --output=main.prof --perfdata=perf.data
+</code></pre>
+<p>لطفاً توجه کنید، <code>perf.data</code> باید با پرچم <code>-b</code> در Linux perf جمع‌آوری شده باشد تا مرحلهٔ بالا کار کند.</p>
+<p>هنگام استفاده از SEP، خروجی به قالب متنی متناظر با <code>llvm-profgen --perfscript</code> است. برای مثال:</p>
+<pre><code class="language-bash">llvm-profgen --binary=./main --output=main.prof \
+    --perfscript=main.perf.data.script
+</code></pre>
+<ol start="4">
+<li>کد را دوباره با استفاده از پروفایل جمع‌آوری‌شده بسازید. این مرحله پروفایل را به بهینه‌سازها برمی‌گرداند. نتیجه باید باینری‌ای باشد که سریع‌تر از نسخهٔ اصلی اجرا می‌شود. توجه کنید که لازم نیست کد را دقیقاً با همان آرگومان‌هایی که در مرحلهٔ اول به کار بردید بسازید. تنها الزام این است که کد را با همان گزینه‌های اطلاعات اشکال‌زدایی و <code>-Cprofile-sample-use</code> بسازید.</li>
+</ol>
+<pre><code class="language-bash">rustc -Cprofile-sample-use=main.prof -Zdebuginfo-for-profiling -O main.rs
+</code></pre>
+<p>توجه کنید که PGO مبتنی بر نمونه‌برداری در <code>rustc</code> بیشتر روی پلتفرم‌های Linux با معماری <code>x86-64</code> آزموده شده است. باید روی سایر معماری‌های سخت‌افزاری و سیستم‌عامل‌ها هم کار کند اما هنوز به‌طور گسترده آزمون نشده است.</p>
+<h2 id="further-reading"><a class="header" href="#further-reading">مطالعهٔ بیشتر</a></h2>
+<p>پشتیبانی <code>rustc</code> از PGO کاملاً به پیاده‌سازی LLVM از این قابلیت وابسته است و معادل چیزی است که Clang از طریق پرچم‌های <code>-fprofile-generate</code> / <code>-fprofile-use</code> و <code>-fprofile-sample-use</code> ارائه می‌دهد. بنابراین بخش <a href="https://clang.llvm.org/docs/UsersManual.html#profile-guided-optimization">Profile Guided Optimization</a> در مستندات Clang برای هر کسی که می‌خواهد PGO را با Rust به کار ببرد مطالعهٔ جالبی است.</p>
+<h2 id="community-maintained-tools"><a class="header" href="#community-maintained-tools">ابزارهای نگهداری‌شده توسط جامعه</a></h2>
+<p>به‌عنوان جایگزینی برای استفادهٔ مستقیم از کامپایلر برای بهینه‌سازی مبتنی بر پروفایل، می‌توانید <code>cargo-pgo</code> را انتخاب کنید که یک API خط فرمان شهودی دارد و شما را از زحمت انجام همهٔ کارهای دستی رها می‌کند. می‌توانید دربارهٔ آن بیشتر در <a href="https://github.com/Kobzol/cargo-pgo">مخزن cargo-pgo</a> بخوانید. فعلاً <code>cargo-pgo</code> فقط از PGO مبتنی بر ابزارگذاری پشتیبانی می‌کند.</p>
+<p>برای کامل بودن، مراحل متناظر با استفاده از <code>cargo-pgo</code> برای PGO مبتنی بر ابزارگذاری این است:</p>
+<pre><code class="language-bash"># Install if you haven't already
+cargo install --locked cargo-pgo
+
+cargo pgo build
+cargo pgo optimize
+</code></pre>
+<p>این مراحل همان کارهای قبلی را انجام می‌دهند:</p>
+<ol>
+<li>یک باینری ابزارگذاری‌شده از کد منبع می‌سازند.</li>
+<li>باینری ابزارگذاری‌شده را برای جمع‌آوری پروفایل‌های PGO اجرا می‌کنند.</li>
+<li>از پروفایل‌های PGO جمع‌آوری‌شده در مرحلهٔ قبل برای ساخت یک باینری بهینه‌شده استفاده می‌کنند.</li>
+</ol><nav class="page-nav"><a href="targets/known-issues.html">→ مشکلات شناخته‌شده</a><a href="instrument-coverage.html">پوشش کد مبتنی بر ابزارگذاری ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

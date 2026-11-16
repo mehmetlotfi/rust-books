@@ -1,0 +1,390 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>QEMU — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="start/qemu"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="qemu"><a class="header" href="#qemu">QEMU</a></h1>
+<p>نوشتن برنامه‌ای برای <a href="http://www.ti.com/product/LM3S6965">LM3S6965</a>، یک میکروکنترلر Cortex-M3، را شروع می‌کنیم. این را به‌عنوان هدف اولیهٔ خود برگزیده‌ایم، چون با QEMU <a href="https://wiki.qemu.org/Documentation/Platforms/ARM#Supported_in_qemu-system-arm">قابل شبیه‌سازی است</a>؛ بنابراین در این بخش لازم نیست با سخت‌افزار سروکله بزنید و می‌توانیم روی ابزارها و فرایند توسعه تمرکز کنیم.</p>
+<p><strong>مهم</strong> در این آموزش از نام «app» برای نام پروژه استفاده می‌کنیم. هر جا واژهٔ «app» را دیدید، باید آن را با نامی که برای پروژهٔ خود انتخاب کرده‌اید جایگزین کنید. یا می‌توانید پروژهٔ خود را هم «app» نام‌گذاری کنید و از این جایگزینی‌ها بی‌نیاز شوید.</p>
+<h2 id="creating-a-non-standard-rust-program"><a class="header" href="#creating-a-non-standard-rust-program">ساخت یک برنامهٔ Rust غیراستاندارد</a></h2>
+<p>از قالب پروژهٔ <a href="https://github.com/rust-embedded/cortex-m-quickstart"><code>cortex-m-quickstart</code></a> برای تولید یک پروژهٔ جدید استفاده می‌کنیم. پروژهٔ ساخته‌شده یک برنامهٔ حداقلی (barebone) خواهد داشت: نقطهٔ شروع خوبی برای یک برنامهٔ جدید Rust توکار. افزون بر این، پروژه یک پوشهٔ <code>examples</code> دارد که چند برنامهٔ مجزا در آن هست و برخی از قابلیت‌های کلیدی Rust توکار را برجسته می‌کنند.</p>
+<h3 id="using-cargo-generate"><a class="header" href="#using-cargo-generate">استفاده از <code>cargo-generate</code></a></h3>
+<p>ابتدا cargo-generate را نصب کنید</p>
+<pre><code class="language-console">cargo install cargo-generate
+</code></pre>
+<p>سپس یک پروژهٔ جدید تولید کنید</p>
+<pre><code class="language-console">cargo generate --git https://github.com/knurling-rs/app-template
+</code></pre>
+<pre><code class="language-text"> Project Name: app
+ Creating project called `app`...
+ Done! New project created /tmp/app
+</code></pre>
+<pre><code class="language-console">cd app
+</code></pre>
+<h3 id="using-git"><a class="header" href="#using-git">استفاده از <code>git</code></a></h3>
+<p>مخزن را کلون کنید</p>
+<pre><code class="language-console">git clone https://github.com/rust-embedded/cortex-m-quickstart app
+cd app
+</code></pre>
+<p>و سپس جاینگهدارها (placeholder) را در فایل <code>Cargo.toml</code> پر کنید</p>
+<pre><code class="language-toml">[package]
+authors = ["{{authors}}"] # "{{authors}}" -&gt; "John Smith"
+edition = "2018"
+name = "{{project-name}}" # "{{project-name}}" -&gt; "app"
+version = "0.1.0"
+
+# ..
+
+[[bin]]
+name = "{{project-name}}" # "{{project-name}}" -&gt; "app"
+test = false
+bench = false
+</code></pre>
+<h3 id="using-neither"><a class="header" href="#using-neither">استفاده از هیچ‌کدام</a></h3>
+<p>آخرین نسخهٔ لحظه‌ای (snapshot) قالب <code>cortex-m-quickstart</code> را بگیرید و از حالت فشرده خارج کنید.</p>
+<pre><code class="language-console">curl -LO https://github.com/rust-embedded/cortex-m-quickstart/archive/master.zip
+unzip master.zip
+mv cortex-m-quickstart-master app
+cd app
+</code></pre>
+<p>یا می‌توانید به <a href="https://github.com/rust-embedded/cortex-m-quickstart"><code>cortex-m-quickstart</code></a> بروید، روی دکمهٔ سبز «Clone or download» کلیک کنید و سپس روی «Download ZIP» کلیک کنید.</p>
+<p>سپس جاینگهدارها را در فایل <code>Cargo.toml</code> پر کنید، همان‌طور که در بخش دوم نسخهٔ «استفاده از <code>git</code>» انجام شد.</p>
+<h2 id="program-overview"><a class="header" href="#program-overview">مروری بر برنامه</a></h2>
+<p>برای راحتی، مهم‌ترین بخش‌های کد منبع در <code>src/main.rs</code> این‌ها هستند:</p>
+<pre><code class="language-rust ignore">#![no_std]
+#![no_main]
+
+use panic_halt as _;
+
+use cortex_m_rt::entry;
+
+#[entry]
+fn main() -&gt; ! {
+    loop {
+        // your code goes here
+    }
+}</code></pre>
+<p>این برنامه با یک برنامهٔ استاندارد Rust کمی تفاوت دارد، پس بیایید دقیق‌تر نگاهی به آن بیندازیم.</p>
+<p><code>#![no_std]</code> نشان می‌دهد که این برنامه به crate استاندارد، یعنی <code>std</code>، پیوند <em>نمی‌خورد</em>. در عوض به زیرمجموعهٔ آن، یعنی crate با نام <code>core</code>، پیوند می‌خورد.</p>
+<p><code>#![no_main]</code> نشان می‌دهد که این برنامه از رابط <code>main</code> استانداردی که بیشتر برنامه‌های Rust استفاده می‌کنند بهره نمی‌برد. دلیل اصلی انتخاب <code>no_main</code> (بدون قصد جناس) این است که استفاده از رابط <code>main</code> در بافت <code>no_std</code> به nightly نیاز دارد.</p>
+<p><code>use panic_halt as _;</code>. این crate یک <code>panic_handler</code> فراهم می‌کند که رفتار panic برنامه را تعریف می‌کند. این موضوع را در فصل <a href="panicking.html">Panic</a> این کتاب با جزئیات بیشتری بررسی می‌کنیم.</p>
+<p><a href="https://docs.rs/cortex-m-rt-macros/latest/cortex_m_rt_macros/attr.entry.html"><code>#[entry]</code></a> یک attribute است که crate با نام <a href="https://crates.io/crates/cortex-m-rt"><code>cortex-m-rt</code></a> فراهم می‌کند و برای علامت‌گذاری نقطهٔ ورود برنامه به کار می‌رود. چون از <code>main</code> استاندارد استفاده نمی‌کنیم، به راه دیگری برای مشخص کردن نقطهٔ ورود برنامه نیاز داریم، و آن <code>#[entry]</code> است.</p>
+<p><code>fn main() -&gt; !</code>. برنامهٔ ما <em>تنها</em> فرایندی خواهد بود که روی سخت‌افزار هدف اجرا می‌شود، پس نمی‌خواهیم تمام شود! از یک <a href="../../rbe/fn/diverging.html">تابع واگرا</a> (بخش <code>-&gt; !</code> در امضای تابع) استفاده می‌کنیم تا در زمان کامپایل مطمئن شویم چنین خواهد بود.</p>
+<h2 id="cross-compiling"><a class="header" href="#cross-compiling">کامپایل متقابل</a></h2>
+<p>پیش از هر چیز به چیدمان حافظهٔ میکروکنترلر هدف، که در اینجا LM3S6965 است، نیاز داریم. در غیر این صورت، ساخت در پیوند دادن image شکست می‌خورد. فایلی به نام <code>memory.x</code> را در ریشهٔ پروژه بسازید و محتوای زیر را در آن بچسبانید:</p>
+<pre><code class="language-text">MEMORY
+{
+  /* NOTE 1 K = 1 KiBi = 1024 bytes */
+  /* TODO Adjust these memory regions to match your device memory layout */
+  /* These values correspond to the LM3S6965, one of the few devices QEMU can emulate */
+  FLASH : ORIGIN = 0x00000000, LENGTH = 256K
+  RAM : ORIGIN = 0x20000000, LENGTH = 64K
+}
+
+/* This is where the call stack will be allocated. */
+/* The stack is of the full descending type. */
+/* You may want to use this variable to locate the call stack and static
+   variables in different memory regions. Below is shown the default value */
+/* _stack_start = ORIGIN(RAM) + LENGTH(RAM); */
+
+/* You can use this symbol to customize the location of the .text section */
+/* If omitted the .text section will be placed right after the .vector_table
+   section */
+/* This is required only on microcontrollers that store some configuration right
+   after the vector table */
+/* _stext = ORIGIN(FLASH) + 0x400; */
+
+/* Example of putting non-initialized variables into custom RAM locations. */
+/* This assumes you have defined a region RAM2 above, and in the Rust
+   sources added the attribute `#[link_section = ".ram2bss"]` to the data
+   you want to place there. */
+/* Note that the section will not be zero-initialized by the runtime! */
+/* SECTIONS {
+     .ram2bss (NOLOAD) : ALIGN(4) {
+       *(.ram2bss);
+       . = ALIGN(4);
+     } &gt; RAM2
+   } INSERT AFTER .bss;
+*/
+</code></pre>
+<p>گام بعدی، کامپایل <em>متقابل</em> برنامه برای معماری Cortex-M3 است. اگر بدانید هدف کامپایل (<code>$TRIPLE</code>) چیست، این کار به سادگی اجرای <code>cargo build --target $TRIPLE</code> است. خوشبختانه فایل <code>.cargo/config.toml</code> در قالب پاسخ را دارد:</p>
+<pre><code class="language-console">tail -n6 .cargo/config.toml
+</code></pre>
+<pre><code class="language-toml">[build]
+# Pick ONE of these compilation targets
+# target = "thumbv6m-none-eabi"    # Cortex-M0 and Cortex-M0+
+target = "thumbv7m-none-eabi"    # Cortex-M3
+# target = "thumbv7em-none-eabi"   # Cortex-M4 and Cortex-M7 (no FPU)
+# target = "thumbv7em-none-eabihf" # Cortex-M4F and Cortex-M7F (with FPU)
+</code></pre>
+<p>برای کامپایل متقابل برای معماری Cortex-M3 باید از <code>thumbv7m-none-eabi</code> استفاده کنیم. این هدف هنگام نصب toolchain زبان Rust به‌طور خودکار نصب نمی‌شود؛ اگر هنوز این کار را نکرده‌اید، اکنون زمان خوبی است که این هدف را به toolchain اضافه کنید:</p>
+<pre><code class="language-console">rustup target add thumbv7m-none-eabi
+</code></pre>
+<p>از آنجا که هدف کامپایل <code>thumbv7m-none-eabi</code> در فایل <code>.cargo/config.toml</code> شما به‌عنوان پیش‌فرض تنظیم شده است، دو دستور زیر یک کار را انجام می‌دهند:</p>
+<pre><code class="language-console">cargo build --target thumbv7m-none-eabi
+cargo build
+</code></pre>
+<h2 id="inspecting"><a class="header" href="#inspecting">بازرسی</a></h2>
+<p>اکنون یک فایل دودویی ELF غیربومی (non-native) در <code>target/thumbv7m-none-eabi/debug/app</code> داریم. می‌توانیم آن را با <code>cargo-binutils</code> بازرسی کنیم.</p>
+<p>با <code>cargo-readobj</code> می‌توانیم سرایندهای ELF را چاپ کنیم تا تأیید کنیم این یک فایل دودویی ARM است.</p>
+<pre><code class="language-console">cargo readobj --bin app -- --file-headers
+</code></pre>
+<p>توجه کنید که:</p>
+<ul>
+<li><code>--bin app</code> میان‌بُری است برای بازرسی فایل دودویی در <code>target/$TRIPLE/debug/app</code></li>
+<li><code>--bin app</code> در صورت لزوم فایل دودویی را (دوباره) کامپایل هم می‌کند</li>
+</ul>
+<pre><code class="language-text">ELF Header:
+  Magic:   7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00
+  Class:                             ELF32
+  Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0x0
+  Type:                              EXEC (Executable file)
+  Machine:                           ARM
+  Version:                           0x1
+  Entry point address:               0x405
+  Start of program headers:          52 (bytes into file)
+  Start of section headers:          153204 (bytes into file)
+  Flags:                             0x5000200
+  Size of this header:               52 (bytes)
+  Size of program headers:           32 (bytes)
+  Number of program headers:         2
+  Size of section headers:           40 (bytes)
+  Number of section headers:         19
+  Section header string table index: 18
+</code></pre>
+<p><code>cargo-size</code> می‌تواند اندازهٔ بخش‌های پیوندگر (linker) فایل دودویی را چاپ کند.</p>
+<pre><code class="language-console">cargo size --bin app --release -- -A
+</code></pre>
+<p>ما از <code>--release</code> استفاده می‌کنیم تا نسخهٔ بهینه‌شده را بازرسی کنیم</p>
+<pre><code class="language-text">app  :
+section             size        addr
+.vector_table       1024         0x0
+.text                 92       0x400
+.rodata                0       0x45c
+.data                  0  0x20000000
+.bss                   0  0x20000000
+.debug_str          2958         0x0
+.debug_loc            19         0x0
+.debug_abbrev        567         0x0
+.debug_info         4929         0x0
+.debug_ranges         40         0x0
+.debug_macinfo         1         0x0
+.debug_pubnames     2035         0x0
+.debug_pubtypes     1892         0x0
+.ARM.attributes       46         0x0
+.debug_frame         100         0x0
+.debug_line          867         0x0
+Total              14570
+</code></pre>
+<blockquote>
+<p>مروری سریع بر بخش‌های پیوندگر ELF</p>
+<ul>
+<li><code>.text</code> شامل دستورهای برنامه است</li>
+<li><code>.rodata</code> شامل مقادیر ثابت مانند رشته‌ها است</li>
+<li><code>.data</code> شامل متغیرهای تخصیص‌یافتهٔ ایستا است که مقدار اولیه‌شان صفر <em>نیست</em></li>
+<li><code>.bss</code> هم شامل متغیرهای تخصیص‌یافتهٔ ایستا است که مقدار اولیه‌شان صفر <em>است</em></li>
+<li><code>.vector_table</code> بخشی <em>غیر</em>استاندارد است که برای نگهداری جدول بردار (وقفه) به کار می‌بریم</li>
+<li><code>.ARM.attributes</code> و بخش‌های <code>.debug_*</code> فراداده دارند و هنگام فلش کردن فایل دودویی روی هدف بارگذاری <em>نمی‌شوند</em>.</li>
+</ul>
+</blockquote>
+<p><strong>مهم</strong>: فایل‌های ELF فراداده‌هایی مانند اطلاعات اشکال‌زدایی دارند، بنابراین <em>اندازهٔ آن‌ها روی دیسک</em> فضایی را که برنامه هنگام فلش شدن روی دستگاه اشغال می‌کند به‌درستی نشان <em>نمی‌دهد</em>. برای دانستن اندازهٔ واقعی یک فایل دودویی <em>همیشه</em> از <code>cargo-size</code> استفاده کنید.</p>
+<p><code>cargo-objdump</code> را می‌توان برای دیس‌اسمبل کردن فایل دودویی به کار برد.</p>
+<pre><code class="language-console">cargo objdump --bin app --release -- --disassemble --no-show-raw-insn --print-imm-hex
+</code></pre>
+<blockquote>
+<p><strong>توجه</strong>: اگر دستور بالا دربارهٔ <code>Unknown command line argument</code> شکایت کرد، گزارش اشکال زیر را ببینید: https://github.com/rust-embedded/book/issues/269</p>
+</blockquote>
+<blockquote>
+<p><strong>توجه</strong>: این خروجی ممکن است روی سیستم شما متفاوت باشد. نسخه‌های جدید rustc، LLVM و کتابخانه‌ها می‌توانند اسمبلی متفاوتی تولید کنند. برخی از دستورها را کوتاه کرده‌ایم تا قطعه کد کوچک بماند.</p>
+</blockquote>
+<pre><code class="language-text">app:  file format ELF32-arm-little
+
+Disassembly of section .text:
+main:
+     400: bl  #0x256
+     404: b #-0x4 &lt;main+0x4&gt;
+
+Reset:
+     406: bl  #0x24e
+     40a: movw  r0, #0x0
+     &lt; .. truncated any more instructions .. &gt;
+
+DefaultHandler_:
+     656: b #-0x4 &lt;DefaultHandler_&gt;
+
+UsageFault:
+     657: strb  r7, [r4, #0x3]
+
+DefaultPreInit:
+     658: bx  lr
+
+__pre_init:
+     659: strb  r7, [r0, #0x1]
+
+__nop:
+     65a: bx  lr
+
+HardFaultTrampoline:
+     65c: mrs r0, msp
+     660: b #-0x2 &lt;HardFault_&gt;
+
+HardFault_:
+     662: b #-0x4 &lt;HardFault_&gt;
+
+HardFault:
+     663: &lt;unknown&gt;
+</code></pre>
+<h2 id="running"><a class="header" href="#running">اجرا</a></h2>
+<p>در ادامه ببینیم چطور یک برنامهٔ توکار را روی QEMU اجرا کنیم! این بار از مثال <code>hello</code> استفاده می‌کنیم که واقعاً کاری انجام می‌دهد. به‌طور پیش‌فرض، این مثال برای چاپ متن از <code>[defmt]</code> و RTT استفاده می‌کند.</p>
+<blockquote>
+<p><strong>توجه</strong>: <code>defmt</code> یک وابستگی شخص ثالث (یعنی غیرهسته‌ای) است که در اکوسیستم Rust توکار به‌طور گسترده استفاده می‌شود.</p>
+</blockquote>
+<p>برای خواندن و رمزگشایی پیام‌هایی که <code>defmt</code> روی میزبان تولید می‌کند، باید خروجی انتقال RTT را به semihosting تغییر دهیم. در سخت‌افزار واقعی این کار به یک نشست اشکال‌زدایی نیاز دارد، اما در QEMU بی‌دردسر کار می‌کند.</p>
+<p>بیایید وابستگی‌ها را عوض کنیم:</p>
+<pre><code class="language-console">cargo remove defmt-rtt
+cargo add defmt-semihosting
+</code></pre>
+<p>فایل <code>src/lib.rs</code> را باز کنید و <code>use defmt_rtt as _;</code> را با <code>use defmt_semihosting as _;</code> جایگزین کنید</p>
+<p>اکنون می‌توانیم مثال را بسازیم:</p>
+<pre><code class="language-console">cargo build --bin hello
+</code></pre>
+<p>فایل دودویی خروجی در <code>target/thumbv7m-none-eabi/debug/hello</code> قرار می‌گیرد.</p>
+<p>برای اجرای این فایل دودویی روی QEMU، دستور زیر معمولاً کافی است:</p>
+<pre><code class="language-console">qemu-system-arm \
+  -cpu cortex-m3 \
+  -machine lm3s6965evb \
+  -nographic \
+  -semihosting-config enable=on,target=native \
+  -kernel target/thumbv7m-none-eabi/debug/hello
+</code></pre>
+<p>در مورد ما، چون از <code>defmt</code> استفاده می‌کنیم، میزبان نمی‌تواند خروجی را رمزگشایی کند. در عوض به ابزاری از Ferrous Systems با نام <a href="https://github.com/knurling-rs/defmt/tree/main/qemu-run/"><code>qemu-run</code></a> نیاز داریم:</p>
+<pre><code class="language-console">git clone git@github.com:knurling-rs/defmt.git
+cd defmt/qemu-run/
+cargo run -- --machine lm3s6965evb ../qemu-rs/target/thumbv7m-none-eabi/debug/hello
+</code></pre>
+<pre><code class="language-text">Hello, world!
+</code></pre>
+<p>دستور باید پس از چاپ متن با موفقیت خارج شود (کد خروج = 0). در سیستم‌های *nix می‌توانید با دستور زیر این را بررسی کنید:</p>
+<pre><code class="language-console">echo $?
+</code></pre>
+<pre><code class="language-text">0
+</code></pre>
+<p>بیایید آن دستور QEMU را تکه‌تکه بررسی کنیم:</p>
+<ul>
+<li>
+<p><code>qemu-system-arm</code>. این شبیه‌ساز QEMU است. چند گونه از این فایل‌های دودویی QEMU وجود دارد؛ این یکی شبیه‌سازی کامل <em>سیستم</em> ماشین‌های <em>ARM</em> را انجام می‌دهد و نامش از همین‌جاست.</p>
+</li>
+<li>
+<p><code>-cpu cortex-m3</code>. این به QEMU می‌گوید یک پردازندهٔ Cortex-M3 را شبیه‌سازی کند. مشخص کردن مدل پردازنده به ما امکان می‌دهد برخی خطاهای کامپایل نادرست را بگیریم: برای مثال، اجرای برنامه‌ای که برای Cortex-M4F، که FPU سخت‌افزاری دارد، کامپایل شده است باعث می‌شود QEMU هنگام اجرا خطا بدهد.</p>
+</li>
+<li>
+<p><code>-machine lm3s6965evb</code>. این به QEMU می‌گوید LM3S6965EVB را شبیه‌سازی کند، بردی ارزیابی که یک میکروکنترلر LM3S6965 دارد.</p>
+</li>
+<li>
+<p><code>-nographic</code>. این به QEMU می‌گوید رابط گرافیکی خود را اجرا نکند.</p>
+</li>
+<li>
+<p><code>-semihosting-config (..)</code>. این به QEMU می‌گوید semihosting را فعال کند. semihosting به دستگاه شبیه‌سازی‌شده اجازه می‌دهد، از جمله، از stdout، stderr و stdin میزبان استفاده کند و روی میزبان فایل بسازد.</p>
+</li>
+<li>
+<p><code>-kernel $file</code>. این به QEMU می‌گوید کدام فایل دودویی را روی ماشین شبیه‌سازی‌شده بارگذاری و اجرا کند.</p>
+</li>
+</ul>
+<p>تایپ کردن آن دستور بلند QEMU زیادی زحمت دارد! می‌توانیم برای ساده‌تر کردن فرایند یک runner سفارشی تعیین کنیم. فایل <code>.cargo/config.toml</code> یک runner به‌صورت توضیح درآمده دارد که QEMU را فراخوانی می‌کند؛ بیایید آن را از حالت توضیح درآوریم:</p>
+<pre><code class="language-console">head -n3 .cargo/config.toml
+</code></pre>
+<pre><code class="language-toml">[target.thumbv7m-none-eabi]
+# uncomment this to make `cargo run` execute programs on QEMU
+runner = "qemu-system-arm -cpu cortex-m3 -machine lm3s6965evb -nographic -semihosting-config enable=on,target=native -kernel"
+</code></pre>
+<p>این runner فقط برای هدف <code>thumbv7m-none-eabi</code> اعمال می‌شود، که هدف کامپایل پیش‌فرض ماست. اکنون <code>cargo run</code> برنامه را کامپایل و روی QEMU اجرا می‌کند:</p>
+<pre><code class="language-console">cargo run --example hello --release
+</code></pre>
+<pre><code class="language-text">   Compiling app v0.1.0 (file:///tmp/app)
+    Finished release [optimized + debuginfo] target(s) in 0.26s
+     Running `qemu-system-arm -cpu cortex-m3 -machine lm3s6965evb -nographic -semihosting-config enable=on,target=native -kernel target/thumbv7m-none-eabi/release/examples/hello`
+Hello, world!
+</code></pre>
+<h2 id="debugging"><a class="header" href="#debugging">اشکال‌زدایی</a></h2>
+<p>اشکال‌زدایی برای توسعهٔ توکار حیاتی است. ببینیم چطور انجام می‌شود.</p>
+<p>اشکال‌زدایی یک دستگاه توکار شامل اشکال‌زدایی <em>از راه دور</em> است، چون برنامه‌ای که می‌خواهیم اشکال‌زدایی کنیم روی ماشینی اجرا نمی‌شود که برنامهٔ اشکال‌زدا (GDB یا LLDB) را اجرا می‌کند.</p>
+<p>اشکال‌زدایی از راه دور شامل یک کلاینت و یک سرور است. در یک راه‌اندازی QEMU، کلاینت یک فرایند GDB (یا LLDB) و سرور فرایند QEMU است که برنامهٔ توکار را هم اجرا می‌کند.</p>
+<p>در این بخش از مثال <code>hello</code> که قبلاً کامپایل کرده‌ایم استفاده می‌کنیم.</p>
+<p>نخستین گام اشکال‌زدایی، اجرای QEMU در حالت اشکال‌زدایی است:</p>
+<pre><code class="language-console">qemu-system-arm \
+  -cpu cortex-m3 \
+  -machine lm3s6965evb \
+  -nographic \
+  -semihosting-config enable=on,target=native \
+  -gdb tcp::3333 \
+  -S \
+  -kernel target/thumbv7m-none-eabi/debug/examples/hello
+</code></pre>
+<p>این دستور چیزی روی کنسول چاپ نمی‌کند و ترمینال را مسدود می‌کند. این بار دو پرچم اضافی داده‌ایم:</p>
+<ul>
+<li>
+<p><code>-gdb tcp::3333</code>. این به QEMU می‌گوید روی پورت TCP شمارهٔ 3333 منتظر اتصال GDB بماند.</p>
+</li>
+<li>
+<p><code>-S</code>. این به QEMU می‌گوید ماشین را هنگام راه‌اندازی متوقف کند. بدون آن، برنامه پیش از آن‌که فرصتی برای اجرای اشکال‌زدا داشته باشیم به انتهای main می‌رسید!</p>
+</li>
+</ul>
+<p>سپس در ترمینال دیگری GDB را اجرا می‌کنیم و به آن می‌گوییم نمادهای اشکال‌زدایی مثال را بارگذاری کند:</p>
+<pre><code class="language-console">gdb-multiarch -q target/thumbv7m-none-eabi/debug/examples/hello
+</code></pre>
+<p><strong>توجه</strong>: بسته به این‌که در فصل نصب کدام نسخهٔ gdb را نصب کرده‌اید، ممکن است به‌جای <code>gdb-multiarch</code> به نسخهٔ دیگری از gdb نیاز داشته باشید. این نسخه می‌تواند <code>arm-none-eabi-gdb</code> یا فقط <code>gdb</code> هم باشد.</p>
+<p>سپس درون پوستهٔ GDB به QEMU وصل می‌شویم، که روی پورت TCP شمارهٔ 3333 منتظر اتصال است.</p>
+<pre><code class="language-console">target remote :3333
+</code></pre>
+<pre><code class="language-text">Remote debugging using :3333
+Reset () at $REGISTRY/cortex-m-rt-0.6.1/src/lib.rs:473
+473     pub unsafe extern "C" fn Reset() -&gt; ! {
+</code></pre>
+<p>می‌بینید که فرایند متوقف شده است و شمارندهٔ برنامه (program counter) به تابعی با نام <code>Reset</code> اشاره می‌کند. این همان کنترل‌گر reset است: چیزی که هسته‌های Cortex-M هنگام بوت اجرا می‌کنند.</p>
+<blockquote>
+<p>توجه کنید که در برخی راه‌اندازی‌ها، به‌جای نمایش خط <code>Reset () at $REGISTRY/cortex-m-rt-0.6.1/src/lib.rs:473</code> که در بالا نشان داده شد، ممکن است gdb چند هشدار چاپ کند، مانند <code>core::num::bignum::Big32x40::mul_small () at src/libcore/num/bignum.rs:254</code> و <code>src/libcore/num/bignum.rs: No such file or directory.</code></p>
+<p><code>core::num::bignum::Big32x40::mul_small () at src/libcore/num/bignum.rs:254</code>
+<code>    src/libcore/num/bignum.rs: No such file or directory.</code></p>
+<p>این یک مشکل شناخته‌شده است. می‌توانید با خیال راحت این هشدارها را نادیده بگیرید؛ به احتمال زیاد در Reset() هستید.</p>
+</blockquote>
+<p>این کنترل‌گر reset سرانجام تابع main ما را فراخوانی می‌کند. بیایید با یک breakpoint و دستور <code>continue</code> یک‌راست به آنجا برویم. برای تنظیم breakpoint، ابتدا با دستور <code>list</code> ببینیم در کد خود کجا می‌خواهیم توقف کنیم.</p>
+<pre><code class="language-console">list main
+</code></pre>
+<p>این دستور کد منبع را از فایل examples/hello.rs نشان می‌دهد.</p>
+<pre><code class="language-text">6       use panic_halt as _;
+7
+8       use cortex_m_rt::entry;
+9       use cortex_m_semihosting::{debug, hprintln};
+10
+11      #[entry]
+12      fn main() -&gt; ! {
+13          hprintln!("Hello, world!").unwrap();
+14
+15          // exit QEMU
+</code></pre>
+<p>می‌خواهیم درست پیش از “Hello, world!” که در خط 13 است، یک breakpoint اضافه کنیم. این کار را با دستور <code>break</code> انجام می‌دهیم:</p>
+<pre><code class="language-console">break 13
+</code></pre>
+<p>اکنون می‌توانیم با دستور <code>continue</code> به gdb بگوییم تا تابع main ما اجرا کند:</p>
+<pre><code class="language-console">continue
+</code></pre>
+<pre><code class="language-text">Continuing.
+
+Breakpoint 1, hello::__cortex_m_rt_main () at examples\hello.rs:13
+13          hprintln!("Hello, world!").unwrap();
+</code></pre>
+<p>اکنون به کدی که “Hello, world!” را چاپ می‌کند نزدیک شده‌ایم. بیایید با دستور <code>next</code> جلوتر برویم.</p>
+<pre><code class="language-console">next
+</code></pre>
+<pre><code class="language-text">16          debug::exit(debug::EXIT_SUCCESS);
+</code></pre>
+<p>در این مرحله باید “Hello, world!” را روی ترمینالی ببینید که <code>qemu-system-arm</code> را اجرا می‌کند.</p>
+<pre><code class="language-text">$ qemu-system-arm (..)
+Hello, world!
+</code></pre>
+<p>فراخوانی دوبارهٔ <code>next</code> فرایند QEMU را خاتمه می‌دهد.</p>
+<pre><code class="language-console">next
+</code></pre>
+<pre><code class="language-text">[Inferior 1 (Remote target) exited normally]
+</code></pre>
+<p>اکنون می‌توانید از نشست GDB خارج شوید.</p>
+<pre><code class="language-console">quit
+</code></pre><nav class="page-nav"><a href="../../embedded/start/index.html">→ شروع کار</a><a href="../../embedded/start/hardware.html">سخت‌افزار ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

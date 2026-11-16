@@ -1,0 +1,46 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0482 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0482"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h4 id="note-this-error-code-is-no-longer-emitted-by-the-compiler"><a class="header" href="#note-this-error-code-is-no-longer-emitted-by-the-compiler">توجه: این کد خطا دیگر توسط کامپایلر صادر نمی‌شود.</a></h4>
+<p>طول عمر یک مقدار بازگشتی بیشتر از فراخوانی تابع عمر نمی‌کند.</p>
+<p>نمونه کد دارای خطا:</p>
+<pre><code class="language-compile_fail E0700">fn prefix&lt;'a&gt;(
+    words: impl Iterator&lt;Item = &amp;'a str&gt;
+) -&gt; impl Iterator&lt;Item = String&gt; { // error!
+    words.map(|v| format!("foo-{}", v))
+}
+</code></pre>
+<p>برای رفع این خطا، طول عمر مقدار بازگشتی را صریح کنید:</p>
+<pre><code>fn prefix&lt;'a&gt;(
+    words: impl Iterator&lt;Item = &amp;'a str&gt; + 'a
+) -&gt; impl Iterator&lt;Item = String&gt; + 'a { // ok!
+    words.map(|v| format!("foo-{}", v))
+}
+</code></pre>
+<p>قابلیت <a href="../reference/types/impl-trait.html"><code>impl Trait</code></a> در این مثال از یک محدودیت ضمنی طول عمر <code>'static</code> در نوع بازگشتی استفاده می‌کند. با این حال، نوعی که <code>Iterator</code> ارسال‌شده به تابع را پیاده‌سازی می‌کند فقط به اندازه‌ی <code>'a</code> عمر می‌کند که کافی نیست.</p>
+<p>راه‌حل شامل افزودن قید طول عمر هم به آرگومان تابع و هم به مقدار بازگشتی است تا اطمینان حاصل شود که مقادیر درون iterator هنگام خروج تابع از دامنه (scope) حذف (drop) نمی‌شوند.</p>
+<p>راه‌حل جایگزین این است که تضمین کنیم ارجاع‌های <code>Item</code> در iterator در تمام طول عمر برنامه زنده‌اند.</p>
+<pre><code>fn prefix(
+    words: impl Iterator&lt;Item = &amp;'static str&gt;
+) -&gt; impl Iterator&lt;Item = String&gt; {  // ok!
+    words.map(|v| format!("foo-{}", v))
+}
+</code></pre>
+<p>مشکل طول عمر مشابهی ممکن است هنگام بازگرداندن closureها نیز پیش آید:</p>
+<pre><code class="language-compile_fail E0700">fn foo(
+    x: &amp;mut Vec&lt;i32&gt;
+) -&gt; impl FnMut(&amp;mut Vec&lt;i32&gt;) -&gt; &amp;[i32] { // error!
+    |y| {
+        y.append(x);
+        y
+    }
+}
+</code></pre>
+<p>به‌طور مشابه، راه‌حل در اینجا استفاده از طول عمر صریح برای مقدار بازگشتی و انتقال مالکیت متغیر به closure است.</p>
+<pre><code>fn foo&lt;'a&gt;(
+    x: &amp;'a mut Vec&lt;i32&gt;
+) -&gt; impl FnMut(&amp;mut Vec&lt;i32&gt;) -&gt; &amp;[i32] + 'a { // ok!
+    move |y| {
+        y.append(x);
+        y
+    }
+}
+</code></pre>
+<p>برای درک بهتر نحوه‌ی برخورد با طول عمر در <a href="../reference/types/impl-trait.html"><code>impl Trait</code></a>، لطفاً به <a href="https://rust-lang.github.io/rfcs/1951-expand-impl-trait.html">RFC 1951</a> مراجعه کنید.</p><nav class="page-nav"><a href="../errors/E0478.html">→ E0478</a><a href="../errors/E0491.html">E0491 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

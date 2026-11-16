@@ -1,0 +1,268 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>اجرای آزمون‌ها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tests/running"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="running-tests"><a class="header" href="#running-tests">Running tests</a></h1>
+<p>می‌توانید کل مجموعهٔ تست‌ها را با <code>x</code> اجرا کنید.
+اما توجه کنید که اجرای <em>کل</em> مجموعهٔ تست‌ها تقریباً هرگز چیزی نیست که هنگام توسعهٔ محلی بخواهید،
+چون زمان بسیار زیادی می‌برد.
+برای توسعهٔ محلی، زیربخش بعدی دربارهٔ اجرای زیرمجموعه‌ای از تست‌ها را ببینید.</p>
+<div class="warning">
+<p>اجرای ساده <code>./x test</code> کامپایلر stage 1 را می‌سازد و سپس کل مجموعهٔ تست را اجرا می‌کند.
+این نه‌فقط <code>tests/</code> بلکه تست‌های بسته‌های <code>library/</code>، <code>compiler/</code>،
+<code>src/tools/</code> و بیشتر را هم شامل می‌شود.</p>
+<p>معمولاً فقط می‌خواهید زیرمجموعه‌ای از مجموعه‌های تست (یا حتی مجموعه‌ای کوچک‌تر از تست‌ها)
+را اجرا کنید که انتظار دارید تغییرات شما را بیازماید.
+CI مربوط به PR زیرمجموعه‌ای از مجموعه‌های تست را اجرا می‌کند، و CI صف merge همهٔ مجموعهٔ تست را اجرا می‌کند.</p>
+</div>
+
+<pre><code class="language-text">./x test
+</code></pre>
+<p>نتایج تست cache می‌شوند و تست‌هایی که قبلاً موفق بوده‌اند هنگام تست <code>ignored</code> می‌شوند.
+محتوای stdout/stderr و یک فایل زمان‌سنج برای هر تست
+را می‌توان زیر <code>build/&lt;target-tuple&gt;/test/</code> برای <code>&lt;target-tuple&gt;</code> داده‌شده یافت. برای اجبار به اجرای مجدد یک تست (مثلاً اگر اجراکنندهٔ تست
+تغییری را تشخیص ندهد) می‌توانید از گزینهٔ خط فرمان <code>--force-rerun</code> استفاده کنید.</p>
+<blockquote>
+<p><strong>نکته دربارهٔ نیازمندی‌های وابستگی‌های خارجی</strong></p>
+<p>برخی مجموعه‌های تست ممکن است به وابستگی‌های خارجی نیاز داشته باشند. این به‌ویژه دربارهٔ
+تست‌های debuginfo صادق است. برخی تست‌های debuginfo به gdb دارای پشتیبانی Python نیاز دارند. می‌توانید
+بررسی کنید gdb نصب‌شدهٔ شما از Python پشتیبانی می‌کند یا نه، با استفاده از دستور <code>python</code> در
+درون gdb. پس از اجرا می‌توانید کد Python (مثلاً <code>print("hi")</code>) بنویسید،
+سپس return و بعد <code>CTRL+D</code> را برای اجرای آن بزنید. اگر gdb را از
+منبع می‌سازید، باید با
+<code>--with-python=&lt;path-to-python-binary&gt;</code> پیکربندی کنید.</p>
+</blockquote>
+<h2 id="running-a-subset-of-the-test-suites"><a class="header" href="#running-a-subset-of-the-test-suites">اجرای زیرمجموعه‌ای از مجموعه‌های تست</a></h2>
+<p>هنگام کار روی یک PR مشخص، معمولاً می‌خواهید مجموعهٔ کوچک‌تری از تست‌ها را اجرا کنید.
+برای مثال، یک «smoke test» خوب که پس از تغییر rustc می‌توان به‌کار برد
+تا ببینید همه‌چیز عموماً درست کار می‌کند، اجرای مجموعهٔ تست <code>ui</code> است
+(<a href="https://github.com/rust-lang/rust/tree/HEAD/tests/ui"><code>tests/ui</code></a>):</p>
+<pre><code class="language-text">./x test tests/ui
+</code></pre>
+<p>البته انتخاب مجموعه‌های تست تا حدی دلبخواه است و ممکن است با کاری که انجام می‌دهید جور نباشد.
+برای مثال، اگر روی debuginfo کار می‌کنید، شاید مجموعهٔ تست debuginfo بهتر باشد:</p>
+<pre><code class="language-text">./x test tests/debuginfo
+</code></pre>
+<p>اگر فقط نیاز دارید زیرپوشهٔ مشخصی از تست‌ها را برای هر مجموعهٔ تست مشخص اجرا کنید،
+می‌توانید آن پوشه را به‌عنوان فیلتر به <code>./x test</code> بدهید:</p>
+<pre><code class="language-text">./x test tests/ui/const-generics
+</code></pre>
+<blockquote>
+<p><strong>نکته برای MSYS2</strong></p>
+<p>در MSYS2 مسیرها عجیب به نظر می‌رسند و <code>./x test</code> نه
+<code>tests/ui/const-generics</code> را می‌شناسد و نه <code>tests\ui\const-generics</code> را. در آن صورت می‌توانید
+با استفاده از مثلاً <code>./x test ui --test-args="tests/ui/const-generics"</code> دور بزنید.</p>
+</blockquote>
+<p>همین‌طور می‌توانید با دادن مسیر یک فایل، آن تک‌فایل را تست کنید:</p>
+<pre><code class="language-text">./x test tests/ui/const-generics/const-test.rs
+</code></pre>
+<p><code>x</code> هنوز از اجرای تست یک ابزار با دادن مسیر آن پشتیبانی نمی‌کند.
+باید از آرگومان <code>--test-args</code> استفاده کنید، همان‌طور که <a href="#running-an-individual-test">در ادامه</a> توضیح داده شده است.</p>
+<pre><code class="language-text">./x test src/tools/miri --test-args tests/fail/uninit/padding-enum.rs
+</code></pre>
+<h3 id="run-only-the-tidy-script"><a class="header" href="#run-only-the-tidy-script">فقط اسکریپت tidy را اجرا کنید</a></h3>
+<pre><code class="language-text">./x test tidy
+</code></pre>
+<h3 id="run-tests-on-the-standard-library"><a class="header" href="#run-tests-on-the-standard-library">تست‌های کتابخانهٔ استاندارد را اجرا کنید</a></h3>
+<pre><code class="language-text">./x test --stage 0 library/std
+</code></pre>
+<p>توجه کنید که این فقط تست‌های <code>std</code> را اجرا می‌کند؛
+اگر می‌خواهید <code>core</code> یا crateهای دیگر را تست کنید، باید آن‌ها را صراحتاً مشخص کنید.</p>
+<h3 id="run-the-tidy-script-and-tests-on-the-standard-library"><a class="header" href="#run-the-tidy-script-and-tests-on-the-standard-library">اسکریپت tidy و تست‌های کتابخانهٔ استاندارد را اجرا کنید</a></h3>
+<pre><code class="language-text">./x test --stage 0 tidy library/std
+</code></pre>
+<h3 id="run-tests-on-the-standard-library-using-a-stage-1-compiler"><a class="header" href="#run-tests-on-the-standard-library-using-a-stage-1-compiler">تست‌های کتابخانهٔ استاندارد را با کامپایلر stage 1 اجرا کنید</a></h3>
+<pre><code class="language-text">./x test --stage 1 library/std
+</code></pre>
+<p>با فهرست‌کردن مجموعه‌های تستی که می‌خواهید اجرا کنید،
+از اجرای تست‌های اجزایی که اصلاً تغییرشان نداده‌اید پرهیز می‌کنید.</p>
+<div class="warning">
+<p>توجه کنید که bors تست‌ها را فقط با ساخت کامل stage 2 اجرا می‌کند؛
+بنابراین، هرچند تست‌ها <strong>معمولاً</strong> با stage 1 خوب کار می‌کنند، چند محدودیت وجود دارد.</p>
+</div>
+
+<h3 id="run-all-tests-using-a-stage-2-compiler"><a class="header" href="#run-all-tests-using-a-stage-2-compiler">همهٔ تست‌ها را با کامپایلر stage 2 اجرا کنید</a></h3>
+<pre><code class="language-text">./x test --stage 2
+</code></pre>
+<div class="warning">
+You almost never need to do this;
+CI will run these tests for you.
+</div>
+
+<h2 id="run-unit-tests-on-the-compilerlibrary"><a class="header" href="#run-unit-tests-on-the-compilerlibrary">اجرای تست‌های واحد روی کامپایلر/کتابخانه</a></h2>
+<p>ممکن است بخواهید تست‌های واحد را روی یک فایل مشخص با دستور زیر اجرا کنید:</p>
+<pre><code class="language-text">./x test compiler/rustc_data_structures/src/thin_vec/tests.rs
+</code></pre>
+<p>اما متأسفانه ممکن نیست.
+به‌جای آن باید این را فراخوانی کنید:</p>
+<pre><code class="language-text">./x test compiler/rustc_data_structures/ --test-args thin_vec
+</code></pre>
+<h2 id="running-an-individual-test"><a class="header" href="#running-an-individual-test">اجرای یک تست جداگانه</a></h2>
+<p>کار رایج دیگری که افراد می‌خواهند انجام دهند اجرای یک <strong>تست جداگانه</strong> است،
+اغلب تستی که سعی می‌کنند رفعش کنند.
+همان‌طور که پیش‌تر گفته شد، می‌توانید
+مسیر کامل فایل را بدهید، یا می‌توانید <code>x</code> را با گزینهٔ <code>--test-args</code> فراخوانی کنید:</p>
+<pre><code class="language-text">./x test tests/ui --test-args issue-1234
+</code></pre>
+<p>در پشت صحنه، اجراکنندهٔ تست اجراکنندهٔ استاندارد تست Rust را فراخوانی می‌کند (همان
+که با <code>#[test]</code> دریافت می‌کنید)، پس این دستور در نهایت فقط تست‌هایی را فیلتر می‌کند
+که «issue-1234» در نامشان باشد.
+بنابراین <code>--test-args</code> راه خوبی برای اجرای مجموعه‌ای از تست‌های مرتبط است.</p>
+<h2 id="passing-arguments-to-rustc-when-running-tests"><a class="header" href="#passing-arguments-to-rustc-when-running-tests">دادن آرگومان به <code>rustc</code> هنگام اجرای تست‌ها</a></h2>
+<p>گاهی می‌تواند مفید باشد برخی تست‌ها را با آرگومان‌های مشخص کامپایلر اجرا کنید،
+بدون استفاده از <code>RUSTFLAGS</code> (مثلاً هنگام توسعهٔ قابلیت‌های ناپایدار با پرچم‌های <code>-Z</code>).</p>
+<p>این کار با گزینهٔ <code>--compiletest-rustc-args</code> در <code>./x test</code> ممکن است، که
+آرگومان‌های اضافی را هنگام ساخت تست‌ها به کامپایلر می‌دهد.</p>
+<h2 id="editing-and-updating-the-reference-files"><a class="header" href="#editing-and-updating-the-reference-files">ویرایش و به‌روزرسانی فایل‌های مرجع</a></h2>
+<p>اگر خروجی کامپایلر را عمداً تغییر داده‌اید، یا تست جدیدی می‌سازید، می‌توانید
+<code>--bless</code> را به زیردستور test بدهید.</p>
+<p>برای مثال، اگر برخی تست‌های <code>tests/ui</code> شکست می‌خورند، می‌توانید این دستور را اجرا کنید:</p>
+<pre><code class="language-text">./x test tests/ui --bless
+</code></pre>
+<p>این به‌طور خودکار فایل‌های <code>.stderr</code>، <code>.stdout</code> یا <code>.fixed</code> همهٔ تست‌های <code>test/ui</code> را تنظیم می‌کند.
+البته می‌توانید فقط تست‌های مشخصی را هم با پرچم <code>--test-args your_test_name</code> هدف بگیرید،
+درست مثل اجرای تست‌ها بدون پرچم <code>--bless</code>.</p>
+<h2 id="configuring-test-running"><a class="header" href="#configuring-test-running">Configuring test running</a></h2>
+<p>چند گزینه برای اجرای تست‌ها هست:</p>
+<ul>
+<li><code>bootstrap.toml</code> گزینهٔ <code>rust.verbose-tests</code> را دارد.
+اگر <code>false</code> باشد، هر تست یک نقطه چاپ می‌کند (پیش‌فرض).
+اگر <code>true</code> باشد، نام هر تست چاپ می‌شود.
+این معادل گزینهٔ <code>--quiet</code> در <a href="../../rustc/tests/index.html">test harness در Rust</a> است.</li>
+<li>متغیر محیطی <code>RUST_TEST_THREADS</code> را می‌توان روی تعداد
+threadهای همزمان برای تست تنظیم کرد.</li>
+</ul>
+<h2 id="passing---pass-mode"><a class="header" href="#passing---pass-mode">Passing <code>--pass $mode</code></a></h2>
+<p>تست‌های UI از نوع pass اکنون سه حالت دارند: <code>check-pass</code>، <code>build-pass</code> و <code>run-pass</code>.
+وقتی <code>--pass $mode</code> داده شود، این تست‌ها مجبور می‌شوند تحت <code>$mode</code> داده‌شده اجرا شوند
+مگر اینکه دستور <code>//@ no-pass-override</code> در فایل تست وجود داشته باشد.
+برای مثال، می‌توانید همهٔ تست‌های <code>tests/ui</code> را به‌صورت <code>check-pass</code> اجرا کنید:</p>
+<pre><code class="language-text">./x test tests/ui --pass check
+</code></pre>
+<p>با دادن <code>--pass $mode</code> می‌توانید زمان تست را کاهش دهید.
+برای هر حالت، لطفاً <a href="ui.html#controlling-passfail-expectations">کنترل انتظارات pass/fail</a> را ببینید.</p>
+<h2 id="running-tests-with-different-compare-modes"><a class="header" href="#running-tests-with-different-compare-modes">اجرای تست‌ها با «حالت‌های مقایسه» مختلف</a></h2>
+<p>تست‌های UI ممکن است بسته به «حالت‌های» مشخصی که کامپایلر در آن است خروجی متفاوتی داشته باشند.
+برای مثال، هنگام استفاده از حالت Polonius، تست <code>foo.rs</code>
+ابتدا خروجی مورد انتظار را در <code>foo.polonius.stderr</code> جست‌وجو می‌کند و اگر نیافت به
+<code>foo.stderr</code> معمول برمی‌گردد.
+دستور زیر مجموعهٔ تست UI را در حالت Polonius اجرا می‌کند:</p>
+<pre><code class="language-text">./x test tests/ui --compare-mode=polonius
+</code></pre>
+<p>برای جزئیات بیشتر <a href="compiletest.html#compare-modes">حالت‌های مقایسه</a> را ببینید.</p>
+<h2 id="running-tests-manually"><a class="header" href="#running-tests-manually">Running tests manually</a></h2>
+<p>گاهی ساده‌تر و سریع‌تر است که تست را دستی اجرا کنید.
+بیشتر تست‌ها فقط فایل‌های <code>.rs</code> هستند، پس پس از <a href="../building/how-to-build-and-run.html#creating-a-rustup-toolchain">ساخت یک toolchain در rustup</a>
+می‌توانید چیزی شبیه این بکنید:</p>
+<pre><code class="language-text">rustc +stage1 tests/ui/issue-1234.rs
+</code></pre>
+<p>این بسیار سریع‌تر است اما همیشه کار نمی‌کند.
+برای مثال، برخی تست‌ها شامل
+دستورهایی هستند که پرچم‌های مشخص کامپایلر را تعیین می‌کنند یا به crateهای دیگر وابسته‌اند،
+و ممکن است بدون آن گزینه‌ها به همان شکل اجرا نشوند.</p>
+<h2 id="running-tests-on-a-remote-machine"><a class="header" href="#running-tests-on-a-remote-machine">اجرای تست‌ها روی ماشین راه‌دور</a></h2>
+<p>تست‌ها را می‌توان روی ماشین راه‌دور اجرا کرد (مثلاً برای تست ساخت‌ها برای معماری متفاوت).
+این با استفاده از <code>remote-test-client</code> روی ماشین ساخت انجام می‌شود تا
+برنامه‌های تست را به <code>remote-test-server</code> که روی ماشین راه‌دور اجرا می‌شود بفرستد.
+<code>remote-test-server</code> برنامه‌های تست را اجرا می‌کند و نتایج را به ماشین ساخت برمی‌گرداند.
+<code>remote-test-server</code> <em>اجرای کد راه‌دور بدون احراز هویت</em> فراهم می‌کند،
+پس مراقب باشید کجا استفاده می‌شود.</p>
+<p>برای این کار، ابتدا <code>remote-test-server</code> را برای ماشین راه‌دور بسازید (با مثال RISC-V):</p>
+<pre><code class="language-text">./x build src/tools/remote-test-server --target riscv64gc-unknown-linux-gnu
+</code></pre>
+<p>فایل دودویی در <code>./build/host/stage2-tools/$TARGET_ARCH/release/remote-test-server</code> ساخته می‌شود.
+آن را به ماشین راه‌دور کپی کنید.</p>
+<p>روی ماشین راه‌دور، <code>remote-test-server</code> را با پرچم <code>--bind 0.0.0.0:12345</code> (و در صورت تمایل پرچم <code>--verbose</code>) اجرا کنید.
+خروجی باید به این شکل باشد:</p>
+<pre><code class="language-console">$ ./remote-test-server --verbose --bind 0.0.0.0:12345
+starting test server
+listening on 0.0.0.0:12345!
+</code></pre>
+<p>توجه کنید که bind‌کردن سرور به 0.0.0.0 به همهٔ میزبان‌هایی که به ماشین شما دسترسی دارند اجازه می‌دهد
+کد دلخواه را روی ماشین شما اجرا کنند.
+قویاً توصیه می‌کنیم یا
+firewall راه بیندازید تا دسترسی خارجی به پورت 12345 مسدود شود، یا هنگام bind از آدرس IP
+محدودتری استفاده کنید.</p>
+<p>می‌توانید با اتصال به <code>remote-test-server</code> و ارسال <code>ping\n</code> بررسی کنید کار می‌کند.
+باید با <code>pong</code> پاسخ دهد:</p>
+<pre><code class="language-console">$ nc $REMOTE_IP 12345
+ping
+pong
+</code></pre>
+<p>برای اجرای تست‌ها با اجراکنندهٔ راه‌دور، متغیر محیطی <code>TEST_DEVICE_ADDR</code> را تنظیم کنید و سپس مثل همیشه از <code>x</code> استفاده کنید.
+برای مثال، برای اجرای تست‌های <code>ui</code> روی ماشین RISC-V با آدرس IP برابر <code>1.2.3.4</code> از این استفاده کنید</p>
+<pre><code class="language-text">export TEST_DEVICE_ADDR="1.2.3.4:12345"
+./x test tests/ui --target riscv64gc-unknown-linux-gnu
+</code></pre>
+<p>اگر <code>remote-test-server</code> با پرچم verbose اجرا شده باشد، خروجی روی ماشین تست ممکن است چیزی شبیه این باشد</p>
+<pre><code class="language-text">[...]
+run "/tmp/work/test1007/a"
+run "/tmp/work/test1008/a"
+run "/tmp/work/test1009/a"
+run "/tmp/work/test1010/a"
+run "/tmp/work/test1011/a"
+run "/tmp/work/test1012/a"
+run "/tmp/work/test1013/a"
+run "/tmp/work/test1014/a"
+run "/tmp/work/test1015/a"
+run "/tmp/work/test1016/a"
+run "/tmp/work/test1017/a"
+run "/tmp/work/test1018/a"
+[...]
+</code></pre>
+<p>تست‌ها روی ماشینی که <code>x</code> را اجرا می‌کند ساخته می‌شوند نه روی ماشین راه‌دور.
+تست‌هایی که به‌طور غیرمنتظره ساخته نمی‌شوند (یا تست‌های <code>ui</code> که خروجی ساخت نادرست تولید می‌کنند)
+ممکن است بدون اینکه هرگز روی ماشین راه‌دور اجرا شوند شکست بخورند.</p>
+<p>یک مهلت پیش‌فرض ۳۰ دقیقه‌ای هست برای وقتی که دستور <code>x</code> نتواند به <code>remote-test-server</code> برسد.
+این مهلت را می‌توان با متغیر محیطی
+<code>TEST_DEVICE_CONNECT_TIMEOUT_SECONDS</code> تغییر داد.</p>
+<h2 id="testing-on-emulators"><a class="header" href="#testing-on-emulators">تست روی شبیه‌سازها (emulators)</a></h2>
+<p>برخی پلتفرم‌ها برای معماری‌هایی که به‌راحتی در دسترس نیستند با شبیه‌ساز تست می‌شوند.
+برای معماری‌هایی که کتابخانهٔ استاندارد در آن‌ها به‌خوبی پشتیبانی می‌شود و
+سیستم‌عامل میزبان از شبکهٔ TCP/IP پشتیبانی می‌کند، دستورالعمل‌های بالا برای تست روی ماشین راه‌دور را ببینید (در این حالت ماشین راه‌دور شبیه‌سازی می‌شود).</p>
+<p>همچنین مجموعه‌ای از ابزارها برای هماهنگ‌کردن اجرای تست‌ها درون شبیه‌ساز هست.
+پلتفرم‌هایی مثل <code>arm-android</code> و <code>arm-unknown-linux-gnueabihf</code>
+طوری تنظیم شده‌اند که تست‌ها را به‌طور خودکار تحت شبیه‌سازی در GitHub Actions اجرا کنند.
+در ادامه نگاهی می‌اندازیم به اینکه تست‌های یک هدف چگونه تحت شبیه‌سازی اجرا می‌شوند.</p>
+<p>ایمیج Docker برای <a href="https://github.com/rust-lang/rust/tree/HEAD/src/ci/docker/host-x86_64/armhf-gnu/Dockerfile">armhf-gnu</a> شامل <a href="https://www.qemu.org/">QEMU</a> برای شبیه‌سازی معماری CPU ARM است.
+در درخت Rust ابزارهای <a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/remote-test-client">remote-test-client</a> و
+<a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/remote-test-server">remote-test-server</a> قرار دارند که برنامه‌هایی برای ارسال برنامه‌ها و کتابخانه‌های تست
+به شبیه‌ساز، اجرای تست‌ها درون شبیه‌ساز و خواندن نتایج‌اند.
+ایمیج Docker طوری تنظیم شده که <code>remote-test-server</code> را اجرا کند و
+ابزارهای ساخت از <code>remote-test-client</code> برای ارتباط با سرور استفاده می‌کنند تا
+اجرای تست‌ها را هماهنگ کنند (<a href="https://github.com/rust-lang/rust/blob/HEAD/src/bootstrap/src/core/build_steps/test.rs">src/bootstrap/src/core/build_steps/test.rs</a> را ببینید).</p>
+<p>برای اجرا روی شبیه‌ساز iOS/tvOS/watchOS/visionOS، می‌توانیم آن را هم مثل ماشین «راه‌دور» در نظر بگیریم.
+جزئیات جالب اینجاست که شبکه بین
+نمونهٔ شبیه‌ساز و macOS میزبان مشترک است، پس می‌توانیم از آدرس loopback محلی <code>127.0.0.1</code> استفاده کنیم.
+چیزی شبیه این باید کار کند:</p>
+<pre><code class="language-sh"># Build the test server for the iOS simulator:
+./x build src/tools/remote-test-server --target aarch64-apple-ios-sim
+
+# If you already have a simulator instance open, copy the device UUID from:
+xcrun simctl list devices booted
+UDID=01234567-89AB-CDEF-0123-456789ABCDEF
+
+# Alternatively, create and boot a new simulator instance:
+xcrun simctl list runtimes
+xcrun simctl list devicetypes
+UDID=$(xcrun simctl create $CHOSEN_DEVICE_TYPE $CHOSEN_RUNTIME)
+xcrun simctl boot $UDID
+# See https://nshipster.com/simctl/ for details.
+
+# Spawn the runner on port 12345:
+xcrun simctl spawn $UDID ./build/host/stage2-tools/aarch64-apple-ios-sim/release/remote-test-server -v --bind 127.0.0.1:12345
+
+# In a new terminal, run tests via the runner:
+export TEST_DEVICE_ADDR="127.0.0.1:12345"
+./x test --host='' --target aarch64-apple-ios-sim --skip tests/debuginfo
+# FIXME(madsmtm): Allow debuginfo tests to work (maybe needs `.dSYM` folder to be copied to the target?).
+</code></pre>
+<h2 id="testing-tests-on-wasi-wasm32-wasip1"><a class="header" href="#testing-tests-on-wasi-wasm32-wasip1">تست‌کردن تست‌ها روی wasi (wasm32-wasip1)</a></h2>
+<p>برخی تست‌ها مخصوص اهداف wasm هستند.
+برای اجرای این تست‌ها، باید <code>--target wasm32-wasip1</code> را به <code>x test</code> بدهید.
+علاوه بر این به wasi sdk نیاز دارید.
+دستورالعمل نصب <a href="https://github.com/WebAssembly/wasi-sdk">مخزن wasi sdk</a> را دنبال کنید تا sysroot را روی رایانهٔ خود داشته باشید.
+در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/doc/rustc/src/platform-support/wasm32-wasip1.md#building-the-target.">صفحهٔ پشتیبانی از هدف wasm32-wasip1</a> حداقل نسخه‌ای مشخص شده که sdk شما باید بتواند بسازد.
+برخی دستورهای cmake که مدتی طول می‌کشند و هشدارهای C++ بسیار نگران‌کننده‌ای می‌دهند…
+سپس، در <code>bootstrap.toml</code>، sysroot را این‌طور مشخص کنید:</p>
+<pre><code class="language-toml">[target.wasm32-wasip1]
+wasi-root = "&lt;wasi-sdk location&gt;/build/sysroot/install/share/wasi-sysroot"
+</code></pre>
+<p>در مورد من آن را کنار پوشهٔ rust با git clone گرفتم، پس <code>../wasi-sdk/build/....</code> بود.
+حالا تست‌ها باید به‌سادگی اجرا شوند و لازم نیست چیز دیگری راه‌اندازی کنید.</p><nav class="page-nav"><a href="intro.html">→ آزمودن کامپایلر</a><a href="docker.html">آزمون با Docker ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

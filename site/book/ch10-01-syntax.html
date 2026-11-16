@@ -1,0 +1,277 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>نوع‌های داده جنریک — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch10-01-syntax"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="generic-data-types"><a class="header" href="#generic-data-types">انواع داده جنریک</a></h2>
+<p>ما از جنریک‌ها برای ایجاد تعریف‌هایی برای مواردی مانند امضای توابع یا ساختارها (struct) استفاده می‌کنیم، که سپس می‌توانیم با انواع داده مشخص مختلف از آن‌ها استفاده کنیم. بیایید ابتدا ببینیم چگونه می‌توان توابع، ساختارها، شمارش‌ها (enum)، و متدها را با استفاده از جنریک‌ها تعریف کرد. سپس درباره اینکه جنریک‌ها چگونه بر عملکرد کد تأثیر می‌گذارند صحبت خواهیم کرد.</p>
+<h3 id="in-function-definitions"><a class="header" href="#in-function-definitions">در تعریف توابع</a></h3>
+<p>هنگام تعریف یک تابع که از جنریک‌ها استفاده می‌کند، جنریک‌ها را در امضای تابع قرار می‌دهیم، جایی که معمولاً نوع داده پارامترها و مقدار بازگشتی را مشخص می‌کنیم. این کار کد ما را انعطاف‌پذیرتر می‌کند و به فراخوانی‌کنندگان تابع ما عملکرد بیشتری ارائه می‌دهد، در حالی که از تکرار کد جلوگیری می‌کند.</p>
+<p>با ادامه تابع <code>largest</code>، لیست ۱۰-۴ دو تابع را نشان می‌دهد که هر دو بزرگ‌ترین مقدار را در یک بخش (slice) پیدا می‌کنند. سپس این‌ها را به یک تابع واحد که از جنریک‌ها استفاده می‌کند ترکیب خواهیم کرد.</p>
+<figure class="listing" id="listing-10-4">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn largest_i32(list: &amp;[i32]) -&gt; &amp;i32 {
+    let mut largest = &amp;list[0];
+
+    for item in list {
+        if item &gt; largest {
+            largest = item;
+        }
+    }
+
+    largest
+}
+
+fn largest_char(list: &amp;[char]) -&gt; &amp;char {
+    let mut largest = &amp;list[0];
+
+    for item in list {
+        if item &gt; largest {
+            largest = item;
+        }
+    }
+
+    largest
+}
+
+fn main() {
+    let number_list = vec![34, 50, 25, 100, 65];
+
+    let result = largest_i32(&amp;number_list);
+    println!("The largest number is {result}");
+<span class="boring">    assert_eq!(*result, 100);
+</span>
+    let char_list = vec!['y', 'm', 'a', 'q'];
+
+    let result = largest_char(&amp;char_list);
+    println!("The largest char is {result}");
+<span class="boring">    assert_eq!(*result, 'y');
+</span>}</code></pre>
+<figcaption><a href="#listing-10-4">لیست ۱۰-۴</a>: دو تابع که فقط در نام‌ها و انواع موجود در امضاهایشان متفاوت هستند</figcaption>
+</figure>
+<p>تابع <code>largest_i32</code> همان تابعی است که در لیست ۱۰-۳ استخراج کردیم و بزرگ‌ترین مقدار <code>i32</code> را در یک بخش پیدا می‌کند. تابع <code>largest_char</code> بزرگ‌ترین مقدار <code>char</code> را در یک بخش پیدا می‌کند. بدنه توابع دارای کد یکسانی هستند، بنابراین با معرفی یک پارامتر نوع جنریک در یک تابع واحد، تکرار را حذف می‌کنیم.</p>
+<p>برای پارامتری‌سازی نوع‌ها در یک تابع جدید، باید همان‌طور که برای پارامترهای مقداری (value parameters) نام مشخص می‌کنیم، برای پارامتر نوع نیز یک نام تعیین کنیم. می‌توانید از هر شناسه‌ای به عنوان نام پارامتر نوع استفاده کنید، اما ما از <code>T</code> استفاده خواهیم کرد، چون طبق قرارداد، نام پارامترهای نوع در Rust کوتاه هستند— اغلب تنها یک حرف—و همچنین طبق قرارداد نام‌گذاری نوع‌ها در Rust به‌صورت CamelCase نوشته می‌شوند. <code>T</code> که مخفف <em>type</em> است، انتخاب پیش‌فرض اکثر برنامه‌نویسان Rust می‌باشد.</p>
+<p>وقتی از یک پارامتر در بدنه تابع استفاده می‌کنیم، باید نام پارامتر را در امضا اعلام کنیم تا کامپایلر بداند آن نام به چه معناست. به طور مشابه، وقتی از نام پارامتر نوع در امضای تابع استفاده می‌کنیم، باید نام پارامتر نوع را قبل از استفاده از آن اعلام کنیم. برای تعریف تابع جنریک <code>largest</code>، نام نوع‌ها را داخل پرانتزهای زاویه‌ای، <code>&lt;&gt;</code>، بین نام تابع و لیست پارامتر قرار می‌دهیم، مانند زیر:</p>
+<pre><code class="language-rust ignore">fn largest&lt;T&gt;(list: &amp;[T]) -&gt; &amp;T {</code></pre>
+<p>این تعریف را به این صورت می‌خوانیم: تابع <code>largest</code> بر روی یک نوع <code>T</code> جنریک است. این تابع یک پارامتر به نام <code>list</code> دارد، که یک بخش از مقادیر نوع <code>T</code> است. تابع <code>largest</code> یک مرجع به مقداری از همان نوع <code>T</code> بازمی‌گرداند.</p>
+<p>لیستینگ 10-5 تعریف ترکیبی تابع <code>largest</code> را نشان می‌دهد که از نوع داده‌ی generic در امضای خود استفاده می‌کند.<br> این لیستینگ همچنین نشان می‌دهد که چگونه می‌توان این تابع را با یک <code>slice</code> از مقادیر <code>i32</code> یا مقادیر <code>char</code> فراخوانی کرد.<br> توجه داشته باشید که این کد هنوز قابل کامپایل نیست.</p>
+<figure class="listing" id="listing-10-5">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">fn largest&lt;T&gt;(list: &amp;[T]) -&gt; &amp;T {
+    let mut largest = &amp;list[0];
+
+    for item in list {
+        if item &gt; largest {
+            largest = item;
+        }
+    }
+
+    largest
+}
+
+fn main() {
+    let number_list = vec![34, 50, 25, 100, 65];
+
+    let result = largest(&amp;number_list);
+    println!("The largest number is {result}");
+
+    let char_list = vec!['y', 'm', 'a', 'q'];
+
+    let result = largest(&amp;char_list);
+    println!("The largest char is {result}");
+}</code></pre>
+<figcaption><a href="#listing-10-5">لیست ۱۰-۵</a>: تابع &lt;code&gt;&lt;/x-listing&gt;largest&lt;/code&gt; با استفاده از پارامترهای نوع جنریک؛ این کد هنوز کامپایل نمی‌شود</figcaption>
+</figure>
+<p>اگر همین حالا این کد را کامپایل کنیم، این خطا را دریافت می‌کنیم:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling chapter10 v0.1.0 (file:///projects/chapter10)
+error[E0369]: binary operation `&gt;` cannot be applied to type `&amp;T`
+ --&gt; src/main.rs:5:17
+  |
+5 |         if item &gt; largest {
+  |            ---- ^ ------- &amp;T
+  |            |
+  |            &amp;T
+  |
+help: consider restricting type parameter `T` with trait `PartialOrd`
+  |
+1 | fn largest&lt;T: std::cmp::PartialOrd&gt;(list: &amp;[T]) -&gt; &amp;T {
+  |             ++++++++++++++++++++++
+
+For more information about this error, try `rustc --explain E0369`.
+error: could not compile `chapter10` (bin "chapter10") due to 1 previous error
+</code></pre>
+<p>متن راهنمای خطا به <code>std::cmp::PartialOrd</code> اشاره می‌کند که یک <em>trait</em> است، و ما در بخش بعدی درباره‌ی <code>trait</code>ها صحبت خواهیم کرد. فعلاً بدانید که این خطا بیان می‌کند بدنه‌ی تابع <code>largest</code> برای همه‌ی نوع‌هایی که <code>T</code> می‌تواند باشد، کار نخواهد کرد. چون می‌خواهیم در بدنه‌ی تابع مقادیری از نوع <code>T</code> را با هم مقایسه کنیم، تنها می‌توانیم از نوع‌هایی استفاده کنیم که مقادیر آن‌ها قابل مقایسه (ترتیب‌پذیر) باشند. برای فعال کردن امکان مقایسه، کتابخانه‌ی استاندارد <code>trait</code>ای به نام <code>std::cmp::PartialOrd</code> دارد که می‌توان آن را روی نوع‌ها پیاده‌سازی کرد (برای اطلاعات بیشتر درباره‌ی این trait، به ضمیمه‌ی C مراجعه کنید). برای اصلاح لیستینگ 10-5، می‌توانیم پیشنهاد متن خطا را دنبال کنیم و نوع‌های معتبر برای <code>T</code> را تنها به آن‌هایی محدود کنیم که <code>PartialOrd</code> را پیاده‌سازی کرده‌اند. در این صورت لیستینگ کامپایل خواهد شد، چون کتابخانه‌ی استاندارد <code>PartialOrd</code> را روی هر دو نوع <code>i32</code> و <code>char</code> پیاده‌سازی کرده است.</p>
+<h3 id="in-struct-definitions"><a class="header" href="#in-struct-definitions">در تعریف ساختارها (Struct)</a></h3>
+<p>ما می‌توانیم ساختارها را نیز به گونه‌ای تعریف کنیم که از یک پارامتر نوع جنریک در یک یا چند فیلد استفاده کنند، با استفاده از نحو <code>&lt;&gt;</code>. لیست ۱۰-۶ ساختار <code>Point&lt;T&gt;</code> را تعریف می‌کند که مقادیر مختصات <code>x</code> و <code>y</code> از هر نوعی را نگه می‌دارد.</p>
+<figure class="listing" id="listing-10-6">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">struct Point&lt;T&gt; {
+    x: T,
+    y: T,
+}
+
+fn main() {
+    let integer = Point { x: 5, y: 10 };
+    let float = Point { x: 1.0, y: 4.0 };
+}</code></pre>
+<figcaption><a href="#listing-10-6">لیست ۱۰-۶</a>: ساختار &lt;code&gt;&lt;/x-listing&gt;Point&lt;T&gt;&lt;/code&gt; که مقادیر &lt;code&gt;x&lt;/code&gt; و &lt;code&gt;y&lt;/code&gt; از نوع &lt;code&gt;T&lt;/code&gt; را نگه می‌دارد</figcaption>
+</figure>
+<p>نحو استفاده از جنریک‌ها در تعریف ساختارها مشابه استفاده آن‌ها در تعریف توابع است. ابتدا نام پارامتر نوع را در داخل پرانتزهای زاویه‌ای بلافاصله پس از نام ساختار اعلام می‌کنیم. سپس نوع جنریک را در تعریف ساختار استفاده می‌کنیم، جایی که در غیر این صورت نوع داده مشخص را مشخص می‌کردیم.</p>
+<p>توجه داشته باشید که از آنجا که فقط یک نوع جنریک برای تعریف <code>Point&lt;T&gt;</code> استفاده کرده‌ایم، این تعریف بیان می‌کند که ساختار <code>Point&lt;T&gt;</code> برای یک نوع <code>T</code> جنریک است و فیلدهای <code>x</code> و <code>y</code> <em>هر دو</em> از همان نوع هستند، هرچه که آن نوع باشد. اگر نمونه‌ای از <code>Point&lt;T&gt;</code> ایجاد کنیم که مقادیر آن انواع مختلف داشته باشند، همانطور که در لیست ۱۰-۷ آمده است، کد ما کامپایل نخواهد شد.</p>
+<figure class="listing" id="listing-10-7">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">struct Point&lt;T&gt; {
+    x: T,
+    y: T,
+}
+
+fn main() {
+    let wont_work = Point { x: 5, y: 4.0 };
+}</code></pre>
+<figcaption><a href="#listing-10-7">لیست ۱۰-۷</a>: فیلدهای &lt;code&gt;&lt;/x-listing&gt;x&lt;/code&gt; و &lt;code&gt;y&lt;/code&gt; باید از همان نوع باشند زیرا هر دو دارای نوع داده جنریک &lt;code&gt;T&lt;/code&gt; هستند.</figcaption>
+</figure>
+<p>در این مثال، وقتی مقدار عدد صحیح <code>5</code> را به <code>x</code> اختصاص می‌دهیم، به کامپایلر اطلاع می‌دهیم که نوع جنریک <code>T</code> برای این نمونه از <code>Point&lt;T&gt;</code> یک عدد صحیح خواهد بود. سپس وقتی <code>4.0</code> را برای <code>y</code> مشخص می‌کنیم، که تعریف کرده‌ایم همان نوع <code>x</code> را داشته باشد، یک خطای عدم تطابق نوع دریافت می‌کنیم، مانند این:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling chapter10 v0.1.0 (file:///projects/chapter10)
+error[E0308]: mismatched types
+ --&gt; src/main.rs:7:38
+  |
+7 |     let wont_work = Point { x: 5, y: 4.0 };
+  |                                      ^^^ expected integer, found floating-point number
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `chapter10` (bin "chapter10") due to 1 previous error
+</code></pre>
+<p>برای تعریف یک ساختار <code>Point</code> که در آن <code>x</code> و <code>y</code> هر دو جنریک هستند اما می‌توانند انواع مختلفی داشته باشند، می‌توانیم از پارامترهای نوع جنریک چندگانه استفاده کنیم. برای مثال، در لیست ۱۰-۸، تعریف <code>Point</code> را تغییر می‌دهیم تا برای نوع‌های <code>T</code> و <code>U</code> جنریک باشد، جایی که <code>x</code> از نوع <code>T</code> و <code>y</code> از نوع <code>U</code> است.</p>
+<figure class="listing" id="listing-10-8">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">struct Point&lt;T, U&gt; {
+    x: T,
+    y: U,
+}
+
+fn main() {
+    let both_integer = Point { x: 5, y: 10 };
+    let both_float = Point { x: 1.0, y: 4.0 };
+    let integer_and_float = Point { x: 5, y: 4.0 };
+}</code></pre>
+<figcaption><a href="#listing-10-8">لیست ۱۰-۸</a>: یک ساختار &lt;code&gt;&lt;/x-listing&gt;Point&lt;T, U&gt;&lt;/code&gt; جنریک بر روی دو نوع، به طوری که &lt;code&gt;x&lt;/code&gt; و &lt;code&gt;y&lt;/code&gt; می‌توانند مقادیری از انواع مختلف باشند</figcaption>
+</figure>
+<p>حالا تمام نمونه‌های <code>Point</code> نشان داده شده معتبر هستند! شما می‌توانید به تعداد دلخواه پارامترهای نوع جنریک در یک تعریف استفاده کنید، اما استفاده از تعداد زیاد خوانایی کد شما را دشوار می‌کند. اگر می‌بینید که نیاز به انواع جنریک زیادی در کد خود دارید، ممکن است نشان‌دهنده این باشد که کد شما نیاز به ساختاربندی مجدد به بخش‌های کوچک‌تر دارد.</p>
+<h3 id="in-enum-definitions"><a class="header" href="#in-enum-definitions">در تعریف شمارش‌ها (Enum)</a></h3>
+<p>همانطور که با ساختارها انجام دادیم، می‌توانیم شمارش‌ها را به گونه‌ای تعریف کنیم که نوع داده‌های جنریک را در حالت‌های خود نگه دارند. بیایید دوباره به شمارش <code>Option&lt;T&gt;</code> که کتابخانه استاندارد ارائه می‌دهد و در فصل ۶ از آن استفاده کردیم نگاه کنیم:</p>
+<pre><code class="language-rust">enum Option&lt;T&gt; {
+    Some(T),
+    None,
+}</code></pre>
+<p>این تعریف اکنون باید برای شما بیشتر معنا پیدا کند. همانطور که می‌بینید، شمارش <code>Option&lt;T&gt;</code> بر روی نوع <code>T</code> جنریک است و دو حالت دارد: <code>Some</code> که یک مقدار از نوع <code>T</code> را نگه می‌دارد و حالت <code>None</code> که هیچ مقداری را نگه نمی‌دارد. با استفاده از شمارش <code>Option&lt;T&gt;</code>، می‌توانیم مفهوم انتزاعی یک مقدار اختیاری را بیان کنیم، و از آنجا که <code>Option&lt;T&gt;</code> جنریک است، می‌توانیم از این انتزاع بدون توجه به نوع مقدار اختیاری استفاده کنیم.</p>
+<p>شمارش‌ها نیز می‌توانند از انواع جنریک چندگانه استفاده کنند. تعریف شمارش <code>Result</code> که در فصل ۹ استفاده کردیم یک مثال است:</p>
+<pre><code class="language-rust">enum Result&lt;T, E&gt; {
+    Ok(T),
+    Err(E),
+}</code></pre>
+<p>شمارش <code>Result</code> بر روی دو نوع جنریک <code>T</code> و <code>E</code> است و دو حالت دارد: <code>Ok</code> که یک مقدار از نوع <code>T</code> نگه می‌دارد و <code>Err</code> که یک مقدار از نوع <code>E</code> نگه می‌دارد. این تعریف استفاده از شمارش <code>Result</code> را در هر جایی که یک عملیات ممکن است موفق شود (یک مقدار از نوع <code>T</code> بازگرداند) یا شکست بخورد (یک خطا از نوع <code>E</code> بازگرداند) آسان می‌کند. در واقع، این همان چیزی است که برای باز کردن یک فایل در لیست ۹-۳ استفاده کردیم، جایی که <code>T</code> با نوع <code>std::fs::File</code> پر شده بود وقتی فایل با موفقیت باز شد و <code>E</code> با نوع <code>std::io::Error</code> پر شده بود وقتی مشکلاتی در باز کردن فایل وجود داشت.</p>
+<p>وقتی وضعیت‌هایی در کد خود را شناسایی کردید که چندین تعریف ساختار یا شمارش وجود دارد که فقط در نوع مقادیر نگهداری شده متفاوت هستند، می‌توانید با استفاده از نوع‌های جنریک از تکرار جلوگیری کنید.</p>
+<h3 id="in-method-definitions"><a class="header" href="#in-method-definitions">در تعریف متدها</a></h3>
+<p>ما می‌توانیم متدهایی را روی ساختارها و شمارش‌ها پیاده‌سازی کنیم (همانطور که در فصل ۵ انجام دادیم) و از انواع جنریک در تعریف آن‌ها نیز استفاده کنیم. لیست ۱۰-۹ ساختار <code>Point&lt;T&gt;</code> که در لیست ۱۰-۶ تعریف کردیم را نشان می‌دهد، با متدی به نام <code>x</code> که روی آن پیاده‌سازی شده است.</p>
+<figure class="listing" id="listing-10-9">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">struct Point&lt;T&gt; {
+    x: T,
+    y: T,
+}
+
+impl&lt;T&gt; Point&lt;T&gt; {
+    fn x(&amp;self) -&gt; &amp;T {
+        &amp;self.x
+    }
+}
+
+fn main() {
+    let p = Point { x: 5, y: 10 };
+
+    println!("p.x = {}", p.x());
+}</code></pre>
+<figcaption><a href="#listing-10-9">لیست ۱۰-۹</a>: پیاده‌سازی متدی به نام &lt;code&gt;&lt;/x-listing&gt;x&lt;/code&gt; روی ساختار &lt;code&gt;Point&lt;T&gt;&lt;/code&gt; که یک مرجع به فیلد &lt;code&gt;x&lt;/code&gt; از نوع &lt;code&gt;T&lt;/code&gt; بازمی‌گرداند</figcaption>
+</figure>
+<p>در اینجا، یک متد به نام <code>x</code> روی <code>Point&lt;T&gt;</code> تعریف کرده‌ایم که یک مرجع به داده موجود در فیلد <code>x</code> بازمی‌گرداند.</p>
+<p>توجه داشته باشید که باید <code>T</code> را بلافاصله بعد از <code>impl</code> اعلام کنیم تا بتوانیم از <code>T</code> برای مشخص کردن اینکه داریم متدها را روی نوع <code>Point&lt;T&gt;</code> پیاده‌سازی می‌کنیم، استفاده کنیم. با اعلام <code>T</code> به عنوان یک نوع جنریک بعد از <code>impl</code>، Rust می‌تواند تشخیص دهد که نوع موجود در پرانتزهای زاویه‌ای در <code>Point</code> یک نوع جنریک است، نه یک نوع مشخص. می‌توانستیم نامی متفاوت از پارامتر جنریک اعلام‌شده در تعریف ساختار برای این پارامتر جنریک انتخاب کنیم، اما استفاده از همان نام یک عرف است. اگر یک متد را درون یک <code>impl</code> که یک نوع جنریک اعلام می‌کند بنویسید، آن متد روی هر نمونه‌ای از آن نوع تعریف می‌شود، بدون توجه به اینکه چه نوع مشخصی جایگزین نوع جنریک می‌شود.</p>
+<p>همچنین می‌توانیم محدودیت‌هایی بر روی نوع‌های جنریک هنگام تعریف متدها روی یک نوع مشخص کنیم. می‌توانیم، برای مثال، متدهایی را فقط روی نمونه‌های <code>Point&lt;f32&gt;</code> پیاده‌سازی کنیم، نه روی نمونه‌های <code>Point&lt;T&gt;</code> با هر نوع جنریک. در لیست ۱۰-۱۰ از نوع مشخص <code>f32</code> استفاده کرده‌ایم، به این معنی که هیچ نوعی را بعد از <code>impl</code> اعلام نمی‌کنیم.</p>
+<figure class="listing" id="listing-10-10">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust"><span class="boring">struct Point&lt;T&gt; {
+</span><span class="boring">    x: T,
+</span><span class="boring">    y: T,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl&lt;T&gt; Point&lt;T&gt; {
+</span><span class="boring">    fn x(&amp;self) -&gt; &amp;T {
+</span><span class="boring">        &amp;self.x
+</span><span class="boring">    }
+</span><span class="boring">}
+</span><span class="boring">
+</span>impl Point&lt;f32&gt; {
+    fn distance_from_origin(&amp;self) -&gt; f32 {
+        (self.x.powi(2) + self.y.powi(2)).sqrt()
+    }
+}
+<span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    let p = Point { x: 5, y: 10 };
+</span><span class="boring">
+</span><span class="boring">    println!("p.x = {}", p.x());
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-10-10">لیست ۱۰-۱۰</a>: یک بلوک &lt;code&gt;&lt;/x-listing&gt;impl&lt;/code&gt; که فقط برای یک ساختار با یک نوع مشخص برای پارامتر نوع جنریک &lt;code&gt;T&lt;/code&gt; اعمال می‌شود</figcaption>
+</figure>
+<p>این کد به این معنی است که نوع <code>Point&lt;f32&gt;</code> دارای یک متد <code>distance_from_origin</code> خواهد بود؛ سایر نمونه‌های <code>Point&lt;T&gt;</code> که <code>T</code> از نوع <code>f32</code> نیستند، این متد را تعریف نخواهند کرد. این متد فاصله نقطه ما از نقطه‌ای با مختصات (0.0, 0.0) را اندازه‌گیری می‌کند و از عملیات ریاضی استفاده می‌کند که فقط برای نوع‌های اعداد اعشاری در دسترس هستند.</p>
+<p>پارامترهای نوع جنریک در تعریف یک ساختار همیشه با آن‌هایی که در امضاهای متد همان ساختار استفاده می‌شوند یکسان نیستند. لیست ۱۰-۱۱ از نوع‌های جنریک <code>X1</code> و <code>Y1</code> برای ساختار <code>Point</code> و <code>X2</code> و <code>Y2</code> برای امضای متد <code>mixup</code> استفاده می‌کند تا مثال را واضح‌تر کند. این متد یک نمونه جدید از <code>Point</code> ایجاد می‌کند با مقدار <code>x</code> از <code>Point</code> <code>self</code> (از نوع <code>X1</code>) و مقدار <code>y</code> از <code>Point</code> پاس‌داده‌شده (از نوع <code>Y2</code>).</p>
+<figure class="listing" id="listing-10-11">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">struct Point&lt;X1, Y1&gt; {
+    x: X1,
+    y: Y1,
+}
+
+impl&lt;X1, Y1&gt; Point&lt;X1, Y1&gt; {
+    fn mixup&lt;X2, Y2&gt;(self, other: Point&lt;X2, Y2&gt;) -&gt; Point&lt;X1, Y2&gt; {
+        Point {
+            x: self.x,
+            y: other.y,
+        }
+    }
+}
+
+fn main() {
+    let p1 = Point { x: 5, y: 10.4 };
+    let p2 = Point { x: "Hello", y: 'c' };
+
+    let p3 = p1.mixup(p2);
+
+    println!("p3.x = {}, p3.y = {}", p3.x, p3.y);
+}</code></pre>
+<figcaption><a href="#listing-10-11">لیست ۱۰-۱۱</a>: یک متد که از نوع‌های جنریک متفاوت از تعریف ساختار خود استفاده می‌کند</figcaption>
+</figure>
+<p>در تابع <code>main</code>، یک <code>Point</code> تعریف کرده‌ایم که <code>x</code> آن یک <code>i32</code> (با مقدار <code>5</code>) و <code>y</code> آن یک <code>f64</code> (با مقدار <code>10.4</code>) است. متغیر <code>p2</code> یک ساختار <code>Point</code> است که <code>x</code> آن یک قطعه رشته (با مقدار <code>"Hello"</code>) و <code>y</code> آن یک <code>char</code> (با مقدار <code>c</code>) است. فراخوانی <code>mixup</code> روی <code>p1</code> با آرگومان <code>p2</code> به ما <code>p3</code> را می‌دهد، که <code>x</code> آن یک <code>i32</code> خواهد بود زیرا <code>x</code> از <code>p1</code> آمده است. متغیر <code>p3</code> یک <code>char</code> برای <code>y</code> خواهد داشت زیرا <code>y</code> از <code>p2</code> آمده است. فراخوانی ماکرو <code>println!</code> مقدار <code>p3.x = 5, p3.y = c</code> را چاپ می‌کند.</p>
+<p>هدف این مثال این است که وضعیتی را نشان دهد که در آن برخی پارامترهای جنریک با <code>impl</code> اعلام می‌شوند و برخی دیگر با تعریف متد اعلام می‌شوند. در اینجا، پارامترهای جنریک <code>X1</code> و <code>Y1</code> بعد از <code>impl</code> اعلام شده‌اند زیرا با تعریف ساختار همراه هستند. پارامترهای جنریک <code>X2</code> و <code>Y2</code> بعد از <code>fn mixup</code> اعلام شده‌اند زیرا فقط به متد مربوط هستند.</p>
+<h3 id="performance-of-code-using-generics"><a class="header" href="#performance-of-code-using-generics">عملکرد کدی که از جنریک‌ها استفاده می‌کند</a></h3>
+<p>ممکن است این سوال برای شما پیش بیاید که آیا هنگام استفاده از پارامترهای نوع جنریک، هزینه‌ای در زمان اجرا وجود دارد یا خیر. خبر خوب این است که استفاده از انواع جنریک برنامه شما را کندتر از حالتی که از انواع مشخص استفاده می‌کردید، نمی‌کند.</p>
+<p>Rust این کار را با انجام فرآیندی به نام <em>تک‌ریخت‌سازی</em> (monomorphization) روی کدی که از جنریک‌ها استفاده می‌کند در زمان کامپایل انجام می‌دهد. <em>تک‌ریخت‌سازی</em> فرآیند تبدیل کد جنریک به کد مشخص است با پر کردن انواع مشخصی که هنگام کامپایل استفاده می‌شوند. در این فرآیند، کامپایلر برعکس مراحلی که برای ایجاد تابع جنریک در لیست ۱۰-۵ استفاده کردیم را انجام می‌دهد: کامپایلر به تمام جاهایی که کد جنریک فراخوانی شده نگاه می‌کند و کدی را برای انواع مشخصی که کد جنریک با آن‌ها فراخوانی شده ایجاد می‌کند.</p>
+<p>بیایید ببینیم این کار چگونه انجام می‌شود با استفاده از شمارش جنریک <code>Option&lt;T&gt;</code> در کتابخانه استاندارد:</p>
+<pre><code class="language-rust">let integer = Some(5);
+let float = Some(5.0);</code></pre>
+<p>وقتی Rust این کد را کامپایل می‌کند، فرآیند تک‌ریخت‌سازی را انجام می‌دهد. در طول این فرآیند، کامپایلر مقادیر استفاده شده در نمونه‌های <code>Option&lt;T&gt;</code> را می‌خواند و دو نوع <code>Option&lt;T&gt;</code> را شناسایی می‌کند: یکی <code>i32</code> و دیگری <code>f64</code>. به این ترتیب، تعریف جنریک <code>Option&lt;T&gt;</code> را به دو تعریف ویژه برای <code>i32</code> و <code>f64</code> گسترش می‌دهد و بنابراین تعریف جنریک را با تعریف‌های مشخص جایگزین می‌کند.</p>
+<p>نسخه تک‌ریخت‌سازی شده کد شبیه به چیزی به نظر می‌رسد (کامپایلر از نام‌های متفاوتی استفاده می‌کند، اما برای توضیح از این نام‌ها استفاده کرده‌ایم):</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">enum Option_i32 {
+    Some(i32),
+    None,
+}
+
+enum Option_f64 {
+    Some(f64),
+    None,
+}
+
+fn main() {
+    let integer = Option_i32::Some(5);
+    let float = Option_f64::Some(5.0);
+}</code></pre>
+</figure>
+<p>شمارش جنریک <code>Option&lt;T&gt;</code> با تعریف‌های مشخص ایجاد شده توسط کامپایلر جایگزین شده است. از آنجا که Rust کد جنریک را به کدی که نوع را در هر نمونه مشخص می‌کند کامپایل می‌کند، هیچ هزینه‌ای در زمان اجرا برای استفاده از جنریک‌ها پرداخت نمی‌کنیم. وقتی کد اجرا می‌شود، دقیقاً همان‌طور عمل می‌کند که اگر هر تعریف را به صورت دستی تکرار کرده بودیم. فرآیند تک‌ریخت‌سازی جنریک‌های Rust را در زمان اجرا بسیار کارآمد می‌کند.</p><nav class="page-nav"><a href="ch10-00-generics.html">→ نوع‌های جنریک، صفت‌ها و طول عمر</a><a href="ch10-02-traits.html">تعریف رفتار مشترک با صفت‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

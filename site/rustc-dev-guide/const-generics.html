@@ -1,0 +1,146 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>جنریک‌های ثابت — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="const-generics"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="const-generics"><a class="header" href="#const-generics">Const generics</a></h1>
+<h2 id="kinds-of-const-arguments"><a class="header" href="#kinds-of-const-arguments">انواع آرگومان‌های const</a></h2>
+<p>بیشتر انواع <code>ty::Const</code> که وجود دارند معادل مستقیمی در انواع نوع‌ها دارند؛ برای مثال <code>ConstKind::Param</code> معادل <code>TyKind::Param</code> است.</p>
+<p>نکات جالب اصلی در اینجا عبارت‌اند از:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/consts/type.ConstKind.html#variant.Alias"><code>ConstKind::Alias</code></a>, which is equivalent to <code>TyKind::Alias</code>.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/consts/type.ConstKind.html#variant.Value"><code>ConstKind::Value</code></a>، که مقدار نهایی یک <code>ty::Const</code> پس از monomorphization است. این تا حدی شبیه چیزهای کاملاً مشخصی مانند <code>TyKind::Str</code> یا <code>TyKind::ADT</code> است.</li>
+</ul>
+<p>برای فهرست کامل <em>همهٔ</em> انواع آرگومان‌های const و اینکه در سیستم نوع واقعاً چگونه نمایش داده می‌شوند، به نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/consts/type.ConstKind.html"><code>ConstKind</code></a> مراجعه کنید.</p>
+<p>متغیرهای استنتاج (Inference Variables) کاملاً بی‌حاشیه‌اند و تقریباً در همه‌جا مانند متغیرهای استنتاج نوع با آن‌ها رفتار می‌شود. پارامترهای const (Const Parameters) نیز به همین ترتیب بی‌حاشیه‌اند و تقریباً در همه‌جا معادل استفاده از پارامترهای نوع هستند. با این حال، ظرافت‌های جالبی در نحوهٔ مدیریت آن‌ها در طول تجزیه (parsing)، تحلیل نام (name resolution) و lowering به AST وجود دارد: <a href="./ambig-unambig-ty-and-consts.html">ambig-unambig-ty-and-consts</a>.</p>
+<h2 id="anon-consts"><a class="header" href="#anon-consts">Anon constها</a></h2>
+<p>Anon constها (مخفف anonymous const items) روشی هستند که عبارت‌های دلخواه در const generics با آن نمایش داده می‌شوند؛ برای مثال طول آرایهٔ <code>1 + 1</code> یا <code>foo()</code> یا حتی فقط <code>0</code>. این‌ها مختص const generics هستند و معادل واقعی در نوع‌ها ندارند.</p>
+<h3 id="desugaring"><a class="header" href="#desugaring">Desugaring</a></h3>
+<pre><code class="language-rust">struct Foo&lt;const N: usize&gt;;
+type Alias = [u8; 1 + 1];</code></pre>
+<p>در این مثال یک آرگومان const به‌صورت <code>1 + 1</code> (طول آرایه) داریم که به‌شکل یک <em>anon const</em> نمایش داده می‌شود. desugaring چیزی شبیه این خواهد بود:</p>
+<pre><code class="language-rust">struct Foo&lt;const N: usize&gt;;
+
+const ANON: usize = 1 + 1;
+type Alias = [u8; ANON];</code></pre>
+<p>که در آن طول آرایه در <code>[u8; ANON]</code> خودش یک anon const شامل استفاده از <code>ANON</code> نیست، بلکه نوعی استفادهٔ «مستقیم» از آیتم const به نام <code>ANON</code> است (<code>ConstKind::Unevaluated</code>).</p>
+<p>Anon constها هیچ پارامتر جنریکی از آیتمی که درون آن هستند به ارث نمی‌برند:</p>
+<pre><code class="language-rust">struct Foo&lt;const N: usize&gt;;
+type Alias&lt;T: Sized&gt; = [T; 1 + 1];
+
+// Desugars To;
+
+struct Foo&lt;const N: usize&gt;;
+
+const ANON: usize = 1 + 1;
+type Alias&lt;T: Sized&gt; = [T; ANON];</code></pre>
+<p>توجه کنید که ثابت <code>ANON</code> هیچ پارامتر جنریک یا where clause ندارد، هرچند <code>Alias</code> هم یک پارامتر نوع <code>T</code> و هم یک where clause به شکل <code>T: Sized</code> دارد. این desugaring بخشی از روشی است که با آن اعمال می‌کنیم anon constها نتوانند از پارامترهای جنریک استفاده کنند.</p>
+<p>اگرچه مفید است که anon constها را به‌صورت desugar شده به آیتم‌های const واقعی در نظر بگیریم، کامپایلر در واقع این‌گونه پیاده‌سازی نشده است.</p>
+<p>در زمان lowering به AST هنوز <em>نوع</em> anon const را نمی‌دانیم، بنابراین نمی‌توانیم آن را به یک آیتم HIR واقعی با نوعی که صریحاً نوشته شده desugar کنیم. برای دور زدن این مشکل، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/def/enum.DefKind.html#variant.AnonConst"><code>DefKind::AnonConst</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/enum.Node.html#variant.AnonConst#"><code>hir::Node::AnonConst</code></a> را داریم که برای نمایش این آیتم‌های const ناشناسی به کار می‌روند که در واقع نمی‌توان آن‌ها را desugar کرد.</p>
+<p>نوع این anon constها از کوئری <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html#method.type_of"><code>type_of</code></a> به دست می‌آید. با این حال، کوئری <code>type_of</code> در واقع منطقی برای محاسبهٔ نوع ندارد (و در حقیقت هنگام فراخوانی فقط ICE می‌دهد). در عوض، HIR Ty lowering مسئول <em>تغذیهٔ</em> (feeding) مقدار کوئری <code>type_of</code> برای هر anon constی است که lower می‌شود. HIR Ty lowering می‌تواند نوع anon const را با نگاه به نوع پارامتر Const که anon const آرگومانی برای آن است تعیین کند.</p>
+<p><strong>TODO</strong>: فصلی دربارهٔ query feeding بنویسید و پیوند آن را اینجا قرار دهید</p>
+<p>به یک معنا، desugaringهای مثال‌های قبلی به این صورت‌اند:</p>
+<pre><code class="language-rust">struct Foo&lt;const N: usize&gt;;
+type Alias = [u8; 1 + 1];
+
+// sort-of desugars to pseudo-rust:
+struct Foo&lt;const N: usize&gt;;
+
+const ANON = 1 + 1;
+type Alias = [u8; ANON];</code></pre>
+<p>وقتی برای نوع آرایه در <code>Alias</code> از HIR ty lowering می‌گذریم، طول آرایه را هم lower می‌کنیم و <code>type_of(ANON) -&gt; usize</code> را feed می‌کنیم. این کار عملاً نوع آیتم const به نام <code>ANON</code> را در بخشی بعدی از کامپایلر تنظیم می‌کند، نه هنگام ساخت HIR.</p>
+<p>پس از انجام همهٔ این desugaringها، نمایش نهایی در سیستم نوع (یعنی به‌صورت یک <code>ty::Const</code>) یک <code>ConstKind::Unevaluated</code> با <code>DefId</code> مربوط به <code>AnonConst</code> است. این معادل روشی است که اگر می‌خواستیم استفاده از یک آیتم const واقعی را بدون عبور از anon const نمایش دهیم، به کار می‌بردیم (مثلاً وقتی <code>min_generic_const_args</code> فعال است).</p>
+<p>این کار اجازه می‌دهد نمایش «alias»های const با نمایش <code>TyKind::Alias</code> یکسان باشد. داشتن یک بدنهٔ HIR واقعی نیز امکان استفادهٔ مجدد <em>بسیار</em> زیادی از کد را فراهم می‌کند؛ برای مثال می‌توانیم از type checking در HIR و همهٔ مراحل lowering به MIR دوباره استفاده کنیم و سپس از ارزیابی ثابت (const eval) بهره ببریم.</p>
+<h3 id="enforcing-lack-of-generic-parameters"><a class="header" href="#enforcing-lack-of-generic-parameters">اعمال نبودن پارامترهای جنریک</a></h3>
+<p>سه راه برای اعمال این قاعده وجود دارد که anon constها نتوانند از پارامترهای جنریک استفاده کنند:</p>
+<ol>
+<li>تحلیل نام (Name Resolution) مسیرهایی را که به پارامترهای جنریک اشاره می‌کنند درون یک anon const resolve نمی‌کند</li>
+<li>HIR Ty lowering وقتی درون یک anon const با یک alias نوع <code>Self</code> مواجه شود که به نوعی با ارجاع به پارامترهای جنریک اشاره دارد، خطا می‌دهد</li>
+<li>Anon constها where clauseها یا جنریک‌ها را از تعریف والد خود به ارث نمی‌برند (یعنی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html#impl-TyCtxt%3C'tcx%3E/method.generics_of"><code>generics_of</code></a> برای anon constها والد ندارد)</li>
+</ol>
+<pre><code class="language-rust">// *1* Errors in name resolution
+type Alias&lt;const N: usize&gt; = [u8; N + 1];
+//~^ ERROR: generic parameters may not be used in const operations
+
+// *2* Errors in HIR Ty lowering:
+struct Foo&lt;T&gt;(T);
+impl&lt;T&gt; Foo&lt;T&gt; {
+    fn assoc() -&gt; [u8; { let a: Self; 0 }] {}
+    //~^ ERROR: generic `Self` types are currently not permitted in anonymous constants
+}
+
+// *3* Errors due to lack of where clauses on the desugared anon const
+trait Trait&lt;T&gt; {
+    const ASSOC: usize;
+}
+fn foo&lt;T&gt;() -&gt; [u8; &lt;()&gt;::ASSOC]
+//~^ ERROR: no associated item named `ASSOC` found for unit type `()`
+where
+    (): Trait&lt;T&gt; {}</code></pre>
+<p>نکتهٔ دوم به‌ویژه ظریف است، زیرا بسیار آسان است که HIR Ty lowering را اشتباه پیاده کنیم و به‌درستی اعمال نکنیم که anon constها نمی‌توانند از پارامترهای جنریک استفاده کنند. بررسی موجود بیش از حد محافظه‌کارانه است و به‌طور تصادفی اجازه می‌دهد برخی پارامترهای جنریک در بدنهٔ anon const راه یابند <a href="https://github.com/rust-lang/rust/issues/144547">#144547</a>.</p>
+<p>مجاز دانستن اشتباهیِ پارامترهای جنریک در anon constها گاهی می‌تواند به ICE بینجامد، اما می‌تواند به پذیرفته‌شدن برنامه‌های نادرست نیز منجر شود.</p>
+<p>نکتهٔ سوم نیز تا حدی ظریف است: با به ارث نبردن هیچ‌یک از where clauseهای آیتم والد، از این پیش‌آمد جلوگیری می‌کنیم که trait solving بر پایهٔ where clauseهای موجود در دامنه که به پارامترهای جنریک اشاره دارند، متغیرهای استنتاج را به پارامترهای جنریک استنتاج کند. برای مثال، استنتاج <code>?x=T</code> از عبارت <code>&lt;() as Trait&lt;?x&gt;&gt;::ASSOC</code> و یک where clause موجود در دامنه به شکل <code>(): Trait&lt;T&gt;</code>.</p>
+<p>این همچنین احتمال اینکه کامپایلر ICE بدهد یا دست‌کم به‌طور اتفاقی نوعی خطا صادر کند را بسیار بیشتر می‌کند، اگر <em>به‌طور تصادفی</em> اجازهٔ پارامترهای جنریک را در یک anon const بدهیم، زیرا anon const هیچ‌یک از اطلاعات لازم برای مدیریت درست پارامترهای جنریک را در محیط خود نخواهد داشت.</p>
+<h4 id="array-repeat-expressions"><a class="header" href="#array-repeat-expressions">عبارت‌های تکرار آرایه</a></h4>
+<p>تنها استثنا در همهٔ موارد بالا، تعداد تکرار (repeat count) در عبارت‌های آرایه است. به‌عنوان یک <em>ترفند سازگاری با گذشته</em>، به آرگومان const تعداد تکرار اجازه می‌دهیم از پارامترهای جنریک استفاده کند.</p>
+<pre><code class="language-rust">fn foo&lt;T: Sized&gt;() {
+    let a = [1_u8; size_of::&lt;T&gt;()];
+}</code></pre>
+<p>با این حال، برای پرهیز از بیشتر مشکلاتی که مجاز کردن پارامترهای جنریک در آرگومان‌های const از نوع anon const به همراه دارد، لازم می‌دانیم ثابت پیش از monomorphization (مثلاً در طول type checking) ارزیابی شود. به یک معنا فقط وقتی اجازهٔ پارامترهای جنریک را در اینجا می‌دهیم که از نظر معنایی استفاده‌نشده باشند.</p>
+<p>در مثال قبل، anon const را می‌توان برای هر پارامتر نوع <code>T</code> ارزیابی کرد، زیرا اشاره‌گرهای خام به نوع‌های sized همیشه اندازهٔ یکسانی دارند (مثلاً <code>8</code> روی پلتفرم‌های ۶۴ بیتی).</p>
+<p>وقتی تشخیص دهیم anon constی ارزیابی شده که از نظر نحوی شامل پارامترهای جنریک بوده، اما موفقیت ارزیابی در واقع به آن‌ها وابسته نبوده، <a href="https://github.com/rust-lang/rust/issues/76200"><code>const_evaluatable_unchecked</code> FCW</a> را صادر می‌کنیم. قرار است این هشدار پس از پایدارسازی راه‌های بیشتری برای استفاده از پارامترهای جنریک در آرگومان‌های const، مثلاً <code>min_generic_const_args</code> یا (اکنون منسوخ‌شدهٔ) <code>generic_const_exprs</code>، به خطای سخت تبدیل شود.</p>
+<p>پیاده‌سازی این FCW را اینجا می‌توان یافت: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.TyCtxt.html#method.const_eval_resolve_for_typeck"><code>const_eval_resolve_for_typeck</code></a></p>
+<h3 id="incompatibilities-with-generic_const_parameter_types"><a class="header" href="#incompatibilities-with-generic_const_parameter_types">ناسازگاری‌ها با <code>generic_const_parameter_types</code></a></h3>
+<p>پشتیبانی از پارامترهای const مانند <code>const N: [u8; M]</code> یا <code>const N: Foo&lt;T&gt;</code> با ساختار فعلی anon constها به‌خوبی کار نمی‌کند. دو دلیل برای این وجود دارد:</p>
+<ol>
+<li>
+<p>چون anon constها نمی‌توانند از پارامترهای جنریک استفاده کنند، نوع آن‌ها <em>نیز</em> نمی‌تواند به پارامترهای جنریک ارجاع دهد. این یعنی اساساً ممکن نیست از یک anon const به‌عنوان آرگومان برای پارامتر constی استفاده کرد که نوعش هنوز به پارامترهای جنریک ارجاع می‌دهد.</p>
+<pre><code class="language-rust">#![feature(adt_const_params, generic_const_parameter_types)]
+
+fn foo&lt;const N: usize, const M: [u8; N]&gt;() {}
+
+fn bar&lt;const N: usize&gt;() {
+    // There is no way to specify the const argument to `M`
+    foo::&lt;N, { [1_u8; N] }&gt;();
+}</code></pre>
+</li>
+<li>
+<p>در حال حاضر لازم است هنگام lower کردن anon constها در HIR ty lowering نوع آن‌ها را بدانیم. با نوع‌های پارامتر const جنریک ممکن است نوعی که در حال حاضر شناخته می‌شود شامل متغیرهای استنتاج باشد (یعنی هنوز ممکن است کاملاً معلوم نباشد).</p>
+<pre><code class="language-rust">#![feature(adt_const_params, generic_const_parameter_types)]
+
+fn foo&lt;const N: usize, const M: [u8; N]&gt;() {}
+
+fn bar() {
+    // The const argument to `N` must be explicitly specified
+    // even though it is able to be inferred
+    foo::&lt;_, { [1_u8; 3] }&gt;();
+}</code></pre>
+</li>
+</ol>
+<p>هنوز روشن نیست که راه درست برای سازگار کردن <code>generic_const_parameter_types</code> با بقیهٔ const generics چیست.</p>
+<p><code>generic_const_exprs</code> اجازهٔ anon constهایی را می‌داد که نوع‌هایشان به پارامترهای جنریک ارجاع دارند، اما آن طراحی عملاً غیرقابل‌استفاده از آب درآمد.</p>
+<p><code>min_generic_const_args</code> اجازه خواهد داد برخی عبارت‌ها (مثلاً ساخت آرایه) بدون anon const و در نتیجه بدون برخورد با این مشکلات قابل نمایش باشند، هرچند هنوز مشخص نیست که این <em>کافی</em> است یا نه.</p>
+<h2 id="checking-types-of-const-arguments"><a class="header" href="#checking-types-of-const-arguments">بررسی نوع آرگومان‌های const</a></h2>
+<p>برای آنکه یک آرگومان const خوش‌فرم (well formed) باشد باید همان نوع پارامتر constی را داشته باشد که آرگومانی برای آن است. برای مثال، آرگومان const از نوع <code>bool</code> برای طول آرایه خوش‌فرم نیست، زیرا پارامتر طول آرایه نوع <code>usize</code> دارد.</p>
+<pre><code class="language-rust">type Alias&lt;const B: bool&gt; = [u8; B];
+//~^ ERROR:</code></pre>
+<p>برای بررسی این مورد، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.ClauseKind.html#variant.ConstArgHasType"><code>ClauseKind::ConstArgHasType(ty::Const, Ty)</code></a> را داریم، که در آن، به‌ازای هر پارامتر Const تعریف‌شده روی یک آیتم، یک clause معادل <code>ConstArgHasType</code> را نیز در فهرست where clauseهای آن desugar می‌کنیم. این تضمین می‌کند که هر بار خوش‌فرمی چیزی را با اثبات همهٔ clauseهایش بررسی می‌کنیم، اتفاقاً بررسی می‌کنیم که همهٔ آرگومان‌های Const نوع درست دارند.</p>
+<pre><code class="language-rust">fn foo&lt;const N: usize&gt;() {}
+
+// desugars to in pseudo-rust
+
+fn foo&lt;const N&gt;()
+where
+//  ConstArgHasType(N, usize)
+    N: usize, {}</code></pre>
+<p>اثبات goalهای <code>ConstArgHasType</code> به این صورت پیاده‌سازی شده که ابتدا نوع آرگومان const محاسبه می‌شود و سپس با نوع داده‌شده برابر قرار داده می‌شود. طرح کلی چگونگی محاسبهٔ نوع یک آرگومان Const:</p>
+<ul>
+<li>برای <code>ConstKind::Param(N)</code> می‌توان در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.ParamEnv.html"><code>ParamEnv</code></a> به دنبال یک clause به شکل <code>ConstArgHasType(N, ty)</code> گشت</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/consts/type.ConstKind.html#variant.Value"><code>ConstKind::Value</code></a> نوع مقدار را درون خودش ذخیره می‌کند، پس می‌توان به‌سادگی به آن دسترسی داشت</li>
+<li>نوع <code>ConstKind::Unevaluated</code> را می‌توان با فراخوانی کوئری <code>type_of</code> محاسبه کرد</li>
+<li>برای اطلاعات دقیق‌تر، پیاده‌سازی اثبات goalهای <code>ConstArgHasType</code> را ببینید</li>
+</ul>
+<p><code>ConstArgHasType</code> <em>تنها</em> روش حیاتی از نظر درستی (soundness) برای بررسی نوع درست آرگومان‌های Const است. با این حال، در برخی موارد نوع آرگومان‌های Const را به روش دیگری نیز <em>به‌طور غیرمستقیم</em> بررسی می‌کنیم.</p>
+<pre><code class="language-rust">type Alias = [u8; true];
+
+// desugars to
+
+const ANON: usize = true;
+type Alias = [u8; ANON];</code></pre>
+<p>با feed کردن نوع یک anon const با نوع پارامتر Const، تضمین می‌کنیم که goal مربوط به <code>ConstArgHasType</code> که anon const را در بر دارد موفق شود. در مواردی که نوع anon const با نوع پارامتر Const مطابقت ندارد، آنچه در واقع رخ می‌دهد یک خطای <em>type checking</em> هنگام بررسی نوع بدنهٔ anon const است.</p>
+<p>با نگاه به مثال بالا، این متناظر است با اینکه <code>[u8; ANON]</code> نوعی خوش‌فرم است زیرا <code>ANON</code> نوع <code>usize</code> دارد، اما <em>بدنهٔ</em> <code>ANON</code> بدفرم است و به خطای type checking می‌انجامد، زیرا <code>true</code> را نمی‌توان از یک آیتم const با نوع <code>usize</code> برگرداند.</p><nav class="page-nav"><a href="hir-typeck/method-lookup.html">→ جست‌وجوی متد</a><a href="opaque-types-type-alias-impl-trait.html">نوع‌های Opaque ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

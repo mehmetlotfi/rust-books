@@ -1,0 +1,52 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>آزادسازی — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="arc-mutex/arc-drop"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="dropping"><a class="header" href="#dropping">آزادسازی (Dropping)</a></h1>
+<p>اکنون به راهی نیاز داریم که شمارندهٔ ارجاع را کاهش دهد و وقتی به اندازهٔ کافی کم شد، داده را drop کند؛ وگرنه داده برای همیشه روی heap باقی می‌ماند.</p>
+<p>برای این کار می‌توانیم <code>Drop</code> را پیاده‌سازی کنیم.</p>
+<p>در اصل باید:</p>
+<ol>
+<li>شمارندهٔ ارجاع را کاهش دهیم</li>
+<li>اگر فقط یک ارجاع به داده باقی مانده است، آنگاه:</li>
+<li>به‌طور اتمیک روی داده fence بگذاریم تا از جابه‌جایی ترتیب استفاده و حذف داده جلوگیری شود</li>
+<li>داده درونی را drop کنیم</li>
+</ol>
+<p>نخست باید به <code>ArcInner</code> دسترسی پیدا کنیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">let inner = unsafe { self.ptr.as_ref() };</code></pre>
+<p>اکنون باید شمارندهٔ ارجاع را کاهش دهیم. برای ساده‌تر شدن کد، می‌توانیم در همان‌جا اگر مقدار برگشتیِ <code>fetch_sub</code> (مقدار شمارندهٔ ارجاع پیش از کاهش) برابر <code>1</code> نباشد (که وقتی رخ می‌دهد که ما آخرین ارجاع به داده نیستیم)، برگردیم.</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">if inner.rc.fetch_sub(1, Ordering::Release) != 1 {
+    return;
+}</code></pre>
+<p>سپس باید یک fence اتمیک بسازیم تا از جابه‌جایی ترتیب استفاده از داده و حذف آن جلوگیری شود. همان‌طور که در <a href="https://github.com/rust-lang/rust/blob/e1884a8e3c3e813aada8254edfa120e85bf5ffca/library/alloc/src/sync.rs#L1440-L1467">پیاده‌سازی <code>Arc</code> در کتابخانهٔ استاندارد</a> توضیح داده شده است:</p>
+<blockquote>
+<p>این fence لازم است تا از جابه‌جایی ترتیب استفاده از داده و حذف آن جلوگیری شود. چون علامت <code>Release</code> دارد، کاهش شمارندهٔ ارجاع با این fence از نوع <code>Acquire</code> همگام می‌شود. یعنی استفاده از داده پیش از کاهش شمارندهٔ ارجاع رخ می‌دهد، که پیش از این fence رخ می‌دهد، که پیش از حذف داده رخ می‌دهد.</p>
+<p>همان‌طور که در <a href="https://www.boost.org/doc/libs/1_55_0/doc/html/atomic/usage_examples.html">مستندات Boost</a> توضیح داده شده،</p>
+<blockquote>
+<p>مهم است که هر دسترسی ممکن به شیء در یک نخ (از طریق یک ارجاع موجود) <em>پیش از</em> حذف شیء در نخی دیگر رخ دهد. این کار با یک عملیات «release» پس از رها کردن یک ارجاع (هر دسترسی به شیء از طریق این ارجاع بدیهی است که باید پیش از آن رخ داده باشد)، و یک عملیات «acquire» پیش از حذف شیء به دست می‌آید.</p>
+</blockquote>
+<p>به‌طور خاص، هرچند محتوای یک Arc معمولاً تغییرناپذیر است، ممکن است نوشتن‌های درونی روی چیزی مانند <code>Mutex&lt;T&gt;</code> رخ دهد. چون هنگام حذف یک Mutex قفل آن گرفته نمی‌شود، نمی‌توانیم به منطق همگام‌سازی آن تکیه کنیم تا نوشتن‌های نخ A برای یک مخرب (destructor) که در نخ B اجرا می‌شود قابل مشاهده شوند.</p>
+<p>همچنین توجه کنید که fence از نوع Acquire در اینجا احتمالاً می‌تواند با یک بار‌خوانی Acquire جایگزین شود، که ممکن است عملکرد را در موقعیت‌های با رقابت زیاد بهبود دهد. <a href="https://github.com/rust-lang/rust/pull/41714">2</a> را ببینید.</p>
+</blockquote>
+<p>برای این کار، به این صورت عمل می‌کنیم:</p>
+<pre><code class="language-rust"><span class="boring">use std::sync::atomic::Ordering;
+</span>use std::sync::atomic;
+atomic::fence(Ordering::Acquire);</code></pre>
+<p>سرانجام می‌توانیم خود داده را drop کنیم. از <code>Box::from_raw</code> برای drop کردن <code>ArcInner&lt;T&gt;</code> درون box و داده‌اش استفاده می‌کنیم. این تابع یک <code>*mut T</code> می‌گیرد، نه <code>NonNull&lt;T&gt;</code>، بنابراین باید با <code>NonNull::as_ptr</code> تبدیل کنیم.</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">unsafe { Box::from_raw(self.ptr.as_ptr()); }</code></pre>
+<p>این کار ایمن است، چون می‌دانیم آخرین اشاره‌گر به <code>ArcInner</code> را داریم و اشاره‌گر آن معتبر است.</p>
+<p>اکنون همهٔ این‌ها را درون پیاده‌سازی <code>Drop</code> جمع می‌کنیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">impl&lt;T&gt; Drop for Arc&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        let inner = unsafe { self.ptr.as_ref() };
+        if inner.rc.fetch_sub(1, Ordering::Release) != 1 {
+            return;
+        }
+        // This fence is needed to prevent reordering of the use and deletion
+        // of the data.
+        atomic::fence(Ordering::Acquire);
+        // This is safe as we know we have the last pointer to the `ArcInner`
+        // and that its pointer is valid.
+        unsafe { Box::from_raw(self.ptr.as_ptr()); }
+    }
+}</code></pre><nav class="page-nav"><a href="arc-clone.html">→ کلون‌کردن</a><a href="arc-final.html">کد نهایی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../nomicon/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,82 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>تبدیل نوع — Rust با مثال</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="types/cast"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../rbe/index.html" style="color:inherit;text-decoration:none">Rust با مثال</a><small class="en-title" dir="ltr">Rust By Example</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="casting"><a class="header" href="#casting">تبدیل نوع</a></h1>
+<p>راست هیچ تبدیل نوع ضمنی (coercion) میان نوع‌های اولیه انجام نمی‌دهد؛ اما تبدیل صریح نوع (casting) را می‌توان با کلیدواژهٔ <code>as</code> انجام داد.</p>
+<p>قواعد تبدیل میان نوع‌های صحیح عموماً از قراردادهای زبان C پیروی می‌کنند، به‌جز مواردی که رفتار در C تعریف‌نشده است. رفتار همهٔ تبدیل‌ها میان نوع‌های صحیح در راست به‌روشنی تعریف شده است.</p>
+<pre class="playground"><code class="language-rust editable ignore mdbook-runnable">// Suppress all errors from casts which overflow.
+#![allow(overflowing_literals)]
+
+fn main() {
+    let decimal = 65.4321_f32;
+
+    // Error! No implicit conversion
+    let integer: u8 = decimal;
+    // FIXME ^ Comment out this line
+
+    // Explicit conversion
+    let integer = decimal as u8;
+    let character = integer as char;
+
+    // Error! There are limitations in conversion rules.
+    // A float cannot be directly converted to a char.
+    let character = decimal as char;
+    // FIXME ^ Comment out this line
+
+    println!("Casting: {} -&gt; {} -&gt; {}", decimal, integer, character);
+
+    // when casting any value to an unsigned type, T,
+    // T::MAX + 1 is added or subtracted until the value
+    // fits into the new type ONLY when the #![allow(overflowing_literals)]
+    // lint is specified like above. Otherwise there will be a compiler error.
+
+    // 1000 already fits in a u16
+    println!("1000 as a u16 is: {}", 1000 as u16);
+
+    // 1000 - 256 - 256 - 256 = 232
+    // Under the hood, the first 8 least significant bits (LSB) are kept,
+    // while the rest towards the most significant bit (MSB) get truncated.
+    println!("1000 as a u8 is : {}", 1000 as u8);
+    // -1 + 256 = 255
+    println!("  -1 as a u8 is : {}", (-1i8) as u8);
+
+    // For positive numbers, this is the same as the modulus
+    println!("1000 mod 256 is : {}", 1000 % 256);
+
+    // When casting to a signed type, the (bitwise) result is the same as
+    // first casting to the corresponding unsigned type. If the most significant
+    // bit of that value is 1, then the value is negative.
+
+    // Unless it already fits, of course.
+    println!(" 128 as a i16 is: {}", 128 as i16);
+
+    // In boundary case 128 value in 8-bit two's complement representation is -128
+    println!(" 128 as a i8 is : {}", 128 as i8);
+
+    // repeating the example above
+    // 1000 as u8 -&gt; 232
+    println!("1000 as a u8 is : {}", 1000 as u8);
+    // and the value of 232 in 8-bit two's complement representation is -24
+    println!(" 232 as a i8 is : {}", 232 as i8);
+
+    // Since Rust 1.45, the `as` keyword performs a *saturating cast*
+    // when casting from float to int. If the floating point value exceeds
+    // the upper bound or is less than the lower bound, the returned value
+    // will be equal to the bound crossed.
+
+    // 300.0 as u8 is 255
+    println!(" 300.0 as u8 is : {}", 300.0_f32 as u8);
+    // -100.0 as u8 is 0
+    println!("-100.0 as u8 is : {}", -100.0_f32 as u8);
+    // nan as u8 is 0
+    println!("   nan as u8 is : {}", f32::NAN as u8);
+
+    // This behavior incurs a small runtime cost and can be avoided
+    // with unsafe methods, however the results might overflow and
+    // return **unsound values**. Use these methods wisely:
+    unsafe {
+        // 300.0 as u8 is 44
+        println!(" 300.0 as u8 is : {}", 300.0_f32.to_int_unchecked::&lt;u8&gt;());
+        // -100.0 as u8 is 156
+        println!("-100.0 as u8 is : {}", (-100.0_f32).to_int_unchecked::&lt;u8&gt;());
+        // nan as u8 is 0
+        println!("   nan as u8 is : {}", f32::NAN.to_int_unchecked::&lt;u8&gt;());
+    }
+}</code></pre><nav class="page-nav"><a href="../../rbe/types.html">→ نوع‌ها</a><a href="../../rbe/types/literals.html">مقادیر لفظی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rbe/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

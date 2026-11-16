@@ -1,0 +1,39 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0222 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0222"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>تلاش برای مقید کردن (constrain) یک نوع وابسته انجام شده است.</p>
+<p>نمونه کد دارای خطا:</p>
+<pre><code class="language-compile_fail E0222">pub trait Vehicle {
+    type Color;
+}
+
+pub trait Box {
+    type Color;
+}
+
+pub trait BoxCar : Box + Vehicle {}
+
+fn dent_object&lt;COLOR&gt;(c: dyn BoxCar&lt;Color=COLOR&gt;) {} // Invalid constraint
+</code></pre>
+<p>در این مثال، <code>BoxCar</code> دو ابرصفت (supertrait) دارد: <code>Vehicle</code> و <code>Box</code>. هر دوی این صفت‌ها نوع وابسته‌ای به نام <code>Color</code> تعریف می‌کنند. <code>BoxCar</code> دو نوع با این نام را از هر دو ابرصفت به ارث می‌برد. به همین دلیل، برای ارجاع به نوع وابسته <code>Color</code> مناسب باید از نحو مسیر کاملاً مشخص (fully qualified) استفاده کنیم، یعنی <code>&lt;BoxCar as Vehicle&gt;::Color</code> یا <code>&lt;BoxCar as Box&gt;::Color</code>، اما استفاده از این نحو در امضای تابع مجاز نیست.</p>
+<p>برای بیان این نوع قید، به یک عبارت <code>where</code> و یک پارامتر نوع جدید نیاز است:</p>
+<pre><code>pub trait Vehicle {
+    type Color;
+}
+
+pub trait Box {
+    type Color;
+}
+
+pub trait BoxCar : Box + Vehicle {}
+
+// Introduce a new `CAR` type parameter
+fn foo&lt;CAR, COLOR&gt;(
+    c: CAR,
+) where
+    // Bind the type parameter `CAR` to the trait `BoxCar`
+    CAR: BoxCar,
+    // Further restrict `&lt;BoxCar as Vehicle&gt;::Color` to be the same as the
+    // type parameter `COLOR`
+    CAR: Vehicle&lt;Color = COLOR&gt;,
+    // We can also simultaneously restrict the other trait's associated type
+    CAR: Box&lt;Color = COLOR&gt;
+{}
+</code></pre><nav class="page-nav"><a href="../errors/E0221.html">→ E0221</a><a href="../errors/E0223.html">E0223 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

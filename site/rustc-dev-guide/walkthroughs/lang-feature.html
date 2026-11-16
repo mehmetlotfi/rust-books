@@ -1,0 +1,173 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>گام‌به‌گام: یک قابلیت جدید زبان، از طراحی تا پایدارسازی — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="walkthroughs/lang-feature"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="walkthrough-a-new-language-feature-from-design-to-stabilization"><a class="header" href="#walkthrough-a-new-language-feature-from-design-to-stabilization">گام‌به‌گام: یک قابلیت جدید زبان، از طراحی تا پایدارسازی</a></h1>
+<p>این فصل طراحی و پیاده‌سازی یک قابلیت جدید زبان را گام‌به‌گام مرور می‌کند.
+برخی از این گام‌ها مخصوص قابلیت‌های زبان‌اند، اما بسیاری به قابلیت‌های کتابخانه هم تعمیم می‌یابند.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>قابلیتی که در این فصل بحث می‌کنم عملگر Kleene با نام <code>?</code> برای ماکروهاست.
+اساساً می‌خواهیم بتوانیم چیزی شبیه این بنویسیم:</p>
+<pre><code class="language-rust ignore">macro_rules! foo {
+    ($arg:ident $(, $optional_arg:ident)?) =&gt; {
+        println!("{}", $arg);
+
+        $(
+            println!("{}", $optional_arg);
+        )?
+    }
+}
+
+fn main() {
+    let x = 0;
+    foo!(x); // ok! prints "0"
+    foo!(x, x); // ok! prints "0 0"
+}</code></pre>
+<p>پس اساساً matcher با نام <code>$(pat)?</code> در ماکرو یعنی «این الگو می‌تواند
+۰ یا ۱ بار رخ دهد»، شبیه نحوهای regex دیگر.</p>
+<p>برای رسیدن از یک ایده به قابلیت پایدار Rust چند گام بود.
+در ادامه فهرست سریعی هست.
+هر کدام را به ترتیب مرور می‌کنیم.
+همان‌طور که پیش‌تر گفتم، همهٔ این‌ها برای هر نوع مشارکتی لازم نیستند.</p>
+<ul>
+<li><strong>بحث ایده/Pre-RFC</strong>  Pre-RFC پیش‌نویس اولیه یا بحث طراحی یک قابلیت است.
+این مرحله برای شکل‌دادن به فضای طراحی و
+درک مزایا و مشکلات مختلف یک ایده است.
+راه عالی برای گرفتن بازخورد زودهنگام دربارهٔ ایده پیش از ارائه به مخاطبان گسترده‌تر است.
+بحث اصلی را <a href="https://internals.rust-lang.org/t/pre-rfc-at-most-one-repetition-macro-patterns/6557">اینجا</a> می‌یابید.</li>
+<li><strong>RFC</strong>  اینجا ایده را رسماً برای بررسی به جامعه ارائه می‌دهید.
+RFC را <a href="https://github.com/rust-lang/rfcs/pull/2298">اینجا</a> می‌یابید.</li>
+<li><strong>پیاده‌سازی</strong> ایده را به‌صورت ناپایدار در کامپایلر پیاده کنید.
+پیاده‌سازی اصلی را <a href="https://github.com/rust-lang/rust/pull/47752">اینجا</a> می‌یابید.</li>
+<li><strong>احتمالاً تکرار/پالایش</strong> وقتی جامعه با قابلیت شما روی کامپایلر nightly و در <code>std</code> تجربه کسب می‌کند، ممکن است بازخورد بیشتری
+دربارهٔ انتخاب‌های طراحی بیاید که شاید تعدیل شوند.
+این قابلیت خاص <a href="https://github.com/rust-lang/rust/pull/49719">چندین</a> <a href="https://github.com/rust-lang/rust/pull/51336">تکرار</a> <a href="https://github.com/rust-lang/rust/pull/51587">را</a> گذراند.</li>
+<li><strong>پایدارسازی</strong> وقتی قابلیت شما به‌اندازهٔ کافی پخته شد، یکی از اعضای تیم Rust ممکن است
+<a href="https://github.com/rust-lang/rust/issues/48075#issuecomment-433177613">پیشنهاد پایدارسازی آن را بدهد</a>.
+اگر اجماع باشد، انجام می‌شود.</li>
+<li><strong>آسوده باشید</strong> قابلیت شما اکنون قابلیت پایدار Rust است!</li>
+</ul>
+<h2 id="pre-rfc-and-rfc"><a class="header" href="#pre-rfc-and-rfc">Pre-RFC و RFC</a></h2>
+<blockquote>
+<p>نکته: عموماً اگر قابلیت <em>جدید</em> یا تغییر اساسی در Rust یا اکوسیستم پیشنهاد نمی‌کنید، لازم نیست فرایند RFC را دنبال کنید.
+به‌جای آن می‌توانید مستقیماً به <a href="#impl">پیاده‌سازی</a> بروید.</p>
+<p>رهنمودهای رسمی دربارهٔ اینکه چه وقت RFC باز کنید را <a href="https://github.com/rust-lang/rfcs#when-you-need-to-follow-this-process">اینجا</a> می‌یابید.</p>
+</blockquote>
+<p>RFC سندی است که قابلیت یا تغییر پیشنهادی شما را با جزئیات توصیف می‌کند.
+هر کسی می‌تواند RFC بنویسد؛
+فرایند برای همه یکسان است، از جمله اعضای تیم Rust.</p>
+<p>برای باز‌کردن RFC، یک PR روی مخزن <a href="https://github.com/rust-lang/rfcs">rust-lang/rfcs</a> در GitHub باز کنید.
+دستورالعمل‌های مفصل را در
+<a href="https://github.com/rust-lang/rfcs#what-the-process-is">README</a> می‌یابید.</p>
+<p>پیش از باز‌کردن RFC، باید تحقیق کنید تا ایده‌تان را «شکل دهید».
+RFCهای شتاب‌زده پیشنهادشده معمولاً پذیرفته نمی‌شوند.
+عموماً باید توضیح خوبی از انگیزه، اثر، معایب و تعامل‌های بالقوه با قابلیت‌های دیگر داشته باشید.</p>
+<p>اگر این کار زیادی به نظر می‌رسد، به این دلیل است که هست.
+اما نترسید!
+حتی اگر هکر کامپایلر نیستید، با انجام یک <em>pre-RFC</em> می‌توانید بازخورد عالی بگیرید.
+این یک بحث <em>غیررسمی</em> دربارهٔ ایده است.
+بهترین جا برای این <a href="https://internals.rust-lang.org">internals.rust-lang.org</a> است.
+پست شما لازم نیست ساختار خاصی داشته باشد.
+حتی لازم نیست ایده‌ای منسجم باشد.
+عموماً بازخورد فراوانی می‌گیرید که می‌توانید برای تولید RFC خوب به آن بازگردانید.</p>
+<p>(نکتهٔ حرفه‌ای دیگر: سعی کنید در مخزن RFCها و internals دنبال ایده‌های مرتبط قبلی بگردید.
+اغلب ایده‌ای قبلاً بررسی شده و یا
+رد شده یا برای تلاش مجدد بعدی به تعویق افتاده.
+این می‌تواند وقت شما و همه را صرفه‌جویی کند)</p>
+<p>در مثال ما، یکی از شرکت‌کنندگان رشتهٔ pre-RFC به یک
+ابهام نحوی و یک راه‌حل بالقوه اشاره کرد.
+همچنین بازخورد کلی مثبت به نظر می‌رسید.
+در این مورد بحث خیلی سریع همگرا شد، اما برای برخی
+ایده‌ها بحث بسیار بیشتری ممکن است رخ دهد (مثلاً <a href="https://github.com/rust-lang/rfcs/pull/2457">این RFC</a> را ببینید که
+حدود ۶۸۴ کامنت گرفت!).
+اگر این رخ داد، ناامید نشوید؛
+یعنی جامعه به ایدهٔ شما علاقه‌مند است اما شاید کمی تعدیل لازم دارد.</p>
+<p>RFC مربوط به قابلیت ماکروی <code>?</code> ما هم در رشتهٔ RFC بحث‌هایی داشت.
+مثل بیشتر RFCها، چند پرسش بود که نتوانستیم با بحث پاسخ دهیم:
+برای تصمیم‌گیری به تجربهٔ استفاده از قابلیت نیاز داشتیم.
+چنین پرسش‌هایی در بخش «پرسش‌های حل‌نشده» RFC فهرست می‌شوند.
+همچنین در طول بحث RFC احتمالاً می‌خواهید خود سند RFC را به‌روز کنید
+تا مسیر بحث را منعکس کند (مثلاً جایگزین‌ها یا کار قبلی جدید اضافه شود یا تصمیم بگیرید بخش‌هایی از خود پیشنهاد را تغییر دهید).</p>
+<p>در نهایت، وقتی بحث به اجماع می‌رسد و کمی فروکش می‌کند،
+یکی از اعضای تیم Rust ممکن است پیشنهاد دهد با یکی
+از سه حالت ممکن به «دورهٔ نظر نهایی» (FCP) برویم.
+یعنی می‌خواهند اعضای تیم‌های مناسب دیگر
+RFC را بازبینی و نظر دهند.
+ممکن است بحث بیشتری رخ دهد که می‌تواند به تغییرات بیشتر یا پرسش‌های حل‌نشدهٔ بیشتر منجر شود.
+در نقطه‌ای، وقتی همه راضی‌اند، RFC وارد FCP می‌شود که
+آخرین فرصت برای مطرح‌کردن اعتراض است.
+وقتی FCP تمام شد، آن حالت پذیرفته می‌شود.
+سه حالت ممکن این‌هاست:</p>
+<ul>
+<li><em>Merge</em>: پذیرش قابلیت.
+این پیشنهاد merge برای <a href="https://github.com/rust-lang/rfcs/pull/2298#issuecomment-360582667">قابلیت ماکروی <code>?</code></a> ماست.</li>
+<li><em>Close</em>: این قابلیت به شکل فعلی برای Rust مناسب نیست.
+اگر این برای RFC شما رخ داد ناامید نشوید و شخصی برداشت نکنید.
+این بازتابی از شما نیست، بلکه تصمیم جامعه است که Rust
+مسیر دیگری برود.</li>
+<li><em>Postpone</em>: علاقه به این مسیر هست اما نه در حال حاضر.
+این بیشتر به این دلیل رخ می‌دهد که تیم Rust مناسب
+ظرفیت هدایت قابلیت را تا پایدارسازی ندارد.
+اغلب وقتی است که قابلیت در نقشهٔ راه تیم نمی‌گنجد.
+ایده‌های به‌تعویق‌افتاده ممکن است بعداً دوباره بررسی شوند.</li>
+</ul>
+<p>وقتی RFC merge می‌شود، PR به مخزن RFCها merge می‌شود.
+یک <em>issue پیگیری</em> جدید در مخزن <a href="https://github.com/rust-lang/rust">rust-lang/rust</a> ساخته می‌شود تا پیشرفت قابلیت را پیگیری و
+پرسش‌های حل‌نشده، پیشرفت پیاده‌سازی و موانع و غیره را بحث کند.
+این issue پیگیری <a href="https://github.com/rust-lang/rust/issues/48075">قابلیت ماکروی <code>?</code></a> ماست.</p>
+<h2 id="experimental-rfc-erfc"><a class="header" href="#experimental-rfc-erfc">Experimental RFC (eRFC)</a></h2>
+<p>eRFC گونه‌ای از فرایند RFC است که برای قابلیت‌های پیچیده به‌کار می‌رود که نیاز سطح بالا
+روشن است اما فضای طراحی آن‌قدر بزرگ است که نمی‌توان از ابتدا روی مشخصات مفصل به توافق رسید.
+به‌جای ارائهٔ طراحی نهایی، eRFC راهبردی سطح بالا را مشخص می‌کند تا دورهٔ آزمایش فعال را مجاز کند.
+این به تیم اجازه می‌دهد قابلیت را پشت
+feature gate پیاده کند و داده‌های عملی جمع کند که سپس RFC رسمی بعدی را برای پایدارسازی آگاه می‌کند.
+هرچند این فرایند برای قابلیت‌های بزرگی مثل coroutineها به‌کار رفت (<a href="https://github.com/rust-lang/rfcs/pull/2033#issuecomment-309057591">RFC 2033 را ببینید</a>)،
+برچسب صریح «eRFC» امروزه به‌ندرت به‌کار می‌رود.
+پروژه اکنون عموماً ترجیح می‌دهد RFC استاندارد را برای نسخهٔ اولیه تأیید کند
+و آن را از طریق کانال nightly تا پایدارسازی نهایی تکرار کند.</p>
+<p><a id="impl"></a></p>
+<h2 id="implementation"><a class="header" href="#implementation">Implementation</a></h2>
+<p>برای تغییر در کامپایلر، یک PR روی مخزن <a href="https://github.com/rust-lang/rust">rust-lang/rust</a> باز کنید.</p>
+<p>بسته به قابلیت/تغییر/رفع باگ/بهبود، پیاده‌سازی ممکن است
+نسبتاً ساده باشد یا کار بزرگی.
+همیشه می‌توانید از توسعه‌دهندگان باتجربه‌تر کامپایلر کمک یا mentoring بخواهید.
+همچنین لازم نیست خودتان قابلیت را پیاده کنید؛
+اما به یاد داشته باشید اگر نکنید، ممکن است مدتی طول بکشد تا کس دیگری انجام دهد.</p>
+<p>برای قابلیت ماکروی <code>?</code> لازم بود بخش‌های مرتبط گسترش ماکرو در کامپایلر را بفهمم.
+شخصاً <a href="https://github.com/rust-lang/rust/pull/47732">بهبود کامنت‌ها</a> در کد را
+راه مفیدی برای اطمینان از درک آن می‌دانم،
+اما اگر نمی‌خواهید لازم نیست این کار را بکنید.</p>
+<p>سپس قابلیت اصلی را همان‌طور که در RFC توصیف شده <a href="https://github.com/rust-lang/rust/pull/47752">پیاده‌سازی کردم</a>.
+وقتی قابلیت جدیدی پیاده‌سازی می‌شود، پشت یک <em>feature gate</em> قرار می‌گیرد، یعنی
+برای استفاده از قابلیت باید <code>#![feature(my_feature_name)]</code> را به‌کار ببرید.
+feature gate هنگام پایدارسازی قابلیت حذف می‌شود.</p>
+<p><strong>بیشتر رفع باگ‌ها و بهبودها</strong> نیاز به feature gate ندارند.
+می‌توانید فقط تغییرات/بهبودهای خود را بدهید.</p>
+<p>برای اطلاعات دربارهٔ نحوهٔ باز‌کردن PR و merge شدن آن <a href="../pr-lifecycle.html">چرخهٔ عمر PR</a> را ببینید.</p>
+<p>اگر قابلیت جدید یا چیزی شبیه آن نمی‌سازید (مثلاً اگر
+باگی را رفع می‌کنید)، همین بود!
+از مشارکت شما متشکریم :)</p>
+<h2 id="refining-your-implementation"><a class="header" href="#refining-your-implementation">پالایش پیاده‌سازی</a></h2>
+<p>وقتی افراد با قابلیت جدید شما در nightly تجربه کسب می‌کنند، ممکن است تغییرات جزئی
+پیشنهاد شود و پرسش‌های حل‌نشده حل شوند.
+تغییرات/به‌روزرسانی‌ها همان فرایند پیاده‌سازی هر تغییر دیگر را طی می‌کنند، همان‌طور که بالا توضیح داده شد
+(یعنی ارسال PR، بازبینی، انتظار برای <code>@bors</code> و غیره).</p>
+<p>برخی تغییرات ممکن است آن‌قدر عمده باشند که به FCP و بازبینی اعضای تیم Rust نیاز داشته باشند.</p>
+<p>برای قابلیت ماکروی <code>?</code>، پس از پیاده‌سازی اولیه چند تکرار مختلف داشتیم: <a href="https://github.com/rust-lang/rust/pull/49719">۱</a>، <a href="https://github.com/rust-lang/rust/pull/51336">۲</a>، <a href="https://github.com/rust-lang/rust/pull/51587">۳</a>.</p>
+<p>در طول راه تصمیم گرفتیم <code>?</code> جداکننده نگیرد، که
+پیش‌تر پرسش حل‌نشدهٔ فهرست‌شده در RFC بود.
+همچنین راهبرد رفع ابهام را تغییر دادیم: تصمیم گرفتیم توانایی استفاده از <code>?</code> به‌عنوان
+توکن جداکننده برای عملگرهای تکرار دیگر (مثل <code>+</code> یا <code>*</code>) را حذف کنیم. اما
+چون این تغییر شکننده بود، تصمیم گرفتیم آن را از مرز edition انجام دهیم.
+پس قابلیت جدید فقط در edition 2018 قابل‌فعال‌شدن است. این انحرافات
+از RFC اصلی <a href="https://github.com/rust-lang/rust/issues/51934">FCP دیگری</a> لازم داشتند.</p>
+<h2 id="stabilization"><a class="header" href="#stabilization">Stabilization</a></h2>
+<p>در نهایت، پس از اینکه قابلیت مدتی روی nightly پخته شد، یکی از اعضای تیم زبان
+<a href="https://github.com/rust-lang/rust/issues/48075#issuecomment-433177613">برای پایدارسازی آن اقدام کرد</a>.</p>
+<p><em>گزارش پایدارسازی</em> باید نوشته شود که شامل این‌هاست</p>
+<ul>
+<li>توضیح مختصر رفتار و هر انحراف از RFC</li>
+<li>کدام edition(ها) تحت‌تأثیر هستند و چگونه</li>
+<li>پیوند به چند تست برای نشان‌دادن جنبه‌های جالب</li>
+</ul>
+<p>گزارش پایدارسازی برای قابلیت ما <a href="https://github.com/rust-lang/rust/issues/48075#issuecomment-433243048">اینجاست</a>.</p>
+<p>پس از این، <a href="https://github.com/rust-lang/rust/pull/56245">یک PR ساخته می‌شود</a> تا feature gate را حذف کند و قابلیت را به‌طور پیش‌فرض فعال کند
+(در edition 2018).
+یادداشتی دربارهٔ قابلیت به <a href="https://github.com/rust-lang/rust/blob/HEAD/RELEASES.md">یادداشت‌های انتشار</a> اضافه می‌شود.</p>
+<p>گام‌های پایدارسازی قابلیت را در <a href="../stabilization-guide.html">پایدارسازی قابلیت‌ها</a> می‌یابید.</p><nav class="page-nav"><a href="../feature-gates.html">→ دروازه‌های قابلیت</a><a href="../conventions.html">قراردادهای کدنویسی ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

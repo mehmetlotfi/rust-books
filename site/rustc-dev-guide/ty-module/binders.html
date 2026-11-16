@@ -1,0 +1,54 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>Binderها و ناحیه‌های مرتبهٔ بالاتر — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="ty-module/binders"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="binder-and-higher-ranked-regions"><a class="header" href="#binder-and-higher-ranked-regions"><code>Binder</code> و regionهای مرتبهٔ بالاتر (Higher ranked)</a></h1>
+<p>گاهی پارامترهای جنریک را نه روی آیتم بلکه به‌عنوان بخشی از نوع یا بند where تعریف می‌کنیم.
+برای مثال، نوع <code>for&lt;'a&gt; fn(&amp;'a u32)</code> یا بند where با نام <code>for&lt;'a&gt; T: Trait&lt;'a&gt;</code> هر دو طول‌عمر جنریکی به نام <code>'a</code> معرفی می‌کنند.
+فعلاً نحو پایداری برای <code>for&lt;T&gt;</code> یا <code>for&lt;const N: usize&gt;</code> وجود ندارد،
+اما در nightly می‌توان از <code>feature(non_lifetime_binders)</code> برای نوشتن بندهای where (اما نه نوع‌ها) با <code>for&lt;T&gt;</code>/<code>for&lt;const N: usize&gt;</code> استفاده کرد.</p>
+<p><code>for</code> «binder» نامیده می‌شود چون نام‌های جدید را به scope می‌آورد.
+در rustc از نوع <code>Binder</code> برای ردیابی اینکه این پارامترها کجا معرفی می‌شوند و پارامترها چه هستند (یعنی چندتا و نوع/const/region بودنشان) استفاده می‌کنیم. نوعی مثل <code>for&lt;'a&gt; fn(&amp;'a u32)</code> در rustc به این شکل نمایش داده می‌شود:</p>
+<pre><code>Binder(
+    fn(&amp;RegionKind::Bound(DebruijnIndex(0), BoundVar(0)) u32) -&gt; (),
+    &amp;[BoundVariableKind::Region(...)],
+)
+</code></pre>
+<p>استفاده از این پارامترها با <code>RegionKind::Bound</code> (یا variantهای <code>TyKind::Bound</code>/<code>ConstKind::Bound</code>) نمایش داده می‌شود.
+این regionها/نوع‌ها/ثابت‌های bound از دو تکه داده اصلی تشکیل شده‌اند:</p>
+<ul>
+<li><a href="../appendix/background.html#what-is-a-de-bruijn-index">DebruijnIndex</a> که مشخص می‌کند به کدام binder ارجاع می‌دهیم.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.BoundVar.html"><code>BoundVar</code></a> که مشخص می‌کند به کدام یک از پارامترهایی که <code>Binder</code> معرفی می‌کند ارجاع می‌دهیم.</li>
+</ul>
+<p>گاهی اطلاعات اضافی هم برای مقاصد diagnostic از طریق <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.BoundTyKind.html"><code>BoundTyKind</code></a>/<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/type.BoundRegionKind.html"><code>BoundRegionKind</code></a> ذخیره می‌کنیم،
+اما این برای برابری نوع، یا به‌طور کلی‌تر، معناشناسی <code>Ty</code> مهم نیست.
+(در مثال بالا حذف شده)</p>
+<p>در خروجی اشکال‌زدایی (و همچنین غیررسمی هنگام صحبت با هم)،
+این متغیرهای bound را به شکل <code>^DebruijnIndex_BoundVar</code> می‌نویسیم.
+مثال بالا به‌جای آن به شکل <code>Binder(fn(&amp;'^0_0), &amp;[BoundVariableKind::Region])</code> نوشته می‌شود.
+گاهی وقتی <code>DebruijnIndex</code> برابر <code>0</code> باشد حذفش می‌کنیم و <code>^0</code> می‌نویسیم.</p>
+<p>مثال عینی دیگر، این بار ترکیبی از <code>for&lt;'a&gt;</code> در بند where و نوع:</p>
+<pre><code>where
+    for&lt;'a&gt; Foo&lt;for&lt;'b&gt; fn(&amp;'a &amp;'b T)&gt;: Trait,
+</code></pre>
+<p>این به این شکل نمایش داده می‌شود</p>
+<pre><code>Binder(
+    Foo&lt;Binder(
+        fn(&amp;'^1_0 &amp;'^0 T/#0),
+        [BoundVariableKind::Region(...)]
+    )&gt;: Trait,
+    [BoundVariableKind::Region(...)]
+)
+</code></pre>
+<p>توجه کنید <code>'^1_0</code> چگونه به پارامتر <code>'a</code> ارجاع می‌دهد.
+از <code>DebruijnIndex</code> برابر <code>1</code> برای ارجاع به binder یک سطح بالاتر از درونی‌ترین استفاده می‌کنیم، و از var برابر <code>0</code> برای ارجاع به اولین پارامتر bound که <code>'a</code> است.
+همچنین از <code>'^0</code> برای ارجاع به پارامتر <code>'b</code> استفاده می‌کنیم، <code>DebruijnIndex</code> برابر <code>0</code> است (که به درونی‌ترین binder ارجاع می‌دهد) پس حذفش می‌کنیم و فقط boundvar برابر <code>0</code> می‌ماند که به اولین پارامتر bound یعنی <code>'b</code> ارجاع می‌دهد.</p>
+<p>همیشه مجموعهٔ متغیرهای bound معرفی‌شده توسط هر <code>Binder</code> را صریحاً ردیابی نمی‌کردیم،
+و این باعث تعدادی باگ شد (بخوانید: ICEها <a href="https://github.com/rust-lang/rust/issues/81193">#81193</a>، <a href="https://github.com/rust-lang/rust/issues/79949">#79949</a>، <a href="https://github.com/rust-lang/rust/issues/83017">#83017</a>).
+با ردیابی صریح این‌ها، می‌توانیم هنگام ساخت بندها/نوع‌های where مرتبهٔ بالاتر assert کنیم که متغیر bound فراری یا متغیر از binder متفاوتی وجود ندارد.
+مثال زیر را از یک نوع نامعتبر درون binder ببینید:</p>
+<pre><code>Binder(
+    fn(&amp;'^1_0 &amp;'^1 T/#0),
+    &amp;[BoundVariableKind::Region(...)],
+)
+</code></pre>
+<p>این انواع مشکلات ایجاد می‌کند چون region با نام <code>'^1_0</code> به binderی در سطحی بالاتر از بیرونی‌ترین binder ارجاع می‌دهد، یعنی متغیر bound فراری (escaping) است.
+region با نام <code>'^1</code> (که به شکل <code>'^0_1</code> هم قابل‌نوشتن است) هم نادرست‌ساخت است چون binderی که به آن ارجاع می‌دهد پارامتر دوم معرفی نمی‌کند.
+rustc امروزی هنگام ساخت این binder به هر دو دلیل ICE می‌دهد.
+در گذشته به‌سادگی اجازه می‌دادیم کار کند و سپس در بخش‌های دیگر codebase به مشکل می‌خوردیم.</p><nav class="page-nav"><a href="early-binder.html">→ EarlyBinder و نمونه‌سازی پارامترها</a><a href="instantiating-binders.html">نمونه‌سازی Binderها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

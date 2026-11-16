@@ -1,0 +1,73 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>نوع‌ها و ثابت‌های Ambig/Unambig — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ambig-unambig-ty-and-consts"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="ambigunambig-types-and-consts"><a class="header" href="#ambigunambig-types-and-consts">نوع‌ها و ثابت‌های Ambig/Unambig</a></h1>
+<p>آرگومان‌های نوع و ثابت در AST/HIR می‌توانند در دو نوع جایگاه قرار بگیرند: مبهم (ambig) یا نامبهم (unambig). جایگاه‌های ambig جاهایی هستند که تجزیهٔ هم نوع و هم ثابت در آن‌ها معتبر خواهد بود. جایگاه‌های unambig جاهایی هستند که فقط یکی از این دو معتبر است.</p>
+<pre><code class="language-rust">fn func&lt;T, const N: usize&gt;(arg: T) {
+    //                          ^ Unambig type position
+    let a: _ = arg;
+    //     ^ Unambig type position
+
+    func::&lt;T, N&gt;(arg);
+    //     ^  ^
+    //     ^^^^ Ambig position
+
+    let _: [u8; 10];
+    //      ^^  ^^ Unambig const position
+    //      ^^ Unambig type position
+}
+</code></pre>
+<p>بیشتر نوع‌ها/ثابت‌ها در جایگاه‌های ambig می‌توانند هنگام تجزیه (parsing) به‌عنوان نوع یا ثابت رفع ابهام شوند. تنها استثناها مسیرها (paths) و آرگومان‌های جنریک استنتاج‌شده هستند.</p>
+<h2 id="paths"><a class="header" href="#paths">مسیرها</a></h2>
+<pre><code class="language-rust">struct Foo&lt;const N: usize&gt;;
+
+fn foo&lt;const N: usize&gt;(_: Foo&lt;N&gt;) {}</code></pre>
+<p>در زمان تجزیه، همهٔ آرگومان‌های جنریک بدون آکولاد را به‌صورت <em>نوع</em> تجزیه می‌کنیم (یعنی به‌صورت <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/ast/enum.GenericArg.html#variant.Type"><code>ast::GenericArg::Ty</code></a> درمی‌آیند). در مثال بالا این یعنی آرگومان جنریک <code>Foo</code> را به‌صورت یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/ast/enum.GenericArg.html#variant.Type"><code>ast::GenericArg::Ty</code></a> تجزیه می‌کنیم که یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/ast/enum.TyKind.html#variant.Path"><code>ast::Ty::Path(N)</code></a> را در بر گرفته است.</p>
+<p>سپس در حین تفکیک نام (name resolution):</p>
+<ul>
+<li>وقتی با مسیری تک‌بخشی و بدون آرگومان جنریک در جایگاه آرگومان جنریک روبه‌رو شویم، ابتدا سعی می‌کنیم آن را در فضای نام نوع تفکیک کنیم و اگر شکست خورد، تفکیک در فضای نام مقدار را امتحان می‌کنیم.</li>
+<li>برای همهٔ انواع دیگر مسیرها فقط تفکیک در فضای نام نوع را امتحان می‌کنیم.</li>
+</ul>
+<p>برای محل پیاده‌سازی این کار <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_resolve/late/struct.LateResolutionVisitor.html#method.visit_generic_arg"><code>LateResolutionVisitor::visit_generic_arg</code></a> را ببینید.</p>
+<p>در نهایت، هنگام پایین‌آوری AST (AST lowering)، وقتی می‌خواهیم یک آرگومان نوع را پایین بیاوریم، ابتدا بررسی می‌کنیم که آیا یک <code>Ty::Path</code> است و آیا به چیزی در فضای نام مقدار تفکیک شده است. اگر چنین بود، یک <em>anon const</em> می‌سازیم و به‌جای آرگومان نوع، به یک آرگومان ثابت پایین می‌آوریم.</p>
+<p>برای محل پیاده‌سازی این کار <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast_lowering/struct.LoweringContext.html#method.lower_generic_arg"><code>LoweringContext::lower_generic_arg</code></a> را ببینید.</p>
+<p>توجه کنید که ابهام مسیرها به HIR منتقل نمی‌شود؛ چیزی به نام <code>hir::GenericArg::Path</code> وجود ندارد که هنگام پایین‌آوری نوع در HIR به <code>Ty</code> یا <code>Const</code> تبدیل شود (هرچند می‌توان چنین کاری کرد).</p>
+<h2 id="inferred-arguments-_"><a class="header" href="#inferred-arguments-_">آرگومان‌های استنتاج‌شده (<code>_</code>)</a></h2>
+<pre><code class="language-rust">struct Foo&lt;const N: usize&gt;;
+
+fn foo() {
+    let _unused: Foo&lt;_&gt;;
+}</code></pre>
+<p>تنها آرگومان‌های جنریکی که پس از پایین‌آوری مبهم باقی می‌مانند، آرگومان‌های جنریک استنتاج‌شده (<code>_</code>) در بخش‌های مسیر هستند. در مثال بالا، در زمان تجزیه روشن نیست که آرگومان <code>_</code> برای <code>Foo</code> یک آرگومان نوع استنتاج‌شده است یا یک آرگومان ثابت استنتاج‌شده.</p>
+<p>در جایگاه‌های ambig در AST، آرگومان‌های استنتاج‌شده به‌صورت یک <code>ast::GenericArg::Ty</code> تجزیه می‌شوند که یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/ast/enum.TyKind.html#variant.Infer"><code>ast::Ty::Infer</code></a> را در بر گرفته است. سپس در حین پایین‌آوری AST، هنگام پایین‌آوری یک <code>ast::GenericArg::Ty</code> بررسی می‌کنیم که آیا نوع استنتاج‌شده است و اگر چنین بود، آن را به <code>hir::GenericArg::Infer</code> پایین می‌آوریم.</p>
+<p>در جایگاه‌های unambig در AST، آرگومان‌های استنتاج‌شده یا به‌صورت <code>ast::Ty::Infer</code> یا به‌صورت <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/ast/struct.AnonConst.html"><code>ast::AnonConst</code></a> تجزیه می‌شوند. حالت <code>AnonConst</code> کمی عجیب است؛ ما از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast/ast/enum.ExprKind.html#variant.Underscore"><code>ast::ExprKind::Underscore</code></a> برای نمایش «بدنهٔ» «anon const» استفاده می‌کنیم، هرچند در واقع آن را در HIR به anon const پایین نمی‌آوریم.</p>
+<p>شاید ارزش داشته باشد بررسی کنیم که آیا می‌توان AST را طوری بازآرایی کرد که <code>ast::GenericArg::Infer</code> داشته باشد و سپس از این معنای سربار <code>AnonConst</code> و همچنین استفادهٔ مجدد از <code>ast::Ty::Infer</code> در جایگاه‌های ambig خلاص شد.</p>
+<p>در جایگاه‌های unambig در AST، هنگام پایین‌آوری AST آرگومان‌های استنتاج‌شده را بسته به اینکه جایگاه نوع است یا ثابت، به ترتیب به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/enum.TyKind.html#variant.Infer"><code>hir::TyKind::Infer</code></a> یا <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/enum.ConstArgKind.html#variant.Infer"><code>hir::ConstArgKind::Infer</code></a> پایین می‌آوریم. در جایگاه‌های ambig در AST، هنگام پایین‌آوری AST آرگومان‌های استنتاج‌شده را به <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/enum.GenericArg.html#variant.Infer"><code>hir::GenericArg::Infer</code></a> پایین می‌آوریم. برای محل پیاده‌سازی این کار <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast_lowering/struct.LoweringContext.html#method.lower_generic_arg"><code>LoweringContext::lower_generic_arg</code></a> را ببینید.</p>
+<p>یک پیاده‌سازی ساده‌لوحانه از این کار باعث می‌شد با نگاه به ساختار HIR بالقوه ۵ جا وجود داشته باشد که فکر کنید ممکن است نوع/ثابت استنتاج‌شده در HIR پیدا شود:</p>
+<ol>
+<li>در جایگاه نوع unambig به‌صورت <code>TyKind::Infer</code></li>
+<li>در جایگاه آرگومان ثابت unambig به‌صورت <code>ConstArgKind::Infer</code></li>
+<li>در یک جایگاه ambig به‌صورت <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/enum.GenericArg.html#variant.Type"><code>GenericArg::Type(TyKind::Infer)</code></a></li>
+<li>در یک جایگاه ambig به‌صورت <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/enum.GenericArg.html#variant.Const"><code>GenericArg::Const(ConstArgKind::Infer)</code></a></li>
+<li>در یک جایگاه ambig به‌صورت <code>GenericArg::Infer</code></li>
+</ol>
+<p>توجه کنید که مواجهه با جایگاه‌های ۳ و ۴ در عمل هرگز ممکن نیست، زیرا در جایگاه آرگومان جنریک همیشه به <code>GenericArg::Infer</code> پایین می‌آوریم.</p>
+<p>این وضع چند حالت شکست دارد:</p>
+<ul>
+<li>ممکن است افراد visitorهایی بنویسند که <code>GenericArg::Infer</code> را بررسی می‌کنند اما بررسی <code>hir::TyKind/ConstArgKind::Infer</code> را فراموش می‌کنند و در نتیجه فقط به‌طور اتفاقی استنتاج‌ها را در جایگاه‌های ambig مدیریت می‌کنند.</li>
+<li>ممکن است افراد visitorهایی بنویسند که <code>TyKind/ConstArgKind::Infer</code> را بررسی می‌کنند اما بررسی <code>GenericArg::Infer</code> را فراموش می‌کنند و در نتیجه فقط به‌طور اتفاقی استنتاج‌ها را در جایگاه‌های unambig مدیریت می‌کنند.</li>
+<li>ممکن است افراد visitorهایی بنویسند که هم <code>GenericArg::Type/Const(TyKind/ConstArgKind::Infer)</code> و هم <code>GenericArg::Infer</code> را بررسی می‌کنند و متوجه نیستند که ما هرگز نوع‌ها/ثابت‌های استنتاج‌شده را در جایگاه‌های ambig به‌صورت <code>GenericArg::Type/Const</code> نمایش نمی‌دهیم.</li>
+<li>ممکن است افراد visitorهایی بنویسند که <em>فقط</em> <code>TyKind::Infer</code> را بررسی می‌کنند و <code>ConstArgKind::Infer</code> را نه، و فراموش می‌کنند که آرگومان‌های ثابت استنتاج‌شده نیز وجود دارند (و برعکس).</li>
+</ul>
+<p>برای کم‌خطاتر کردن نوشتن visitorهای HIR وقتی به نوع‌ها/ثابت‌های استنتاج‌شده اهمیت می‌دهیم، یک سیستم نسبتاً پیچیده داریم:</p>
+<ol>
+<li>
+<p>در کامپایلر برای وقتی که نوع یا ثابت در جایگاه unambig یا ambig قرار دارد، نوع‌های متفاوتی داریم: <code>Ty&lt;AmbigArg&gt;</code> و <code>Ty&lt;()&gt;</code>. <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/enum.AmbigArg.html"><code>AmbigArg</code></a> یک نوع غیرقابل‌سکونت (uninhabited) است که در واریانت <code>Infer</code> از <code>TyKind</code> و <code>ConstArgKind</code> استفاده می‌کنیم تا در صورت قرار داشتن در جایگاه ambig آن را به‌طور انتخابی «غیرفعال» کنیم.</p>
+</li>
+<li>
+<p>متدهای <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/intravisit/trait.Visitor.html#method.visit_ty"><code>visit_ty</code></a> و <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/intravisit/trait.Visitor.html#method.visit_const_arg"><code>visit_const_arg</code></a> در visitorهای HIR فقط نسخه‌های جایگاه ambig نوع‌ها/ثابت‌ها را می‌پذیرند. نوع‌ها/ثابت‌های unambig در طول فرایند بازدید به‌طور ضمنی به نوع‌ها/ثابت‌های ambig تبدیل می‌شوند و واریانت <code>Infer</code> توسط متد اختصاصی <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/intravisit/trait.Visitor.html#method.visit_infer"><code>visit_infer</code></a> مدیریت می‌شود.</p>
+</li>
+</ol>
+<p>این کار مزایای متعددی دارد:</p>
+<ul>
+<li>روشن است که <code>GenericArg::Type/Const</code> نمی‌تواند آرگومان‌های نوع/ثابت استنتاج‌شده را نمایش دهد</li>
+<li>پیاده‌سازان <code>visit_ty</code> و <code>visit_const_arg</code> هرگز با نوع‌ها/ثابت‌های استنتاج‌شده روبه‌رو نمی‌شوند، و نوشتن visitorی که ظاهراً درست کار می‌کند اما حالت‌های لبه‌ای را غلط مدیریت می‌کند ناممکن می‌شود</li>
+<li>متد <code>visit_infer</code> <em>همهٔ</em> حالت‌های نوع/ثابت استنتاج‌شده در HIR را مدیریت می‌کند و باعث می‌شود visitorها بتوانند نوع‌ها/ثابت‌های استنتاج‌شده را در یک جای اختصاصی مدیریت کنند و هیچ حالتی را فراموش نکنند</li>
+</ul><nav class="page-nav"><a href="hir/debugging.html">→ اشکال‌زدایی</a><a href="thir.html">THIR (بازنمایی میانی سطح بالای نوع‌دار) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

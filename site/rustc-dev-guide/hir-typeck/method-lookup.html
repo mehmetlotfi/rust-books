@@ -1,0 +1,92 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>جست‌وجوی متد — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="hir-typeck/method-lookup"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="method-lookup"><a class="header" href="#method-lookup">جست‌وجوی متد</a></h1>
+<p>جست‌وجوی متد (method lookup) می‌تواند به‌دلیل تعامل تعدادی
+عامل مانند نوع‌های self، autoderef، جست‌وجوی صفت و غیره نسبتاً پیچیده باشد.
+این فایل مروری بر این فرایند ارائه می‌دهد.
+یادداشت‌های دقیق‌تر طبیعتاً در خود کد قرار دارند.</p>
+<p>یک راه نگاه کردن به جست‌وجوی متد این است که عبارتی به شکل
+<code>receiver.method(...)</code> را به <a href="https://doc.rust-lang.org/nightly/book/ch19-03-advanced-traits.html#fully-qualified-syntax-for-disambiguation-calling-methods-with-the-same-name">نحو کاملاً مشخص‌شده (fully-qualified)</a> صریح‌تری
+(که پیش‌تر <a href="https://github.com/rust-lang/rfcs/blob/master/text/0132-ufcs.md">UFCS</a> نامیده می‌شد) تبدیل کنیم:</p>
+<ul>
+<li><code>Trait::method(ADJ(receiver), ...)</code> برای فراخوانی صفت</li>
+<li><code>ReceiverType::method(ADJ(receiver), ...)</code> برای فراخوانی متد ذاتی (inherent)</li>
+</ul>
+<p>در اینجا <code>ADJ</code> نوعی تعدیل (adjustment) است که معمولاً دنباله‌ای از
+autoderefها و سپس احتمالاً یک autoref است (مثلاً <code>&amp;**receiver</code>). با این حال
+گاهی تعدیل‌ها و coercionهای دیگری هم در این مسیر انجام می‌دهیم، به‌ویژه
+unsizing (مثلاً تبدیل از <code>[T; n]</code> به <code>[T]</code>).</p>
+<p>جست‌وجوی متد به دو فاز اصلی تقسیم می‌شود:</p>
+<ol>
+<li>کاوش (probing) (<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_typeck/method/probe/"><code>probe.rs</code></a>).
+فاز probe زمانی است که تصمیم می‌گیریم کدام متد را فراخوانی کنیم و گیرنده (receiver) را چگونه تعدیل کنیم.</li>
+<li>تأیید (confirmation) (<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir_typeck/method/confirm/"><code>confirm.rs</code></a>).
+فاز تأیید این انتخاب را «اعمال» می‌کند: جدول‌های جانبی را به‌روزرسانی می‌کند،
+متغیرهای نوع را یکی (unify) می‌کند و کارهای دارای اثر جانبی دیگر را انجام می‌دهد.</li>
+</ol>
+<p>یکی از دلایل این تقسیم‌بندی مناسب‌تر بودن برای کش کردن است.
+فاز probe یک «انتخاب» (<code>probe::Pick</code>) تولید می‌کند
+که طوری طراحی شده تا بین نقطه‌های فراخوانی متد قابل کش باشد.
+بنابراین شامل متغیرهای استنتاج یا اطلاعات دیگر نیست.</p>
+<h2 id="the-probe-phase"><a class="header" href="#the-probe-phase">فاز Probe</a></h2>
+<h3 id="steps"><a class="header" href="#steps">گام‌ها</a></h3>
+<p>اولین کاری که فاز probe انجام می‌دهد ساختن دنباله‌ای از <em>گام‌ها</em> (steps) است.
+این کار با dereference تدریجی نوع گیرنده تا زمانی که دیگر نتوان deref کرد انجام می‌شود،
+و همچنین با اعمال یک گام «unsize» اختیاری.
+پس اگر گیرنده نوع <code>Rc&lt;Box&lt;[T; 3]&gt;&gt;</code> داشته باشد، ممکن است این‌ها حاصل شوند:</p>
+<ol>
+<li><code>Rc&lt;Box&lt;[T; 3]&gt;&gt;</code></li>
+<li><code>Box&lt;[T; 3]&gt;</code></li>
+<li><code>[T; 3]</code></li>
+<li><code>[T]</code></li>
+</ol>
+<h3 id="candidate-assembly"><a class="header" href="#candidate-assembly">جمع‌آوری candidateها</a></h3>
+<p>سپس در امتداد این گام‌ها جست‌وجو می‌کنیم تا فهرستی از <em>candidateها</em> بسازیم.
+یک <code>Candidate</code> آیتمی از نوع متد است که ممکن است به‌طور موجه همان متدی باشد که فراخوانی می‌شود.
+برای هر candidate، یک «نوع self تبدیل‌شده» به دست می‌آوریم که self صریح را در نظر می‌گیرد.</p>
+<p>candidateها به دو دسته گروه‌بندی می‌شوند: ذاتی (inherent) و افزونه‌ای (extension).</p>
+<p><strong>candidateهای ذاتی</strong> آن‌هایی هستند که از نوع خود گیرنده به دست می‌آیند.
+بنابراین اگر گیرنده‌ای از نوعی اسمی (nominal) مانند <code>Foo</code> (مثلاً یک struct) داشته باشید،
+هر متدی که درون implای مانند <code>impl Foo</code> تعریف شده باشد یک متد ذاتی است.
+برای استفاده از متد ذاتی لازم نیست چیزی import شود؛
+آن‌ها با خود نوع مرتبط‌اند.
+توجه کنید که implهای ذاتی فقط می‌توانند در همان crate‌ای که نوع تعریف شده است تعریف شوند.</p>
+<!--
+FIXME: Inherent candidates are not always derived from impls.
+If you have a trait object, such as a value of type `Box<ToString>`, then the
+trait methods (`to_string()`, in this case) are inherently associated with it.
+Another case is type parameters, in which case the methods of their bounds are inherent.
+However, this part of the rules is subject
+to change: when DST's "impl Trait for Trait" is complete, trait object
+dispatch could be subsumed into trait matching,
+and the type parameter behavior should be reconsidered in light of where clauses.
+
+Is this still accurate?
+-->
+<p><strong>candidateهای افزونه‌ای</strong> از صفت‌های import‌شده به دست می‌آیند.
+اگر صفت <code>ToString</code> را import کرده باشم و <code>to_string()</code> را به‌عنوان متد فراخوانی کنم،
+آنگاه تعریف <code>to_string()</code> را در هر impl از <code>ToString</code> به‌عنوان یک candidate فهرست می‌کنیم.
+این نوع فراخوانی‌های متد «متدهای افزونه‌ای» (extension methods) نامیده می‌شوند.</p>
+<p>بیایید مثالمان را ادامه دهیم.
+تصور کنید متدی به نام
+<code>foo</code> را با گیرندهٔ <code>Rc&lt;Box&lt;[T; 3]&gt;&gt;</code> فراخوانی می‌کنیم و صفتی به نام <code>Foo</code>
+وجود دارد که آن را با <code>&amp;self</code> برای نوع <code>Rc&lt;U&gt;</code> تعریف می‌کند، و همچنین متدی
+روی نوع <code>Box</code> که <code>foo</code> را اما با <code>&amp;mut self</code> تعریف می‌کند.
+آنگاه ممکن است دو candidate داشته باشیم:</p>
+<ul>
+<li><code>&amp;Rc&lt;U&gt;</code> به‌عنوان candidate افزونه‌ای</li>
+<li><code>&amp;mut Box&lt;U&gt;</code> به‌عنوان candidate ذاتی</li>
+</ul>
+<h3 id="candidate-search"><a class="header" href="#candidate-search">جست‌وجوی candidate</a></h3>
+<p>در نهایت، برای انتخاب واقعی متد، گام‌ها را به‌ترتیب پایین می‌رویم
+و می‌کوشیم نوع گیرنده را با نوع‌های candidateها تطبیق دهیم.
+در هر گام،
+یک auto-ref و auto-mut-ref را هم در نظر می‌گیریم تا ببینیم آیا باعث تطبیق هیچ‌یک از candidateها می‌شود یا نه.
+برای هر نوع گیرندهٔ حاصل، candidateهای ذاتی را پیش از candidateهای افزونه‌ای در نظر می‌گیریم.
+اگر در یک گروه چند candidate منطبق وجود داشته باشد، خطا گزارش می‌کنیم،
+با این استثنا که چند impl از یک صفت یکسان به‌عنوان یک تطبیق واحد در نظر گرفته می‌شوند.
+در غیر این صورت اولین تطبیقی را که پیدا کنیم انتخاب می‌کنیم.</p>
+<p>در مورد مثال ما، گام اول <code>Rc&lt;Box&lt;[T; 3]&gt;&gt;</code> است
+که به‌تنهایی با هیچ candidateای تطبیق ندارد.
+اما وقتی آن را autoref کنیم، نوع <code>&amp;Rc&lt;Box&lt;[T; 3]&gt;&gt;</code> به دست می‌آید که با <code>&amp;Rc&lt;U&gt;</code> تطبیق دارد.
+سپس به‌صورت بازگشتی همهٔ بندهای where را که روی impl ظاهر می‌شوند بررسی می‌کنیم: اگر
+آن‌ها هم تطبیق کنند (یا نتوانیم رد کنیم که تطبیق می‌کنند)، همین متدی است که انتخاب می‌کنیم.
+در غیر این صورت، به پایین آمدن در دنبالهٔ گام‌ها ادامه می‌دهیم.</p><nav class="page-nav"><a href="coercions.html">→ Coercionها</a><a href="../const-generics.html">جنریک‌های ثابت ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

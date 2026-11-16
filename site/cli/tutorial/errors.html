@@ -1,0 +1,128 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>گزارش‌دهی بهتر خطا — کتاب برنامه‌های خط فرمان</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tutorial/errors"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../cli/index.html" style="color:inherit;text-decoration:none">کتاب برنامه‌های خط فرمان</a><small class="en-title" dir="ltr">Command Line Applications in Rust</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="nicer-error-reporting"><a class="header" href="#nicer-error-reporting">گزارش‌دهی بهتر خطا</a></h1>
+<p>چاره‌ای جز پذیرفتن این واقعیت نداریم که خطاها رخ خواهند داد. برخلاف بسیاری از زبان‌های دیگر، هنگام استفاده از Rust نادیده گرفتن این واقعیت و نپرداختن به آن بسیار دشوار است، چون Rust استثنا (exception) ندارد. همهٔ حالت‌های خطای ممکن اغلب در نوع بازگشتی تابع‌ها کدگذاری می‌شوند.</p>
+<h2 id="results"><a class="header" href="#results">Resultها</a></h2>
+<p>تابعی مانند <a href="https://doc.rust-lang.org/1.39.0/std/fs/fn.read_to_string.html"><code>read_to_string</code></a> یک رشته برنمی‌گرداند. در عوض، یک <a href="https://doc.rust-lang.org/1.39.0/std/result/index.html"><code>Result</code></a> برمی‌گرداند که یا شامل یک <code>String</code> یا یک خطا از نوعی خاص است. در این مورد، <a href="https://doc.rust-lang.org/1.39.0/std/io/type.Result.html"><code>std::io::Error</code></a>.</p>
+<p>از کجا بفهمیم کدام است؟ چون <code>Result</code> یک <code>enum</code> است، می‌توانید با <code>match</code> بررسی کنید کدام یک از حالت‌ها (variant) است:</p>
+<pre><code class="language-rust no_run">let result = std::fs::read_to_string("test.txt");
+match result {
+    Ok(content) =&gt; { println!("File content: {}", content); }
+    Err(error) =&gt; { println!("Oh noes: {}", error); }
+}</code></pre>
+<aside>
+<p>**توجه:** مطمئن نیستید enumها چه هستند یا در Rust چگونه کار می‌کنند؟ [این فصل از کتاب Rust را ببینید](https://doc.rust-lang.org/1.39.0/book/ch06-00-enums.html) تا به سرعت با آن‌ها آشنا شوید.</p>
+</aside>
+<h2 id="unwrapping"><a class="header" href="#unwrapping">باز کردن مقدار (Unwrapping)</a></h2>
+<p>اکنون توانستیم به محتوای فایل دسترسی پیدا کنیم، اما بعد از بلوک <code>match</code> واقعاً نمی‌توانیم کاری با آن بکنیم. برای این کار، باید حالت خطا را مدیریت کنیم. اگرچه این یک چالش است که همهٔ بازوهای (arm) یک بلوک <code>match</code> باید چیزی از یک نوع برگردانند، ترفند ظریفی برای دور زدن آن وجود دارد:</p>
+<pre><code class="language-rust no_run">let result = std::fs::read_to_string("test.txt");
+let content = match result {
+    Ok(content) =&gt; { content },
+    Err(error) =&gt; { panic!("Can't deal with {}, just exit here", error); }
+};
+println!("file content: {}", content);</code></pre>
+<p>می‌توانیم بعد از بلوک match از String موجود در <code>content</code> استفاده کنیم، اما اگر <code>result</code> یک خطا بود، آن String وجود نمی‌داشت. این مشکلی ندارد، چون برنامه پیش از رسیدن به نقطه‌ای که از <code>content</code> استفاده می‌کنیم خارج می‌شود.</p>
+<p>این ممکن است تند به نظر برسد، اما بسیار راحت است. اگر برنامهٔ شما باید آن فایل را بخواند و در صورت نبودن فایل نمی‌تواند کاری انجام دهد، خارج شدن راهبردی معتبر است. حتی یک متد میان‌بر روی <a href="https://doc.rust-lang.org/1.39.0/std/result/index.html"><code>Result</code></a> به نام <code>unwrap</code> وجود دارد:</p>
+<pre><code class="language-rust no_run">let content = std::fs::read_to_string("test.txt").unwrap();</code></pre>
+<h2 id="no-need-to-panic"><a class="header" href="#no-need-to-panic">نیازی به panic نیست</a></h2>
+<p>البته، متوقف کردن برنامه تنها راه مدیریت خطاها نیست. به‌جای استفاده از <code>panic!</code>، می‌توانیم فقط از <code>return</code> استفاده کنیم:</p>
+<pre><code class="language-rust no_run"><span class="boring">fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+</span>let result = std::fs::read_to_string("test.txt");
+let content = match result {
+    Ok(content) =&gt; { content },
+    Err(error) =&gt; { return Err(error.into()); }
+};
+<span class="boring">Ok(())
+</span><span class="boring">}</span></code></pre>
+<p>با این حال، این کار نوع بازگشتی تابع ما را تغییر می‌دهد. در تمام این مدت چیزی در مثال‌هایمان پنهان بود: امضای تابعی که این کد در آن قرار دارد. و در این آخرین مثال با <code>return</code>، اهمیت پیدا می‌کند. این هم مثال <em>کامل</em>:</p>
+<pre><code class="language-rust no_run">fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let result = std::fs::read_to_string("test.txt");
+    let content = match result {
+        Ok(content) =&gt; { content },
+        Err(error) =&gt; { return Err(error.into()); }
+    };
+    println!("file content: {}", content);
+    Ok(())
+}</code></pre>
+<p>نوع بازگشتی ما یک <code>Result</code> است! به همین دلیل می‌توانیم در بازوی دوم match بنویسیم <code>return Err(error);</code>. می‌بینید که در پایین یک <code>Ok(())</code> وجود دارد؟ این مقدار بازگشتی پیش‌فرض تابع است و معنایش این است: «Result سالم است و محتوایی ندارد».</p>
+<aside>
+<p><strong>توجه:</strong> چرا این به‌صورت <code>return Ok(());</code> نوشته نشده است؟ به‌راحتی می‌شد آن را این‌طور نوشت – این هم کاملاً معتبر است. آخرین عبارت هر بلوک در Rust مقدار بازگشتی آن است، و رسم بر این است که <code>return</code> غیرضروری حذف شود.</p>
+</aside>
+<h2 id="question-mark"><a class="header" href="#question-mark">علامت سؤال</a></h2>
+<p>همان‌طور که فراخوانی <code>.unwrap()</code> میان‌بری است برای <code>match</code> همراه با <code>panic!</code> در بازوی خطا، میان‌بر دیگری برای <code>match</code>ای داریم که در بازوی خطا <code>return</code> می‌کند: <code>?</code>.</p>
+<p>درست است، یک علامت سؤال. می‌توانید این عملگر را به مقداری از نوع <code>Result</code> اضافه کنید، و Rust آن را در درون به چیزی بسیار شبیه به همان <code>match</code> که همین حالا نوشتیم باز می‌کند.</p>
+<p>امتحانش کنید:</p>
+<pre><code class="language-rust no_run">fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let content = std::fs::read_to_string("test.txt")?;
+    println!("file content: {}", content);
+    Ok(())
+}</code></pre>
+<p>بسیار مختصر!</p>
+<aside>
+<p><strong>توجه:</strong> چند اتفاق دیگر هم این‌جا در حال رخ دادن است که برای کار کردن با این کد لازم نیست آن‌ها را بفهمید. برای مثال، نوع خطا در تابع <code>main</code> ما <code>Box&lt;dyn std::error::Error&gt;</code> است، اما در بالا دیدیم که <code>read_to_string</code> یک <a href="https://doc.rust-lang.org/1.39.0/std/io/type.Result.html"><code>std::io::Error</code></a> برمی‌گرداند. این کار می‌کند زیرا <code>?</code> به کدی گسترش می‌یابد که انواع خطا را <em>تبدیل</em> می‌کند.</p>
+<p><code>Box&lt;dyn std::error::Error&gt;</code> نیز نوعی جالب است. این یک <code>Box</code> است که می‌تواند <em>هر</em> نوعی را در خود جای دهد که trait استاندارد <a href="https://doc.rust-lang.org/1.39.0/std/error/trait.Error.html"><code>Error</code></a> را پیاده‌سازی می‌کند. این یعنی همهٔ خطاها را می‌توان در این جعبه گذاشت، و می‌توانیم <code>?</code> را روی همهٔ توابع معمولی که یک <code>Result</code> برمی‌گردانند به کار ببریم.</p>
+</aside>
+<h2 id="providing-context"><a class="header" href="#providing-context">فراهم کردن زمینه (Context)</a></h2>
+<p>خطاهایی که هنگام استفاده از <code>?</code> در تابع <code>main</code> می‌گیرید قابل‌قبول هستند، اما عالی نیستند. برای مثال، وقتی <code>std::fs::read_to_string("test.txt")?</code> را اجرا می‌کنید و فایل <code>test.txt</code> وجود ندارد، این خروجی را می‌گیرید:</p>
+<pre><code class="language-text">Error: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+</code></pre>
+<p>در مواردی که کد شما در واقع نام فایل را در خود ندارد، تشخیص اینکه کدام فایل <code>NotFound</code> بوده دشوار خواهد بود. راه‌های متعددی برای مدیریت این وضعیت وجود دارد.</p>
+<p>برای مثال، می‌توانیم نوع خطای خودمان را بسازیم و از آن برای ساختن یک پیام خطای سفارشی استفاده کنیم:</p>
+<pre><code class="language-rust ignore">#[derive(Debug)]
+struct CustomError(String);
+
+fn main() -&gt; Result&lt;(), CustomError&gt; {
+    let path = "test.txt";
+    let content = std::fs::read_to_string(path)
+        .map_err(|err| CustomError(format!("Error reading `{}`: {}", path, err)))?;
+    println!("file content: {}", content);
+    Ok(())
+}</code></pre>
+<p>با اجرای این، پیام خطای سفارشی خود را می‌گیریم:</p>
+<pre><code class="language-text">Error: CustomError("Error reading `test.txt`: No such file or directory (os error 2)")
+</code></pre>
+<p>چندان زیبا نیست، اما می‌توانیم بعداً خروجی debug را برای نوع خودمان تطبیق دهیم.</p>
+<p>این الگو بسیار رایج است. با این حال یک مشکل دارد: خطای اصلی را ذخیره نمی‌کنیم، فقط نمایش رشته‌ای آن را. کتابخانهٔ محبوب <a href="https://docs.rs/anyhow"><code>anyhow</code></a> راه‌حل ظریفی برای این دارد: trait با نام <a href="https://docs.rs/anyhow/1.0/anyhow/trait.Context.html"><code>Context</code></a> آن را می‌توان برای افزودن توضیحی مشابه نوع <code>CustomError</code> ما به کار برد. علاوه بر این، خطای اصلی را نگه می‌دارد، بنابراین «زنجیره‌ای» از پیام‌های خطا می‌گیریم که به علت ریشه‌ای اشاره می‌کند.</p>
+<p>بیایید ابتدا crate با نام <code>anyhow</code> را با افزودن <code>anyhow = "1.0"</code> به بخش <code>[dependencies]</code> فایل <code>Cargo.toml</code> خود وارد کنیم.</p>
+<p>مثال کامل چنین خواهد بود:</p>
+<pre><code class="language-rust ignore">use anyhow::{Context, Result};
+
+fn main() -&gt; Result&lt;()&gt; {
+    let path = "test.txt";
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("could not read file `{}`", path))?;
+    println!("file content: {}", content);
+    Ok(())
+}</code></pre>
+<p>این یک خطا چاپ می‌کند:</p>
+<pre><code class="language-text">Error: could not read file `test.txt`
+
+Caused by:
+    No such file or directory (os error 2)
+</code></pre>
+<h2 id="wrapping-up"><a class="header" href="#wrapping-up">جمع‌بندی</a></h2>
+<p>کد شما اکنون باید این‌گونه باشد:</p>
+<pre><code class="language-rust ignore">use anyhow::{Context, Result};
+use clap::Parser;
+
+/// Search for a pattern in a file and display the lines that contain it.
+#[derive(Parser)]
+struct Cli {
+    /// The pattern to look for
+    pattern: String,
+    /// The path to the file to read
+    path: std::path::PathBuf,
+}
+
+fn main() -&gt; Result&lt;()&gt; {
+    let args = Cli::parse();
+
+    let content = std::fs::read_to_string(&amp;args.path)
+        .with_context(|| format!("could not read file `{}`", args.path.display()))?;
+
+    for line in content.lines() {
+        if line.contains(&amp;args.pattern) {
+            println!("{}", line);
+        }
+    }
+
+    Ok(())
+}</code></pre><nav class="page-nav"><a href="../../cli/tutorial/impl-draft.html">→ نخستین پیاده‌سازی</a><a href="../../cli/tutorial/output.html">خروجی برای انسان‌ها و ماشین‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cli/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

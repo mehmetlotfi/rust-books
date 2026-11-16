@@ -1,0 +1,35 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>`no_std` — کتاب Rust نهفته</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="intro/no-std"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../embedded/intro/index.html" style="color:inherit;text-decoration:none">کتاب Rust نهفته</a><small class="en-title" dir="ltr">The Embedded Rust Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="a-no_std-rust-environment"><a class="header" href="#a-no_std-rust-environment">یک محیط Rust با <code>no_std</code></a></h1>
+<p>اصطلاح برنامه‌نویسی توکار برای طیف گسترده‌ای از انواع مختلف برنامه‌نویسی به کار می‌رود؛ از برنامه‌نویسی ریزکنترلرهای 8 بیتی (مانند <a href="https://www.st.com/resource/en/datasheet/st72325j6.pdf">ST72325xx</a>) با تنها چند کیلوبایت RAM و ROM گرفته، تا سیستم‌هایی مانند Raspberry Pi (<a href="https://en.wikipedia.org/wiki/Raspberry_Pi#Specifications">Model B 3+</a>) که یک پردازندهٔ 4 هسته‌ای Cortex-A53 32/64 بیتی با کلاک 1.4 گیگاهرتز و 1 گیگابایت RAM دارد. بسته به نوع هدف و مورد استفاده، هنگام نوشتن کد با محدودیت‌های متفاوتی روبه‌رو خواهید بود.</p>
+<p>دو دستهٔ کلی برای برنامه‌نویسی توکار وجود دارد:</p>
+<h2 id="hosted-environments"><a class="header" href="#hosted-environments">محیط‌های Hosted</a></h2>
+<p>این نوع محیط‌ها به یک محیط معمولی PC نزدیک‌اند. یعنی یک رابط سیستمی در اختیار شماست <a href="https://en.wikipedia.org/wiki/POSIX">مثلاً POSIX</a> که ابزارهای پایه‌ای برای تعامل با بخش‌های گوناگون سیستم، مانند سیستم فایل، شبکه، مدیریت حافظه، نخ‌ها و غیره، فراهم می‌کند. کتابخانه‌های استاندارد نیز معمولاً برای پیاده‌سازی قابلیت‌های خود به همین ابزارهای پایه تکیه دارند. ممکن است نوعی sysroot و محدودیت‌هایی در مصرف RAM/ROM هم داشته باشید و شاید سخت‌افزار یا ورودی/خروجی‌های خاصی. در مجموع حس می‌کنید روی یک محیط PC با کاربرد ویژه کد می‌نویسید.</p>
+<h2 id="bare-metal-environments"><a class="header" href="#bare-metal-environments">محیط‌های Bare Metal</a></h2>
+<p>در یک محیط bare metal پیش از برنامهٔ شما هیچ کدی بارگذاری نشده است. بدون نرم‌افزاری که یک سیستم‌عامل فراهم می‌کند، نمی‌توانیم کتابخانهٔ استاندارد را بارگذاری کنیم. در عوض، برنامه به‌همراه crateهایی که به کار می‌برد فقط می‌تواند برای اجرا از سخت‌افزار (bare metal) استفاده کند. برای جلوگیری از بارگذاری کتابخانهٔ استاندارد توسط Rust از <code>no_std</code> استفاده کنید. بخش‌های مستقل از پلتفرم کتابخانهٔ استاندارد از طریق <a href="https://doc.rust-lang.org/core/">libcore</a> در دسترس‌اند. libcore همچنین مواردی را که در یک محیط توکار همیشه مطلوب نیستند کنار می‌گذارد. یکی از این موارد تخصیص‌دهندهٔ حافظه برای تخصیص پویای حافظه است. اگر به این قابلیت یا هر قابلیت دیگری نیاز دارید، اغلب crateهایی وجود دارند که آن‌ها را فراهم می‌کنند.</p>
+<h3 id="the-libstd-runtime"><a class="header" href="#the-libstd-runtime">محیط اجرایی libstd</a></h3>
+<p>همان‌طور که پیش‌تر گفته شد، استفاده از <a href="https://doc.rust-lang.org/std/">libstd</a> به نوعی یکپارچگی با سیستم نیاز دارد، اما دلیلش فقط این نیست که <a href="https://doc.rust-lang.org/std/">libstd</a> راهی مشترک برای دسترسی به انتزاع‌های سیستم‌عامل فراهم می‌کند؛ بلکه یک محیط اجرایی (runtime) نیز دارد. این محیط اجرایی، در میان کارهای دیگر، پیش از فراخوانی تابع main برنامه، مسئول راه‌اندازی حفاظت در برابر سرریز پشته، پردازش آرگومان‌های خط فرمان و ایجاد نخ اصلی است. این محیط اجرایی نیز در یک محیط <code>no_std</code> در دسترس نخواهد بود.</p>
+<h2 id="summary"><a class="header" href="#summary">جمع‌بندی</a></h2>
+<p><code>#![no_std]</code> یک attribute در سطح crate است که نشان می‌دهد crate به‌جای crate با نام std به crate با نام core پیوند می‌شود. crate با نام <a href="https://doc.rust-lang.org/core/">libcore</a> نیز زیرمجموعه‌ای مستقل از پلتفرم از crate با نام std است که هیچ فرضی دربارهٔ سیستمی که برنامه روی آن اجرا می‌شود ندارد. به همین دلیل، APIهایی برای اولیه‌های زبان مانند اعداد ممیز شناور، رشته‌ها و برش‌ها (slice) فراهم می‌کند، و نیز APIهایی که قابلیت‌های پردازنده مانند عملیات اتمی و دستورهای SIMD را در دسترس می‌گذارند. با این حال، APIای برای هر چیزی که به یکپارچگی با پلتفرم مربوط باشد ندارد. به‌خاطر این ویژگی‌ها، کد no_std و <a href="https://doc.rust-lang.org/core/">libcore</a> را می‌توان برای هر نوع کد راه‌اندازی (مرحلهٔ 0) مانند بوت‌لودرها، فرم‌ویر یا هسته‌ها به کار برد.</p>
+<h3 id="overview"><a class="header" href="#overview">مرور کلی</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>قابلیت</th><th>no_std</th><th>std</th></tr>
+</thead>
+<tbody>
+<tr><td>heap (حافظهٔ پویا)</td><td>*</td><td>✓</td></tr>
+<tr><td>مجموعه‌ها (Vec، BTreeMap و غیره)</td><td>**</td><td>✓</td></tr>
+<tr><td>حفاظت در برابر سرریز پشته</td><td>✘</td><td>✓</td></tr>
+<tr><td>اجرای کد راه‌اندازی پیش از main</td><td>✘</td><td>✓</td></tr>
+<tr><td>libstd در دسترس است</td><td>✘</td><td>✓</td></tr>
+<tr><td>libcore در دسترس است</td><td>✓</td><td>✓</td></tr>
+<tr><td>نوشتن کد فرم‌ویر، هسته یا بوت‌لودر</td><td>✓</td><td>✘</td></tr>
+</tbody>
+</table>
+</div>
+<p>* فقط اگر از crate با نام <code>alloc</code> استفاده کنید و تخصیص‌دهندهٔ مناسبی مانند <a href="https://github.com/rust-embedded/alloc-cortex-m">تخصیص‌دهندهٔ alloc-cortex-m</a> به کار ببرید.</p>
+<p>** فقط اگر از crate با نام <code>collections</code> استفاده کنید و یک تخصیص‌دهندهٔ سراسری پیش‌فرض پیکربندی کنید.</p>
+<p>** HashMap و HashSet به‌دلیل نبود مولد امن اعداد تصادفی در دسترس نیستند.</p>
+<h2 id="see-also"><a class="header" href="#see-also">همچنین ببینید</a></h2>
+<ul>
+<li><a href="https://github.com/rust-lang/rfcs/blob/master/text/1184-stabilize-no_std.md">RFC-1184</a></li>
+</ul><nav class="page-nav"><a href="../../embedded/intro/hardware.html">→ سخت‌افزار</a><a href="../../embedded/intro/tooling.html">ابزارها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../embedded/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

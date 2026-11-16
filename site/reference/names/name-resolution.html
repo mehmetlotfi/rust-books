@@ -1,0 +1,573 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>تفکیک نام (Name resolution) — مرجع زبان Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="names/name-resolution"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../introduction.html" style="color:inherit;text-decoration:none">مرجع زبان Rust</a><small class="en-title" dir="ltr">The Rust Reference</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><div class="rule" id="r-names.resolution"><a class="rule-link" href="#r-names.resolution" title="names.resolution"><span>[names<wbr>.resolution]</span></a>
+</div>
+
+<h1 id="name-resolution"><a class="header" href="#name-resolution">تفکیک نام</a></h1>
+<div class="rule" id="r-names.resolution.intro"><a class="rule-link" href="#r-names.resolution.intro" title="names.resolution.intro"><span>[names<wbr>.resolution<wbr>.intro]</span></a>
+</div>
+
+<p><em>تفکیک نام</em> فرایند پیوند دادن مسیرها و دیگر شناسه‌ها به اعلان موجودیت‌های متناظر است. نام‌ها در <a href="../names/namespaces.html">فضاهای نام</a> گوناگون جدا می‌شوند تا موجودیت‌های فضاهای نام متفاوت بتوانند بدون تداخل نام یکسانی داشته باشند. هر نام در یک <a href="../names/scopes.html">دامنه</a>، یعنی ناحیه‌ای از متن منبع که در آن می‌توان به نام ارجاع داد، معتبر است. دسترسی به نام ممکن است بر پایهٔ <a href="../visibility-and-privacy.html">نمایانی</a> آن محدود شود.</p>
+<p>تفکیک نام در سراسر فرایند کامپایل به سه مرحله تقسیم می‌شود. مرحلهٔ نخست، <em>تفکیک زمان گسترش</em>، همهٔ <a href="../items/use-declarations.html">اعلان‌های <code>use</code></a> و <a href="../macros.html#macro-invocation">فراخوانی‌های ماکرو</a> را تفکیک می‌کند. مرحلهٔ دوم، <em>تفکیک اصلی</em>، همهٔ نام‌هایی را تفکیک می‌کند که هنوز تفکیک نشده‌اند و تفکیکشان به اطلاعات نوع وابسته نیست. مرحلهٔ پایانی، <em>تفکیک نسبی به نوع</em>، پس از در دسترس قرار گرفتن اطلاعات نوع، نام‌های باقی‌مانده را تفکیک می‌کند.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> تفکیک زمان گسترش با نام <em>تفکیک زودهنگام</em> نیز شناخته می‌شود. تفکیک اصلی نیز <em>تفکیک دیرهنگام</em> نامیده می‌شود.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-names.resolution.general"><a class="rule-link" href="#r-names.resolution.general" title="names.resolution.general"><span>[names<wbr>.resolution<wbr>.general]</span></a>
+</div>
+
+<h2 id="general"><a class="header" href="#general">کلیات</a></h2>
+<div class="rule" id="r-names.resolution.general.intro"><a class="rule-link" href="#r-names.resolution.general.intro" title="names.resolution.general.intro"><span>[names<wbr>.resolution<wbr>.general<wbr>.intro]</span></a>
+</div>
+
+<p>قواعد این بخش بر همهٔ مراحل تفکیک نام اعمال می‌شوند.</p>
+<div class="rule" id="r-names.resolution.general.scopes"><a class="rule-link" href="#r-names.resolution.general.scopes" title="names.resolution.general.scopes"><span>[names<wbr>.resolution<wbr>.general<wbr>.scopes]</span></a>
+</div>
+
+<h3 id="scopes"><a class="header" href="#scopes">دامنه‌ها</a></h3>
+<div class="rule" id="r-names.resolution.general.scopes.intro"><a class="rule-link" href="#r-names.resolution.general.scopes.intro" title="names.resolution.general.scopes.intro"><span>[names<wbr>.resolution<wbr>.general<wbr>.scopes<wbr>.intro]</span></a>
+</div>
+
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> این بخش جای‌نگهداری برای گسترش آینده دربارهٔ تفکیک نام‌ها در دامنه‌های گوناگون است.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-names.resolution.expansion"><a class="rule-link" href="#r-names.resolution.expansion" title="names.resolution.expansion"><span>[names<wbr>.resolution<wbr>.expansion]</span></a>
+</div>
+
+<h2 id="expansion-time-name-resolution"><a class="header" href="#expansion-time-name-resolution">تفکیک نام هنگام گسترش</a></h2>
+<div class="rule" id="r-names.resolution.expansion.intro"><a class="rule-link" href="#r-names.resolution.expansion.intro" title="names.resolution.expansion.intro"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.intro]</span></a>
+</div>
+
+<p>تفکیک نام هنگام گسترش مرحله‌ای است که برای تکمیل گسترش ماکرو و تولید کامل <a href="../glossary.html#r-glossary.ast">AST</a> یک کریت لازم است. این مرحله به تفکیک فراخوانی‌های ماکرو و اعلان‌های <code>use</code> نیاز دارد. تفکیک اعلان‌های <code>use</code> برای فراخوانی‌های ماکرویی لازم است که از راه <a href="../macros.html#r-macro.invocation.name-resolution">دامنهٔ مبتنی بر مسیر</a> تفکیک می‌شوند. تفکیک فراخوانی‌های ماکرو نیز برای گسترش آن‌ها لازم است.</p>
+<div class="rule" id="r-names.resolution.expansion.unresolved-invocations"><a class="rule-link" href="#r-names.resolution.expansion.unresolved-invocations" title="names.resolution.expansion.unresolved-invocations"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.unresolved-invocations]</span></a>
+</div>
+
+<p>پس از تفکیک نام هنگام گسترش، AST نباید هیچ فراخوانی ماکروی گسترش‌نیافته‌ای داشته باشد. هر فراخوانی ماکرو به تعریف معتبری تفکیک می‌شود که در AST نهایی یا یک کریت خارجی وجود دارد.</p>
+<pre><code class="language-rust compile_fail">m!(); // ERROR: Cannot find macro `m` in this scope.</code></pre>
+<div class="rule" id="r-names.resolution.expansion.expansion-order-stability"><a class="rule-link" href="#r-names.resolution.expansion.expansion-order-stability" title="names.resolution.expansion.expansion-order-stability"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.expansion-order-stability]</span></a>
+</div>
+
+<p>تفکیک نام‌ها باید پایدار باشد. پس از گسترش، نام‌های AST کاملاً گسترش‌یافته باید مستقل از ترتیب گسترش ماکروها و تفکیک واردسازی‌ها به همان تعریف تفکیک شوند.</p>
+<div class="rule" id="r-names.resolution.expansion.speculation"><a class="rule-link" href="#r-names.resolution.expansion.speculation" title="names.resolution.expansion.speculation"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.speculation]</span></a>
+</div>
+
+<p>همهٔ نامزدهای تفکیک نام که هنگام گسترش ماکرو انتخاب می‌شوند، حدسی در نظر گرفته می‌شوند. پس از گسترش کامل کریت، همهٔ تفکیک‌های حدسی واردسازی اعتبارسنجی می‌شوند تا اطمینان حاصل شود گسترش ماکرو ابهام جدیدی وارد نکرده است.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> به‌دلیل ماهیت تکرارشوندهٔ گسترش ماکرو، این وضعیت به ابهام‌های موسوم به سفر در زمان منجر می‌شود؛ برای نمونه وقتی یک ماکرو یا واردسازی سراسری قلمی معرفی می‌کند که با مسیر پایهٔ خودش مبهم است.</p>
+<pre><code class="language-rust compile_fail E0659"><span class="boring">fn main() {}
+</span>macro_rules! f {
+    () =&gt; {
+        mod m {
+            pub(crate) use f;
+        }
+    }
+}
+f!();
+
+const _: () = {
+    // Initially, we speculatively resolve `m` to the module in
+    // the crate root.
+    //
+    // Expansion of `f` introduces a second `m` module inside this
+    // body.
+    //
+    // Expansion-time resolution finalizes resolutions by re-
+    // resolving all imports and macro invocations, sees the
+    // introduced ambiguity and reports it as an error.
+    m::f!(); // ERROR: `m` is ambiguous.
+};</code></pre>
+</blockquote>
+</div>
+
+<div class="rule" id="r-names.resolution.expansion.imports"><a class="rule-link" href="#r-names.resolution.expansion.imports" title="names.resolution.expansion.imports"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.imports]</span></a>
+</div>
+
+<h3 id="imports"><a class="header" href="#imports">واردسازی‌ها</a></h3>
+<div class="rule" id="r-names.resolution.expansion.imports.intro"><a class="rule-link" href="#r-names.resolution.expansion.imports.intro" title="names.resolution.expansion.imports.intro"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.imports<wbr>.intro]</span></a>
+</div>
+
+<p>همهٔ اعلان‌های <code>use</code> در این مرحله از تفکیک به‌طور کامل تفکیک می‌شوند. <a href="name-resolution.html#r-names.resolution.type-relative">مسیرهای نسبی به نوع</a> در این مرحله قابل تفکیک نیستند و خطا تولید می‌کنند.</p>
+<pre><code class="language-rust no_run">mod m {
+    pub const C: () = ();
+    pub enum E { V }
+    pub type A = E;
+    impl E {
+        pub const C: () = ();
+    }
+}
+
+// Valid imports resolved at expansion-time:
+use m::C; // OK.
+use m::E; // OK.
+use m::A; // OK.
+use m::E::V; // OK.
+
+// Valid expressions resolved during type-relative resolution:
+let _ = m::A::V; // OK.
+let _ = m::E::C; // OK.</code></pre>
+<pre><code class="language-rust compile_fail E0432"><span class="boring">mod m {
+</span><span class="boring">    pub const C: () = ();
+</span><span class="boring">    pub enum E { V }
+</span><span class="boring">    pub type A = E;
+</span><span class="boring">    impl E {
+</span><span class="boring">        pub const C: () = ();
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>// Invalid type-relative imports that can't resolve at expansion-time:
+use m::A::V; // ERROR: Unresolved import `m::A::V`.
+use m::E::C; // ERROR: Unresolved import `m::E::C`.</code></pre>
+<div class="rule" id="r-names.resolution.expansion.imports.shadowing"><a class="rule-link" href="#r-names.resolution.expansion.imports.shadowing" title="names.resolution.expansion.imports.shadowing"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.imports<wbr>.shadowing]</span></a>
+</div>
+
+<p>نام‌هایی که با اعلان‌های <code>use</code> در یک <a href="name-resolution.html#r-names.resolution.general.scopes">دامنهٔ بیرونی</a> معرفی شده‌اند، به‌وسیلهٔ نامزدهای هم‌نام در همان فضای نام از دامنه‌ای درونی‌تر زیر سایه می‌روند؛ مگر جایی که <a href="name-resolution.html#r-names.resolution.expansion.imports.ambiguity">ابهام‌های تفکیک نام</a> محدودیت دیگری اعمال کنند.</p>
+<pre><code class="language-rust no_run">pub mod m1 {
+    pub mod ambig {
+        pub const C: u8 = 1;
+    }
+}
+
+pub mod m2 {
+    pub mod ambig {
+        pub const C: u8 = 2;
+    }
+}
+
+// This introduces the name `ambig` in the outer scope.
+use m1::ambig;
+const _: () = {
+    // This shadows `ambig` in the inner scope.
+    use m2::ambig;
+    // The inner candidate is selected here
+    // as the resolution of `ambig`.
+    use ambig::C;
+    assert!(C == 2);
+};</code></pre>
+<div class="rule" id="r-names.resolution.expansion.imports.shadowing-shared-scope"><a class="rule-link" href="#r-names.resolution.expansion.imports.shadowing-shared-scope" title="names.resolution.expansion.imports.shadowing-shared-scope"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.imports<wbr>.shadowing-shared-scope]</span></a>
+</div>
+
+<p>سایه‌اندازی نام‌های معرفی‌شده با اعلان‌های <code>use</code> در یک دامنهٔ واحد در موقعیت‌های زیر مجاز است:</p>
+<ul>
+<li>[سایه‌اندازی واردسازی سراسری <code>use</code>]</li>
+<li><a href="../macros-by-example.html#r-macro.decl.scope.textual.shadow-path-based">سایه‌اندازی دامنهٔ متنی ماکرو</a></li>
+</ul>
+<div class="rule" id="r-names.resolution.expansion.imports.ambiguity"><a class="rule-link" href="#r-names.resolution.expansion.imports.ambiguity" title="names.resolution.expansion.imports.ambiguity"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.imports<wbr>.ambiguity]</span></a>
+</div>
+
+<h4 id="ambiguities"><a class="header" href="#ambiguities">ابهام‌ها</a></h4>
+<div class="rule" id="r-names.resolution.expansion.imports.ambiguity.intro"><a class="rule-link" href="#r-names.resolution.expansion.imports.ambiguity.intro" title="names.resolution.expansion.imports.ambiguity.intro"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.imports<wbr>.ambiguity<wbr>.intro]</span></a>
+</div>
+
+<p>در برخی وضعیت‌های تفکیک زمان گسترش، چند تعریف ماکرو، اعلان <code>use</code> یا ماژول وجود دارد که نام یک واردسازی یا فراخوانی ماکرو می‌تواند به آن‌ها اشاره کند و کامپایلر نمی‌تواند به‌طور سازگار تعیین کند کدام نامزد باید دیگری را زیر سایه ببرد. در این وضعیت‌ها سایه‌اندازی مجاز نیست و کامپایلر به‌جای آن خطای ابهام صادر می‌کند.</p>
+<div class="rule" id="r-names.resolution.expansion.imports.ambiguity.glob-vs-glob"><a class="rule-link" href="#r-names.resolution.expansion.imports.ambiguity.glob-vs-glob" title="names.resolution.expansion.imports.ambiguity.glob-vs-glob"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.imports<wbr>.ambiguity<wbr>.glob-vs-glob]</span></a>
+</div>
+
+<p>نام‌ها را نمی‌توان از راه واردسازی‌های سراسری مبهم تفکیک کرد. واردسازی‌های سراسری می‌توانند نام‌های متعارض را در یک فضای نام وارد کنند، به شرط آنکه نام استفاده نشود. نام‌های دارای نامزدهای متعارض از واردسازی‌های سراسری مبهم همچنان می‌توانند به‌وسیلهٔ واردسازی‌های غیرسراسری زیر سایه بروند و بدون خطا استفاده شوند. خطا هنگام استفاده رخ می‌دهد، نه هنگام واردسازی.</p>
+<pre><code class="language-rust compile_fail E0659">mod m1 {
+    pub struct Ambig;
+}
+
+mod m2 {
+    pub struct Ambig;
+}
+
+// OK: This brings conficting names in the same namespace into scope
+// but they have not been used yet.
+use m1::*;
+use m2::*;
+
+const _: () = {
+    // The error happens when the name with the conflicting candidates
+    // is used.
+    let x = Ambig; // ERROR: `Ambig` is ambiguous.
+};</code></pre>
+<pre><code class="language-rust no_run"><span class="boring">mod m1 {
+</span><span class="boring">    pub struct Ambig;
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">mod m2 {
+</span><span class="boring">    pub struct Ambig;
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">use m1::*;
+</span><span class="boring">use m2::*; // OK: No name conflict.
+</span>const _: () = {
+    // This is permitted, since resolution is not through the
+    // ambiguous globs.
+    struct Ambig;
+    let x = Ambig; // OK.
+};</code></pre>
+<p>چند واردسازی سراسری می‌توانند نام یکسانی را وارد کنند و اگر واردسازی‌ها ــ با در نظر گرفتن بازصادرسازی‌ها ــ به همان قلم اشاره کنند، استفاده از آن نام مجاز است. نمایانی نام بیشترین نمایانی میان واردسازی‌ها است.</p>
+<pre><code class="language-rust no_run">mod m1 {
+    pub struct Ambig;
+}
+
+mod m2 {
+    // This reexports the same `Ambig` item from a second module.
+    pub use super::m1::Ambig;
+}
+
+mod m3 {
+    // These both import the same `Ambig`.
+    //
+    // The visibility of `Ambig` is `pub` because that is the
+    // maximum visibility between these two `use` declarations.
+    pub use super::m1::*;
+    use super::m2::*;
+}
+
+mod m4 {
+    // `Ambig` can be used through the `m3` globs and still has
+    // `pub` visibility.
+    pub use crate::m3::Ambig;
+}
+
+const _: () = {
+    // Therefore, we can use it here.
+    let _ = m4::Ambig; // OK.
+};
+<span class="boring">fn main() {}</span></code></pre>
+<div class="rule" id="r-names.resolution.expansion.imports.ambiguity.glob-vs-outer"><a class="rule-link" href="#r-names.resolution.expansion.imports.ambiguity.glob-vs-outer" title="names.resolution.expansion.imports.ambiguity.glob-vs-outer"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.imports<wbr>.ambiguity<wbr>.glob-vs-outer]</span></a>
+</div>
+
+<p>وقتی نامزد دیگری در یک <a href="name-resolution.html#r-names.resolution.general.scopes">دامنهٔ بیرونی</a> وجود دارد، نام‌های موجود در واردسازی‌ها و فراخوانی‌های ماکرو را نمی‌توان از راه واردسازی‌های سراسری تفکیک کرد.</p>
+<div class="rule" id="r-names.resolution.expansion.imports.ambiguity.panic-hack"><a class="rule-link" href="#r-names.resolution.expansion.imports.ambiguity.panic-hack" title="names.resolution.expansion.imports.ambiguity.panic-hack"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.imports<wbr>.ambiguity<wbr>.panic-hack]</span></a>
+</div>
+
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> وقتی یکی از <code>core::panic!</code> یا <code>std::panic!</code> به‌دلیل <a href="preludes.html#r-names.preludes.std">پیش‌درآمد کتابخانهٔ استاندارد</a> وارد دامنه شده باشد و یک <a href="../items/use-declarations.html#r-items.use.glob">واردسازی سراسری</a> نوشته‌شده به‌وسیلهٔ کاربر دیگری را وارد دامنه کند، <code>rustc</code> در حال حاضر استفاده از <code>panic!</code> را با وجود ابهام مجاز می‌داند. برای رفع این ابهام، واردسازی سراسری کاربر اولویت دارد.</p>
+<p>در Rust 2021 و بعد از آن، <code>core::panic!</code> و <code>std::panic!</code> رفتاری یکسان دارند. اما در ویرایش‌های پیشین متفاوت‌اند؛ فقط <code>std::panic!</code> یک <code>String</code> را به‌عنوان آرگومان قالب می‌پذیرد.</p>
+<p>برای نمونه، این کد خطاست:</p>
+<pre><code class="language-rust edition2018 compile_fail E0308">extern crate core;
+use ::core::prelude::v1::*;
+fn main() {
+    panic!(std::string::String::new()); // ERROR.
+}</code></pre>
+<p>و این کد پذیرفته می‌شود:</p>
+<!-- ignore: Can't test with `no_std`. -->
+<pre><code class="language-rust edition2018 ignore">#![no_std]
+extern crate std;
+use ::std::prelude::v1::*;
+fn main() {
+    panic!(std::string::String::new()); // OK.
+}</code></pre>
+<p>به این رفتار تکیه نکنید؛ برنامه بر حذف آن است.</p>
+<p>برای جزئیات، <a href="https://github.com/rust-lang/rust/issues/147319">مسئلهٔ شمارهٔ 147319 در Rust</a> را ببینید.</p>
+</blockquote>
+</div>
+
+<pre><code class="language-rust compile_fail E0659">mod glob {
+    pub mod ambig {
+        pub struct Name;
+    }
+}
+
+// Outer `ambig` candidate.
+pub mod ambig {
+    pub struct Name;
+}
+
+const _: () = {
+    // Cannot resolve `ambig` through this glob
+    // because of the outer `ambig` candidate above.
+    use glob::*;
+    use ambig::Name; // ERROR: `ambig` is ambiguous.
+};</code></pre>
+<pre><code class="language-rust compile_fail E0659">// As above, but with macros.
+pub mod m {
+    macro_rules! f {
+        () =&gt; {};
+    }
+    pub(crate) use f;
+}
+pub mod glob {
+    macro_rules! f {
+        () =&gt; {};
+    }
+    pub(crate) use f as ambig;
+}
+
+use m::f as ambig;
+
+const _: () = {
+    use glob::*;
+    ambig!(); // ERROR: `ambig` is ambiguous.
+};</code></pre>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> این خطاهای ابهام ویژهٔ تفکیک زمان گسترش‌اند. وجود چند نامزد برای یک نام در مراحل بعدی تفکیک خطا به شمار نمی‌آید. تا زمانی که خود واردسازی‌ها مبهم نباشند، همیشه یک نزدیک‌ترین تفکیک بدون ابهام وجود دارد.</p>
+<pre><code class="language-rust no_run">mod glob {
+    pub const AMBIG: u8 = 1;
+}
+
+mod outer {
+    pub const AMBIG: u8 = 2;
+}
+
+use outer::AMBIG;
+
+const C: () = {
+    use glob::*;
+    assert!(AMBIG == 1);
+    //      ^---- This `AMBIG` is resolved during primary resolution.
+};</code></pre>
+</blockquote>
+</div>
+
+<div class="rule" id="r-names.resolution.expansion.imports.ambiguity.path-vs-textual-macro"><a class="rule-link" href="#r-names.resolution.expansion.imports.ambiguity.path-vs-textual-macro" title="names.resolution.expansion.imports.ambiguity.path-vs-textual-macro"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.imports<wbr>.ambiguity<wbr>.path-vs-textual-macro]</span></a>
+</div>
+
+<p>نام‌ها را نمی‌توان از راه بازصادرسازی‌های مبهم ماکرو تفکیک کرد. بازصادرسازی‌های ماکرو زمانی مبهم‌اند که روی یک نامزد ماکروی متنی هم‌نام در یک <a href="name-resolution.html#r-names.resolution.general.scopes">دامنهٔ بیرونی</a> سایه بیندازند.</p>
+<pre><code class="language-rust compile_fail E0659">// Textual macro candidate.
+macro_rules! ambig {
+    () =&gt; {}
+}
+
+// Path-based macro candidate.
+macro_rules! path_based {
+    () =&gt; {}
+}
+
+pub fn f() {
+    // This reexport of the `path_based` macro definition
+    // as `ambig` may not shadow the `ambig` macro definition
+    // which is resolved via textual macro scope.
+    use path_based as ambig;
+    ambig!(); // ERROR: `ambig` is ambiguous.
+}</code></pre>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> این محدودیت به‌دلیل جزئیات پیاده‌سازی کامپایلر، به‌ویژه منطق کنونی پیمایش دامنه و پیچیدگی پشتیبانی از این رفتار، لازم است. ممکن است این خطای ابهام در آینده حذف شود.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-names.resolution.expansion.macros"><a class="rule-link" href="#r-names.resolution.expansion.macros" title="names.resolution.expansion.macros"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.macros]</span></a>
+</div>
+
+<h3 id="macros"><a class="header" href="#macros">ماکروها</a></h3>
+<div class="rule" id="r-names.resolution.expansion.macros.intro"><a class="rule-link" href="#r-names.resolution.expansion.macros.intro" title="names.resolution.expansion.macros.intro"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.macros<wbr>.intro]</span></a>
+</div>
+
+<p>ماکروها با پیمایش دامنه‌های موجود برای یافتن نامزدهای در دسترس تفکیک می‌شوند. ماکروها به دو زیرفضای نام تقسیم می‌شوند: یکی برای ماکروهای تابع‌مانند و دیگری برای ویژگی‌ها و مشتق‌سازی‌ها. نامزدهای تفکیک از زیرفضای نام نادرست نادیده گرفته می‌شوند.</p>
+<div class="rule" id="r-names.resolution.expansion.macros.visitation-order"><a class="rule-link" href="#r-names.resolution.expansion.macros.visitation-order" title="names.resolution.expansion.macros.visitation-order"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.macros<wbr>.visitation-order]</span></a>
+</div>
+
+<p>گونه‌های دامنهٔ در دسترس با ترتیب زیر پیمایش می‌شوند. هر گونهٔ دامنه نمایندهٔ یک یا چند دامنه است.</p>
+<ul>
+<li><a href="../procedural-macros.html#r-macro.proc.derive.attributes">کمک‌مشتق‌ها</a></li>
+<li><a href="../macros-by-example.html#r-macro.decl.scope.textual">ماکروهای دامنهٔ متنی</a></li>
+<li><a href="../macros.html#r-macro.invocation.name-resolution">ماکروهای دامنهٔ مبتنی بر مسیر</a></li>
+<li>[پیش‌درآمد <code>macro_use</code>]</li>
+<li><a href="./preludes.html#r-names.preludes.std">پیش‌درآمد کتابخانهٔ استاندارد</a></li>
+<li><a href="./preludes.html#r-names.preludes.lang">ویژگی‌های داخلی</a></li>
+</ul>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> کامپایلر تلاش می‌کند کمک‌مشتق‌هایی را تفکیک کند که پیش از معرفی‌شدن به دامنه به‌وسیلهٔ ماکروی وابستهٔ خود استفاده شده‌اند. این دامنه پس از دامنهٔ تفکیک نامزدهای کمک‌مشتقی پیمایش می‌شود که به‌درستی در دامنه قرار دارند. این رفتار برای حذف برنامه‌ریزی شده است.</p>
+<p>برای اطلاعات بیشتر، <a href="../procedural-macros.html#r-macro.proc.derive.attributes.scope">دامنهٔ کمک‌مشتق</a> را ببینید.</p>
+</blockquote>
+</div>
+
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> ممکن است این ترتیب پیمایش در آینده تغییر کند؛ برای نمونه نامزدهای دامنهٔ متنی و مبتنی بر مسیر بر پایهٔ دامنه‌های واژگانی‌شان به‌صورت درهم‌آمیخته پیمایش شوند.</p>
+</blockquote>
+</div>
+
+<blockquote>
+<p><strong>تفاوت‌های ویرایش 2018</strong> از ویرایش ۲۰۱۸ به بعد، در حضور <a href="preludes.html#r-names.preludes.no_implicit_prelude"><code>#[no_implicit_prelude]</code></a>، پیش‌درآمد <code>#[macro_use]</code> پیمایش نمی‌شود.</p>
+</blockquote>
+<div class="rule" id="r-names.resolution.expansion.macros.reserved-names"><a class="rule-link" href="#r-names.resolution.expansion.macros.reserved-names" title="names.resolution.expansion.macros.reserved-names"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.macros<wbr>.reserved-names]</span></a>
+</div>
+
+<p>نام‌های <code>cfg</code> و <code>cfg_attr</code> در <a href="namespaces.html#r-names.namespaces.sub-namespaces">زیرفضای نام</a> ویژگی ماکرو رزرو شده‌اند.</p>
+<div class="rule" id="r-names.resolution.expansion.macros.ambiguity"><a class="rule-link" href="#r-names.resolution.expansion.macros.ambiguity" title="names.resolution.expansion.macros.ambiguity"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.macros<wbr>.ambiguity]</span></a>
+</div>
+
+<h4 id="ambiguities-1"><a class="header" href="#ambiguities-1">ابهام‌ها</a></h4>
+<div class="rule" id="r-names.resolution.expansion.macros.ambiguity.more-expanded-vs-outer"><a class="rule-link" href="#r-names.resolution.expansion.macros.ambiguity.more-expanded-vs-outer" title="names.resolution.expansion.macros.ambiguity.more-expanded-vs-outer"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.macros<wbr>.ambiguity<wbr>.more-expanded-vs-outer]</span></a>
+</div>
+
+<p>نام‌ها را نمی‌توان از راه نامزدهای مبهم درون گسترش‌های ماکرو تفکیک کرد. نامزدهای درون گسترش ماکرو زمانی مبهم‌اند که روی نامزدی هم‌نام از بیرون گسترش ماکروی نامزد نخست سایه بیندازند و فراخوانی نام در حال تفکیک نیز بیرون از گسترش ماکروی نامزد نخست باشد.</p>
+<pre><code class="language-rust compile_fail E0659">macro_rules! define_ambig {
+    () =&gt; {
+        macro_rules! ambig {
+            () =&gt; {}
+        }
+    }
+}
+
+// Introduce outer candidate definition for `ambig` macro invocation.
+macro_rules! ambig {
+    () =&gt; {}
+}
+
+// Introduce a second candidate definition for `ambig` inside of a
+// macro expansion.
+define_ambig!();
+
+// The definition of `ambig` from the second invocation
+// of `define_ambig` is the innermost canadidate.
+//
+// The definition of `ambig` from the first invocation of
+// `define_ambig` is the second candidate.
+//
+// The compiler checks that the first candidate is inside of a macro
+// expansion, that the second candidate is not from within the same
+// macro expansion, and that the name being resolved is not from
+// within the same macro expansion.
+ambig!(); // ERROR: `ambig` is ambiguous.</code></pre>
+<p>حالت معکوس مبهم در نظر گرفته نمی‌شود.</p>
+<pre><code class="language-rust no_run"><span class="boring">macro_rules! define_ambig {
+</span><span class="boring">    () =&gt; {
+</span><span class="boring">        macro_rules! ambig {
+</span><span class="boring">            () =&gt; {}
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>// Swap order of definitions.
+define_ambig!();
+macro_rules! ambig {
+    () =&gt; {}
+}
+// The innermost candidate is now less expanded so it may shadow more
+// the macro expanded definition above it.
+ambig!();</code></pre>
+<p>اگر فراخوانی در حال تفکیک درون گسترش درونی‌ترین نامزد باشد نیز ابهامی وجود ندارد.</p>
+<pre><code class="language-rust no_run">macro_rules! ambig {
+    () =&gt; {}
+}
+
+macro_rules! define_and_invoke_ambig {
+    () =&gt; {
+        // Define innermost candidate.
+        macro_rules! ambig {
+            () =&gt; {}
+        }
+
+        // Invocation of `ambig` is in the same expansion as the
+        // innermost candidate.
+        ambig!(); // OK
+    }
+}
+
+define_and_invoke_ambig!();</code></pre>
+<p>مهم نیست هر دو تعریف از فراخوانی‌های یک ماکرو آمده باشند؛ نامزد بیرونی‌تر همچنان «کمتر گسترش‌یافته» در نظر گرفته می‌شود، زیرا درون گسترشی که تعریف نامزد درونی‌تر را در خود دارد قرار نگرفته است.</p>
+<pre><code class="language-rust compile_fail E0659"><span class="boring">macro_rules! define_ambig {
+</span><span class="boring">    () =&gt; {
+</span><span class="boring">        macro_rules! ambig {
+</span><span class="boring">            () =&gt; {}
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">}
+</span>define_ambig!();
+define_ambig!();
+ambig!(); // ERROR: `ambig` is ambiguous.</code></pre>
+<p>این قاعده دربارهٔ واردسازی‌ها نیز برقرار است، به شرط آنکه درونی‌ترین نامزد نام از درون یک گسترش ماکرو آمده باشد.</p>
+<pre><code class="language-rust compile_fail E0659">macro_rules! define_ambig {
+    () =&gt; {
+        mod ambig {
+            pub struct Name;
+        }
+    }
+}
+
+mod ambig {
+    pub struct Name;
+}
+
+const _: () = {
+    // Introduce innermost candidate for
+    // `ambig` mod in this macro expansion.
+    define_ambig!();
+    use ambig::Name; // ERROR: `ambig` is ambiguous.
+};</code></pre>
+<div class="rule" id="r-names.resolution.expansion.macros.ambiguity.built-in-attr"><a class="rule-link" href="#r-names.resolution.expansion.macros.ambiguity.built-in-attr" title="names.resolution.expansion.macros.ambiguity.built-in-attr"><span>[names<wbr>.resolution<wbr>.expansion<wbr>.macros<wbr>.ambiguity<wbr>.built-in-attr]</span></a>
+</div>
+
+<p>ویژگی‌های تعریف‌شده توسط کاربر یا ماکروهای مشتق‌سازی نمی‌توانند روی ویژگی‌های داخلی غیرماکرو (مثلاً inline) سایه بیندازند.</p>
+<!-- ignore: test doesn't support proc-macro -->
+<pre><code class="language-rust ignore">// with-helper/src/lib.rs
+<span class="boring">use proc_macro::TokenStream;
+</span>#[proc_macro_derive(WithHelperAttr, attributes(non_exhaustive))]
+//                                             ^^^^^^^^^^^^^^
+//                                   User-defined attribute candidate.
+// ...
+<span class="boring">pub fn derive_with_helper_attr(_item: TokenStream) -&gt; TokenStream {
+</span><span class="boring">    TokenStream::new()
+</span><span class="boring">}</span></code></pre>
+<!-- ignore: requires external crates -->
+<pre><code class="language-rust ignore">// src/lib.rs
+#[derive(with_helper::WithHelperAttr)]
+#[non_exhaustive] // ERROR: `non_exhaustive` is ambiguous.
+struct S;</code></pre>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> این قاعده مستقل از نامی برقرار است که ویژگی داخلی برای آن یک نامزد به شمار می‌آید:</p>
+<!-- ignore: test doesn't support proc-macro -->
+<pre><code class="language-rust ignore">// with-helper/src/lib.rs
+<span class="boring">use proc_macro::TokenStream;
+</span><span class="boring">
+</span>#[proc_macro_derive(WithHelperAttr, attributes(helper))]
+//                                             ^^^^^^
+//                                 User-defined attribute candidate.
+// ...
+<span class="boring">pub fn derive_with_helper_attr(_item: TokenStream) -&gt; TokenStream {
+</span><span class="boring">    TokenStream::new()
+</span><span class="boring">}</span></code></pre>
+<!-- ignore: requires external crates -->
+<pre><code class="language-rust ignore">// src/lib.rs
+use inline as helper;
+//            ^----- Built-in attribute candidate via reexport.
+
+#[derive(with_helper::WithHelperAttr)]
+#[helper] // ERROR: `helper` is ambiguous.
+struct S;</code></pre>
+</blockquote>
+</div>
+
+<div class="rule" id="r-names.resolution.primary"><a class="rule-link" href="#r-names.resolution.primary" title="names.resolution.primary"><span>[names<wbr>.resolution<wbr>.primary]</span></a>
+</div>
+
+<h2 id="primary-name-resolution"><a class="header" href="#primary-name-resolution">تفکیک اصلی نام</a></h2>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> این بخش جای‌نگهداری برای گسترش آینده دربارهٔ تفکیک اصلی نام است.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-names.resolution.type-relative"><a class="rule-link" href="#r-names.resolution.type-relative" title="names.resolution.type-relative"><span>[names<wbr>.resolution<wbr>.type-relative]</span></a>
+</div>
+
+<h2 id="type-relative-resolution"><a class="header" href="#type-relative-resolution">تفکیک نسبی به نوع</a></h2>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> این بخش جای‌نگهداری برای گسترش آینده دربارهٔ تفکیک وابسته به نوع است.</p>
+</blockquote>
+</div><nav class="page-nav"><a href="../paths.html">→ مسیرها (Paths)</a><a href="../visibility-and-privacy.html">دیدپذیری و حریم خصوصی (Visibility and privacy) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../reference/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

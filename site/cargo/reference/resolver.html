@@ -1,0 +1,345 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>حل وابستگی‌ها — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/resolver"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="dependency-resolution"><a class="header" href="#dependency-resolution">حل وابستگی‌ها (Dependency Resolution)</a></h1>
+<p>یکی از وظایف اصلی Cargo این است که بر اساس نیازمندی‌های نسخه‌ای که در هر بسته مشخص شده‌اند، تعیین کند از چه نسخه‌هایی از وابستگی‌ها استفاده شود. این فرایند «حل وابستگی‌ها» (dependency resolution) نام دارد و توسط «حل‌کننده» (resolver) انجام می‌شود. نتیجهٔ حل در فایل <code>Cargo.lock</code> ذخیره می‌شود که وابستگی‌ها را روی نسخه‌های مشخصی «قفل» می‌کند و آن‌ها را در طول زمان ثابت نگه می‌دارد. از دستور <a href="../commands/cargo-tree.html"><code>cargo tree</code></a> می‌توان برای نمایش بصری نتیجهٔ resolver استفاده کرد.</p>
+<h2 id="constraints-and-heuristics"><a class="header" href="#constraints-and-heuristics">قیدها و قواعد اکتشافی (Constraints and Heuristics)</a></h2>
+<p>در بسیاری از موارد، تنها یک حل وابستگی «بهینه» وجود ندارد. resolver تحت قیدها و قواعد اکتشافی (heuristic) گوناگونی کار می‌کند تا حلی بیابد که به‌طور کلی قابل‌اعمال باشد. برای درک نحوهٔ تعامل این‌ها با یکدیگر، داشتن شناختی کلی از نحوهٔ کار حل وابستگی‌ها مفید است.</p>
+<p>این شبه‌کد تقریبی از کار resolver در Cargo را نشان می‌دهد:</p>
+<pre><code class="language-rust">pub fn resolve(workspace: &amp;[Package], policy: Policy) -&gt; Option&lt;ResolveGraph&gt; {
+    let dep_queue = Queue::new(workspace);
+    let resolved = ResolveGraph::new();
+    resolve_next(dep_queue, resolved, policy)
+}
+
+fn resolve_next(dep_queue: Queue, resolved: ResolveGraph, policy: Policy) -&gt; Option&lt;ResolveGraph&gt; {
+    let Some(dep_spec) = policy.pick_next_dep(&amp;mut dep_queue) else {
+        // Done
+        return Some(resolved);
+    };
+
+    if let Some(resolved) = policy.try_unify_version(dep_spec, resolved.clone()) {
+        return Some(resolved);
+    }
+
+    let dep_versions = dep_spec.lookup_versions()?;
+    let mut dep_versions = policy.filter_versions(dep_spec, dep_versions);
+    while let Some(dep_version) = policy.pick_next_version(&amp;mut dep_versions) {
+        if policy.needs_version_unification(&amp;dep_version, &amp;resolved) {
+            continue;
+        }
+
+        let mut dep_queue = dep_queue.clone();
+        dep_queue.enqueue(&amp;dep_version.dependencies);
+        let mut resolved = resolved.clone();
+        resolved.register(dep_version);
+        if let Some(resolved) = resolve_next(dep_queue, resolved, policy) {
+            return Some(resolved);
+        }
+    }
+
+    // No valid solution found, backtrack and `pick_next_version`
+    None
+}</code></pre>
+<p>مراحل کلیدی:</p>
+<ul>
+<li>پیمایش وابستگی‌ها (<code>pick_next_dep</code>): ترتیب پیمایش وابستگی‌ها می‌تواند بر نحوهٔ حل نیازمندی‌های نسخهٔ مرتبط با یک وابستگی واحد تأثیر بگذارد (به یکپارچه‌سازی نسخه‌ها نگاه کنید) و همچنین بر میزان بازگشت به عقب (backtrack) در resolver، و در نتیجه بر کارایی آن اثر بگذارد،</li>
+<li>یکپارچه‌سازی نسخه‌ها (<code>try_unify_version</code>، <code>needs_version_unification</code>): Cargo در صورت امکان از نسخه‌ها دوباره استفاده می‌کند تا زمان ساخت کاهش یابد و بتوان نوع‌های وابستگی‌های مشترک را بین APIها جابه‌جا کرد. اگر چند نسخه به‌جز به‌خاطر تعارض در <a href="specifying-dependencies.html">مشخصات وابستگی</a> آن‌ها یکپارچه می‌شدند، Cargo به عقب برمی‌گردد و اگر راه‌حلی پیدا نشود به‌جای انتخاب چند نسخه خطا می‌دهد. یک <a href="specifying-dependencies.html">مشخصهٔ وابستگی</a> یا خود Cargo ممکن است تشخیص دهد که یک نسخه نامطلوب است و ترجیح دهد به‌جای استفاده از آن به عقب برگردد یا خطا بدهد.</li>
+<li>ترجیح دادن نسخه‌ها (<code>pick_next_version</code>): Cargo ممکن است تصمیم بگیرد که یک نسخهٔ مشخص را ترجیح دهد و هنگام بازگشت به عقب به نسخهٔ بعدی برود.</li>
+</ul>
+<h3 id="version-numbers"><a class="header" href="#version-numbers">شماره‌های نسخه (Version numbers)</a></h3>
+<p>به‌طور کلی، Cargo بالاترین نسخهٔ موجود در حال حاضر را ترجیح می‌دهد.</p>
+<p>برای مثال، اگر بسته‌ای در گراف حل داشته باشید که این‌گونه باشد:</p>
+<pre><code class="language-toml">[dependencies]
+bitflags = "*"
+</code></pre>
+<p>و در زمان تولید فایل <code>Cargo.lock</code> بزرگ‌ترین نسخهٔ <code>bitflags</code> برابر <code>1.2.1</code> باشد، آن بسته از <code>1.2.1</code> استفاده خواهد کرد.</p>
+<p>برای نمونه‌ای از یک استثنای ممکن، <a href="#rust-version">نسخهٔ Rust</a> را ببینید.</p>
+<h3 id="version-requirements"><a class="header" href="#version-requirements">نیازمندی‌های نسخه (Version requirements)</a></h3>
+<p>بسته‌ها از طریق <a href="specifying-dependencies.html#version-requirement-syntax">نیازمندی‌های نسخه</a> مشخص می‌کنند که از چه نسخه‌هایی پشتیبانی می‌کنند و همهٔ نسخه‌های دیگر را رد می‌کنند.</p>
+<p>برای مثال، اگر بسته‌ای در گراف حل داشته باشید که این‌گونه باشد:</p>
+<pre><code class="language-toml">[dependencies]
+bitflags = "1.0"  # meaning `&gt;=1.0.0,&lt;2.0.0`
+</code></pre>
+<p>و در زمان تولید فایل <code>Cargo.lock</code> بزرگ‌ترین نسخهٔ <code>bitflags</code> برابر <code>1.2.1</code> باشد، آن بسته از <code>1.2.1</code> استفاده می‌کند، چون بزرگ‌ترین نسخه در بازهٔ سازگاری است. اگر <code>2.0.0</code> منتشر شود، باز هم از <code>1.2.1</code> استفاده خواهد کرد، زیرا <code>2.0.0</code> ناسازگار شمرده می‌شود.</p>
+<h3 id="semver-compatibility"><a class="header" href="#semver-compatibility">سازگاری SemVer (SemVer compatibility)</a></h3>
+<p>Cargo فرض می‌کند بسته‌ها از <a href="https://semver.org/">SemVer</a> پیروی می‌کنند و اگر نسخه‌های وابستگی‌ها طبق <a href="specifying-dependencies.html#default-requirements">نیازمندی‌های نسخهٔ caret</a> با <a href="https://semver.org/">SemVer</a> سازگار باشند، آن‌ها را یکپارچه می‌کند. اگر دو نسخهٔ سازگار به‌دلیل تعارض نیازمندی‌های نسخه نتوانند یکپارچه شوند، Cargo خطا می‌دهد.</p>
+<p>برای راهنمایی دربارهٔ اینکه چه تغییری «سازگار» شمرده می‌شود، فصل <a href="semver.html">سازگاری SemVer</a> را ببینید.</p>
+<p>مثال‌ها:</p>
+<p>در دو بسته زیر، وابستگی‌هایشان به <code>bitflags</code> یکپارچه خواهد شد، زیرا هر نسخه‌ای که انتخاب شود با دیگری سازگار خواهد بود.</p>
+<pre><code class="language-toml"># Package A
+[dependencies]
+bitflags = "1.0"  # meaning `&gt;=1.0.0,&lt;2.0.0`
+
+# Package B
+[dependencies]
+bitflags = "1.1"  # meaning `&gt;=1.1.0,&lt;2.0.0`
+</code></pre>
+<p>بسته‌های زیر خطا خواهند داد، زیرا نیازمندی‌های نسخه با هم تعارض دارند و دو نسخهٔ سازگار متمایز انتخاب می‌شوند.</p>
+<pre><code class="language-toml"># Package A
+[dependencies]
+log = "=0.4.11"
+
+# Package B
+[dependencies]
+log = "=0.4.8"
+</code></pre>
+<p>در دو بسته زیر، وابستگی‌هایشان به <code>rand</code> یکپارچه نخواهد شد، زیرا برای هر کدام فقط نسخه‌های ناسازگار در دسترس است. در عوض، دو نسخهٔ متفاوت (مثلاً 0.6.5 و 0.7.3) حل و ساخته خواهند شد. این می‌تواند به مشکلات احتمالی منجر شود؛ برای جزئیات بیشتر بخش <a href="#version-incompatibility-hazards">خطرات ناسازگاری نسخه</a> را ببینید.</p>
+<pre><code class="language-toml"># Package A
+[dependencies]
+rand = "0.7"  # meaning `&gt;=0.7.0,&lt;0.8.0`
+
+# Package B
+[dependencies]
+rand = "0.6"  # meaning `&gt;=0.6.0,&lt;0.7.0`
+</code></pre>
+<p>به‌طور کلی، در دو بسته زیر وابستگی‌ها یکپارچه نخواهند شد، زیرا نسخه‌های ناسازگاری در دسترس‌اند که نیازمندی‌های نسخه را برآورده می‌کنند: در عوض، دو نسخهٔ متفاوت (مثلاً 0.6.5 و 0.7.3) حل و ساخته خواهند شد. اعمال قیدها یا قواعد اکتشافی دیگر ممکن است باعث شود این‌ها یکپارچه شوند و یک نسخه (مثلاً 0.6.5) انتخاب شود.</p>
+<pre><code class="language-toml"># Package A
+[dependencies]
+rand = "&gt;=0.6,&lt;0.8.0"
+
+# Package B
+[dependencies]
+rand = "0.6"  # meaning `&gt;=0.6.0,&lt;0.7.0`
+</code></pre>
+<h4 id="version-incompatibility-hazards"><a class="header" href="#version-incompatibility-hazards">خطرات ناسازگاری نسخه (Version-incompatibility hazards)</a></h4>
+<p>وقتی چند نسخه از یک crate در گراف حل ظاهر می‌شوند، اگر نوع‌های آن crateها توسط crateهای استفاده‌کنندهٔ آن‌ها در معرض دید قرار گرفته باشند، ممکن است مشکل ایجاد شود. دلیلش این است که کامپایلر Rust نوع‌ها و آیتم‌ها را متفاوت می‌داند، حتی اگر نام یکسانی داشته باشند. کتابخانه‌ها باید هنگام انتشار نسخهٔ ناسازگار با SemVer (برای مثال، انتشار <code>2.0.0</code> پس از اینکه <code>1.0.0</code> مدتی مورد استفاده بوده است) دقت کنند، به‌ویژه کتابخانه‌هایی که به‌طور گسترده استفاده می‌شوند.</p>
+<p>«ترفند semver» (<a href="https://github.com/dtolnay/semver-trick">semver trick</a>) راه‌حلی برای این مشکل است که امکان انتشار یک تغییر ناسازگار را با حفظ سازگاری با نسخه‌های قدیمی‌تر فراهم می‌کند. صفحهٔ پیوندشده جزئیات مشکل و نحوهٔ رفع آن را توضیح می‌دهد. به‌طور خلاصه، وقتی یک کتابخانه می‌خواهد نسخه‌ای منتشر کند که SemVer را می‌شکند، نسخهٔ جدید را منتشر کنید و همچنین یک نسخهٔ نقطه‌ای (point release) از نسخهٔ قبلی منتشر کنید که نوع‌های نسخهٔ جدیدتر را دوباره صادر (reexport) می‌کند.</p>
+<p>این ناسازگاری‌ها معمولاً به‌صورت خطای زمان کامپایل ظاهر می‌شوند، اما گاهی فقط به‌صورت رفتار نادرست در زمان اجرا بروز می‌کنند. برای مثال، فرض کنید یک کتابخانهٔ مشترک به نام <code>foo</code> وجود دارد که در نهایت هم با نسخهٔ <code>1.0.0</code> و هم با <code>2.0.0</code> در گراف حل ظاهر می‌شود. اگر <code>downcast_ref</code> روی شیئی استفاده شود که توسط کتابخانه‌ای با نسخهٔ <code>1.0.0</code> ساخته شده است، و کدی که <code>downcast_ref</code> را فراخوانی می‌کند به نوعی از نسخهٔ <code>2.0.0</code> تبدیل کند، این downcast در زمان اجرا شکست می‌خورد.</p>
+<p>مهم است که اگر چند نسخه از یک کتابخانه دارید مطمئن شوید که از آن‌ها درست استفاده می‌کنید، به‌ویژه اگر امکان استفادهٔ هم‌زمان نوع‌های نسخه‌های مختلف وجود داشته باشد. از دستور <code>cargo tree -d</code> می‌توان برای شناسایی نسخه‌های تکراری و منشأ آن‌ها استفاده کرد. به همین ترتیب، مهم است که اگر نسخه‌ای ناسازگار با SemVer از یک کتابخانهٔ محبوب منتشر می‌کنید، تأثیر آن بر اکوسیستم را در نظر بگیرید.</p>
+<h3 id="lock-file"><a class="header" href="#lock-file">فایل قفل (Lock file)</a></h3>
+<p>Cargo در صورت استفاده، بالاترین اولویت را به نسخه‌های موجود در فایل <code>Cargo.lock</code> می‌دهد. هدف این است که میان ساخت‌های تکرارپذیر و سازگاری با تغییرات در manifest تعادل برقرار شود.</p>
+<p>برای مثال، اگر بسته‌ای در گراف حل داشته باشید که این‌گونه باشد:</p>
+<pre><code class="language-toml">[dependencies]
+bitflags = "*"
+</code></pre>
+<p>و در زمان تولید فایل <code>Cargo.lock</code> شما بزرگ‌ترین نسخهٔ <code>bitflags</code> برابر <code>1.2.1</code> باشد، آن بسته از <code>1.2.1</code> استفاده می‌کند و این نسخه در فایل <code>Cargo.lock</code> ثبت می‌شود.</p>
+<p>تا زمانی که Cargo دوباره اجرا شود، <code>bitflags</code> نسخهٔ <code>1.3.5</code> منتشر شده است. هنگام حل وابستگی‌ها، باز هم <code>1.2.1</code> استفاده می‌شود، چون در فایل <code>Cargo.lock</code> شما وجود دارد.</p>
+<p>سپس بسته به این صورت ویرایش می‌شود:</p>
+<pre><code class="language-toml">[dependencies]
+bitflags = "1.3.0"
+</code></pre>
+<p><code>bitflags</code> نسخهٔ <code>1.2.1</code> با این نیازمندی نسخه مطابقت ندارد و بنابراین آن ورودی در فایل <code>Cargo.lock</code> شما نادیده گرفته می‌شود و اکنون نسخهٔ <code>1.3.5</code> استفاده و در فایل <code>Cargo.lock</code> شما ثبت می‌شود.</p>
+<h3 id="rust-version"><a class="header" href="#rust-version">نسخهٔ Rust (Rust version)</a></h3>
+<p>برای پشتیبانی از توسعهٔ نرم‌افزار با یک <a href="rust-version.html">نسخهٔ Rust</a> حداقلِ پشتیبانی‌شده، resolver می‌تواند سازگاری نسخهٔ یک وابستگی با نسخهٔ Rust شما را در نظر بگیرد. این رفتار با فیلد پیکربندی <a href="config.html#resolverincompatible-rust-versions"><code>resolver.incompatible-rust-versions</code></a> کنترل می‌شود.</p>
+<p>با تنظیم <code>fallback</code>، resolver بسته‌هایی را ترجیح می‌دهد که نسخهٔ Rust آن‌ها کمتر از نسخهٔ Rust شما یا برابر با آن باشد. برای مثال، فرض کنید برای توسعهٔ بستهٔ زیر از Rust 1.85 استفاده می‌کنید:</p>
+<pre><code class="language-toml">[package]
+name = "my-cli"
+rust-version = "1.62"
+
+[dependencies]
+clap = "4.0"  # resolves to 4.0.32
+</code></pre>
+<p>resolver نسخهٔ 4.0.32 را انتخاب می‌کند، چون نسخهٔ Rust آن 1.60.0 است.</p>
+<ul>
+<li>4.0.0 انتخاب نمی‌شود، چون با اینکه آن هم نسخهٔ Rust برابر 1.60.0 دارد، <a href="#version-numbers">شمارهٔ نسخهٔ پایین‌تری</a> دارد.</li>
+<li>4.5.20 انتخاب نمی‌شود، چون با نسخهٔ Rust برابر 1.62 در <code>my-cli</code> ناسازگار است، هرچند <a href="#version-numbers">نسخهٔ بسیار بالاتری</a> دارد و نسخهٔ Rust آن 1.74.0 است که با toolchain نسخهٔ 1.85 شما سازگار است.</li>
+</ul>
+<p>اگر یک نیازمندی نسخه شامل هیچ نسخهٔ وابستگی سازگار با نسخهٔ Rust نباشد، resolver خطا نمی‌دهد و در عوض یک نسخه را انتخاب می‌کند، حتی اگر احتمالاً بهینه نباشد. برای مثال، وابستگی به <code>clap</code> را تغییر می‌دهید:</p>
+<pre><code class="language-toml">[package]
+name = "my-cli"
+rust-version = "1.62"
+
+[dependencies]
+clap = "4.2"  # resolves to 4.5.20
+</code></pre>
+<p>هیچ نسخه‌ای از <code>clap</code> که با آن <a href="#version-requirements">نیازمندی نسخه</a> مطابقت داشته باشد با نسخهٔ Rust برابر 1.62 سازگار نیست. در این حالت resolver یک نسخهٔ ناسازگار را انتخاب می‌کند، مثلاً 4.5.20، هرچند نسخهٔ Rust آن 1.74 است.</p>
+<p>وقتی resolver یک نسخهٔ وابستگی را برای یک بسته انتخاب می‌کند، نمی‌داند در نهایت کدام اعضای workspace وابستگی تراگذری (transitive) به آن نسخه خواهند داشت و بنابراین نمی‌تواند فقط نسخه‌های Rust مرتبط با آن وابستگی را در نظر بگیرد. resolver قواعد اکتشافی‌ای دارد تا هنگامی که اعضای workspace نسخه‌های Rust متفاوتی دارند، راه‌حلی «به‌اندازهٔ کافی خوب» پیدا کند. این موضوع حتی برای بسته‌های یک workspace که نسخهٔ Rust ندارند نیز صدق می‌کند.</p>
+<p>وقتی یک workspace اعضایی با نسخه‌های Rust متفاوت دارد، resolver ممکن است نسخهٔ وابستگی‌ای پایین‌تر از حد لازم انتخاب کند. برای مثال، اعضای workspace زیر را در نظر بگیرید:</p>
+<pre><code class="language-toml">[package]
+name = "a"
+rust-version = "1.62"
+
+[package]
+name = "b"
+
+[dependencies]
+clap = "4.2"  # resolves to 4.5.20
+</code></pre>
+<p>با اینکه بستهٔ <code>b</code> نسخهٔ Rust ندارد و می‌تواند از نسخهٔ بالاتری مانند 4.5.20 استفاده کند، به‌دلیل نسخهٔ Rust برابر 1.62 در بستهٔ <code>a</code>، نسخهٔ 4.0.32 انتخاب می‌شود.</p>
+<p>یا resolver ممکن است نسخه‌ای بیش از حد بالا انتخاب کند. برای مثال، اعضای workspace زیر را در نظر بگیرید:</p>
+<pre><code class="language-toml">[package]
+name = "a"
+rust-version = "1.62"
+
+[dependencies]
+clap = "4.2"  # resolves to 4.5.20
+
+[package]
+name = "b"
+
+[dependencies]
+clap = "4.5"  # resolves to 4.5.20
+</code></pre>
+<p>با اینکه هر بسته نیازمندی نسخه‌ای برای <code>clap</code> دارد که نسخهٔ Rust خودش را برآورده می‌کند، به‌دلیل <a href="#version-numbers">یکپارچه‌سازی نسخه‌ها</a>، resolver باید نسخه‌ای را انتخاب کند که در هر دو حالت کار کند، و آن نسخه‌ای مانند 4.5.20 خواهد بود.</p>
+<h3 id="publish-age"><a class="header" href="#publish-age">زمان انتشار (Publish age)</a></h3>
+<p>نسخه‌هایی که زمان انتشارشان جدیدتر از <code>min-publish-age</code> پیکربندی‌شده باشد، از نظر زمان انتشار ناسازگار (pubtime-incompatible) در نظر گرفته می‌شوند. وقتی <a href="config.html#resolverincompatible-publish-age"><code>resolver.incompatible-publish-age</code></a> روی <code>deny</code> تنظیم شده باشد، resolver این نسخه‌ها را نادیده می‌گیرد، مگر اینکه از قبل در فایل <code>Cargo.lock</code> وجود داشته باشند. تنظیم این پیکربندی روی <code>allow</code> این بررسی را غیرفعال می‌کند، و اگر با <code>cargo update --precise</code> ترکیب شود، cargo یک نسخهٔ مشخص و وابستگی‌های تراگذری آن را وارد می‌کند.</p>
+<h3 id="features"><a class="header" href="#features">featureها (Features)</a></h3>
+<p>به‌منظور تولید <code>Cargo.lock</code>، resolver گراف وابستگی را طوری می‌سازد که گویی همهٔ <a href="features.html">featureهای</a> همهٔ اعضای <a href="workspaces.html">workspace</a> فعال هستند. این کار تضمین می‌کند که هر وابستگی اختیاری در دسترس است و هنگام افزودن یا حذف featureها با <a href="features.html#command-line-feature-options">پرچم خط فرمان <code>--features</code></a> به‌درستی همراه با بقیهٔ گراف حل می‌شود. resolver بار دوم اجرا می‌شود تا featureهای واقعاً استفاده‌شده هنگام <em>کامپایل</em> یک crate را بر اساس featureهای انتخاب‌شده در خط فرمان تعیین کند.</p>
+<p>وابستگی‌ها با اجتماع همهٔ featureهایی که روی آن‌ها فعال شده است حل می‌شوند. برای مثال، اگر یک بسته به بستهٔ <a href="https://crates.io/crates/im"><code>im</code></a> با وابستگی <code>serde</code> فعال‌شده وابسته باشد و بستهٔ دیگری به آن با وابستگی <code>rayon</code> فعال‌شده وابسته باشد، آنگاه <code>im</code> با هر دو feature فعال ساخته می‌شود، و crateهای <code>serde</code> و <code>rayon</code> در گراف حل قرار می‌گیرند. اگر هیچ بسته‌ای با آن featureها به <code>im</code> وابسته نباشد، آن وابستگی‌های اختیاری نادیده گرفته می‌شوند و بر حل تأثیری نخواهند داشت.</p>
+<p>هنگام ساخت چند بسته در یک workspace (مثلاً با <code>--workspace</code> یا چند پرچم <code>-p</code>)، featureهای وابستگی‌های همهٔ آن بسته‌ها یکپارچه می‌شوند. اگر موقعیتی دارید که می‌خواهید از این یکپارچه‌سازی برای اعضای مختلف workspace جلوگیری کنید، باید آن‌ها را با فراخوانی‌های جداگانهٔ <code>cargo</code> بسازید.</p>
+<p>resolver از نسخه‌هایی از بسته‌ها که featureهای لازم را ندارند عبور می‌کند. برای مثال، اگر بسته‌ای به نسخهٔ <code>^1</code> از <a href="https://crates.io/crates/regex"><code>regex</code></a> با feature با نام <code>perf</code> وابسته باشد، قدیمی‌ترین نسخه‌ای که می‌تواند انتخاب کند <code>1.3.0</code> است، چون نسخه‌های پیش از آن feature با نام <code>perf</code> را نداشتند. به همین ترتیب، اگر یک feature از نسخهٔ جدیدی حذف شود، بسته‌هایی که به آن feature نیاز دارند روی نسخه‌های قدیمی‌ای که آن را دارند گیر می‌کنند. حذف featureها در نسخهٔ سازگار با SemVer توصیه نمی‌شود. توجه داشته باشید که وابستگی‌های اختیاری نیز یک feature ضمنی تعریف می‌کنند، بنابراین حذف یک وابستگی اختیاری یا غیراختیاری کردن آن می‌تواند مشکل ایجاد کند؛ <a href="semver.html#cargo-remove-opt-dep">حذف یک وابستگی اختیاری</a> را ببینید.</p>
+<h4 id="feature-resolver-version-2"><a class="header" href="#feature-resolver-version-2">نسخهٔ ۲ حل‌کنندهٔ feature (Feature resolver version 2)</a></h4>
+<p>وقتی <code>resolver = "2"</code> در <code>Cargo.toml</code> مشخص شده باشد (در ادامه <a href="#resolver-versions">نسخه‌های resolver</a> را ببینید)، از یک حل‌کنندهٔ feature متفاوت استفاده می‌شود که الگوریتم متفاوتی برای یکپارچه‌سازی featureها دارد. resolver نسخهٔ <code>"1"</code> featureهای یک بسته را صرف‌نظر از جایی که مشخص شده‌اند یکپارچه می‌کند. resolver نسخهٔ <code>"2"</code> در موقعیت‌های زیر از یکپارچه‌سازی featureها پرهیز می‌کند:</p>
+<ul>
+<li>
+<p>featureهای وابستگی‌های مخصوص یک هدف (target) فعال نمی‌شوند، اگر آن هدف در حال حاضر ساخته نمی‌شود. برای مثال:</p>
+<pre><code class="language-toml">[dependencies.common]
+version = "1.0"
+features = ["f1"]
+
+[target.'cfg(windows)'.dependencies.common]
+version = "1.0"
+features = ["f2"]
+</code></pre>
+<p>هنگام ساخت این مثال برای یک پلتفرم غیر Windows، feature با نام <code>f2</code> فعال <em>نخواهد</em> شد.</p>
+</li>
+<li>
+<p>featureهای فعال‌شده روی <a href="specifying-dependencies.html#build-dependencies">build-dependencies</a> یا proc-macroها وقتی همان وابستگی‌ها به‌عنوان وابستگی معمولی استفاده می‌شوند، یکپارچه نمی‌شوند. برای مثال:</p>
+<pre><code class="language-toml">[dependencies]
+log = "0.4"
+
+[build-dependencies]
+log = {version = "0.4", features=['std']}
+</code></pre>
+<p>هنگام ساخت build script، crate با نام <code>log</code> با feature با نام <code>std</code> ساخته می‌شود. هنگام ساخت کتابخانهٔ بستهٔ شما، این feature فعال نخواهد شد.</p>
+</li>
+<li>
+<p>featureهای فعال‌شده روی <a href="specifying-dependencies.html#development-dependencies">dev-dependencies</a> وقتی همان وابستگی‌ها به‌عنوان وابستگی معمولی استفاده می‌شوند یکپارچه نمی‌شوند، مگر اینکه آن dev-dependencyها در حال حاضر ساخته شوند. برای مثال:</p>
+<pre><code class="language-toml">[dependencies]
+serde = {version = "1.0", default-features = false}
+
+[dev-dependencies]
+serde = {version = "1.0", features = ["std"]}
+</code></pre>
+<p>در این مثال، کتابخانه به‌طور معمول بدون feature با نام <code>std</code> با <code>serde</code> پیوند می‌شود. اما وقتی به‌عنوان آزمون یا مثال ساخته شود، feature با نام <code>std</code> را شامل می‌شود. برای مثال، <code>cargo test</code> یا <code>cargo build --all-targets</code> این featureها را یکپارچه می‌کنند. توجه کنید که dev-dependencyها در وابستگی‌ها همیشه نادیده گرفته می‌شوند؛ این فقط برای بستهٔ سطح بالا یا اعضای workspace اهمیت دارد.</p>
+</li>
+</ul>
+<h3 id="links"><a class="header" href="#links"><code>links</code></a></h3>
+<p>فیلد <code>links</code> برای اطمینان از این استفاده می‌شود که فقط یک نسخه از یک کتابخانهٔ بومی (native) در یک فایل باینری پیوند شود. resolver تلاش می‌کند گرافی بیابد که در آن از هر نام <code>links</code> فقط یک نمونه وجود داشته باشد. اگر نتواند گرافی پیدا کند که این قید را برآورده کند، خطا برمی‌گرداند.</p>
+<p>برای مثال، اگر یک بسته به <a href="https://crates.io/crates/libgit2-sys"><code>libgit2-sys</code></a> نسخهٔ <code>0.11</code> و بستهٔ دیگری به <code>0.12</code> وابسته باشد، خطا رخ می‌دهد، چون Cargo نمی‌تواند آن‌ها را یکپارچه کند، اما هر دو به کتابخانهٔ بومی <code>git2</code> پیوند می‌شوند. به‌دلیل این الزام، اگر کتابخانهٔ شما رایج است، توصیه می‌شود هنگام انتشار نسخه‌های ناسازگار با SemVer که فیلد <code>links</code> را دارند بسیار مراقب باشید.</p>
+<h3 id="yanked-versions"><a class="header" href="#yanked-versions">نسخه‌های yank‌شده (Yanked versions)</a></h3>
+<p><a href="publishing.html#cargo-yank">نسخه‌های yank‌شده</a> نسخه‌هایی هستند که علامت‌گذاری شده‌اند تا استفاده نشوند. وقتی resolver گراف را می‌سازد، همهٔ نسخه‌های yank‌شده را نادیده می‌گیرد، مگر اینکه از قبل در فایل <code>Cargo.lock</code> وجود داشته باشند یا صریحاً با پرچم <a href="../commands/cargo-update.html#option-cargo-update---precise"><code>--precise</code></a> در <a href="../commands/cargo-update.html"><code>cargo update</code></a> درخواست شده باشند.</p>
+<h2 id="dependency-updates"><a class="header" href="#dependency-updates">به‌روزرسانی وابستگی‌ها (Dependency updates)</a></h2>
+<p>حل وابستگی‌ها به‌طور خودکار توسط همهٔ دستورهای Cargo که باید از گراف وابستگی خبر داشته باشند انجام می‌شود. برای مثال، <a href="../commands/cargo-build.html"><code>cargo build</code></a> resolver را اجرا می‌کند تا همهٔ وابستگی‌هایی را که باید ساخته شوند بیابد. پس از نخستین اجرا، نتیجه در <code>Cargo.lock</code> ذخیره می‌شود. دستورهای بعدی resolver را اجرا می‌کنند و در صورت امکان وابستگی‌ها را روی نسخه‌های موجود در <code>Cargo.lock</code> قفل نگه می‌دارند.</p>
+<p>اگر فهرست وابستگی‌ها در <code>Cargo.toml</code> تغییر کرده باشد، مثلاً نسخهٔ یک وابستگی از <code>1.0</code> به <code>2.0</code> تغییر کرده باشد، resolver نسخهٔ جدیدی برای آن وابستگی انتخاب می‌کند که با نیازمندی‌های جدید مطابقت داشته باشد. اگر آن وابستگی جدید نیازمندی‌های تازه‌ای وارد کند، آن نیازمندی‌ها نیز ممکن است به‌روزرسانی‌های بیشتری را برانگیزند. فایل <code>Cargo.lock</code> با نتیجهٔ جدید به‌روزرسانی می‌شود. می‌توان از پرچم‌های <code>--locked</code> یا <code>--frozen</code> استفاده کرد تا این رفتار تغییر کند و هنگام تغییر نیازمندی‌ها از به‌روزرسانی خودکار جلوگیری شود و در عوض خطا برگردانده شود.</p>
+<p><a href="../commands/cargo-update.html"><code>cargo update</code></a> را می‌توان برای به‌روزرسانی ورودی‌های <code>Cargo.lock</code> هنگام انتشار نسخه‌های جدید به کار برد. بدون هیچ گزینه‌ای، تلاش می‌کند همهٔ بسته‌های موجود در فایل قفل را به‌روزرسانی کند. پرچم <code>-p</code> را می‌توان برای هدف قرار دادن به‌روزرسانی یک بستهٔ خاص به کار برد، و پرچم‌های دیگری مانند <code>--recursive</code> یا <code>--precise</code> را می‌توان برای کنترل نحوهٔ انتخاب نسخه‌ها استفاده کرد.</p>
+<h2 id="overrides"><a class="header" href="#overrides">بازنویسی‌ها (Overrides)</a></h2>
+<p>Cargo چند سازوکار برای بازنویسی (override) وابستگی‌ها در گراف دارد. فصل <a href="overriding-dependencies.html">بازنویسی وابستگی‌ها</a> جزئیات نحوهٔ استفاده از overrideها را توضیح می‌دهد. overrideها مانند یک لایهٔ پوششی روی رجیستری ظاهر می‌شوند و نسخهٔ وصله‌شده را با ورودی جدید جایگزین می‌کنند. در غیر این صورت، حل مانند حالت عادی انجام می‌شود.</p>
+<h2 id="dependency-kinds"><a class="header" href="#dependency-kinds">انواع وابستگی (Dependency kinds)</a></h2>
+<p>در یک بسته سه نوع وابستگی وجود دارد: معمولی، <a href="specifying-dependencies.html#build-dependencies">build</a> و <a href="specifying-dependencies.html#development-dependencies">dev</a>. از دید resolver، این‌ها تا حد زیادی همگی یکسان رفتار می‌شوند. یک تفاوت این است که dev-dependencyهای اعضایی که عضو workspace نیستند همیشه نادیده گرفته می‌شوند و بر حل تأثیری ندارند.</p>
+<p><a href="specifying-dependencies.html#platform-specific-dependencies">وابستگی‌های مخصوص پلتفرم</a> با جدول <code>[target]</code> طوری حل می‌شوند که گویی همهٔ پلتفرم‌ها فعال هستند. به عبارت دیگر، resolver پلتفرم یا عبارت <code>cfg</code> را نادیده می‌گیرد.</p>
+<h3 id="dev-dependency-cycles"><a class="header" href="#dev-dependency-cycles">چرخه‌های dev-dependency (dev-dependency cycles)</a></h3>
+<p>معمولاً resolver چرخه‌ها را در گراف مجاز نمی‌داند، اما برای <a href="specifying-dependencies.html#development-dependencies">dev-dependencies</a> اجازه می‌دهد. برای مثال، پروژهٔ «foo» یک dev-dependency به «bar» دارد، و «bar» یک وابستگی معمولی به «foo» دارد (معمولاً به‌صورت وابستگی «path»). این مجاز است، چون از دید مصنوعات ساخت (build artifacts) واقعاً چرخه‌ای وجود ندارد. در این مثال، کتابخانهٔ «foo» ساخته می‌شود (که به «bar» نیازی ندارد، چون «bar» فقط برای آزمون‌ها استفاده می‌شود)، و سپس «bar» می‌تواند با وابستگی به «foo» ساخته شود، و بعد آزمون‌های «foo» با پیوند به «bar» ساخته می‌شوند.</p>
+<p>توجه داشته باشید که این می‌تواند به خطاهای گیج‌کننده منجر شود. در مورد ساخت آزمون‌های واحد کتابخانه، در واقع دو نسخه از کتابخانه در باینری آزمون نهایی پیوند می‌شوند: نسخه‌ای که با «bar» پیوند شده است، و نسخه‌ای که ساخته شده و شامل آزمون‌های واحد است. مشابه مشکلاتی که در بخش <a href="#version-incompatibility-hazards">خطرات ناسازگاری نسخه</a> برجسته شد، نوع‌های این دو با هم سازگار نیستند. هنگام در معرض قرار دادن نوع‌های «foo» از «bar» در این وضعیت دقت کنید، چون آزمون‌های واحد «foo» آن‌ها را با نوع‌های محلی یکسان در نظر نمی‌گیرند.</p>
+<p>در صورت امکان، سعی کنید بستهٔ خود را به چند بسته تقسیم کنید و ساختار آن را طوری تغییر دهید که کاملاً غیرچرخه‌ای (acyclic) باقی بماند.</p>
+<h2 id="resolver-versions"><a class="header" href="#resolver-versions">نسخه‌های resolver (Resolver versions)</a></h2>
+<p>می‌توان رفتار متفاوتی از resolver را از طریق نسخهٔ resolver در <code>Cargo.toml</code> به این صورت مشخص کرد:</p>
+<pre><code class="language-toml">[package]
+name = "my-package"
+version = "1.0.0"
+resolver = "2"
+</code></pre>
+<ul>
+<li><code>"1"</code> (پیش‌فرض)</li>
+<li><code>"2"</code> (پیش‌فرض برای <a href="manifest.html#the-edition-field"><code>edition = "2021"</code></a>): تغییراتی در <a href="#features">یکپارچه‌سازی featureها</a> ایجاد می‌کند. برای جزئیات بیشتر <a href="features.html#feature-resolver-version-2">فصل featureها</a> را ببینید.</li>
+<li><code>"3"</code> (پیش‌فرض برای <a href="manifest.html#the-edition-field"><code>edition = "2024"</code></a>، به Rust 1.84+ نیاز دارد): پیش‌فرض <a href="config.html#resolverincompatible-rust-versions"><code>resolver.incompatible-rust-versions</code></a> را از <code>allow</code> به <code>fallback</code> تغییر می‌دهد</li>
+</ul>
+<p>resolver یک گزینهٔ سراسری است که کل workspace را تحت تأثیر قرار می‌دهد. نسخهٔ <code>resolver</code> در وابستگی‌ها نادیده گرفته می‌شود و فقط مقدار موجود در بستهٔ سطح بالا استفاده خواهد شد. اگر از <a href="workspaces.html#virtual-workspace">workspace مجازی</a> استفاده می‌کنید، نسخه باید در جدول <code>[workspace]</code> مشخص شود، برای مثال:</p>
+<pre><code class="language-toml">[workspace]
+members = ["member1", "member2"]
+resolver = "2"
+</code></pre>
+<blockquote>
+<p><strong>MSRV:</strong> به نسخهٔ 1.51 یا بالاتر نیاز دارد</p>
+</blockquote>
+<h2 id="recommendations"><a class="header" href="#recommendations">توصیه‌ها (Recommendations)</a></h2>
+<p>موارد زیر چند توصیه برای تعیین نسخه در بستهٔ شما و برای مشخص کردن نیازمندی‌های وابستگی‌ها هستند. این‌ها رهنمودهای کلی‌ای هستند که باید در موقعیت‌های رایج به کار بروند، اما البته برخی موقعیت‌ها ممکن است مستلزم تعیین نیازمندی‌های غیرمعمول باشند.</p>
+<ul>
+<li>
+<p>هنگام تصمیم‌گیری دربارهٔ اینکه شمارهٔ نسخه‌تان را چگونه به‌روز کنید و اینکه آیا باید تغییر نسخه‌ای ناسازگار با SemVer انجام دهید یا نه، از <a href="semver.html">رهنمودهای SemVer</a> پیروی کنید.</p>
+</li>
+<li>
+<p>در بیشتر موارد از نیازمندی‌های caret برای وابستگی‌ها استفاده کنید، مانند <code>"1.2.3"</code>. این کار تضمین می‌کند که resolver در انتخاب نسخه بیشترین انعطاف را دارد و در عین حال سازگاری ساخت حفظ می‌شود.</p>
+<ul>
+<li>هر سه مؤلفه را با نسخه‌ای که اکنون استفاده می‌کنید مشخص کنید. این کار به تعیین حداقل نسخه‌ای که استفاده خواهد شد کمک می‌کند و تضمین می‌کند که کاربران دیگر به نسخه‌ای قدیمی‌تر از وابستگی نمی‌رسند که ممکن است چیزی را که بستهٔ شما لازم دارد نداشته باشد.</li>
+<li>از نیازمندی‌های <code>*</code> پرهیز کنید، چون در <a href="https://crates.io/">crates.io</a> مجاز نیستند و می‌توانند در یک <a href="../commands/cargo-update.html"><code>cargo update</code></a> معمولی تغییرات شکنندهٔ SemVer را وارد کنند.</li>
+<li>از نیازمندی‌های نسخهٔ بیش از حد گسترده پرهیز کنید. برای مثال، <code>&gt;=2.0.0</code> می‌تواند هر نسخهٔ ناسازگار با SemVer، مانند نسخهٔ <code>5.0.0</code>، را وارد کند و این در آینده می‌تواند به ساخت‌های خراب منجر شود.</li>
+<li>در صورت امکان از نیازمندی‌های نسخهٔ بیش از حد محدود پرهیز کنید. برای مثال، اگر یک نیازمندی tilde مانند <code>bar="~1.3"</code> مشخص کنید و بستهٔ دیگری نیازمندی <code>bar="1.4"</code> را مشخص کند، حل شکست می‌خورد، با اینکه نسخه‌های minor باید سازگار باشند.</li>
+</ul>
+</li>
+<li>
+<p>سعی کنید نسخه‌های وابستگی‌ها را با حداقل نسخه‌های واقعی‌ای که کتابخانهٔ شما لازم دارد به‌روز نگه دارید. برای مثال، اگر نیازمندی <code>bar="1.0.12"</code> دارید و سپس در نسخه‌ای آینده شروع به استفاده از قابلیت‌های جدیدی کنید که در نسخهٔ <code>1.1.0</code> از «bar» اضافه شده‌اند، نیازمندی وابستگی خود را به <code>bar="1.1.0"</code> به‌روز کنید.</p>
+<p>اگر این کار را نکنید، ممکن است بلافاصله آشکار نشود، چون Cargo هنگام اجرای یک <code>cargo update</code> کلی می‌تواند فرصت‌طلبانه جدیدترین نسخه را انتخاب کند. اما اگر کاربر دیگری به کتابخانهٔ شما وابسته باشد و <code>cargo update your-library</code> را اجرا کند، «bar» در صورتی که در <code>Cargo.lock</code> او قفل شده باشد <em>به‌طور خودکار</em> به‌روز نمی‌شود. در آن وضعیت فقط در صورتی «bar» را به‌روز می‌کند که اعلان وابستگی نیز به‌روز شده باشد. انجام ندادن این کار می‌تواند برای کاربری که <code>cargo update your-library</code> را اجرا می‌کند خطاهای ساخت گیج‌کننده‌ای ایجاد کند.</p>
+</li>
+<li>
+<p>اگر دو بسته به‌شدت به هم وابسته‌اند، یک نیازمندی وابستگی از نوع <code>=</code> می‌تواند به همگام ماندن آن‌ها کمک کند. برای مثال، کتابخانه‌ای که یک کتابخانهٔ proc-macro همراه دارد گاهی بین آن دو کتابخانه فرض‌هایی می‌کند که اگر آن دو هماهنگ نباشند خوب کار نمی‌کنند (و هرگز انتظار نمی‌رود آن دو کتابخانه مستقل از هم استفاده شوند). کتابخانهٔ والد می‌تواند از یک نیازمندی <code>=</code> روی proc-macro استفاده کند و ماکروها را برای دسترسی آسان دوباره صادر (re-export) کند.</p>
+</li>
+<li>
+<p>نسخه‌های <code>0.0.x</code> را می‌توان برای بسته‌هایی به کار برد که دائماً ناپایدار هستند.</p>
+</li>
+</ul>
+<p>به‌طور کلی، هرچه نیازمندی‌های وابستگی را سخت‌گیرانه‌تر کنید، احتمال شکست خوردن resolver بیشتر می‌شود. در مقابل، اگر از نیازمندی‌هایی استفاده کنید که بیش از حد آزاد هستند، ممکن است نسخه‌های جدیدی منتشر شوند که ساخت را خراب کنند.</p>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">رفع مشکل (Troubleshooting)</a></h2>
+<p>موارد زیر برخی مشکلاتی را که ممکن است با آن‌ها روبه‌رو شوید و برخی راه‌حل‌های ممکن را نشان می‌دهند.</p>
+<h3 id="why-was-a-dependency-included"><a class="header" href="#why-was-a-dependency-included">چرا یک وابستگی گنجانده شد؟ (Why was a dependency included?)</a></h3>
+<p>فرض کنید وابستگی <code>rand</code> را در خروجی <code>cargo check</code> می‌بینید اما فکر نمی‌کنید لازم باشد و می‌خواهید بفهمید چرا وارد شده است.</p>
+<p>می‌توانید اجرا کنید</p>
+<pre><code class="language-console">$ cargo tree --workspace --target all --all-features --invert rand
+rand v0.8.5
+└── ...
+
+rand v0.8.5
+└── ...
+</code></pre>
+<h3 id="why-was-that-feature-on-this-dependency-enabled"><a class="header" href="#why-was-that-feature-on-this-dependency-enabled">چرا آن feature روی این وابستگی فعال شد؟ (Why was that feature on this dependency enabled?)</a></h3>
+<p>ممکن است تشخیص دهید که یک feature فعال‌شده باعث ظاهر شدن <code>rand</code> شده است. <strong>برای پی بردن به اینکه کدام بسته آن feature را فعال کرده است، می‌توانید <code>--edges features</code> را اضافه کنید</strong></p>
+<pre><code class="language-console">$ cargo tree --workspace --target all --all-features --edges features --invert rand
+rand v0.8.5
+└── ...
+
+rand v0.8.5
+└── ...
+</code></pre>
+<h3 id="unexpected-dependency-duplication"><a class="header" href="#unexpected-dependency-duplication">تکرار غیرمنتظرهٔ وابستگی (Unexpected dependency duplication)</a></h3>
+<p>هنگام اجرای این دستور چند نمونه از <code>rand</code> را می‌بینید</p>
+<pre><code class="language-console">$ cargo tree --workspace --target all --all-features --duplicates
+rand v0.7.3
+└── ...
+
+rand v0.8.5
+└── ...
+</code></pre>
+<p>الگوریتم resolver به راه‌حلی همگرا شده است که شامل دو نسخه از یک وابستگی است، در حالی که یکی کافی بود. برای مثال:</p>
+<pre><code class="language-toml"># Package A
+[dependencies]
+rand = "0.7"
+
+# Package B
+[dependencies]
+rand = "&gt;=0.6"  # note: open requirements such as this are discouraged
+</code></pre>
+<p>در این مثال، Cargo ممکن است دو نسخه از crate با نام <code>rand</code> بسازد، با اینکه یک نسخهٔ واحد <code>0.7.3</code> همهٔ نیازمندی‌ها را برآورده می‌کرد. دلیلش این است که الگوریتم resolver ساخت جدیدترین نسخهٔ موجود <code>rand</code> را برای بستهٔ B ترجیح می‌دهد، که در زمان نگارش این متن <code>0.8.5</code> است، و آن با مشخصات بستهٔ A ناسازگار است. الگوریتم resolver در حال حاضر تلاشی برای «حذف تکرار» (deduplicate) در این وضعیت نمی‌کند.</p>
+<p>استفاده از نیازمندی‌های نسخهٔ باز مانند <code>&gt;=0.6</code> در Cargo توصیه نمی‌شود. اما اگر با این وضعیت روبه‌رو شدید، می‌توان از دستور <code>cargo update</code> با پرچم <code>--precise</code> برای حذف دستی چنین تکرارهایی استفاده کرد.</p>
+<h3 id="why-wasnt-a-newer-version-selected"><a class="header" href="#why-wasnt-a-newer-version-selected">چرا نسخهٔ جدیدتر انتخاب نشد؟ (Why wasn’t a newer version selected?)</a></h3>
+<p>فرض کنید متوجه شدید هنگام اجرای دستور زیر، آخرین نسخهٔ یک وابستگی انتخاب نشده است:</p>
+<pre><code class="language-console">$ cargo update
+</code></pre>
+<p>می‌توانید برای دیدن دلیل این اتفاق، گزارش‌گیری (logging) اضافی را فعال کنید:</p>
+<pre><code class="language-console">$ env CARGO_LOG=cargo::resolver=trace cargo update
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>هدف‌ها و سطح‌های گزارش‌گیری Cargo ممکن است با گذر زمان تغییر کنند.</p>
+</blockquote>
+<h3 id="semver-breaking-patch-release-breaks-the-build"><a class="header" href="#semver-breaking-patch-release-breaks-the-build">نسخهٔ وصلهٔ شکنندهٔ SemVer ساخت را خراب می‌کند (SemVer-breaking patch release breaks the build)</a></h3>
+<p>گاهی یک پروژه ممکن است سهواً یک نسخهٔ نقطه‌ای (point release) را با یک تغییر شکنندهٔ SemVer منتشر کند. وقتی کاربران با <code>cargo update</code> به‌روز می‌کنند، این نسخهٔ جدید را دریافت می‌کنند و سپس ساخت آن‌ها ممکن است خراب شود. در این وضعیت، توصیه می‌شود پروژه نسخه را <a href="publishing.html#cargo-yank">yank</a> کند و یا تغییر شکنندهٔ SemVer را حذف کند، یا آن را به‌صورت افزایش نسخهٔ major جدید SemVer منتشر کند.</p>
+<p>اگر تغییر در یک پروژهٔ شخص ثالث رخ داده است، در صورت امکان سعی کنید (مؤدبانه!) با آن پروژه برای رفع مشکل همکاری کنید.</p>
+<p>تا زمانی که منتظر yank شدن نسخه هستید، برخی راه‌حل‌های موقت بسته به شرایط وجود دارند:</p>
+<ul>
+<li>اگر پروژهٔ شما محصول نهایی است (مثلاً یک فایل اجرایی باینری)، فقط از به‌روز کردن بستهٔ مشکل‌دار در <code>Cargo.lock</code> خودداری کنید. این کار را می‌توان با پرچم <code>--precise</code> در <code>cargo update</code> انجام داد.</li>
+<li>اگر یک باینری را در <a href="https://crates.io/">crates.io</a> منتشر می‌کنید، می‌توانید موقتاً یک نیازمندی <code>=</code> اضافه کنید تا وابستگی را روی یک نسخهٔ سالم مشخص مجبور کنید.
+<ul>
+<li>پروژه‌های باینری می‌توانند به‌جای آن به کاربران توصیه کنند که از پرچم <code>--locked</code> همراه با <a href="../commands/cargo-install.html"><code>cargo install</code></a> استفاده کنند تا از <code>Cargo.lock</code> اصلی که نسخهٔ سالم شناخته‌شده را دارد استفاده شود.</li>
+</ul>
+</li>
+<li>کتابخانه‌ها نیز می‌توانند انتشار یک نسخهٔ جدید موقت با نیازمندی‌های سخت‌گیرانه‌تر را در نظر بگیرند که از وابستگی مشکل‌ساز دوری می‌کند. شاید بخواهید از نیازمندی‌های بازه‌ای (به‌جای <code>=</code>) استفاده کنید تا از نیازمندی‌های بیش از حد سخت‌گیرانه‌ای که ممکن است با بسته‌های دیگری که از همان وابستگی استفاده می‌کنند تعارض داشته باشد، پرهیز شود. پس از رفع مشکل، می‌توانید یک نسخهٔ نقطه‌ای دیگر منتشر کنید که وابستگی را دوباره به نیازمندی caret سست می‌کند.</li>
+<li>اگر به نظر می‌رسد پروژهٔ شخص ثالث نمی‌تواند یا نمی‌خواهد نسخه را yank کند، یک گزینه این است که کد خود را برای سازگاری با تغییرات به‌روز کنید و نیازمندی وابستگی را طوری به‌روز کنید که حداقل نسخه همان نسخهٔ جدید باشد. همچنین باید در نظر بگیرید که آیا این تغییر برای کتابخانهٔ خودتان نیز شکنندهٔ SemVer است، برای مثال اگر نوع‌های وابستگی را در معرض دید قرار می‌دهد.</li>
+</ul><nav class="page-nav"><a href="source-replacement.html">→ جایگزینی منبع</a><a href="features.html">Featureها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

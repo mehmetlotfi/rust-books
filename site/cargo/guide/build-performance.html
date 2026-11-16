@@ -1,0 +1,162 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>بهینه‌سازی عملکرد ساخت — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="guide/build-performance"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="optimizing-build-performance"><a class="header" href="#optimizing-build-performance">بهینه‌سازی عملکرد ساخت</a></h1>
+<p>گزینه‌های پیکربندی Cargo و الگوهای سازمان‌دهی کد منبع می‌توانند با اولویت دادن به عملکرد ساخت نسبت به جنبه‌های دیگری که شاید برای شرایط شما اهمیت کمتری دارند، به بهبود عملکرد ساخت کمک کنند.</p>
+<p>همان‌طور که در بهینه‌سازی عملکرد زمان اجرا نیز چنین است، حتماً این تغییرات را با گردش‌کارهایی که واقعاً برایتان مهم هستند بسنجید؛ زیرا ما رهنمودهای کلی ارائه می‌دهیم و شرایط شما ممکن است متفاوت باشد، و امکان دارد برخی از این رویکردها در واقع عملکرد ساخت را در مورد استفادهٔ شما بدتر کنند.</p>
+<p>نمونه گردش‌کارهایی که باید در نظر بگیرید عبارت‌اند از:</p>
+<ul>
+<li>بازخورد کامپایلر هنگام توسعه (<code>cargo check</code> پس از تغییر در کد)</li>
+<li>بازخورد آزمون هنگام توسعه (<code>cargo test</code> پس از تغییر در کد)</li>
+<li>ساخت‌های CI</li>
+</ul>
+<h2 id="cargo-and-compiler-configuration"><a class="header" href="#cargo-and-compiler-configuration">پیکربندی Cargo و کامپایلر</a></h2>
+<p>Cargo از پیکربندی‌های پیش‌فرضی استفاده می‌کند که می‌کوشند میان جنبه‌های مختلفی از جمله قابلیت اشکال‌زدایی، عملکرد زمان اجرا، عملکرد ساخت، اندازهٔ باینری و موارد دیگر تعادل برقرار کنند. این بخش چند رویکرد برای تغییر این پیش‌فرض‌ها را شرح می‌دهد که برای به حداکثر رساندن عملکرد ساخت طراحی شده‌اند.</p>
+<p>مکان‌های رایج برای بازنویسی پیش‌فرض‌ها عبارت‌اند از:</p>
+<ul>
+<li><a href="../reference/profiles.html">فایل manifest با نام <code>Cargo.toml</code></a>
+<ul>
+<li>در دسترس همهٔ توسعه‌دهندگانی که در پروژهٔ شما مشارکت می‌کنند</li>
+<li>پیکربندی‌های پشتیبانی‌شده در آن محدود است (برای گسترش این امر <a href="https://github.com/rust-lang/cargo/issues/12738">#12738</a> را ببینید)</li>
+</ul>
+</li>
+<li><a href="../reference/config.html">فایل پیکربندی <code>$WORKSPACE_ROOT/.cargo/config.toml</code></a>
+<ul>
+<li>در دسترس همهٔ توسعه‌دهندگانی که در پروژهٔ شما مشارکت می‌کنند</li>
+<li>برخلاف <code>Cargo.toml</code>، این فایل به این حساس است که <code>cargo</code> را از کدام پوشه فراخوانی می‌کنید (به <a href="https://github.com/rust-lang/cargo/issues/2930">#2930</a> نگاه کنید)</li>
+</ul>
+</li>
+<li><a href="../reference/config.html">فایل پیکربندی <code>$CARGO_HOME/.cargo/config.toml</code></a>
+<ul>
+<li>برای اینکه هر توسعه‌دهنده پیش‌فرض‌های محیط توسعهٔ خود را کنترل کند</li>
+</ul>
+</li>
+</ul>
+<h3 id="reduce-amount-of-generated-debug-information"><a class="header" href="#reduce-amount-of-generated-debug-information">کاهش مقدار اطلاعات اشکال‌زدایی تولیدشده</a></h3>
+<p>توصیه: این را به <code>Cargo.toml</code> یا <code>.cargo/config.toml</code> خود اضافه کنید:</p>
+<pre><code class="language-toml">[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.debugging]
+inherits = "dev"
+debug = true
+</code></pre>
+<p>این کار موارد زیر را انجام می‌دهد:</p>
+<ul>
+<li><a href="../reference/profiles.html#dev">profile <code>dev</code></a> (پیش‌فرض دستورهای توسعه) را به این صورت تغییر می‌دهد:
+<ul>
+<li><a href="../reference/profiles.html#debug">اطلاعات اشکال‌زدایی</a> اعضای workspace را به مقداری که برای backtraceهای مفید panic لازم است محدود می‌کند</li>
+<li>از تولید هرگونه اطلاعات اشکال‌زدایی برای وابستگی‌ها پرهیز می‌کند</li>
+</ul>
+</li>
+<li>راهی اختیاری برای زمانی که با <a href="../reference/profiles.html#custom-profiles"><code>--profile debugging</code></a> اشکال‌زدایی می‌کنید فراهم می‌کند</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> بازبینی مجدد profile <code>dev</code> در <a href="https://github.com/rust-lang/cargo/issues/15931">#15931</a> پیگیری می‌شود.</p>
+</blockquote>
+<p>مبادلات:</p>
+<ul>
+<li>✅ تولید کد سریع‌تر (<code>cargo build</code>)</li>
+<li>✅ زمان‌های لینک سریع‌تر</li>
+<li>✅ مصرف کمتر فضای دیسک توسط پوشهٔ <code>target</code></li>
+<li>❌ برای داشتن تجربهٔ اشکال‌زدایی با کیفیت بالا، به ساخت کامل مجدد نیاز دارد</li>
+</ul>
+<h3 id="use-an-alternative-codegen-backend"><a class="header" href="#use-an-alternative-codegen-backend">استفاده از یک backend تولید کد جایگزین</a></h3>
+<p>پیشنهاد:</p>
+<ul>
+<li>مؤلفهٔ rustup مربوط به backend تولید کد Cranelift را نصب کنید
+<pre><code class="language-console">$ rustup component add rustc-codegen-cranelift-preview --toolchain nightly
+</code></pre>
+</li>
+<li>این را به <code>Cargo.toml</code> یا <code>.cargo/config.toml</code> خود اضافه کنید: <code>toml [profile.dev] codegen-backend = "cranelift"</code>
+<pre><code class="language-toml">[profile.dev]
+codegen-backend = "cranelift"
+</code></pre>
+</li>
+<li>Cargo را با <code>-Z codegen-backend</code> اجرا کنید یا قابلیت <a href="../reference/unstable.html#codegen-backend"><code>codegen-backend</code></a> را در <code>.cargo/config.toml</code> فعال کنید.
+<ul>
+<li>این کار لازم است، چون این قابلیت در حال حاضر ناپایدار (unstable) است.</li>
+</ul>
+</li>
+</ul>
+<p>این کار <a href="../reference/profiles.html#dev">profile <code>dev</code></a> را طوری تغییر می‌دهد که برای تولید کد ماشین به‌جای backend پیش‌فرض LLVM، از <a href="https://github.com/rust-lang/rustc_codegen_cranelift">backend تولید کد Cranelift</a> استفاده کند. backend مربوط به Cranelift باید کد را سریع‌تر از LLVM تولید کند که باید به بهبود عملکرد ساخت بینجامد.</p>
+<p>مبادلات:</p>
+<ul>
+<li>✅ تولید کد سریع‌تر (<code>cargo build</code>)</li>
+<li>❌ <strong>نیاز به استفاده از Rust نسخهٔ nightly و یک <a href="../reference/unstable.html#codegen-backend">قابلیت ناپایدار Cargo</a> دارد</strong></li>
+<li>❌ عملکرد زمان اجرای بدتر برای کد تولیدشده
+<ul>
+<li>بخش ساخت در <code>cargo test</code> را سریع‌تر می‌کند، اما ممکن است بخش اجرای آزمون‌های آن را طولانی‌تر کند</li>
+</ul>
+</li>
+<li>❌ فقط برای <a href="https://github.com/rust-lang/rustc_codegen_cranelift?tab=readme-ov-file#platform-support">هدف‌های معین</a> در دسترس است</li>
+<li>❌ ممکن است از همهٔ قابلیت‌های Rust پشتیبانی نکند (مثلاً unwinding)</li>
+</ul>
+<h3 id="enable-the-experimental-parallel-frontend"><a class="header" href="#enable-the-experimental-parallel-frontend">فعال‌سازی frontend موازی آزمایشی</a></h3>
+<p>توصیه: این را به <code>.cargo/config.toml</code> خود اضافه کنید:</p>
+<pre><code class="language-toml">[build]
+rustflags = "-Zthreads=8"
+</code></pre>
+<p>این <a href="../reference/config.html#buildrustflags"><code>rustflags</code></a>، <a href="https://blog.rust-lang.org/2023/11/09/parallel-rustc/">frontend موازی</a> کامپایلر Rust را فعال می‌کند و به آن می‌گوید از <code>n</code> نخ استفاده کند. مقدار <code>n</code> باید بر اساس تعداد هسته‌های موجود در سیستم شما انتخاب شود، هرچند بازده با افزایش آن کاهش می‌یابد. توصیه می‌کنیم حداکثر از <code>8</code> نخ استفاده کنید.</p>
+<p>مبادلات:</p>
+<ul>
+<li>✅ زمان‌های ساخت سریع‌تر (هم برای <code>cargo check</code> و هم برای <code>cargo build</code>)</li>
+<li>❌ <strong>نیاز به استفاده از Rust نسخهٔ nightly و یک <a href="https://github.com/rust-lang/rust/issues/113349">قابلیت ناپایدار Rust</a> دارد</strong></li>
+</ul>
+<h3 id="use-an-alternative-linker"><a class="header" href="#use-an-alternative-linker">استفاده از یک لینکر جایگزین</a></h3>
+<p>پیشنهاد: یک لینکر جایگزین مانند <a href="https://lld.llvm.org/">LLD</a>، <a href="https://github.com/rui314/mold">mold</a> یا <a href="https://github.com/davidlattimore/wild">wild</a> را نصب و پیکربندی کنید. برای مثال، برای پیکربندی mold در Linux می‌توانید این را به <code>.cargo/config.toml</code> خود اضافه کنید:</p>
+<pre><code class="language-toml">[target.'cfg(target_os = "linux")']
+# mold, if you have GCC 12+
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+# mold, otherwise
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=/path/to/mold"]
+</code></pre>
+<p>اگرچه وابستگی‌ها ممکن است به‌صورت موازی ساخته شوند، لینک کردن همهٔ وابستگی‌های شما یک‌جا و در پایان ساخت انجام می‌شود، که می‌تواند باعث شود لینک کردن بر زمان ساخت شما غالب شود، به‌ویژه در ساخت‌های مجدد افزایشی (incremental). اغلب لینکری که Rust استفاده می‌کند از قبل نسبتاً سریع است و سودی که از تعویض آن به دست می‌آید ممکن است ارزشش را نداشته باشد، اما همیشه چنین نیست. برای مثال، هدف‌های Linux به‌جز <code>x86_64-unknown-linux-gnu</code> همچنان از لینکر سیستمی Linux استفاده می‌کنند که کاملاً کند است (برای جزئیات بیشتر <a href="https://github.com/rust-lang/rust/issues/39915">rust#39915</a> را ببینید).</p>
+<p>مبادلات:</p>
+<ul>
+<li>✅ زمان‌های لینک سریع‌تر</li>
+<li>❌ ممکن است همهٔ موارد استفاده را پشتیبانی نکند، به‌ویژه اگر به وابستگی‌های C یا C++ وابسته باشید</li>
+</ul>
+<h3 id="resolve-features-for-the-whole-workspace"><a class="header" href="#resolve-features-for-the-whole-workspace">تحلیل featureها برای کل workspace</a></h3>
+<p>پیشنهاد: این را به <code>.cargo/config.toml</code> پروژهٔ خود اضافه کنید</p>
+<pre><code class="language-toml">[resolver]
+feature-unification = "workspace"
+</code></pre>
+<p>هنگام فراخوانی <code>cargo</code>، <a href="../reference/resolver.html#features">featureها فعال می‌شوند</a> و این بر اساس این است که کدام اعضای workspace را انتخاب کرده‌اید. با این حال، هنگام مشارکت در یک برنامه، ممکن است لازم باشد بسته‌های مختلف درون برنامه را بسازید و آزمون کنید، که می‌تواند باعث ساخت‌های مجدد غیرضروری شود، چون ممکن است برای وابستگی‌های مشترک مجموعه‌های مختلفی از featureها فعال شوند. با <a href="../reference/unstable.html#feature-unification"><code>feature-unification</code></a>، می‌توانید با اطمینان از فعال شدن مجموعهٔ یکسانی از featureهای وابستگی، صرف‌نظر از اینکه در حال حاضر کدام بسته را می‌سازید و آزمون می‌کنید، ساخت‌های وابستگی بیشتری را دوباره استفاده کنید.</p>
+<p>مبادلات:</p>
+<ul>
+<li>✅ ساخت‌های مجدد کمتر هنگام ساخت بسته‌های مختلف در یک workspace</li>
+<li>❌ <strong>نیاز به استفاده از Rust نسخهٔ nightly و یک <a href="../reference/unstable.html#feature-unification">قابلیت ناپایدار Cargo</a> دارد</strong></li>
+<li>❌ فعال کردن یک feature توسط یک بسته می‌تواند اشکالات بسته‌های دیگری را که باید آن را فعال کنند اما نمی‌کنند پنهان کند</li>
+<li>❌ اگر یکسان‌سازی featureها از طریق <code>--workspace</code> برای شما کار نکند، این روش هم کار نخواهد کرد</li>
+</ul>
+<h2 id="reducing-built-code"><a class="header" href="#reducing-built-code">کاهش کد ساخته‌شده</a></h2>
+<h3 id="removing-unused-dependencies"><a class="header" href="#removing-unused-dependencies">حذف وابستگی‌های استفاده‌نشده</a></h3>
+<p><a href="../reference/lints.html#unused_dependencies"><code>cargo::unused_dependencies</code></a> بیشتر وابستگی‌های استفاده‌نشده را با موارد مثبت کاذب اندک شناسایی می‌کند.</p>
+<p>برای هر چیز دیگر، نتایج پنهان <a href="../reference/lints.html#unused_dependencies"><code>cargo::unused_dependencies</code></a> را به‌طور دوره‌ای بازبینی کنید:</p>
+<pre><code class="language-console">$ CARGO_LOG=cargo::diagnostics::rules::unused_dependencies=debug cargo check --workspace --all-targets
+</code></pre>
+<p>این دستور وابستگی‌های بالقوه استفاده‌نشده را در موارد زیر نشان می‌دهد</p>
+<ul>
+<li>وابستگی‌های registry و git</li>
+<li>زمانی که <a href="../reference/rust-version.html"><code>package.rust-version</code></a> شما برای استفاده از <code>[lints.cargo]</code> بسیار قدیمی است</li>
+<li>زمانی که ممکن است از وابستگی شما <em>شاید</em> برای محدود کردن نسخهٔ یک وابستگی تعدی‌یافته استفاده شده باشد (به‌جای آن از <code>[target."cfg(false)".dependencies]</code> استفاده کنید)</li>
+<li>زمانی که ممکن است از وابستگی شما <em>شاید</em> برای فعال کردن featureها روی یک وابستگی تعدی‌یافته استفاده شده باشد</li>
+<li><code>[dev-dependencies]</code> شما، چون هنوز راهی برای اطمینان از ساخته شدن همهٔ مصرف‌کنندگان آن‌ها وجود ندارد</li>
+</ul>
+<p>هنگام تغییر کد، ممکن است به‌آسانی از نظر دور بماند که یک وابستگی دیگر استفاده نمی‌شود و می‌توان آن را حذف کرد.</p>
+<p>مبادلات:</p>
+<ul>
+<li>✅ زمان‌های ساخت کامل و لینک سریع‌تر</li>
+<li>❌ شناسایی وابستگی‌های استفاده‌نشده از میان موارد مثبت کاذب به تلاش نیاز دارد</li>
+</ul>
+<h3 id="removing-unused-features-from-dependencies"><a class="header" href="#removing-unused-features-from-dependencies">حذف featureهای استفاده‌نشده از وابستگی‌ها</a></h3>
+<p>توصیه: featureهای استفاده‌نشدهٔ وابستگی‌ها را برای حذف، به‌طور دوره‌ای با ابزارهای شخص ثالث مانند <a href="https://crates.io/crates/cargo-features-manager">cargo-features-manager</a>، <a href="https://crates.io/crates/cargo-unused-features">cargo-unused-features</a> بازبینی کنید.</p>
+<p>هنگام تغییر کد، ممکن است به‌آسانی از نظر دور بماند که یک feature از یک وابستگی دیگر استفاده نمی‌شود و می‌توان آن را حذف کرد. این کار می‌تواند تعداد وابستگی‌های تعدی‌یافته‌ای را که ساخته می‌شوند کاهش دهد یا مقدار کد درون یک crate را که ساخته می‌شود کم کند. هنگام حذف featureها باید احتیاط بیشتری کرد، زیرا ممکن است featureها برای رفتار یا تغییرات عملکردی مطلوب نیز استفاده شوند که همیشه از روی کامپایل یا آزمون کردن بدیهی نیست.</p>
+<p>مبادلات:</p>
+<ul>
+<li>✅ زمان‌های ساخت کامل و لینک سریع‌تر</li>
+<li>❌ ممکن است featureها را به‌اشتباه استفاده‌نشده علامت‌گذاری کند</li>
+</ul><nav class="page-nav"><a href="cargo-home.html">→ Cargo Home</a><a href="../reference/index.html">مرجع Cargo ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

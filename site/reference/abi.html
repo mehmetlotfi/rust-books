@@ -1,0 +1,236 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>رابط دودویی برنامه (Application binary interface) — مرجع زبان Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="abi"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="introduction.html" style="color:inherit;text-decoration:none">مرجع زبان Rust</a><small class="en-title" dir="ltr">The Rust Reference</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><div class="rule" id="r-abi"><a class="rule-link" href="#r-abi" title="abi"><span>[abi]</span></a>
+</div>
+
+<h1 id="application-binary-interface-abi"><a class="header" href="#application-binary-interface-abi">رابط دودویی برنامه (ABI)</a></h1>
+<div class="rule" id="r-abi.intro"><a class="rule-link" href="#r-abi.intro" title="abi.intro"><span>[abi<wbr>.intro]</span></a>
+</div>
+
+<p>این بخش قابلیت‌هایی را مستند می‌کند که بر ABI خروجی کامپایل‌شدهٔ یک crate اثر می‌گذارند.</p>
+<p>برای چگونگی تعیین ABI تابع‌های صادرشده، <em><a href="items/functions.html#extern-function-qualifier">تابع‌های extern</a></em> را ببینید. برای تعیین ABI هنگام پیوند کتابخانه‌های خارجی، <em><a href="items/external-blocks.html">بلوک‌های خارجی</a></em> را ببینید.</p>
+<!-- template:attributes -->
+<div class="rule" id="r-abi.used"><a class="rule-link" href="#r-abi.used" title="abi.used"><span>[abi<wbr>.used]</span></a>
+</div>
+
+<h2 id="the-used-attribute"><a class="header" href="#the-used-attribute">ویژگی <code>used</code></a></h2>
+<div class="rule" id="r-abi.used.intro"><a class="rule-link" href="#r-abi.used.intro" title="abi.used.intro"><span>[abi<wbr>.used<wbr>.intro]</span></a>
+</div>
+
+<p><em>ویژگی <a href="attributes.html"><code>used</code></a></em> یک <a href="items/static-items.html">static</a> را وادار می‌کند حتی اگر هرگز استفاده نشود یا آیتم دیگری از crate به آن ارجاع ندهد، در فایل شیء خروجی (<code>.o</code>، ‏<code>.rlib</code> و مانند آن، به‌جز فایل‌های دودویی نهایی) حفظ شود. بااین‌حال، پیونددهنده همچنان آزاد است آن را حذف کند.</p>
+<blockquote>
+<p><strong>مثال</strong></p>
+<pre><code class="language-rust">// lib.rs
+
+// This is kept because of `#[used]`.
+#[used]
+static S1: u8 = 0;
+
+// This is removable because it's unused.
+#[allow(dead_code)]
+static S2: u8 = 0;
+
+// This is kept because it's publicly reachable.
+pub static S3: u8 = 0;
+
+// This is kept because it's referenced by a publicly
+// reachable function.
+static S4: u8 = 0;
+#[unsafe(no_mangle)] pub fn f4() -&gt; &amp;'static u8 { &amp;S4 }
+
+// This is removable because it's referenced only by a
+// private, unused (dead) function.
+static S5: u8 = 0;
+#[allow(dead_code)]
+fn f5() -&gt; &amp;'static u8 { &amp;S5 }</code></pre>
+<pre><code class="language-console">$ rustc -O --emit=obj --crate-type=rlib lib.rs
+$ LC_ALL=C nm -C lib.o
+0000000000000000 R lib::S1
+0000000000000000 R lib::S3
+0000000000000000 r lib::S4
+0000000000000000 T f4
+</code></pre>
+</blockquote>
+<div class="rule" id="r-abi.used.syntax"><a class="rule-link" href="#r-abi.used.syntax" title="abi.used.syntax"><span>[abi<wbr>.used<wbr>.syntax]</span></a>
+</div>
+
+<p>ویژگی <code>used</code> از نحو <a href="attributes.html#grammar-MetaWord">MetaWord</a> استفاده می‌کند.</p>
+<div class="rule" id="r-abi.used.allowed-positions"><a class="rule-link" href="#r-abi.used.allowed-positions" title="abi.used.allowed-positions"><span>[abi<wbr>.used<wbr>.allowed-positions]</span></a>
+</div>
+
+<p>ویژگی <code>used</code> را تنها می‌توان روی <a href="items/static-items.html#r-items.static">آیتم‌های <code>static</code></a> اعمال کرد.</p>
+<div class="rule" id="r-abi.used.duplicates"><a class="rule-link" href="#r-abi.used.duplicates" title="abi.used.duplicates"><span>[abi<wbr>.used<wbr>.duplicates]</span></a>
+</div>
+
+<p>تنها نخستین استفاده از <code>used</code> روی یک آیتم اثر دارد.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> <code>rustc</code> دربارهٔ استفاده‌های پس از مورد نخست lint صادر می‌کند.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-abi.no_mangle"><a class="rule-link" href="#r-abi.no_mangle" title="abi.no_mangle"><span>[abi<wbr>.no_mangle]</span></a>
+</div>
+
+<h2 id="the-no_mangle-attribute"><a class="header" href="#the-no_mangle-attribute">ویژگی <code>no_mangle</code></a></h2>
+<div class="rule" id="r-abi.no_mangle.intro"><a class="rule-link" href="#r-abi.no_mangle.intro" title="abi.no_mangle.intro"><span>[abi<wbr>.no_mangle<wbr>.intro]</span></a>
+</div>
+
+<p><em>ویژگی <a href="attributes.html"><code>no_mangle</code></a></em> درهم‌سازی استاندارد نام نماد را برای یک <a href="items/functions.html">تابع</a> یا <a href="items/static-items.html">static</a> غیرفعال می‌کند. نماد آیتم همان شناسهٔ آیتم خواهد بود.</p>
+<blockquote>
+<p><strong>مثال</strong></p>
+<pre><code class="language-rust">#[unsafe(no_mangle)]
+extern "C" fn foo() {}</code></pre>
+</blockquote>
+<div class="rule" id="r-abi.no_mangle.syntax"><a class="rule-link" href="#r-abi.no_mangle.syntax" title="abi.no_mangle.syntax"><span>[abi<wbr>.no_mangle<wbr>.syntax]</span></a>
+</div>
+
+<p>ویژگی <code>no_mangle</code> از نحو <a href="attributes.html#grammar-MetaWord">MetaWord</a> استفاده می‌کند.</p>
+<div class="rule" id="r-abi.no_mangle.allowed-positions"><a class="rule-link" href="#r-abi.no_mangle.allowed-positions" title="abi.no_mangle.allowed-positions"><span>[abi<wbr>.no_mangle<wbr>.allowed-positions]</span></a>
+</div>
+
+<p>ویژگی <code>no_mangle</code> را تنها می‌توان روی موارد زیر اعمال کرد:</p>
+<ul>
+<li><a href="items/static-items.html#r-items.static">آیتم‌های static</a></li>
+<li><a href="items/functions.html#r-items.fn">تابع‌های آزاد</a></li>
+<li><a href="items/associated-items.html#r-items.associated.fn">تابع‌های وابستهٔ ذاتی</a></li>
+<li><a href="items/implementations.html#r-items.impl.trait">تابع‌های impl صفت</a></li>
+</ul>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> <code>rustc</code> دربارهٔ استفاده در موقعیت‌های دیگر lint صادر می‌کند. ممکن است در آینده به خطا تبدیل شود.</p>
+</blockquote>
+</div>
+
+<!-- TODO: Currently it works on a trait function with a body, but generates a warning about being phased out. how do we document that?
+https://github.com/rust-lang/rust/pull/86492#issuecomment-885682960
+-->
+<!-- TODO: should this clarify that external block items are already unmangled?, and thus the attribute does nothing? Currently it is "phased out" warning. -->
+<div class="rule" id="r-abi.no_mangle.closures"><a class="rule-link" href="#r-abi.no_mangle.closures" title="abi.no_mangle.closures"><span>[abi<wbr>.no_mangle<wbr>.closures]</span></a>
+</div>
+
+<p>ویژگی <code>no_mangle</code> را نمی‌توان با <a href="expressions/closure-expr.html#r-expr.closure">بستار</a> به‌کار برد.</p>
+<div class="rule" id="r-abi.no_mangle.generics"><a class="rule-link" href="#r-abi.no_mangle.generics" title="abi.no_mangle.generics"><span>[abi<wbr>.no_mangle<wbr>.generics]</span></a>
+</div>
+
+<p>ویژگی <code>no_mangle</code> را نمی‌توان روی آیتم دارای پارامتر عمومی به‌کار برد.</p>
+<div class="rule" id="r-abi.no_mangle.duplicates"><a class="rule-link" href="#r-abi.no_mangle.duplicates" title="abi.no_mangle.duplicates"><span>[abi<wbr>.no_mangle<wbr>.duplicates]</span></a>
+</div>
+
+<p>تنها نخستین استفاده از <code>no_mangle</code> روی یک آیتم اثر دارد.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> <code>rustc</code> دربارهٔ استفاده‌های پس از مورد نخست lint صادر می‌کند.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-abi.no_mangle.export_name"><a class="rule-link" href="#r-abi.no_mangle.export_name" title="abi.no_mangle.export_name"><span>[abi<wbr>.no_mangle<wbr>.export_name]</span></a>
+</div>
+
+<p>اگر ویژگی‌های <code>no_mangle</code> و <a href="abi.html#r-abi.export_name"><code>export_name</code></a> هر دو روی یک آیتم اعمال شوند، نام نماد از <code>export_name</code> گرفته می‌شود و <code>no_mangle</code> اثری ندارد.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> <code>rustc</code> دربارهٔ این ترکیب lint صادر می‌کند.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-abi.no_mangle.unsafe"><a class="rule-link" href="#r-abi.no_mangle.unsafe" title="abi.no_mangle.unsafe"><span>[abi<wbr>.no_mangle<wbr>.unsafe]</span></a>
+</div>
+
+<p>ویژگی <code>no_mangle</code> باید با <a href="attributes.html#r-attributes.safety"><code>unsafe</code></a> علامت‌گذاری شود، زیرا نماد درهم‌سازی‌نشده ممکن است با نماد دیگری به همان نام یا نمادی شناخته‌شده برخورد کند و به رفتار تعریف‌نشده منجر شود.</p>
+<div class="rule" id="r-abi.no_mangle.edition2024"><a class="rule-link" href="#r-abi.no_mangle.edition2024" title="abi.no_mangle.edition2024"><span>[abi<wbr>.no_mangle<wbr>.edition2024]</span></a>
+</div>
+
+<blockquote>
+<p><strong>تفاوت‌های ویرایش 2024</strong> پیش از ویرایش ۲۰۲۴ استفاده از ویژگی <code>no_mangle</code> بدون <code>unsafe</code> مجاز بود.</p>
+</blockquote>
+<div class="rule" id="r-abi.no_mangle.publicly-exported"><a class="rule-link" href="#r-abi.no_mangle.publicly-exported" title="abi.no_mangle.publicly-exported"><span>[abi<wbr>.no_mangle<wbr>.publicly-exported]</span></a>
+</div>
+
+<p>ویژگی <code>no_mangle</code> افزون بر غیرفعال‌کردن درهم‌سازی نام، باعث می‌شود نماد مانند ویژگی <a href="abi.html#r-abi.used"><code>used</code></a> به‌طور عمومی از کتابخانه یا فایل شیء تولیدشده صادر شود.</p>
+<div class="rule" id="r-abi.no_mangle.ascii-only"><a class="rule-link" href="#r-abi.no_mangle.ascii-only" title="abi.no_mangle.ascii-only"><span>[abi<wbr>.no_mangle<wbr>.ascii-only]</span></a>
+</div>
+
+<p>ویژگی <code>no_mangle</code> تنها روی آیتم‌هایی مجاز است که نامشان فقط نویسه‌های ASCII دارد.</p>
+<div class="rule" id="r-abi.link_section"><a class="rule-link" href="#r-abi.link_section" title="abi.link_section"><span>[abi<wbr>.link_section]</span></a>
+</div>
+
+<h2 id="the-link_section-attribute"><a class="header" href="#the-link_section-attribute">ویژگی <code>link_section</code></a></h2>
+<div class="rule" id="r-abi.link_section.intro"><a class="rule-link" href="#r-abi.link_section.intro" title="abi.link_section.intro"><span>[abi<wbr>.link_section<wbr>.intro]</span></a>
+</div>
+
+<p><em>ویژگی <code>link_section</code></em> بخشی از فایل شیء را مشخص می‌کند که محتوای یک <a href="items/functions.html">تابع</a> یا <a href="items/static-items.html">static</a> در آن قرار می‌گیرد.</p>
+<div class="rule" id="r-abi.link_section.syntax"><a class="rule-link" href="#r-abi.link_section.syntax" title="abi.link_section.syntax"><span>[abi<wbr>.link_section<wbr>.syntax]</span></a>
+</div>
+
+<p>ویژگی <code>link_section</code> برای مشخص‌کردن نام بخش از نحو <a href="attributes.html#grammar-MetaNameValueStr">MetaNameValueStr</a> استفاده می‌کند.</p>
+<!-- no_run: don't link. The format of the section name is platform-specific. -->
+<pre><code class="language-rust no_run"><span class="boring">#[cfg(target_os = "linux")] {
+</span>#[unsafe(no_mangle)]
+#[unsafe(link_section = ".example_section")]
+pub static VAR1: u32 = 1;
+<span class="boring">}</span></code></pre>
+<div class="rule" id="r-abi.link_section.unsafe"><a class="rule-link" href="#r-abi.link_section.unsafe" title="abi.link_section.unsafe"><span>[abi<wbr>.link_section<wbr>.unsafe]</span></a>
+</div>
+
+<p>این ویژگی ناامن است، زیرا به کاربر اجازه می‌دهد داده و کد را در بخش‌هایی از حافظه قرار دهد که انتظار آن‌ها را ندارند؛ برای نمونه دادهٔ تغییرپذیر در ناحیهٔ فقط‌خواندنی.</p>
+<div class="rule" id="r-abi.link_section.duplicates"><a class="rule-link" href="#r-abi.link_section.duplicates" title="abi.link_section.duplicates"><span>[abi<wbr>.link_section<wbr>.duplicates]</span></a>
+</div>
+
+<p>تنها نخستین استفاده از <code>link_section</code> روی یک آیتم اثر دارد.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> <code>rustc</code> دربارهٔ استفاده‌های پس از مورد نخست هشدار سازگاری آینده صادر می‌کند. ممکن است در آینده به خطا تبدیل شود.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-abi.link_section.edition2024"><a class="rule-link" href="#r-abi.link_section.edition2024" title="abi.link_section.edition2024"><span>[abi<wbr>.link_section<wbr>.edition2024]</span></a>
+</div>
+
+<blockquote>
+<p><strong>تفاوت‌های ویرایش 2024</strong> پیش از ویرایش ۲۰۲۴ استفاده از ویژگی <code>link_section</code> بدون مشخص‌کنندهٔ <code>unsafe</code> مجاز بود.</p>
+</blockquote>
+<div class="rule" id="r-abi.export_name"><a class="rule-link" href="#r-abi.export_name" title="abi.export_name"><span>[abi<wbr>.export_name]</span></a>
+</div>
+
+<h2 id="the-export_name-attribute"><a class="header" href="#the-export_name-attribute">ویژگی <code>export_name</code></a></h2>
+<div class="rule" id="r-abi.export_name.intro"><a class="rule-link" href="#r-abi.export_name.intro" title="abi.export_name.intro"><span>[abi<wbr>.export_name<wbr>.intro]</span></a>
+</div>
+
+<p><em>ویژگی <code>export_name</code></em> نام نمادی را مشخص می‌کند که برای یک <a href="items/functions.html">تابع</a> یا <a href="items/static-items.html">static</a> صادر خواهد شد.</p>
+<div class="rule" id="r-abi.export_name.syntax"><a class="rule-link" href="#r-abi.export_name.syntax" title="abi.export_name.syntax"><span>[abi<wbr>.export_name<wbr>.syntax]</span></a>
+</div>
+
+<p>ویژگی <code>export_name</code> برای مشخص‌کردن نام نماد از نحو <a href="attributes.html#grammar-MetaNameValueStr">MetaNameValueStr</a> استفاده می‌کند.</p>
+<pre><code class="language-rust">#[unsafe(export_name = "exported_symbol_name")]
+pub fn name_in_rust() { }</code></pre>
+<div class="rule" id="r-abi.export_name.unsafe"><a class="rule-link" href="#r-abi.export_name.unsafe" title="abi.export_name.unsafe"><span>[abi<wbr>.export_name<wbr>.unsafe]</span></a>
+</div>
+
+<p>این ویژگی ناامن است، زیرا نمادی با نام سفارشی ممکن است با نماد دیگری به همان نام یا نمادی شناخته‌شده برخورد کند و رفتار تعریف‌نشده به‌وجود آورد.</p>
+<div class="rule" id="r-abi.export_name.duplicates"><a class="rule-link" href="#r-abi.export_name.duplicates" title="abi.export_name.duplicates"><span>[abi<wbr>.export_name<wbr>.duplicates]</span></a>
+</div>
+
+<p>تنها نخستین استفاده از <code>export_name</code> روی یک آیتم اثر دارد.</p>
+<div class="alert alert-note">
+<blockquote>
+<p class="alert-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+
+<p><strong>نکته</strong> <code>rustc</code> دربارهٔ استفاده‌های پس از مورد نخست هشدار سازگاری آینده صادر می‌کند. ممکن است در آینده به خطا تبدیل شود.</p>
+</blockquote>
+</div>
+
+<div class="rule" id="r-abi.export_name.edition2024"><a class="rule-link" href="#r-abi.export_name.edition2024" title="abi.export_name.edition2024"><span>[abi<wbr>.export_name<wbr>.edition2024]</span></a>
+</div>
+
+<blockquote>
+<p><strong>تفاوت‌های ویرایش 2024</strong> پیش از ویرایش ۲۰۲۴ استفاده از ویژگی <code>export_name</code> بدون مشخص‌کنندهٔ <code>unsafe</code> مجاز بود.</p>
+</blockquote><nav class="page-nav"><a href="const_eval.html">→ ارزیابی ثابت (Constant evaluation)</a><a href="runtime.html">محیط اجرای Rust (The Rust runtime) ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../reference/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,42 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>بررسی‌کنندهٔ قرض — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="borrow-check"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="mir-borrow-check"><a class="header" href="#mir-borrow-check">MIR borrow check</a></h1>
+<p>borrow check «سس مخفی» Rust است – وظیفه‌اش اعمال چند ویژگی است:</p>
+<ul>
+<li>اینکه همهٔ متغیرها پیش از استفاده مقداردهی اولیه شده باشند.</li>
+<li>اینکه نمی‌توانید یک مقدار را دو بار move کنید.</li>
+<li>اینکه نمی‌توانید مقداری را وقتی borrow شده است move کنید.</li>
+<li>اینکه نمی‌توانید به place‌ای که به‌صورت تغییرپذیر borrow شده دسترسی داشته باشید (جز از طریق ارجاع).</li>
+<li>اینکه نمی‌توانید place‌ای را که به‌صورت تغییرناپذیر borrow شده تغییر دهید.</li>
+<li>etc</li>
+</ul>
+<p>borrow checker روی MIR عمل می‌کند.
+پیاده‌سازی قدیمی‌تر روی HIR عمل می‌کرد.
+انجام borrow checking روی MIR چند مزیت دارد:</p>
+<ul>
+<li>MIR <em>بسیار</em> کم‌پیچیده‌تر از HIR است؛ desugaring تند آن به پیشگیری از باگ‌ها در borrow checker کمک می‌کند.
+(اگر کنجکاوید، می‌توانید
+<a href="https://github.com/rust-lang/rust/issues/47366">فهرست باگ‌هایی را که borrow checker مبتنی بر MIR رفع می‌کند اینجا ببینید</a>.)</li>
+<li>مهم‌تر از آن، استفاده از MIR <a href="https://rust-lang.github.io/rfcs/2094-nll.html">«طول‌عمرهای غیرلغوی (non-lexical lifetimes)»</a> را ممکن می‌کند،
+که regionهایی مشتق از گراف جریان کنترل هستند.</li>
+</ul>
+<h2 id="major-phases-of-the-borrow-checker"><a class="header" href="#major-phases-of-the-borrow-checker">فازهای اصلی borrow checker</a></h2>
+<p>منبع borrow checker در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/index.html">crate با نام <code>rustc_borrowck</code></a> یافت می‌شود.
+نقطهٔ ورود اصلی کوئری <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/fn.mir_borrowck.html"><code>mir_borrowck</code></a> است.</p>
+<ul>
+<li>ابتدا یک <strong>نسخهٔ محلی</strong> از MIR می‌سازیم.
+در گام‌های بعدی،
+این نسخه را در جا تغییر می‌دهیم تا نوع‌ها و چیزهای دیگر را طوری تغییر دهیم که ارجاع به regionهای جدیدی را که محاسبه می‌کنیم شامل شوند.</li>
+<li>سپس <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_borrowck/nll/fn.replace_regions_in_mir.html"><code>replace_regions_in_mir</code></a> را فراخوانی می‌کنیم تا MIR محلی خود را تغییر دهیم.
+این تابع، از جمله، همهٔ <a href="./appendix/glossary.html#region">regionها</a> را در MIR با <a href="./appendix/glossary.html#inf-var">متغیرهای استنتاج</a> تازه جایگزین می‌کند.</li>
+<li>سپس چند <a href="./appendix/background.html#dataflow">تحلیل جریان داده</a> انجام می‌دهیم که محاسبه می‌کنند چه داده‌ای و چه زمانی move شده است.</li>
+<li>سپس <a href="borrow-check/type-check.html">بررسی نوع دوم</a> را روی MIR انجام می‌دهیم:
+هدف این بررسی نوع تعیین همهٔ قیدهای بین regionهای مختلف است.</li>
+<li>سپس <a href="borrow-check/region-inference.html">استنتاج region</a> را انجام می‌دهیم که مقدار هر region را محاسبه می‌کند — اساساً نقاطی در گراف جریان کنترل که هر طول‌عمر باید بر اساس قیدهایی که جمع کرده‌ایم در آن‌ها معتبر باشد.</li>
+<li>در این نقطه می‌توانیم «borrowهای در scope» را در هر نقطه محاسبه کنیم.</li>
+<li>در نهایت، پیمایش دومی روی MIR انجام می‌دهیم، به اعمالی که انجام می‌دهد نگاه می‌کنیم و خطاها را گزارش می‌دهیم.
+برای مثال، اگر دستوری مثل <code>*a + 1</code> ببینیم،
+بررسی می‌کنیم متغیر <code>a</code> مقداردهی اولیه شده و به‌صورت تغییرپذیر borrow نشده باشد،
+چون هر یک از این‌ها نیازمند گزارش خطاست.
+انجام این بررسی نتایج همهٔ تحلیل‌های قبلی را لازم دارد.</li>
+</ul>
+<h2 id="debugging-the-borrow-checker"><a class="header" href="#debugging-the-borrow-checker">اشکال‌زدایی borrow checker</a></h2>
+<p><a href="borrow-check/debugging.html">اشکال‌زدایی borrow checker</a> و <a href="mir/debugging.html">اشکال‌زدایی MIR</a> را ببینید.</p><nav class="page-nav"><a href="mir/drop-elaboration.html">→ Drop elaboration</a><a href="borrow-check/moves-and-initialization.html">ردیابی انتقال‌ها و مقداردهی اولیه ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,188 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>سازمان‌دهی آزمون‌ها — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch11-03-test-organization"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="test-organization"><a class="header" href="#test-organization">سازماندهی تست‌ها</a></h2>
+<p>همانطور که در ابتدای فصل ذکر شد، تست‌نویسی یک رشته پیچیده است، و افراد مختلف از اصطلاحات و سازماندهی متفاوتی استفاده می‌کنند. جامعه Rust تست‌ها را به دو دسته اصلی تقسیم می‌کند: تست‌های واحد و تست‌های یکپارچه. <em>تست‌های واحد</em> کوچک و متمرکزتر هستند، یک ماژول را به طور جداگانه در یک زمان تست می‌کنند و می‌توانند رابط‌های خصوصی را تست کنند. <em>تست‌های یکپارچه</em> کاملاً خارجی نسبت به کتابخانه شما هستند و از کد شما همانطور که هر کد خارجی دیگری استفاده می‌کند، تنها از طریق رابط عمومی استفاده می‌کنند و ممکن است چندین ماژول را در هر تست بررسی کنند.</p>
+<p>نوشتن هر دو نوع تست برای اطمینان از اینکه قطعات کتابخانه شما به صورت جداگانه و با هم کار می‌کنند، مهم است.</p>
+<h3 id="unit-tests"><a class="header" href="#unit-tests">تست‌های واحد</a></h3>
+<p>هدف تست‌های واحد این است که هر واحد کد را به طور جداگانه از سایر کدها تست کنند تا به سرعت مشخص شود که کد کجا به درستی کار می‌کند و کجا نه. تست‌های واحد را در دایرکتوری <em>src</em> در هر فایل با کدی که تست می‌کنند قرار می‌دهید. کنوانسیون این است که یک ماژول به نام <code>tests</code> در هر فایل ایجاد کنید تا توابع تست را در آن قرار دهید و ماژول را با <code>cfg(test)</code> حاشیه‌نویسی کنید.</p>
+<h4 id="the-tests-module-and-cfgtest"><a class="header" href="#the-tests-module-and-cfgtest">ماژول <code>tests</code> و <code>#[cfg(test)]</code></a></h4>
+<p>حاشیه‌نویسی <code>#[cfg(test)]</code> روی ماژول <code>tests</code> به Rust می‌گوید که کد تست فقط وقتی که <code>cargo test</code> اجرا شود کامپایل و اجرا شود، نه وقتی که <code>cargo build</code> اجرا شود. این باعث صرفه‌جویی در زمان کامپایل وقتی فقط می‌خواهید کتابخانه را بسازید می‌شود و فضای کمتری در نتیجه کامپایل‌شده می‌گیرد زیرا تست‌ها شامل نمی‌شوند. مشاهده خواهید کرد که چون تست‌های یکپارچه در یک دایرکتوری جداگانه قرار می‌گیرند، نیازی به حاشیه‌نویسی <code>#[cfg(test)]</code> ندارند. با این حال، چون تست‌های واحد در همان فایل‌هایی که کد قرار دارد قرار می‌گیرند، از <code>#[cfg(test)]</code> استفاده می‌کنید تا مشخص کنید که نباید در نتیجه کامپایل‌شده قرار گیرند.</p>
+<p>به یاد بیاورید وقتی پروژه جدید <code>adder</code> را در بخش اول این فصل تولید کردیم، Cargo این کد را برای ما تولید کرد:</p>
+<p><span class="filename">نام فایل: src/lib.rs</span></p>
+<pre><code class="language-rust noplayground">pub fn add(left: u64, right: u64) -&gt; u64 {
+    left + right
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        let result = add(2, 2);
+        assert_eq!(result, 4);
+    }
+}</code></pre>
+<p>روی ماژول <code>tests</code> که به طور خودکار تولید شده است، ویژگی <code>cfg</code> مخفف <em>پیکربندی</em> است و به Rust می‌گوید که آیتم زیر فقط در صورت وجود یک گزینه پیکربندی مشخص گنجانده شود. در این مورد، گزینه پیکربندی <code>test</code> است، که توسط Rust برای کامپایل و اجرای تست‌ها ارائه می‌شود. با استفاده از ویژگی <code>cfg</code>، Cargo کد تست ما را فقط در صورتی که تست‌ها را به طور فعال با <code>cargo test</code> اجرا کنیم، کامپایل می‌کند. این شامل هر تابع کمکی که ممکن است در این ماژول باشد نیز می‌شود، علاوه بر توابعی که با <code>#[test]</code> حاشیه‌نویسی شده‌اند.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="testing-private-functions"></a></p>
+<h4 id="private-function-tests"><a class="header" href="#private-function-tests">تست توابع خصوصی</a></h4>
+<p>در جامعه تست‌نویسی بحث‌هایی درباره اینکه آیا توابع خصوصی باید مستقیماً تست شوند یا نه وجود دارد، و برخی زبان‌ها تست کردن توابع خصوصی را دشوار یا غیرممکن می‌کنند. صرف نظر از اینکه از کدام ایدئولوژی تست‌نویسی پیروی می‌کنید، قوانین خصوصی‌سازی Rust به شما اجازه می‌دهند توابع خصوصی را تست کنید. کدی که در لیست ۱۱-۱۲ با تابع خصوصی <code>internal_adder</code> ارائه شده است را در نظر بگیرید.</p>
+<figure class="listing" id="listing-11-12">
+<span class="file-name">Filename: src/lib.rs</span>
+<pre><code class="language-rust noplayground">pub fn add_two(a: u64) -&gt; u64 {
+    internal_adder(a, 2)
+}
+
+fn internal_adder(left: u64, right: u64) -&gt; u64 {
+    left + right
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn internal() {
+        let result = internal_adder(2, 2);
+        assert_eq!(result, 4);
+    }
+}</code></pre>
+<figcaption><a href="#listing-11-12">لیست ۱۱-۱۲</a>: تست یک تابع خصوصی</figcaption>
+</figure>
+<p>توجه داشته باشید که تابع <code>internal_adder</code> به‌صورت <code>pub</code> علامت‌گذاری نشده است.<br> تست‌ها فقط کد Rust هستند و ماژول <code>tests</code> نیز یک ماژول عادی دیگر است.<br> همان‌طور که در بخش <a href="ch07-03-paths-for-referring-to-an-item-in-the-module-tree.html">“مسیرها برای ارجاع به یک آیتم در درخت ماژول”</a><!-- ignore --> بحث کردیم،<br> آیتم‌های ماژول‌های فرزند می‌توانند از آیتم‌های ماژول‌های والد خود استفاده کنند.<br> در این تست، با استفاده از <code>use super::*</code> تمام آیتم‌های ماژول والد <code>tests</code> وارد حوزه می‌شوند،<br> و سپس تست می‌تواند تابع <code>internal_adder</code> را فراخوانی کند.<br> اگر فکر می‌کنید توابع خصوصی نباید تست شوند، در Rust هیچ اجباری برای انجام این کار وجود ندارد.</p>
+<h3 id="integration-tests"><a class="header" href="#integration-tests">تست‌های یکپارچه</a></h3>
+<p>در Rust، تست‌های یکپارچه کاملاً خارجی نسبت به کتابخانه شما هستند. آن‌ها از کتابخانه شما همانطور که هر کد دیگری استفاده می‌کند استفاده می‌کنند، که به این معنی است که فقط می‌توانند توابعی را که بخشی از رابط عمومی کتابخانه شما هستند فراخوانی کنند. هدف آن‌ها این است که بررسی کنند آیا قسمت‌های مختلف کتابخانه شما با یکدیگر به درستی کار می‌کنند یا نه. واحدهای کدی که به تنهایی به درستی کار می‌کنند می‌توانند هنگام یکپارچه‌سازی مشکل داشته باشند، بنابراین پوشش تست کد یکپارچه نیز مهم است. برای ایجاد تست‌های یکپارچه، ابتدا به یک دایرکتوری به نام <em>tests</em> نیاز دارید.</p>
+<h4 id="the-tests-directory"><a class="header" href="#the-tests-directory">دایرکتوری <em>tests</em></a></h4>
+<p>ما یک دایرکتوری به نام <em>tests</em> در سطح بالای دایرکتوری پروژه خود، در کنار <em>src</em> ایجاد می‌کنیم. Cargo می‌داند که باید به دنبال فایل‌های تست یکپارچه در این دایرکتوری بگردد. سپس می‌توانیم به هر تعداد فایل تست که می‌خواهیم ایجاد کنیم، و Cargo هر یک از فایل‌ها را به عنوان یک crate جداگانه کامپایل می‌کند.</p>
+<p>بیایید یک تست یکپارچه ایجاد کنیم. با کدی که هنوز در فایل <em>src/lib.rs</em> از لیست ۱۱-۱۲ قرار دارد، یک دایرکتوری <em>tests</em> ایجاد کنید و یک فایل جدید به نام <em>tests/integration_test.rs</em> بسازید. ساختار دایرکتوری شما باید به این صورت باشد:</p>
+<pre><code class="language-text">adder
+├── Cargo.lock
+├── Cargo.toml
+├── src
+│   └── lib.rs
+└── tests
+    └── integration_test.rs
+</code></pre>
+<p>کد موجود در لیست ۱۱-۱۳ را در فایل <em>tests/integration_test.rs</em> وارد کنید.</p>
+<figure class="listing" id="listing-11-13">
+<span class="file-name">Filename: tests/integration_test.rs</span>
+<pre><code class="language-rust ignore">use adder::add_two;
+
+#[test]
+fn it_adds_two() {
+    let result = add_two(2);
+    assert_eq!(result, 4);
+}</code></pre>
+<figcaption><a href="#listing-11-13">لیست ۱۱-۱۳</a>: یک تست یکپارچه برای تابعی در crate &lt;code&gt;&lt;/x-listing&gt;adder&lt;/code&gt;</figcaption>
+</figure>
+<p>هر فایل در دایرکتوری <em>tests</em> یک crate جداگانه است، بنابراین باید کتابخانهٔ خود را به دامنهٔ هر crate تست وارد کنیم. به همین دلیل در بالای کد <code>use adder::add_two;</code> را اضافه می‌کنیم، که در تست‌های واحد به آن نیازی نداشتیم.</p>
+<p>نیازی نیست هیچ کدی در فایل <em>tests/integration_test.rs</em> را با <code>#[cfg(test)]</code> علامت‌گذاری کنیم. Cargo دایرکتوری <em>tests</em> را به طور خاص مدیریت می‌کند و فایل‌های موجود در این دایرکتوری را فقط زمانی که <code>cargo test</code> اجرا کنیم کامپایل می‌کند. اکنون <code>cargo test</code> را اجرا کنید:</p>
+<pre><code class="language-console">$ cargo test
+   Compiling adder v0.1.0 (file:///projects/adder)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.31s
+     Running unittests src/lib.rs (target/debug/deps/adder-1082c4b063a8fbe6)
+
+running 1 test
+test tests::internal ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/integration_test.rs (target/debug/deps/integration_test-1082c4b063a8fbe6)
+
+running 1 test
+test it_adds_two ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests adder
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+</code></pre>
+<p>سه بخش خروجی شامل تست‌های واحد، تست یکپارچه، و تست‌های مستندات هستند. توجه داشته باشید که اگر هر تستی در یک بخش شکست بخورد، بخش‌های بعدی اجرا نخواهند شد. برای مثال، اگر یک تست واحد شکست بخورد، هیچ خروجی‌ای برای تست‌های یکپارچه و مستندات وجود نخواهد داشت زیرا آن تست‌ها فقط در صورتی اجرا می‌شوند که تمام تست‌های واحد پاس شوند.</p>
+<p>بخش اول برای تست‌های واحد همان چیزی است که قبلاً دیده‌ایم: یک خط برای هر تست واحد (یکی به نام <code>internal</code> که در لیست ۱۱-۱۲ اضافه کردیم) و سپس یک خط خلاصه برای تست‌های واحد.</p>
+<p>بخش تست‌های یکپارچه با خط <code>Running tests/integration_test.rs</code> شروع می‌شود. سپس یک خط برای هر تابع تست در آن تست یکپارچه و یک خط خلاصه برای نتایج تست یکپارچه دقیقاً قبل از شروع بخش <code>Doc-tests adder</code> وجود دارد.</p>
+<p>هر فایل تست یکپارچه بخش خاص خود را دارد، بنابراین اگر فایل‌های بیشتری در دایرکتوری <em>tests</em> اضافه کنیم، بخش‌های بیشتری برای تست‌های یکپارچه خواهیم داشت.</p>
+<p>ما هنوز می‌توانیم یک تابع تست خاص در یکپارچه را با مشخص کردن نام تابع تست به عنوان یک آرگومان برای <code>cargo test</code> اجرا کنیم. برای اجرای تمام تست‌های یک فایل تست یکپارچه خاص، از آرگومان <code>--test</code> برای <code>cargo test</code> به همراه نام فایل استفاده کنید:</p>
+<pre><code class="language-console">$ cargo test --test integration_test
+   Compiling adder v0.1.0 (file:///projects/adder)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.64s
+     Running tests/integration_test.rs (target/debug/deps/integration_test-82e7799c1bc62298)
+
+running 1 test
+test it_adds_two ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+</code></pre>
+<p>این فرمان فقط تست‌های موجود در فایل <em>tests/integration_test.rs</em> را اجرا می‌کند.</p>
+<h4 id="submodules-in-integration-tests"><a class="header" href="#submodules-in-integration-tests">زیرماژول‌ها در تست‌های یکپارچه</a></h4>
+<p>با اضافه کردن تست‌های یکپارچه بیشتر، ممکن است بخواهید فایل‌های بیشتری در دایرکتوری <em>tests</em> برای کمک به سازماندهی آن‌ها ایجاد کنید؛ برای مثال، می‌توانید توابع تست را بر اساس عملکردی که تست می‌کنند گروه‌بندی کنید. همانطور که قبلاً ذکر شد، هر فایل در دایرکتوری <em>tests</em> به عنوان یک crate جداگانه کامپایل می‌شود، که برای ایجاد دامنه‌های جداگانه مفید است تا بیشتر شبیه نحوه استفاده کاربران نهایی از crate شما باشد. با این حال، این به این معنی است که فایل‌های موجود در دایرکتوری <em>tests</em> رفتار یکسانی با فایل‌های موجود در <em>src</em> ندارند، همانطور که در فصل ۷ درباره جدا کردن کد به ماژول‌ها و فایل‌ها آموختید.</p>
+<p>این رفتار متفاوت فایل‌های دایرکتوری <em>tests</em> بیشترین توجه را زمانی جلب می‌کند که مجموعه‌ای از توابع کمکی برای استفاده در چندین فایل تست یکپارچه دارید و سعی می‌کنید مراحل بخش <a href="ch07-05-separating-modules-into-different-files.html">“جدا کردن ماژول‌ها به فایل‌های مختلف”</a><!-- ignore --> در فصل ۷ را برای استخراج آن‌ها به یک ماژول مشترک دنبال کنید. برای مثال، اگر <em>tests/common.rs</em> ایجاد کنیم و یک تابع به نام <code>setup</code> در آن قرار دهیم، می‌توانیم کدی به <code>setup</code> اضافه کنیم که می‌خواهیم از چندین تابع تست در چندین فایل تست فراخوانی کنیم:</p>
+<p><span class="filename">نام فایل: tests/common.rs</span></p>
+<pre><code class="language-rust noplayground">pub fn setup() {
+    // setup code specific to your library's tests would go here
+}</code></pre>
+<p>وقتی دوباره تست‌ها را اجرا می‌کنیم، یک بخش جدید در خروجی تست برای فایل <em>common.rs</em> خواهیم دید، حتی اگر این فایل هیچ تابع تستی ندارد و تابع <code>setup</code> را از هیچ جایی فراخوانی نکرده‌ایم:</p>
+<pre><code class="language-console">$ cargo test
+   Compiling adder v0.1.0 (file:///projects/adder)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.89s
+     Running unittests src/lib.rs (target/debug/deps/adder-92948b65e88960b4)
+
+running 1 test
+test tests::internal ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/common.rs (target/debug/deps/common-92948b65e88960b4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/integration_test.rs (target/debug/deps/integration_test-92948b65e88960b4)
+
+running 1 test
+test it_adds_two ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests adder
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+</code></pre>
+<p>داشتن <code>common</code> در نتایج تست با <code>running 0 tests</code> نمایش داده شده برای آن، چیزی نبود که می‌خواستیم. ما فقط می‌خواستیم برخی کدها را با دیگر فایل‌های تست یکپارچه به اشتراک بگذاریم. برای جلوگیری از نمایش <code>common</code> در خروجی تست، به جای ایجاد <em>tests/common.rs</em>، فایل <em>tests/common/mod.rs</em> را ایجاد می‌کنیم. اکنون ساختار دایرکتوری پروژه به این شکل است:</p>
+<pre><code class="language-text">├── Cargo.lock
+├── Cargo.toml
+├── src
+│   └── lib.rs
+└── tests
+    ├── common
+    │   └── mod.rs
+    └── integration_test.rs
+</code></pre>
+<p>این روش نام‌گذاری قدیمی‌تر است که Rust نیز آن را می‌شناسد و در بخش <a href="ch07-05-separating-modules-into-different-files.html#alternate-file-paths">“مسیرهای فایل جایگزین”</a><!-- ignore --> در فصل ۷ به آن اشاره کردیم.<br> نام‌گذاری فایل به این صورت به Rust می‌گوید که ماژول <code>common</code> را به عنوان یک فایل تست یکپارچه (integration test) در نظر نگیرد.<br> وقتی کد تابع <code>setup</code> را به فایل <em>tests/common/mod.rs</em> منتقل کنیم و فایل <em>tests/common.rs</em> را حذف کنیم،<br> بخش مربوطه در خروجی تست دیگر ظاهر نخواهد شد.<br> فایل‌های موجود در زیرشاخه‌های دایرکتوری <em>tests</em> به صورت crateهای جداگانه کامپایل نمی‌شوند<br> و در خروجی تست نیز بخش مجزایی ندارند.</p>
+<p>پس از ایجاد <em>tests/common/mod.rs</em>، می‌توانیم از آن به عنوان یک ماژول در هر یک از فایل‌های تست یکپارچه استفاده کنیم. در اینجا یک مثال از فراخوانی تابع <code>setup</code> از تست <code>it_adds_two</code> در <em>tests/integration_test.rs</em> آمده است:</p>
+<p><span class="filename">نام فایل: tests/integration_test.rs</span></p>
+<pre><code class="language-rust ignore">use adder::add_two;
+
+mod common;
+
+#[test]
+fn it_adds_two() {
+    common::setup();
+
+    let result = add_two(2);
+    assert_eq!(result, 4);
+}</code></pre>
+<p>توجه داشته باشید که اعلان <code>mod common;</code> مشابه اعلان ماژولی است که در لیست ۷-۲۱ نشان دادیم. سپس، در تابع تست، می‌توانیم تابع <code>common::setup()</code> را فراخوانی کنیم.</p>
+<h4 id="integration-tests-for-binary-crates"><a class="header" href="#integration-tests-for-binary-crates">تست‌های یکپارچه برای crate‌های دودویی</a></h4>
+<p>اگر پروژه ما یک crate دودویی باشد که فقط شامل یک فایل <em>src/main.rs</em> است و فایل <em>src/lib.rs</em> ندارد، نمی‌توانیم تست‌های یکپارچه را در دایرکتوری <em>tests</em> ایجاد کنیم و توابع تعریف‌شده در فایل <em>src/main.rs</em> را با یک عبارت <code>use</code> به دامنه وارد کنیم. فقط crate‌های کتابخانه‌ای توابعی را که سایر crate‌ها می‌توانند استفاده کنند در معرض قرار می‌دهند؛ crate‌های دودویی برای اجرای مستقل طراحی شده‌اند.</p>
+<p>این یکی از دلایلی است که پروژه‌های Rust که یک دودویی ارائه می‌دهند، معمولاً یک فایل <em>src/main.rs</em> ساده دارند که به منطق موجود در فایل <em>src/lib.rs</em> فراخوانی می‌کند. با استفاده از این ساختار، تست‌های یکپارچه می‌توانند crate کتابخانه‌ای را با <code>use</code> تست کنند تا قابلیت مهم را در دسترس قرار دهند. اگر قابلیت مهم کار کند، مقدار کمی کد در فایل <em>src/main.rs</em> نیز کار خواهد کرد، و نیازی به تست آن مقدار کم از کد نیست.</p>
+<h2 id="summary"><a class="header" href="#summary">خلاصه</a></h2>
+<p>ویژگی‌های تست‌نویسی در Rust راهی برای مشخص کردن نحوه عملکرد کد فراهم می‌کنند تا اطمینان حاصل شود که کد همانطور که انتظار می‌رود کار می‌کند، حتی زمانی که تغییراتی در آن ایجاد می‌کنید. تست‌های واحد بخش‌های مختلف یک کتابخانه را به طور جداگانه آزمایش می‌کنند و می‌توانند جزئیات پیاده‌سازی خصوصی را تست کنند. تست‌های یکپارچه بررسی می‌کنند که آیا بخش‌های مختلف کتابخانه به درستی با یکدیگر کار می‌کنند یا نه، و از رابط عمومی کتابخانه برای تست کد به همان روشی که کد خارجی از آن استفاده می‌کند، استفاده می‌کنند. حتی با وجود اینکه سیستم نوع‌ها و قوانین مالکیت در Rust به جلوگیری از برخی انواع باگ‌ها کمک می‌کند، تست‌ها همچنان برای کاهش باگ‌های منطقی که به نحوه عملکرد مورد انتظار کد مربوط می‌شوند، مهم هستند.</p>
+<p>بیایید دانش خود را که در این فصل و فصل‌های قبلی یاد گرفتید، ترکیب کرده و روی یک پروژه کار کنیم!</p><nav class="page-nav"><a href="ch11-02-running-tests.html">→ کنترل نحوهٔ اجرای آزمون‌ها</a><a href="ch12-00-an-io-project.html">یک پروژهٔ ورودی/خروجی: ساخت یک برنامهٔ خط فرمان ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

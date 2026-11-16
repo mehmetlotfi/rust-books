@@ -1,0 +1,48 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>E0591 — راهنمای خطاهای کامپایلر</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="E0591"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../errors/E0001.html" style="color:inherit;text-decoration:none">راهنمای خطاهای کامپایلر</a><small class="en-title" dir="ltr">Compiler Error Index</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><p>بر اساس <a href="https://rust-lang.github.io/rfcs/0401-coercions.html">RFC 401</a>، اگر یک اعلان تابع <code>foo</code> داشته باشید:</p>
+<pre><code>struct S;
+
+// For the purposes of this explanation, all of these
+// different kinds of `fn` declarations are equivalent:
+
+fn foo(x: S) { /* ... */ }
+# #[cfg(for_demonstration_only)]
+extern "C" {
+    fn foo(x: S);
+}
+# #[cfg(for_demonstration_only)]
+impl S {
+    fn foo(self) { /* ... */ }
+}
+</code></pre>
+<p>نوع <code>foo</code> برخلاف انتظار <strong><code>fn(S)</code> نیست</strong>. بلکه یک نوع نشانگر منحصربه‌فرد با اندازه‌ی صفر است که در اینجا به‌صورت <code>typeof(foo)</code> نوشته می‌شود. با این حال، <code>typeof(foo)</code> را می‌توان به یک اشاره‌گر تابع <code>fn(S)</code> <em>تبدیل (coerce)</em> کرد، به همین دلیل به‌ندرت متوجه این موضوع می‌شوید:</p>
+<pre><code># struct S;
+# fn foo(_: S) {}
+let x: fn(S) = foo; // OK, coerces
+</code></pre>
+<p>دلیل اهمیت این موضوع آن است که نوع <code>fn(S)</code> مختص هیچ تابع خاصی نیست: این یک <em>اشاره‌گر</em> تابع است. بنابراین فراخوانی <code>x()</code> به یک فراخوانی مجازی (virtual call) منجر می‌شود، در حالی که <code>foo()</code> به‌صورت ایستا ارسال (dispatch) می‌شود، چون نوع <code>foo</code> دقیقاً مشخص می‌کند که کدام تابع فراخوانی می‌شود.</p>
+<p>همان‌طور که گفته شد، تبدیل‌های خودکار باعث می‌شوند بیشتر کدها نیازی نداشته باشند نگران این تمایز باشند. با این حال، وقتی از <strong>transmute</strong> برای تبدیل یک آیتم fn به یک اشاره‌گر fn استفاده می‌کنید، می‌توانید تفاوت را ببینید.</p>
+<p>این کار گاهی به‌عنوان بخشی از FFI انجام می‌شود:</p>
+<pre><code class="language-compile_fail E0591">extern "C" fn foo(userdata: Box&lt;i32&gt;) {
+    /* ... */
+}
+
+# fn callback(_: extern "C" fn(*mut i32)) {}
+# use std::mem::transmute;
+unsafe {
+    let f: extern "C" fn(*mut i32) = transmute(foo);
+    callback(f);
+}
+</code></pre>
+<p>در اینجا transmute برای تبدیل نوع آرگومان‌های fn استفاده شده است. این الگو نادرست است، زیرا نوع <code>foo</code> یک <strong>آیتم</strong> تابع (<code>typeof(foo)</code>) است که اندازه‌ی صفر دارد، در حالی که نوع هدف (<code>fn()</code>) یک اشاره‌گر تابع است که اندازه‌ی صفر ندارد. این الگو باید بازنویسی شود. چند راه ممکن برای این کار وجود دارد:</p>
+<ul>
+<li>اعلان اصلی fn را تغییر دهید تا با امضای مورد انتظار مطابقت داشته باشد و تبدیل را در بدنه‌ی fn انجام دهید (گزینه‌ی ترجیحی)</li>
+<li>پیش از فراخوانی transmute، آیتم fn را به یک اشاره‌گر fn تبدیل (cast) کنید، همان‌طور که در اینجا نشان داده شده است:</li>
+</ul>
+<pre><code># extern "C" fn foo(_: Box&lt;i32&gt;) {}
+# use std::mem::transmute;
+# unsafe {
+let f: extern "C" fn(*mut i32) = transmute(foo as extern "C" fn(_));
+let f: extern "C" fn(*mut i32) = transmute(foo as usize); // works too
+# }
+</code></pre>
+<p>همین موضوع درباره‌ی transmuteها به <code>*mut fn()</code> که در عمل مشاهده شده‌اند نیز صدق می‌کند. البته توجه کنید که استفاده از این نوع معمولاً نادرست است. هدف معمولاً توصیف یک اشاره‌گر تابع است، اما خودِ <code>fn()</code> به‌تنهایی برای این منظور کافی است. <code>*mut fn()</code> یک اشاره‌گر به یک اشاره‌گر fn است. (با این حال، از آنجا که این مقادیر معمولاً فقط به کد C پاس داده می‌شوند، در عمل به‌ندرت تفاوتی ایجاد می‌کند.)</p><nav class="page-nav"><a href="../errors/E0590.html">→ E0590</a><a href="../errors/E0592.html">E0592 ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../errors/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

@@ -1,0 +1,54 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>auto-traits — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/auto-traits"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="auto_traits"><a class="header" href="#auto_traits"><code>auto_traits</code></a></h1>
+<p>issue ردیابی این قابلیت <a href="https://github.com/rust-lang/rust/issues/13231">#13231</a> است.</p>
+<hr>
+<p>قابلیت <code>auto_traits</code> به شما اجازه می‌دهد صفت‌های خودکار (auto trait) تعریف کنید.</p>
+<p>Auto traitها، مانند <a href="https://doc.rust-lang.org/std/marker/trait.Send.html"><code>Send</code></a> یا <a href="https://doc.rust-lang.org/std/marker/trait.Sync.html"><code>Sync</code></a> در کتابخانهٔ استاندارد، traitهای نشانگر (marker) هستند که به‌طور خودکار برای هر نوعی پیاده‌سازی می‌شوند، مگر اینکه آن نوع یا نوعی که در خود دارد از طریق یک پیاده‌سازی منفی (negative impl) صراحتاً از آن انصراف داده باشد. (پیاده‌سازی‌های منفی جداگانه توسط قابلیت <code>negative_impls</code> کنترل می‌شوند.)</p>
+<pre><code class="language-rust ignore (partial-example)">impl !Trait for Type {}</code></pre>
+<p>مثال:</p>
+<pre><code class="language-rust">#![feature(negative_impls)]
+#![feature(auto_traits)]
+
+auto trait Valid {}
+
+struct True;
+struct False;
+
+impl !Valid for False {}
+
+struct MaybeValid&lt;T&gt;(T);
+
+fn must_be_valid&lt;T: Valid&gt;(_t: T) { }
+
+fn main() {
+    // works
+    must_be_valid( MaybeValid(True) );
+
+    // compiler error - trait bound not satisfied
+    // must_be_valid( MaybeValid(False) );
+}</code></pre>
+<h2 id="automatic-trait-implementations"><a class="header" href="#automatic-trait-implementations">پیاده‌سازی‌های خودکار صفت</a></h2>
+<p>وقتی نوعی به‌صورت <code>auto trait</code> اعلام شود، برای هر struct/enum/union به‌طور خودکار پیاده‌سازی ایجاد می‌کنیم، مگر اینکه پیاده‌سازی صریحی ارائه شده باشد. این پیاده‌سازی‌های خودکار برای هر فیلد یک عبارت where به شکل <code>T: AutoTrait</code> دارند، که در آن <code>T</code> نوع فیلد و <code>AutoTrait</code> همان صفت خودکار مورد نظر است. به‌عنوان مثال، struct به نام <code>List</code> و صفت خودکار <code>Send</code> را در نظر بگیرید:</p>
+<pre><code class="language-rust">struct List&lt;T&gt; {
+  data: T,
+  next: Option&lt;Box&lt;List&lt;T&gt;&gt;&gt;,
+}</code></pre>
+<p>با فرض اینکه هیچ پیاده‌سازی صریحی از <code>Send</code> برای <code>List</code> وجود نداشته باشد، کامپایلر یک پیاده‌سازی خودکار به شکل زیر فراهم می‌کند:</p>
+<pre><code class="language-rust">struct List&lt;T&gt; {
+  data: T,
+  next: Option&lt;Box&lt;List&lt;T&gt;&gt;&gt;,
+}
+
+unsafe impl&lt;T&gt; Send for List&lt;T&gt;
+where
+  T: Send, // from the field `data`
+  Option&lt;Box&lt;List&lt;T&gt;&gt;&gt;: Send, // from the field `next`
+{ }</code></pre>
+<p>پیاده‌سازی‌های صریح می‌توانند مثبت یا منفی باشند. شکل آن‌ها به این صورت است:</p>
+<pre><code class="language-rust ignore (partial-example)">impl&lt;...&gt; AutoTrait for StructName&lt;..&gt; { }
+impl&lt;...&gt; !AutoTrait for StructName&lt;..&gt; { }</code></pre>
+<h2 id="coinduction-auto-traits-permit-cyclic-matching"><a class="header" href="#coinduction-auto-traits-permit-cyclic-matching">هم‌استقرایی (Coinduction): صفت‌های خودکار تطبیق دوری را مجاز می‌کنند</a></h2>
+<p>برخلاف تطبیق معمول صفت‌ها، صفت‌های خودکار <strong>هم‌استقرایی</strong> (coinductive) هستند. این یعنی، به‌اختصار، دورهایی که در تطبیق صفت رخ می‌دهند قابل‌قبول‌اند. به‌عنوان مثال، struct بازگشتی <code>List</code> را که در بخش قبل معرفی شد در نظر بگیرید. هنگام تلاش برای تعیین اینکه آیا <code>List: Send</code> برقرار است، به یک دور می‌رسیم: برای اعمال پیاده‌سازی باید نشان دهیم که <code>Option&lt;Box&lt;List&gt;&gt;: Send</code>، که به نوبه‌ی خود به <code>Box&lt;List&gt;: Send</code> و سپس در نهایت دوباره به <code>List: Send</code> نیاز دارد. در تطبیق معمول صفت، این دور یک خطا خواهد بود، اما برای یک صفت خودکار تطبیق موفق به حساب می‌آید.</p>
+<h2 id="items"><a class="header" href="#items">آیتم‌ها</a></h2>
+<p>صفت‌های خودکار نمی‌توانند هیچ آیتم صفتی مانند متد یا نوع وابسته (associated type) داشته باشند. این تضمین می‌کند که بتوانیم پیاده‌سازی‌های پیش‌فرض تولید کنیم.</p>
+<h2 id="supertraits"><a class="header" href="#supertraits">Supertraitها (ابَرصفت‌ها)</a></h2>
+<p>صفت‌های خودکار نمی‌توانند ابَرصفت داشته باشند. دلیل این امر صحت (soundness) است، چون تعامل هم‌استقرا با کران‌های ضمنی (implied bounds) به‌سختی قابل‌تطبیق است.</p><nav class="page-nav"><a href="../../unstable/language-features/asm-unwind.html">→ asm-unwind</a><a href="../../unstable/language-features/cfg-sanitize.html">cfg-sanitize ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

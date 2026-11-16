@@ -1,0 +1,94 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>بهینه‌سازی مبتنی بر پروفایل — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="profile-guided-optimization"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="profile-guided-optimization"><a class="header" href="#profile-guided-optimization">بهینه‌سازی مبتنی بر پروفایل (Profile-guided optimization)</a></h1>
+<p><code>rustc</code> از بهینه‌سازی مبتنی بر پروفایل (PGO) پشتیبانی می‌کند.
+این فصل توضیح می‌دهد PGO چیست و پشتیبانی از آن در <code>rustc</code> چگونه پیاده‌سازی شده است.</p>
+<h2 id="what-is-profiled-guided-optimization"><a class="header" href="#what-is-profiled-guided-optimization">بهینه‌سازی مبتنی بر پروفایل چیست؟</a></h2>
+<p>ایدهٔ اصلی PGO این است که دادهٔ مربوط به اجرای معمول یک برنامه (مثلاً اینکه احتمالاً کدام شاخه‌ها را طی می‌کند) جمع‌آوری شود و سپس از این داده برای هدایت بهینه‌سازی‌هایی مانند درون‌خطی‌سازی (inlining)، چیدمان کد ماشین، تخصیص ثبات (register allocation) و مانند آن‌ها استفاده شود.</p>
+<p>راه‌های گوناگونی برای جمع‌آوری داده دربارهٔ اجرای یک برنامه وجود دارد.
+یکی اجرای برنامه درون یک پروفایلر (مانند <code>perf</code>) است و دیگری
+ساخت یک باینری ابزارگذاری‌شده (instrumented)، یعنی باینری‌ای که جمع‌آوری داده
+در آن تعبیه شده است، و اجرای آن.
+راه دوم معمولاً داده‌های دقیق‌تری فراهم می‌کند.</p>
+<h2 id="how-is-pgo-implemented-in-rustc"><a class="header" href="#how-is-pgo-implemented-in-rustc">PGO در <code>rustc</code> چگونه پیاده‌سازی شده است؟</a></h2>
+<p><code>rustc</code> در پیاده‌سازی فعلی PGO کاملاً به LLVM متکی است.
+LLVM در واقع <a href="https://clang.llvm.org/docs/UsersManual.html#profile-guided-optimization">از چند شکل</a> PGO پشتیبانی می‌کند:</p>
+<ul>
+<li>PGO مبتنی بر نمونه‌برداری (sampling)، که در آن از یک ابزار پروفایل‌گیری بیرونی مانند <code>perf</code>
+برای جمع‌آوری داده دربارهٔ اجرای برنامه استفاده می‌شود.</li>
+<li>پروفایل‌گیری مبتنی بر GCOV، که در آن از زیرساخت پوشش کد برای جمع‌آوری
+اطلاعات پروفایل استفاده می‌شود.</li>
+<li>ابزارگذاری مبتنی بر فرانت‌اند، که در آن فرانت‌اند کامپایلر (مثلاً Clang)
+intrinsicهای ابزارگذاری را در LLVM IRای که تولید می‌کند درج می‌کند (اما به
+<sup class="footnote-reference" id="fr-note-instrument-coverage-1"><a href="#footnote-note-instrument-coverage">1</a></sup>«نکته» نگاه کنید).</li>
+<li>ابزارگذاری در سطح IR، که در آن خود LLVM در طول passهای بهینه‌سازی
+intrinsicهای ابزارگذاری را درج می‌کند.</li>
+</ul>
+<p><code>rustc</code> تنها از رویکرد آخر، یعنی ابزارگذاری در سطح IR، پشتیبانی می‌کند، عمدتاً
+چون تقریباً به‌طور کامل در LLVM پیاده‌سازی شده است و در سمت Rust به نگهداری اندکی نیاز دارد.
+خوشبختانه این رویکرد در عین حال مدرن‌ترین روش است
+و بهترین نتایج را به دست می‌دهد.</p>
+<p>بنابراین با یک رویکرد مبتنی بر ابزارگذاری سروکار داریم، یعنی داده‌های پروفایل
+توسط نسخه‌ای از برنامه که به‌طور ویژه ابزارگذاری شده و در حال بهینه‌سازی است تولید می‌شوند.
+PGO مبتنی بر ابزارگذاری دو مؤلفه دارد: یک مؤلفهٔ زمان کامپایل
+و یک مؤلفهٔ زمان اجرا، و برای دیدن چگونگی تعامل آن‌ها باید
+گردش کار کلی را فهمید.</p>
+<h3 id="overall-workflow"><a class="header" href="#overall-workflow">گردش کار کلی</a></h3>
+<p>تولید یک برنامهٔ بهینه‌شده با PGO شامل چهار گام زیر است:</p>
+<ol>
+<li>برنامه را با فعال‌بودن ابزارگذاری کامپایل کنید (مثلاً <code>rustc -C profile-generate main.rs</code>)</li>
+<li>برنامهٔ ابزارگذاری‌شده را اجرا کنید (مثلاً <code>./main</code>) که یک فایل <code>default-&lt;id&gt;.profraw</code> تولید می‌کند</li>
+<li>فایل <code>.profraw</code> را به یک فایل <code>.profdata</code> تبدیل کنید، با ابزار <code>llvm-profdata</code> در LLVM.</li>
+<li>برنامه را دوباره کامپایل کنید، این بار با استفاده از داده‌های پروفایل
+(مثلاً <code>rustc -C profile-use=merged.profdata main.rs</code>)</li>
+</ol>
+<h3 id="compile-time-aspects"><a class="header" href="#compile-time-aspects">جنبه‌های زمان کامپایل</a></h3>
+<p>بسته به اینکه در کدام گام از گردش کار بالا باشیم، دو اتفاق متفاوت
+ممکن است در زمان کامپایل رخ دهد:</p>
+<h4 id="create-binaries-with-instrumentation"><a class="header" href="#create-binaries-with-instrumentation">ساخت باینری‌ها با ابزارگذاری</a></h4>
+<p>همان‌طور که در بالا گفته شد، ابزارگذاری پروفایل‌گیری توسط LLVM افزوده می‌شود.
+<code>rustc</code> هنگام ساخت <code>PassManager</code>های LLVM با <a href="https://github.com/rust-lang/rust/blob/1.34.1/src/rustllvm/PassWrapper.cpp#L412-L416">تنظیم پرچم‌های مناسب</a>
+به LLVM دستور می‌دهد این کار را انجام دهد:</p>
+<pre><code class="language-C">	// `PMBR` is an `LLVMPassManagerBuilderRef`
+    unwrap(PMBR)-&gt;EnablePGOInstrGen = true;
+    // Instrumented binaries have a default output path for the `.profraw` file
+    // hard-coded into them:
+    unwrap(PMBR)-&gt;PGOInstrGen = PGOGenPath;
+</code></pre>
+<p><code>rustc</code> همچنین باید مطمئن شود که برخی از نمادهای (symbol) محیط اجرای پروفایل‌گیری LLVM
+حذف نمی‌شوند؛ این کار <a href="https://github.com/rust-lang/rust/blob/1.34.1/src/librustc_codegen_ssa/back/symbol_export.rs#L212-L225">با علامت‌گذاری آن‌ها با سطح صادرسازی (export level) مناسب</a> انجام می‌شود.</p>
+<h4 id="compile-binaries-where-optimizations-make-use-of-profiling-data"><a class="header" href="#compile-binaries-where-optimizations-make-use-of-profiling-data">کامپایل باینری‌هایی که بهینه‌سازی‌های آن‌ها از داده‌های پروفایل استفاده می‌کنند</a></h4>
+<p>در گام نهایی گردش کار توصیف‌شده در بالا، برنامه دوباره کامپایل می‌شود
+و کامپایلر از داده‌های پروفایل جمع‌آوری‌شده برای هدایت تصمیم‌های بهینه‌سازی استفاده می‌کند.
+<code>rustc</code> در اینجا نیز بیشتر کار را به LLVM واگذار می‌کند
+و اساساً <a href="https://github.com/rust-lang/rust/blob/1.34.1/src/rustllvm/PassWrapper.cpp#L417-L420">فقط به</a> <code>PassManagerBuilder</code> در LLVM
+می‌گوید داده‌های پروفایل کجا قرار دارند:</p>
+<pre><code class="language-C">	unwrap(PMBR)-&gt;PGOInstrUse = PGOUsePath;
+</code></pre>
+<p>بقیهٔ کار را LLVM انجام می‌دهد (مثلاً تنظیم وزن شاخه‌ها، علامت‌گذاری توابع با
+<code>cold</code> یا <code>inlinehint</code> و مانند آن).</p>
+<h3 id="runtime-aspects"><a class="header" href="#runtime-aspects">جنبه‌های زمان اجرا</a></h3>
+<p>رویکردهای مبتنی بر ابزارگذاری همیشه یک مؤلفهٔ زمان اجرا نیز دارند، یعنی
+پس از داشتن یک برنامهٔ ابزارگذاری‌شده، باید آن برنامه اجرا شود
+تا داده‌های پروفایل تولید شوند، و جمع‌آوری و ماندگارکردن این
+داده‌ها به مقداری زیرساخت نیاز دارد.</p>
+<p>در مورد LLVM، این مؤلفه‌های زمان اجرا در
+<a href="https://github.com/llvm/llvm-project/tree/main/compiler-rt/lib/profile">compiler-rt</a> پیاده‌سازی شده‌اند و به‌صورت ایستا به هر باینری ابزارگذاری‌شده لینک می‌شوند.
+نسخهٔ <code>rustc</code> از این مؤلفه‌ها در <code>library/profiler_builtins</code> قرار دارد که
+اساساً کد C موجود در <code>compiler-rt</code> را در یک crate از Rust بسته‌بندی می‌کند.</p>
+<p>برای اینکه <code>profiler_builtins</code> ساخته شود، باید <code>profiler = true</code>
+در پیکربندی <code>rustc</code>، یعنی فایل <code>bootstrap.toml</code>، تنظیم شده باشد.</p>
+<h2 id="testing-pgo"><a class="header" href="#testing-pgo">آزمودن PGO</a></h2>
+<p>از آنجا که گردش کار PGO چند فراخوانی کامپایلر را در بر می‌گیرد، بیشتر آزمودن در
+<a href="https://github.com/rust-lang/rust/tree/HEAD/tests/run-make">آزمون‌های run-make</a> انجام می‌شود (آزمون‌های مربوطه عبارت <code>pgo</code> را در نام خود دارند).
+همچنین یک <a href="https://github.com/rust-lang/rust/blob/HEAD/tests/codegen-llvm/pgo-instrumentation.rs">آزمون تولید کد (codegen)</a> وجود دارد که بررسی می‌کند برخی
+آرتیفکت‌های ابزارگذاری مورد انتظار در LLVM IR ظاهر شوند.</p>
+<h2 id="additional-information"><a class="header" href="#additional-information">اطلاعات بیشتر</a></h2>
+<p>مستندات Clang مروری خوب بر <a href="https://clang.llvm.org/docs/UsersManual.html#profile-guided-optimization">PGO در LLVM</a> دارد.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-note-instrument-coverage">
+<p>نکته: <code>rustc</code> اکنون از ابزارگذاری پوشش مبتنی بر فرانت‌اند
+پشتیبانی می‌کند، از طریق گزینهٔ آزمایشی
+<a href="./llvm-coverage-instrumentation.html"><code>-C instrument-coverage</code></a>، اما استفاده از این
+نتایج پوشش برای PGO تاکنون امتحان نشده است. <a href="#fr-note-instrument-coverage-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="backend/libs-and-metadata.html">→ کتابخانه‌ها و فراداده</a><a href="llvm-coverage-instrumentation.html">پوشش کد مبتنی بر منبع LLVM ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

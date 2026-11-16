@@ -1,0 +1,451 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>جست‌وجو — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="rustdoc-internals/search"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="rustdoc-search"><a class="header" href="#rustdoc-search">Rustdoc search</a></h1>
+<p>Rustdoc Search دو برنامه است: <code>search_index.rs</code> و <code>search.js</code>.
+اولی یک فایل JSON پیچیده با فهرست کامل آیتم‌ها و امضای توابع
+در crateهای بستهٔ مستندات تولید می‌کند، و دومی
+آن را می‌خواند، به ساختارهای درون‌حافظه تبدیل می‌کند و برای جست‌وجو آن‌ها را به‌صورت خطی اسکن می‌کند.</p>
+<h2 id="search-index-format"><a class="header" href="#search-index-format">Search index format</a></h2>
+<p><code>search.js</code> این را Raw می‌نامد، چون پس از بارگذاری آن را به درخت شیء عادی‌تری تبدیل می‌کند.
+برای صرفه‌جویی فضا، بدون خط جدید و فاصله هم نوشته می‌شود.</p>
+<pre><code class="language-json">[
+    [ "crate_name", {
+        // name
+        "n": ["function_name", "Data"],
+        // type
+        "t": "HF",
+        // parent module
+        "q": [[0, "crate_name"]],
+        // parent type
+        "i": [2, 0],
+        // type dictionary
+        "p": [[1, "i32"], [1, "str"], [5, "Data", 0]],
+        // function signature
+        "f": "{{gb}{d}}`", // [[3, 1], [2]]
+        // impl disambiguator
+        "b": [],
+        // deprecated flag
+        "c": "OjAAAAAAAAA=", // empty bitmap
+        // empty description flag
+        "e": "OjAAAAAAAAA=", // empty bitmap
+        // aliases
+        "a": [["get_name", 0]],
+        // description shards
+        "D": "g", // 3
+        // inlined re-exports
+        "r": [],
+    }]
+]
+</code></pre>
+<p><a href="https://github.com/rust-lang/rust/blob/2f92f050e83bf3312ce4ba73c31fe843ad3cbc60/src/librustdoc/html/static/js/rustdoc.d.ts#L344-L390"><code>src/librustdoc/html/static/js/rustdoc.d.ts</code></a> یک طرح‌وارهٔ (schema) واقعی را در یک <code>type</code> در TypeScript تعریف می‌کند.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Name</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>n</code></td><td>Names</td><td>Item names</td></tr>
+<tr><td><code>t</code></td><td>Item Type</td><td>کد نوع آیتم یک‌نویسه‌ای</td></tr>
+<tr><td><code>q</code></td><td>Parent module</td><td><code>Map&lt;index, path&gt;</code></td></tr>
+<tr><td><code>i</code></td><td>Parent type</td><td>فهرست اندیس‌ها</td></tr>
+<tr><td><code>f</code></td><td>Function signature</td><td><a href="#i-f-and-p">encoded</a></td></tr>
+<tr><td><code>b</code></td><td>Impl disambiguator</td><td><code>Map&lt;index, string&gt;</code></td></tr>
+<tr><td><code>c</code></td><td>Deprecation flag</td><td><a href="#roaring-bitmaps">roaring bitmap</a></td></tr>
+<tr><td><code>e</code></td><td>توضیح خالی است</td><td><a href="#roaring-bitmaps">roaring bitmap</a></td></tr>
+<tr><td><code>p</code></td><td>Type dictionary</td><td><code>[[item type, path]]</code></td></tr>
+<tr><td><code>a</code></td><td>Alias</td><td><code>Map&lt;string, index&gt;</code></td></tr>
+<tr><td><code>D</code></td><td>description shards</td><td><a href="#how-descriptions-are-stored">encoded</a></td></tr>
+</tbody>
+</table>
+</div>
+<p>اندیس بالا یک crate به نام <code>crate_name</code> تعریف می‌کند
+با یک تابع آزاد به نام <code>function_name</code> و یک struct به نام <code>Data</code>،
+با امضای نوع <code>Data, i32 -&gt; str</code>،
+و یک نام مستعار، <code>get_name</code>، که به‌طور معادل به <code>function_name</code> اشاره می‌کند.</p>
+<p>فهرست جست‌وجو باید نیازهای کامپایلر <code>rustdoc</code>،
+فرانت‌اند <code>search.js</code> را برآورده کند
+و در عین حال فشرده و سریع برای دیکد کردن باشد.
+بسیاری مصالحه‌ها دارد:</p>
+<ul>
+<li>کامپایلر <code>rustdoc</code> هر بار روی یک crate اجرا می‌شود،
+پس هر crate اساساً فهرست جست‌وجوی جداگانه دارد.
+آن‌ها را <a href="https://github.com/rust-lang/rust/blob/79b710c13968a1a48d94431d024d2b1677940866/src/librustdoc/html/render/write_shared.rs#L151-L164">ادغام می‌کند</a> با گذاشتن هر crate در یک خط و نگاه‌کردن به اولین رشتهٔ داخل نقل‌قول.</li>
+<li>نام‌ها در فهرست جست‌وجو با حروف اصلی و زیرخط داده می‌شوند.
+هنگام بارگذاری فهرست جست‌وجو،
+<code>search.js</code> نام‌های اصلی را برای نمایش نگه می‌دارد،
+اما آن‌ها را برای جست‌وجو به حروف کوچک تبدیل و زیرخط‌ها را حذف می‌کند.
+آن‌ها را با نام <code>normalized</code> خواهید دید.</li>
+<li>آرایهٔ <code>f</code> نوع‌ها را به‌صورت آفست در آرایهٔ <code>p</code> ذخیره می‌کند.
+این نوع‌ها ممکن است واقعاً از crate دیگری باشند،
+پس <code>search.js</code> باید اعداد را به نام تبدیل کند و سپس
+دوباره به عدد تبدیل کند تا اگر چند crate در یک
+فهرست به نوع‌های یکسانی اشاره کنند تکراری‌ها حذف شوند.</li>
+<li>فایل JSON است، اما برای خوانایی انسان طراحی نشده.
+مرورگرها از قبل دیکودر JSON بهینه دارند،
+پس این کد <code>search.js</code> را کم می‌کند و برای crateهای کوچک عملکرد بهتری دارد،
+اما به‌جای استفاده از اشیا مثل قالب‌های JSON معمول،
+سعی می‌کند داده‌های هم‌نوع را کنار هم بگذارد
+تا پنجرهٔ لغزندهٔ مورد استفادهٔ <a href="https://en.wikipedia.org/wiki/Deflate">DEFLATE</a> بتواند افزونگی‌ها را بیابد.
+جایی که <code>search.js</code> فشرده‌سازی خودش را انجام می‌دهد،
+طراحی شده تا هنگام بارگذاری نهایی فایل حافظه صرفه‌جویی کند،
+نه فقط اندازهٔ روی دیسک یا انتقال شبکه.</li>
+</ul>
+<h3 id="parallel-arrays-and-indexed-maps"><a class="header" href="#parallel-arrays-and-indexed-maps">آرایه‌های موازی و نقشه‌های اندیس‌دار</a></h3>
+<p>به‌طور انتزاعی، داده‌های Rustdoc Search جدولی است که به‌صورت ستون‌محور (column-major) ذخیره می‌شود.
+بیشتر داده‌های فهرست مجموعه‌ای از آرایه‌های موازی («ستون‌ها») را نشان می‌دهد
+که اگر در یک موقعیت باشند به داده‌های یکسانی اشاره دارند.</p>
+<p>برای مثال،
+فهرست جست‌وجوی بالا را می‌توان به این جدول تبدیل کرد:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th>n</th><th>t</th><th><a href="#how-descriptions-are-stored">d</a></th><th>q</th><th>i</th><th>f</th><th>b</th><th>c</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td><code>crate_name</code></td><td><code>D</code></td><td>Documentation</td><td>NULL</td><td>0</td><td>NULL</td><td>NULL</td><td>0</td></tr>
+<tr><td>1</td><td><code>function_name</code></td><td><code>H</code></td><td>این تابع نام یک عدد صحیح را همراه با Data می‌گیرد</td><td><code>crate_name</code></td><td>2</td><td><code>{{gb}{d}}</code></td><td>NULL</td><td>0</td></tr>
+<tr><td>2</td><td><code>Data</code></td><td><code>F</code></td><td>struct مربوط به داده</td><td><code>crate_name</code></td><td>0</td><td><code>`</code></td><td>NULL</td><td>0</td></tr>
+</tbody>
+</table>
+</div>
+<p>ردیف crate در بیشتر ستون‌ها ضمنی است، چون نوعش مشخص است (crate است)،
+نمی‌تواند والد داشته باشد (crateها ریشهٔ درخت ماژول‌اند)،
+نامش به‌عنوان کلید نقشه مشخص می‌شود،
+و داده‌های مخصوص تابع مثل disambiguator مربوط به impl هم نمی‌توانند اعمال شوند.
+اما همچنان می‌تواند توضیح داشته باشد و می‌تواند منسوخ شود.
+بنابراین crate کلید اصلی <code>0</code> دارد.</p>
+<p>کد بالا از <code>c</code> که اندیس‌های منسوخ را نگه می‌دارد،
+یا <code>b</code> که اندیس‌ها را به رشته‌ها نگاشت می‌کند استفاده نمی‌کند.
+اگر <code>crate_name::function_name</code> از هر دو استفاده می‌کرد، شبیه این می‌شد.</p>
+<pre><code class="language-json">        "b": [[0, "impl-Foo-for-Bar"]],
+        "c": "OjAAAAEAAAAAAAIAEAAAABUAbgZYCQ==",
+</code></pre>
+<p>این یک disambiguator را به اندیس 1 متصل و آن را منسوخ علامت می‌زند.</p>
+<p>مزیت این چیدمان این است که این APIها اغلب ساختار ضمنی دارند
+که DEFLATE می‌تواند از آن بهره ببرد،
+اما rustdoc نمی‌تواند آن را فرض کند.
+مثل اینکه نام‌ها معمولاً CamelCase یا snake_case هستند،
+اما توضیحات نه.
+همچنین استفاده از داده‌های پراکنده (sparse) را برای چیزهایی مثل پرچم‌های بولی آسان‌تر می‌کند.</p>
+<p><code>q</code> یک Map از <em>اولین شناسهٔ قابل‌اعمال</em> به مسیر ماژول والد است.
+این ترفند عجیبی است، اما در شبه‌کد معنادارتر است:</p>
+<pre><code class="language-rust">let mut parent_module = "";
+for (i, entry) in search_index.iter().enumerate() {
+    if q.contains(i) {
+        parent_module = q.get(i);
+    }
+    // ... do other stuff with `entry` ...
+}</code></pre>
+<p>این معتبر است چون هر چیزی ماژول والد دارد (حتی اگر فقط خود crate باشد)،
+و جمع‌آوری آن آسان است چون تولیدکنندهٔ rustdoc پیش از سریالایز بر اساس مسیر مرتب می‌کند.
+این کار به rustdoc اجازه می‌دهد نه‌فقط فهرست جست‌وجو را کوچک‌تر کند،
+بلکه همان رشتهٔ نمایندهٔ مسیر والد را بین چند آیتم درون‌حافظه دوباره استفاده کند.</p>
+<h3 id="representing-sparse-columns"><a class="header" href="#representing-sparse-columns">Representing sparse columns</a></h3>
+<h4 id="vlq-hex"><a class="header" href="#vlq-hex">VLQ Hex</a></h4>
+<p>تا جایی که می‌دانم این قالب جایی غیر از rustdoc استفاده نمی‌شود.
+از این گرامر پیروی می‌کند:</p>
+<pre><code class="language-ebnf">VLQHex = { VHItem | VHBackref }
+VHItem = VHNumber | ( '{', {VHItem}, '}' )
+VHNumber = { '@' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N' | 'O' }, ( '`' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k ' | 'l' | 'm' | 'n' | 'o' )
+VHBackref = ( '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | ':' | ';' | '&lt;' | '=' | '&gt;' | '?' )
+</code></pre>
+<p>VHNumber عدد base16 با طول متغیر و خودخاتمه‌یاب است
+(خاتمه‌یاب است چون آخرین رقم hex با حروف کوچک است در حالی که همهٔ بقیه با حروف بزرگ‌اند).
+بیت علامت با <a href="https://en.wikipedia.org/wiki/Variable-length_quantity#Zigzag_encoding">zig-zag encoding</a> نمایش داده می‌شود.</p>
+<p>این الفبا انتخاب شده چون نویسه‌ها را می‌توان با
+ماسک‌کردن چهار بیت آخر کدگذاری ASCII به رقم hex تبدیل کرد.</p>
+<p>ویژگی اصلی این کدگذاری، مثل همهٔ «فشرده‌سازی»های انجام‌شده در rustdoc،
+این است که می‌تواند <em>حتی در حافظه هنگام اجرا</em> در قالب فشرده بماند.
+به همین دلیل <code>HBackref</code> فقط در سطح بالا استفاده می‌شود،
+و به همین دلیل برای همه‌چیز فقط از <a href="https://en.wikipedia.org/wiki/Deflate">Flate</a> استفاده نمی‌کنیم: دیکودر در search.js
+هر بار که backref ببیند کل شیء دیکدشده را دوباره استفاده می‌کند،
+که در کار دیکد و حافظه صرفه‌جویی می‌کند.</p>
+<h4 id="roaring-bitmaps"><a class="header" href="#roaring-bitmaps">Roaring Bitmaps</a></h4>
+<p>داده‌های سبک پرچم، مثل منسوخ‌بودن و توضیحات خالی،
+با <a href="https://github.com/RoaringBitmap/RoaringFormatSpec">قالب استاندارد سریالایز Roaring Bitmap با runها</a> ذخیره می‌شوند.
+سپس داده هنگام نوشتن با base64 کدگذاری می‌شود.</p>
+<p>به‌عنوان مرور کوتاه: roaring bitmap آرایهٔ تکه‌تکه‌ای از بیت‌هاست،
+که در <a href="https://arxiv.org/pdf/1603.06549.pdf">این مقاله</a> شرح داده شده.
+یک تکه می‌تواند فهرستی از اعداد صحیح، یک bitfield، یا فهرستی از runها باشد.
+در هر صورت، موتور جست‌وجو باید آن را base64 دیکد کند
+و خود اندیس تکه را بخواند،
+اما داده‌های payload همان‌طور که هستند می‌مانند.</p>
+<p>همهٔ roaring bitmapها در rustdoc فعلاً برای هر اندیس آیتم یک پرچم ذخیره می‌کنند.
+crate آیتم 0 است و همهٔ بقیه از 1 شروع می‌شوند.</p>
+<h3 id="how-descriptions-are-stored"><a class="header" href="#how-descriptions-are-stored">توضیحات چگونه ذخیره می‌شوند</a></h3>
+<p>بزرگ‌ترین حجم داده،
+و چیز اصلی‌ای که Rustdoc Search با آن سروکار دارد اما واقعاً
+برای جست‌وجو استفاده نمی‌شود، توضیحات است.
+در جدول SERP، این چیزی است که در ستون سمت راست ظاهر می‌شود.</p>
+<p>item type | item path | item path             | <em><strong>description</strong></em> (this part)                       |</p>
+<blockquote>
+<p>| ——— | ——————— | ————————————————— |
+function | my_crate::my_function  | my_crate::my_function | This function gets the name of an integer with Data |</p>
+</blockquote>
+<p>وقتی کسی برای اولین بار در rustdoc جست‌وجو می‌کند، مرورگرش
+یک «بار کاری ساندویچی» سه‌گامی را طی می‌کند:</p>
+<ol>
+<li>دانلود فایل‌های search-index.js و search.js (گلوگاه شبکه).</li>
+<li>انجام جست‌وجوی واقعی (گلوگاه CPU و پهنای باند حافظه).</li>
+<li>دانلود داده‌های توضیحات (گلوگاه شبکه دیگر).</li>
+</ol>
+<p>کاهش مقدار داده‌های دانلودشده در اینجا تقریباً همیشه تأخیر را افزایش می‌دهد،
+چون تصمیم دربارهٔ اینکه چه چیزی دانلود شود را پشت کارهای دیگر به تأخیر می‌اندازد و/یا
+وابستگی‌های داده‌ای اضافه می‌کند که چیزی بدون دانلود چیز دیگر قابل‌دانلود نیست.
+در این مورد، نمی‌توانیم دانلود توضیحات را پیش از
+پایان جست‌وجو شروع کنیم، چون همین است که اجازه می‌دهد تصمیم بگیرد <em>کدام</em>
+توضیحات دانلود شوند (باید نتایج را مرتب کند و سپس به 200 کوتاه کند).</p>
+<p>برای این کار، دو ستون در فهرست جست‌وجو ذخیره می‌شود که بر روی
+Roaring Bitmapها و VLQ Hex ساخته شده‌اند.</p>
+<ul>
+<li><code>e</code> فهرست توضیحات <strong>خ</strong>الی (<strong>e</strong>mpty) است.
+یک <a href="#roaring-bitmaps">roaring bitmap</a> از هر آیتم است (خود crate آیتم 0 است و بقیه از 1 شروع می‌شوند).</li>
+<li><code>D</code> فهرست shardها است که در <a href="#vlq-hex">VLQ hex</a> به‌صورت فهرست تخت اعداد صحیح ذخیره می‌شود.
+هر عدد صحیح تعداد توضیحات در shard را می‌دهد.
+وقتی دیکودر فهرست را پیمایش می‌کند، بررسی می‌کند آیا توضیح خالی است.
+اگر نباشد، در shard «فعلی» است.
+وقتی همهٔ آیتم‌ها تمام شدند، به shard بعدی می‌رود.</li>
+</ul>
+<p>درون هر shard فهرستی از توضیحات جداشده با خط جدید هست،
+که در فراخوانی تابع به سبک JSONP پیچیده شده است.</p>
+<h3 id="i-f-and-p"><a class="header" href="#i-f-and-p"><code>i</code>, <code>f</code>, and <code>p</code></a></h3>
+<p><code>i</code> و <code>f</code> هر دو به <code>p</code>، آرایهٔ آیتم‌های والد، اندیس می‌دهند.</p>
+<p><code>i</code> فقط یک عدد با اندیس یک است
+(نه اندیس صفر چون <code>0</code> برای آیتم‌هایی است که آیتم والد ندارند).
+با <code>q</code> فرق دارد چون <code>q</code> <em>ماژول یا crate</em> والد را نشان می‌دهد،
+که همه‌چیز دارد،
+در حالی که <code>i</code>/<code>q</code> برای <em>آیتم‌های مرتبط با نوع و trait</em> مثل متدها به‌کار می‌روند.</p>
+<p><code>f</code>، امضاهای تابع، از درخت <a href="#vlq-hex">VLQ hex</a> استفاده می‌کند.
+عدد یا ارجاع با اندیس یک به <code>p</code> است،
+یا عدد منفی که جنریک را نشان می‌دهد،
+یا صفر برای null.</p>
+<p>(نمایش داخلی شیء هم، حتی پس از دیکد،
+از اعداد منفی برای نمایش جنریک‌ها استفاده می‌کند).</p>
+<p>برای مثال، <code>{{gb}{d}}</code> معادل JSON با نام <code>[[3, 1], [2]]</code> است.
+به‌دلیل zigzag encoding، <code>`</code> برابر +0، <code>a</code> برابر -0 (که استفاده نمی‌شود)،
+<code>b</code> برابر +1 و <code>c</code> برابر -1 است.</p>
+<h2 id="searching-by-name"><a class="header" href="#searching-by-name">جست‌وجو بر اساس نام</a></h2>
+<p>جست‌وجو بر اساس نام با پیمایش فهرست جست‌وجو و اجرای این توابع روی هر ورودی انجام می‌شود:</p>
+<ul>
+<li><a href="https://github.com/rust-lang/rust/blob/79b710c13968a1a48d94431d024d2b1677940866/src/librustdoc/html/static/js/search.js#L137"><code>editDistance</code></a> همیشه برای تعیین تطابق استفاده می‌شود
+(مگر اینکه نقل‌قول مشخص شده باشد، که در آن صورت برابری ساده به‌کار می‌رود).
+تعداد جابه‌جایی‌ها، درج‌ها و حذف‌های لازم برای تبدیل
+نام کوئری به نام ورودی را محاسبه می‌کند.
+برای مثال، <code>foo</code> فاصلهٔ صفر از خودش دارد،
+اما فاصلهٔ 1 از <code>ofo</code> (یک جابه‌جایی) و <code>foob</code> (یک درج).
+با آستانهٔ ابتکاری سنجیده می‌شود و سپس،
+اگر درون آن آستانه باشد، فاصله برای رتبه‌بندی ذخیره می‌شود.</li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/indexOf"><code>String.prototype.indexOf</code></a> همیشه برای تعیین تطابق استفاده می‌شود.
+اگر چیزی غیر از -1 برگرداند، نتیجه افزوده می‌شود،
+حتی اگر <code>editDistance</code> از آستانه‌اش بگذرد،
+و اندیس برای رتبه‌بندی ذخیره می‌شود.</li>
+<li><a href="https://github.com/rust-lang/rust/blob/79b710c13968a1a48d94431d024d2b1677940866/src/librustdoc/html/static/js/search.js#L1814"><code>checkPath</code></a> فقط و فقط وقتی استفاده می‌شود که مسیر والد در کوئری مشخص شده باشد.
+برای مثال، <code>vec</code> مسیر والد ندارد، اما <code>vec::vec</code> دارد.
+درون checkPath، editDistance و indexOf به‌کار می‌روند،
+و کوئری مسیر آستانهٔ ابتکاری خودش را هم دارد.
+اگر درون آستانه نباشد، ورودی رد می‌شود،
+حتی اگر دو مورد اول بگذرند.
+اگر درون آستانه باشد، فاصلهٔ مسیر برای رتبه‌بندی ذخیره می‌شود.</li>
+<li><a href="https://github.com/rust-lang/rust/blob/79b710c13968a1a48d94431d024d2b1677940866/src/librustdoc/html/static/js/search.js#L1787"><code>checkType</code></a> فقط وقتی استفاده می‌شود که فیلتر نوع وجود داشته باشد،
+مثل struct در <code>struct:vec</code>.
+اگر شکست بخورد،
+ورودی رد می‌شود.</li>
+</ul>
+<p>اگر هر چهار معیار بگذرند (به‌علاوهٔ فیلتر crate، که از نظر فنی بخشی از کوئری نیست)،
+نتایج با <a href="https://github.com/rust-lang/rust/blob/79b710c13968a1a48d94431d024d2b1677940866/src/librustdoc/html/static/js/search.js#L1229"><code>sortResults</code></a> مرتب می‌شوند.</p>
+<h2 id="searching-by-type"><a class="header" href="#searching-by-type">جست‌وجو بر اساس نوع</a></h2>
+<p>جست‌وجو بر اساس نوع را می‌توان به دو فاز تقسیم کرد،
+و فاز دوم دو زیرفاز دارد.</p>
+<ul>
+<li>نام‌های کوئری را به عدد تبدیل کنید.</li>
+<li>Loop over each entry in the search index:
+<ul>
+<li>رد سریع با استفاده از bloom filter.</li>
+<li>رد کند با الگوریتم بازگشتی یکپارچه‌سازی نوع (type unification).</li>
+</ul>
+</li>
+</ul>
+<p>در فاز نام‌ها←اعداد، اگر کوئری فقط یک نام داشته باشد،
+تابع editDistance برای یافتن تطابق نزدیک وقتی تطابق دقیق شکست بخورد به‌کار می‌رود،
+اما اگر چند آیتم در کوئری باشد،
+آیتم‌های نامنطبق به‌جای آن مثل جنریک در نظر گرفته می‌شوند.
+یعنی <code>hahsmap</code> به‌تنهایی hashmap را تطبیق می‌دهد، اما <code>hahsmap, u32</code>
+همان چیزهایی را تطبیق می‌دهد که <code>T, u32</code> تطبیق می‌دهد
+(هرچند rustdoc این مشکل خاص را تشخیص می‌دهد و هشدار می‌دهد).</p>
+<p>سپس، هنگام پیمایش واقعی هر آیتم،
+bloom filter احتمالاً ورودی‌هایی را که همهٔ نوع‌های ذکرشده در کوئری را ندارند رد می‌کند.
+برای مثال، کوئری bloom اجازه می‌دهد کوئری <code>i32 -&gt; u32</code> با
+تابعی با نوع <code>i32, u32 -&gt; bool</code> تطبیق شود،
+اما یکپارچه‌سازی (unification) بعداً آن را رد می‌کند.</p>
+<p>فیلتر unification تضمین می‌کند:</p>
+<ul>
+<li>معناشناسی کیسه (bag) رعایت می‌شود.
+اگر کوئری شما <code>i32, i32</code> بگوید،
+تابع باید <em>دو</em> i32 را ذکر کند، نه فقط یکی.</li>
+<li>معناشناسی تو در تو رعایت می‌شود.
+اگر کوئری شما <code>vec&lt;option&gt;</code> بگوید،
+آن‌گاه <code>vec&lt;option&lt;i32&gt;&gt;</code> مشکلی ندارد، اما <code>option&lt;vec&lt;i32&gt;&gt;</code> <em>تطبیق نمی‌شود</em>.</li>
+<li>تفکیک بین نوع بازگشتی و پارامتر رعایت می‌شود.
+<code>i32 -&gt; u32</code> و <code>u32 -&gt; i32</code> کاملاً متفاوت‌اند.</li>
+</ul>
+<p>bloom filter هیچ‌کدام از این‌ها را بررسی نمی‌کند،
+و علاوه بر آن می‌تواند مثبت کاذب داشته باشد.
+اما سریع است و حافظهٔ بسیار کمی مصرف می‌کند، پس bloom filter کمک می‌کند.</p>
+<h2 id="re-exports"><a class="header" href="#re-exports">Re-exports</a></h2>
+<p><a href="../../rustdoc/write-documentation/re-exports.html">inline کردن re-export</a> اجازه می‌دهد یک آیتم با چند نام یافت شود.
+جست‌وجو این را با دادن چند ورودی به همان آیتم و ردیابی مسیر canonical
+برای آیتم‌هایی که با مسیر داده‌شده فرق دارد پشتیبانی می‌کند.</p>
+<p>برای مثال، این فهرست نمونه یک struct را دارد که از دو مسیر export شده است:</p>
+<pre><code class="language-json">[
+    [ "crate_name", {
+        "doc": "Documentation",
+        "n": ["Data", "Data"],
+        "t": "FF",
+        "d": ["The data struct", "The data struct"],
+        "q": [[0, "crate_name"], [1, "crate_name::submodule"]],
+        "i": [0, 0],
+        "p": [],
+        "f": "``",
+        "b": [],
+        "c": [],
+        "a": [],
+        "r": [[0, 1]],
+    }]
+]
+</code></pre>
+<p>بخش مهم این مثال آرایهٔ <code>r</code> است،
+که نشان می‌دهد ورودی مسیر 1 در آرایهٔ <code>q</code> مسیر canonical برای آیتم 0 است.
+یعنی <code>crate_name::Data</code> مسیر canonical برابر <code>crate_name::submodule::Data</code> دارد.</p>
+<p>این ممکن است طراحی عجیبی به نظر برسد، چون داده‌های تکراری دارد.
+دلیلش این است که inline کردن می‌تواند بین crateها رخ دهد،
+که جداگانه کامپایل می‌شوند و ممکن است همه در مستندات حضور نداشته باشند.</p>
+<pre><code class="language-json">[
+  [ "crate_name", ... ],
+  [ "crate_name_2", { "q": [[0, "crate_name::submodule"], [5, "core::option"]], ... }]
+]
+</code></pre>
+<p>در مثال بالا، یک مسیر canonical در واقع از یک وابستگی می‌آید،
+و دیگری از آیتم inline‌شدهٔ کتابخانهٔ استاندارد:
+مسیر canonical حتی در فهرست نیست!
+مسیر canonical ممکن است خصوصی هم باشد.
+در هر دو مورد هرگز به کاربر نشان داده نمی‌شود و فقط برای حذف تکراری‌ها به‌کار می‌رود.</p>
+<p>نوع‌های وابسته، مثل متدها، آن‌ها را متفاوت ذخیره می‌کنند.
+این نوع‌ها با یک ورودی در <code>p</code> («والد» آن‌ها) مرتبط‌اند
+و هر کدام یک عنصر سوم اختیاری در tuple دارند:</p>
+<pre><code>"p": [[5, "Data", 0, 1]]
+</code></pre>
+<p>That’s:</p>
+<ul>
+<li>5: این یک struct است</li>
+<li>«Data»: نام آن</li>
+<li>0: مسیر نمایش آن، «crate_name»</li>
+<li>1: مسیر canonical آن، «crate_name::submodule»</li>
+</ul>
+<p>در هر دو مورد، مسیر canonical ممکن است اصلاً عمومی نباشد،
+یا ممکن است از crate دیگری باشد که در مستندات نیست،
+پس هرگز به کاربر نشان داده نمی‌شود اما برای حذف تکراری‌ها به‌کار می‌رود.</p>
+<h2 id="testing-the-search-engine"><a class="header" href="#testing-the-search-engine">تست موتور جست‌وجو</a></h2>
+<p>در حالی که UI تولیدشده با تست‌های <code>rustdoc-gui</code> تست می‌شود،
+راه اصلی تست موتور جست‌وجو تست‌های <code>rustdoc-js</code> و <code>rustdoc-js-std</code> است.
+آن‌ها در NodeJS اجرا می‌شوند.</p>
+<p>تست <code>rustdoc-js</code> یک فایل <code>.rs</code> و یک فایل <code>.js</code> با نام یکسان دارد.
+فایل <code>.rs</code> crate کتابخانهٔ فرضی را که جست‌وجوها روی آن اجرا می‌شوند مشخص می‌کند
+(مطمئن شوید هر چیزی را که باید یافت شود <code>pub</code> علامت زده‌اید).
+فایل <code>.js</code> جست‌وجوهای واقعی را مشخص می‌کند.
+تست‌های <code>rustdoc-js-std</code> مشابه‌اند، اما فایل <code>.rs</code>
+لازم ندارند، چون از کتابخانهٔ استاندارد استفاده می‌کنند.</p>
+<p>فایل <code>.js</code> مثل یک ماژول است (جز اینکه loader مدیریت <code>exports</code> را برایتان انجام می‌دهد).
+از این متغیرها استفاده می‌کند:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>FILTER_CRATE</code></td><td><code>string</code></td><td>فقط نتایج crate داده‌شده را شامل شود. در GUI این منوی کشویی «Results in <kbd>crate</kbd>» است.</td></tr>
+<tr><td><code>EXPECTED</code></td><td><code>[ResultsTable]|ResultsTable</code></td><td>فهرست تست‌هایی که باید اجرا شوند و مشخص می‌کنند کاربر فرضی در کادر جست‌وجو چه تایپ می‌کند و در تب‌ها چه می‌بیند</td></tr>
+<tr><td><code>PARSED</code></td><td><code>[ParsedQuery]|ParsedQuery</code></td><td>فهرست تست‌های parser که باید بدون اجرای جست‌وجوی واقعی اجرا شوند</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>FILTER_CRATE</code> را می‌توان حذف کرد (معادل جست‌وجو در «همهٔ crateها»)، اما
+باید <code>EXPECTED</code> یا <code>PARSED</code> را مشخص کنید.</p>
+<p>به‌طور پیش‌فرض، تست شکست می‌خورد اگر هر یک از نتایج مشخص‌شده در مورد تست
+پس از اجرای جست‌وجو یافت نشود، یا اگر نتایج یافت‌شده پس از اجرای
+جست‌وجو به همان ترتیب تست ظاهر نشوند.
+نتایج واقعی جست‌وجو اما ممکن است نتایجی داشته باشند که در تست نیستند.
+برای بازنویسی این، هر یک از کامنت‌های جادویی زیر را مشخص کنید.
+آن‌ها را در خط جداگانه و بدون تورفتگی بگذارید.</p>
+<ul>
+<li><code>// exact-check</code>: اگر نتایج جست‌وجویی ظاهر شوند که بخشی از مورد تست نیستند،
+آن‌گاه شکست بخور.</li>
+<li><code>// ignore-order</code>: اجازه بده نتایج جست‌وجو به هر ترتیب ظاهر شوند.</li>
+<li><code>// should-fail</code>: برای نوشتن تست‌های منفی به‌کار می‌رود.</li>
+</ul>
+<p>تست‌های کتابخانهٔ استاندارد معمولاً نباید <code>// exact-check</code> مشخص کنند، چون
+می‌خواهیم تیم libs بتواند آیتم‌های جدید اضافه کند بدون اینکه باعث شکست
+تست‌های نامرتبط شود، اما تست‌های مستقل بیشتر از آن استفاده می‌کنند.</p>
+<p>نوع‌های <code>ResultsTable</code> و <code>ParsedQuery</code> در
+<a href="https://github.com/rust-lang/rust/blob/HEAD/src/librustdoc/html/static/js/rustdoc.d.ts"><code>rustdoc.d.ts</code></a> مشخص شده‌اند.</p>
+<p>برای مثال، تصور کنید باید باگی را رفع کنیم که در آن تابعی به نام <code>constructor</code> یافت نمی‌شد.
+برای این کار دو فایل بنویسید:</p>
+<pre><code class="language-rust">// tests/rustdoc-js/constructor_search.rs
+// The test case needs to find this result.
+pub fn constructor(_input: &amp;str) -&gt; i32 { 1 }</code></pre>
+<pre><code class="language-js">// tests/rustdoc-js/constructor_search.js
+// exact-check
+// Since this test runs against its own crate,
+// new items should not appear in the search results.
+const EXPECTED = [
+  // This first test targets name-based search.
+  {
+    query: "constructor",
+    others: [
+      { path: "constructor_search", name: "constructor" },
+    ],
+    in_args: [],
+    returned: [],
+  },
+  // This test targets the second tab.
+  {
+    query: "str",
+    others: [],
+    in_args: [
+      { path: "constructor_search", name: "constructor" },
+    ],
+    returned: [],
+  },
+  // This test targets the third tab.
+  {
+    query: "i32",
+    others: [],
+    in_args: [],
+    returned: [
+      { path: "constructor_search", name: "constructor" },
+    ],
+  },
+  // This test targets advanced type-driven search.
+  {
+    query: "str -&gt; i32",
+    others: [
+      { path: "constructor_search", name: "constructor" },
+    ],
+    in_args: [],
+    returned: [],
+  },
+]
+</code></pre>
+<p>اگر directive با نام <a href="../tests/compiletest.html#revisions"><code>//@ revisions</code></a> استفاده شود، فایل JS به
+متغیری به نام <code>REVISION</code> دسترسی خواهد داشت.</p>
+<pre><code class="language-js">const EXPECTED = [
+  // This first test targets name-based search.
+  {
+    query: "constructor",
+    others: REVISION === "has_constructor" ?
+      [
+        { path: "constructor_search", name: "constructor" },
+      ] :
+      [],
+    in_args: [],
+    returned: [],
+  },
+];
+</code></pre><nav class="page-nav"><a href="../rustdoc-internals.html">→ درونیات Rustdoc</a><a href="rustdoc-html-test-suite.html">مجموعه آزمون rustdoc-html ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

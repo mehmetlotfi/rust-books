@@ -1,0 +1,48 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../../assets/theme.js"></script><title>قرار دادن خطاها در Box — Rust با مثال</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../../assets/favicon.svg"><link rel="manifest" href="../../../manifest.webmanifest"><link rel="stylesheet" href="../../../assets/style.css"><link rel="stylesheet" href="../../../assets/highlight.css"></head><body data-page="error/multiple_error_types/boxing_errors"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../../rbe/index.html" style="color:inherit;text-decoration:none">Rust با مثال</a><small class="en-title" dir="ltr">Rust By Example</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="boxing-errors"><a class="header" href="#boxing-errors">قراردادن خطاها در <code>Box</code></a></h1>
+<p>یک راه نوشتن کد ساده با حفظ خطاهای اصلی، قراردادن آن‌ها در <a href="https://doc.rust-lang.org/std/boxed/struct.Box.html"><code>Box</code></a> است. عیب آن این است که نوع زیرین خطا فقط هنگام اجرا معلوم است و <a href="https://doc.rust-lang.org/book/ch17-02-trait-objects.html#trait-objects-perform-dynamic-dispatch">به‌صورت ایستا تعیین نمی‌شود</a>.</p>
+<p>کتابخانهٔ استاندارد با اینکه <code>Box</code> تبدیل از هر نوعی را که صفت <code>Error</code> را پیاده‌سازی می‌کند به شیء صفت <code>Box&lt;Error&gt;</code> پیاده‌سازی کرده است، از طریق <a href="https://doc.rust-lang.org/std/convert/trait.From.html"><code>From</code></a> به جعبه‌کردن (boxing) خطاهای ما کمک می‌کند.</p>
+<pre><code class="language-rust editable">use std::error;
+use std::fmt;
+
+// Change the alias to use `Box&lt;dyn error::Error&gt;`.
+type Result&lt;T&gt; = std::result::Result&lt;T, Box&lt;dyn error::Error&gt;&gt;;
+
+#[derive(Debug, Clone)]
+struct EmptyVec;
+
+impl fmt::Display for EmptyVec {
+    fn fmt(&amp;self, f: &amp;mut fmt::Formatter) -&gt; fmt::Result {
+        write!(f, "invalid first item to double")
+    }
+}
+
+impl error::Error for EmptyVec {}
+
+fn double_first(vec: Vec&lt;&amp;str&gt;) -&gt; Result&lt;i32&gt; {
+    vec.first()
+        .ok_or_else(|| EmptyVec.into()) // Converts to Box using Into trait.
+        .and_then(|s| {
+            s.parse::&lt;i32&gt;()
+                .map_err(From::from) // Converts to Box using From::from fn pointer.
+                .map(|i| 2 * i)
+        })
+}
+
+fn print(result: Result&lt;i32&gt;) {
+    match result {
+        Ok(n) =&gt; println!("The first doubled is {}", n),
+        Err(e) =&gt; println!("Error: {}", e),
+    }
+}
+
+fn main() {
+    let numbers = vec!["42", "93", "18"];
+    let empty = vec![];
+    let strings = vec!["tofu", "93", "18"];
+
+    print(double_first(numbers));
+    print(double_first(empty));
+    print(double_first(strings));
+}</code></pre>
+<h3 id="see-also"><a class="header" href="#see-also">همچنین ببینید</a></h3>
+<p><a href="https://doc.rust-lang.org/book/ch17-02-trait-objects.html#trait-objects-perform-dynamic-dispatch">ارسال پویا</a> و <a href="https://doc.rust-lang.org/std/error/trait.Error.html">صفت <code>Error</code></a></p><nav class="page-nav"><a href="../../../rbe/error/multiple_error_types/define_error_type.html">→ تعریف نوع خطا</a><a href="../../../rbe/error/multiple_error_types/reenter_question_mark.html">کاربردهای دیگر ? ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../../index.html">کتابخانه</a><a href="../../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../../rbe/toc.js"></script><script src="../../../assets/highlight.js"></script><script src="../../../assets/app.js"></script></body></html>

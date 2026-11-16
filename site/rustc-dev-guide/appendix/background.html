@@ -1,0 +1,191 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>پیوست الف: مباحث پیش‌زمینه — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="appendix/background"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="background-topics"><a class="header" href="#background-topics">موضوعات پیش‌زمینه</a></h1>
+<p>این بخش تعدادی از اصطلاحات رایج کامپایلر را که در این راهنما پیش می‌آید پوشش می‌دهد. می‌کوشیم تعریف کلی را بیان کنیم و در عین حال زمینه‌ای مختص Rust هم ارائه دهیم.</p>
+<p><a id="cfg"></a></p>
+<h2 id="what-is-a-control-flow-graph"><a class="header" href="#what-is-a-control-flow-graph">گراف جریان کنترل چیست؟</a></h2>
+<p>گراف جریان کنترل (control-flow graph یا CFG) اصطلاحی رایج در کامپایلرهاست. اگر تا به حال از فلوچارت استفاده کرده باشید، مفهوم گراف جریان کنترل برایتان کاملاً آشنا خواهد بود. این گراف نمایشی از برنامهٔ شماست که جریان کنترل زیربنایی را به‌روشنی آشکار می‌کند.</p>
+<p>یک گراف جریان کنترل به‌صورت مجموعه‌ای از <strong>بلوک‌های پایه</strong> (basic blocks) ساخته می‌شود که با یال‌ها به هم متصل‌اند. ایدهٔ اصلی بلوک پایه این است که مجموعه‌ای از دستورهاست که «با هم» اجرا می‌شوند؛ یعنی هر وقت به یک بلوک پایه شاخه می‌زنید، از اولین دستور شروع می‌کنید و سپس همهٔ باقی‌مانده را اجرا می‌کنید. فقط در انتهای بلوک امکان شاخه‌زدن به بیش از یک مقصد وجود دارد (در MIR به آن دستور پایانی <strong>terminator</strong> می‌گوییم):</p>
+<pre><code class="language-mir">bb0: {
+    statement0;
+    statement1;
+    statement2;
+    ...
+    terminator;
+}
+</code></pre>
+<p>بسیاری از عبارت‌هایی که در Rust به آن‌ها عادت دارید به چند بلوک پایه کامپایل می‌شوند. برای مثال، یک دستور if را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">a = 1;
+if some_variable {
+    b = 1;
+} else {
+    c = 1;
+}
+d = 1;</code></pre>
+<p>این کد در MIR به چهار بلوک پایه کامپایل می‌شود. در شکل متنی چنین به نظر می‌رسد:</p>
+<pre><code class="language-mir">BB0: {
+    a = 1;
+    if some_variable {
+        goto BB1;
+    } else {
+        goto BB2;
+    }
+}
+
+BB1: {
+    b = 1;
+    goto BB3;
+}
+
+BB2: {
+    c = 1;
+    goto BB3;
+}
+
+BB3: {
+    d = 1;
+    ...
+}
+</code></pre>
+<p>در شکل گرافیکی چنین به نظر می‌رسد:</p>
+<pre><code>                BB0
+       +--------------------+
+       | a = 1;             |
+       +--------------------+
+             /       \
+  if some_variable   else
+           /           \
+     BB1  /             \  BB2
+    +-----------+   +-----------+
+    | b = 1;    |   | c = 1;    |
+    +-----------+   +-----------+
+            \          /
+             \        /
+              \ BB3  /
+            +----------+
+            | d = 1;   |
+            | ...      |
+            +----------+
+</code></pre>
+<p>هنگام استفاده از گراف جریان کنترل، یک حلقه به‌سادگی به‌صورت یک دور در گراف ظاهر می‌شود و کلیدواژهٔ <code>break</code> به مسیری برای خروج از آن دور ترجمه می‌شود.</p>
+<p><a id="dataflow"></a></p>
+<h2 id="what-is-a-dataflow-analysis"><a class="header" href="#what-is-a-dataflow-analysis">تحلیل جریان داده چیست؟</a></h2>
+<p><a href="https://cs.au.dk/~amoeller/spa/"><em>Static Program Analysis</em></a> نوشتهٔ Anders Møller و Michael I. Schwartzbach منبعی فوق‌العاده است!</p>
+<p><em>تحلیل جریان داده</em> (dataflow analysis) نوعی تحلیل ایستا است که در بسیاری از کامپایلرها رایج است. این اصطلاح یک تکنیک کلی را توصیف می‌کند، نه یک تحلیل خاص.</p>
+<p>ایدهٔ اصلی این است که می‌توانیم روی یک <a href="#cfg">گراف جریان کنترل (CFG)</a> پیمایش کنیم و ردیابی کنیم که یک مقدار چه می‌تواند باشد. در پایان پیمایش، ممکن است نشان داده باشیم که یک ادعا درست است یا لزوماً درست نیست (مثلاً «این متغیر باید مقداردهی اولیه شده باشد»). <code>rustc</code> معمولاً تحلیل‌های جریان داده را روی MIR انجام می‌دهد، چون MIR از قبل یک CFG است.</p>
+<p>برای مثال، فرض کنید می‌خواهیم بررسی کنیم که <code>x</code> پیش از استفاده در این قطعه کد مقداردهی اولیه شده است:</p>
+<pre><code class="language-rust ignore">fn foo() {
+    let mut x;
+
+    if some_cond {
+        x = 1;
+    }
+
+    dbg!(x);
+}</code></pre>
+<p>یک CFG برای این کد ممکن است چنین به نظر برسد:</p>
+<pre><code class="language-txt"> +------+
+ | Init | (A)
+ +------+
+    |   \
+    |   if some_cond
+  else    \ +-------+
+    |      \| x = 1 | (B)
+    |       +-------+
+    |      /
+ +---------+
+ | dbg!(x) | (C)
+ +---------+
+</code></pre>
+<p>تحلیل جریان داده را می‌توانیم این‌گونه انجام دهیم: با یک پرچم <code>init</code> شروع می‌کنیم که نشان می‌دهد آیا می‌دانیم <code>x</code> مقداردهی اولیه شده است یا نه. هنگام پیمایش CFG، این پرچم را به‌روز می‌کنیم. در پایان می‌توانیم مقدارش را بررسی کنیم.</p>
+<p>پس ابتدا در بلوک (A)، متغیر <code>x</code> اعلان شده اما مقداردهی اولیه نشده است، بنابراین <code>init = false</code>. در بلوک (B) مقدار را مقداردهی اولیه می‌کنیم، پس می‌دانیم <code>x</code> مقداردهی اولیه شده است. بنابراین در انتهای (B)، <code>init = true</code>.</p>
+<p>بلوک (C) جایی است که کار جالب می‌شود. توجه کنید که دو یال ورودی وجود دارد، یکی از (A) و یکی از (B)، که مربوط به درست بودن یا نبودن <code>some_cond</code> هستند. اما ما نمی‌توانیم این را بدانیم! ممکن است <code>some_cond</code> همیشه درست باشد، به‌طوری که <code>x</code> در واقع همیشه مقداردهی اولیه شده باشد. همچنین ممکن است <code>some_cond</code> به چیزی تصادفی (مثلاً زمان) بستگی داشته باشد، پس <code>x</code> ممکن است مقداردهی اولیه نشده باشد. در حالت کلی نمی‌توانیم به‌صورت ایستا بدانیم (به دلیل <a href="https://en.wikipedia.org/wiki/Rice%27s_theorem">قضیهٔ رایس</a>). پس مقدار <code>init</code> در بلوک (C) باید چه باشد؟</p>
+<p>به‌طور کلی، در تحلیل‌های جریان داده، اگر یک بلوک چند والد داشته باشد (مانند (C) در مثال ما)، مقدار جریان داده‌اش تابعی از همهٔ والدهایش خواهد بود (و البته آنچه در (C) رخ می‌دهد). اینکه کدام تابع را به کار ببریم به تحلیلی که انجام می‌دهیم بستگی دارد.</p>
+<p>در این مورد، می‌خواهیم بتوانیم قطعاً ثابت کنیم که <code>x</code> باید پیش از استفاده مقداردهی اولیه شده باشد. این ما را وادار می‌کند محافظه‌کار باشیم و فرض کنیم <code>some_cond</code> گاهی ممکن است false باشد. بنابراین «تابع ادغام» ما «و» است. یعنی، <code>init = true</code> در (C) است اگر <code>init = true</code> در (A) <em>و</em> در (B) باشد (یا اگر <code>x</code> در (C) مقداردهی اولیه شود). اما چنین نیست؛ به‌ویژه <code>init = false</code> در (A) است و <code>x</code> در (C) مقداردهی اولیه نشده است. بنابراین <code>init = false</code> در (C) است؛ می‌توانیم خطای «<code>x</code> ممکن است پیش از استفاده مقداردهی اولیه نشده باشد» را گزارش کنیم.</p>
+<p>قطعاً دربارهٔ تحلیل‌های جریان داده می‌توان خیلی بیشتر گفت. مجموعهٔ گسترده‌ای از ادبیات پژوهشی دربارهٔ این موضوع وجود دارد، از جمله نظریهٔ فراوان. ما فقط یک تحلیل رو به جلو را بحث کردیم، اما تحلیل جریان داده رو به عقب نیز مفید است. برای مثال، به‌جای شروع از بلوک (A) و حرکت رو به جلو، می‌توانستیم از استفادهٔ <code>x</code> شروع کنیم و رو به عقب حرکت کنیم تا مقداردهی اولیهٔ آن را پیدا کنیم.</p>
+<p><a id="quantified"></a></p>
+<h2 id="what-is-universally-quantified-what-about-existentially-quantified"><a class="header" href="#what-is-universally-quantified-what-about-existentially-quantified">«سورگذاری عمومی» چیست؟ و «سورگذاری وجودی» چه؟</a></h2>
+<p>در ریاضی، یک محمول (predicate) ممکن است <em>عمومی سورگذاری</em> یا <em>وجودی سورگذاری</em> شده باشد:</p>
+<ul>
+<li>سورگذاری <em>عمومی</em>:
+<ul>
+<li>محمول برقرار است اگر برای همهٔ ورودی‌های ممکن درست باشد.</li>
+<li>نمادگذاری سنتی: ∀x: P(x). خوانده می‌شود «برای همهٔ x، P(x) برقرار است».</li>
+</ul>
+</li>
+<li>سورگذاری <em>وجودی</em>:
+<ul>
+<li>محمول برقرار است اگر ورودی‌ای وجود داشته باشد که در آن درست باشد، یعنی فقط کافی است یک ورودی واحد وجود داشته باشد.</li>
+<li>نمادگذاری سنتی: ∃x: P(x). خوانده می‌شود «x‌ای وجود دارد که P(x) برقرار است».</li>
+</ul>
+</li>
+</ul>
+<p>در Rust این‌ها در بررسی نوع و حل صفت پیش می‌آیند. برای مثال،</p>
+<pre><code class="language-rust ignore">fn foo&lt;T&gt;()</code></pre>
+<p>این تابع ادعا می‌کند که تابع برای همهٔ نوع‌های <code>T</code> خوش‌نوع (well-typed) است: <code>∀ T: well_typed(foo)</code>.</p>
+<p>مثالی دیگر:</p>
+<pre><code class="language-rust ignore">fn foo&lt;'a&gt;(_: &amp;'a usize)</code></pre>
+<p>این تابع ادعا می‌کند که برای هر طول عمر <code>'a</code> (که فراخواننده تعیین می‌کند)، خوش‌نوع است: <code>∀ 'a: well_typed(foo)</code>.</p>
+<p>مثالی دیگر:</p>
+<pre><code class="language-rust ignore">fn foo&lt;F&gt;()
+where for&lt;'a&gt; F: Fn(&amp;'a u8)</code></pre>
+<p>این تابع ادعا می‌کند که برای همهٔ نوع‌های <code>F</code> که به ازای همهٔ طول عمرهای <code>'a</code> داریم <code>F: Fn(&amp;'a u8)</code>، خوش‌نوع است: <code>∀ F: ∀ 'a: (F: Fn(&amp;'a u8)) =&gt; well_typed(foo)</code>.</p>
+<p>یک مثال دیگر:</p>
+<pre><code class="language-rust ignore">fn foo(_: dyn Debug)</code></pre>
+<p>این تابع ادعا می‌کند که نوعی <code>T</code> وجود دارد که <code>Debug</code> را پیاده‌سازی می‌کند به‌طوری که تابع خوش‌نوع است: <code>∃ T: (T: Debug) and well_typed(foo)</code>.</p>
+<p><a id="variance"></a></p>
+<h2 id="what-is-a-de-bruijn-index"><a class="header" href="#what-is-a-de-bruijn-index">شاخص دبروین چیست؟</a></h2>
+<p><a href="https://en.wikipedia.org/wiki/De_Bruijn_index">شاخص‌های دبروین (De Bruijn)</a> روشی‌اند برای نمایش اینکه کدام متغیرها در کدام بست‌کننده‌ها (binder) مقید شده‌اند، آن هم تنها با استفاده از اعداد صحیح. آن‌ها در ابتدا برای ارزیابی حساب لامبدا ابداع شدند (برای اطلاعات بیشتر <a href="https://en.wikipedia.org/wiki/De_Bruijn_index">این مقالهٔ ویکی‌پدیا</a> را ببینید). در <code>rustc</code> از شاخص‌های دبروین برای <a href="../ty-module/generic-arguments.html">نمایش نوع‌های جنریک</a> استفاده می‌کنیم.</p>
+<p>در اینجا مثالی ساده از نحوهٔ استفاده از شاخص‌های دبروین برای closureها آمده است (البته ما در <code>rustc</code> واقعاً این کار را نمی‌کنیم!):</p>
+<pre><code class="language-rust ignore">|x| {
+    f(x) // de Bruijn index of `x` is 1 because `x` is bound 1 level up
+
+    |y| {
+        g(x, y) // index of `x` is 2 because it is bound 2 levels up
+                // index of `y` is 1 because it is bound 1 level up
+    }
+}</code></pre>
+<h2 id="what-are-co--and-contra-variance"><a class="header" href="#what-are-co--and-contra-variance">هم‌وردایی و پادوردایی چیست؟</a></h2>
+<p>فصل زیرنوع‌سازی (subtyping) را در <a href="../../nomicon/subtyping.html">Rust Nomicon</a> ببینید.</p>
+<p>برای اطلاعات بیشتر دربارهٔ اینکه بررسی‌کنندهٔ نوع چگونه با وردایی (variance) برخورد می‌کند، فصل <a href="../variance.html">وردایی</a> این راهنما را ببینید.</p>
+<p><a id="free-vs-bound"></a></p>
+<h2 id="what-is-a-free-region-or-a-free-variable-what-about-bound-region"><a class="header" href="#what-is-a-free-region-or-a-free-variable-what-about-bound-region">«ناحیهٔ آزاد» یا «متغیر آزاد» چیست؟ و «ناحیهٔ مقید» چه؟</a></h2>
+<p>بیایید مفاهیم آزاد در برابر مقید را بر حسب متغیرهای برنامه توضیح دهیم، چون با آن‌ها بیش از همه آشنا هستیم.</p>
+<ul>
+<li>این عبارت را که یک closure می‌سازد در نظر بگیرید: <code>|a, b| a + b</code>. در اینجا <code>a</code> و <code>b</code> در <code>a + b</code> به آرگومان‌هایی اشاره می‌کنند که closure هنگام فراخوانی دریافت خواهد کرد. می‌گوییم <code>a</code> و <code>b</code> در آنجا به closure <strong>مقید</strong> (bound) هستند، و امضای closure یعنی <code>|a, b|</code> یک <strong>بست‌کننده</strong> (binder) برای نام‌های <code>a</code> و <code>b</code> است (چون هر اشاره‌ای به <code>a</code> یا <code>b</code> در درون آن، به متغیرهایی اشاره می‌کند که آن معرفی می‌کند).</li>
+<li>این عبارت را در نظر بگیرید: <code>a + b</code>. در این عبارت، <code>a</code> و <code>b</code> به متغیرهای محلی‌ای اشاره می‌کنند که <em>بیرون</em> از عبارت تعریف شده‌اند. می‌گوییم آن متغیرها در عبارت <strong>آزاد ظاهر می‌شوند</strong> (یعنی <strong>آزاد</strong> هستند، نه <strong>مقید</strong> (بسته‌شده)).</li>
+</ul>
+<p>پس مسئله این است: یک متغیر در یک عبارت/دستور/هر چیز دیگر «آزاد ظاهر می‌شود» اگر به چیزی اشاره کند که بیرون از آن عبارت/دستور/هر چیز دیگر تعریف شده است. به‌طور معادل، می‌توانیم از «متغیرهای آزاد» یک عبارت صحبت کنیم – که صرفاً مجموعهٔ متغیرهایی است که «آزاد ظاهر می‌شوند».</p>
+<p>حالا این چه ربطی به ناحیه‌ها (regions) دارد؟ خب، می‌توانیم مفهوم مشابهی را برای نوع‌ها و ناحیه‌ها به کار ببریم. برای مثال، در نوع <code>&amp;'a u32</code>، <code>'a</code> آزاد ظاهر می‌شود. اما در نوع <code>for&lt;'a&gt; fn(&amp;'a u32)</code> چنین نیست.</p>
+<h1 id="further-reading-about-compilers"><a class="header" href="#further-reading-about-compilers">مطالعهٔ بیشتر دربارهٔ کامپایلرها</a></h1>
+<blockquote>
+<p>از <code>mem</code>، <code>scottmcm</code> و <code>Levi</code> در Discord رسمی بابت پیشنهادها سپاسگزاریم، و از <code>tinaun</code> برای ارسال پیوند به یک <a href="https://web.archive.org/web/20181230012554/https://twitter.com/graydon_pub/status/1039615569132118016">رشته‌توییت از Graydon Hoare</a> که پیشنهادهای بیشتری داشت!</p>
+<p>منابع دیگر: https://gcc.gnu.org/wiki/ListOfCompilerBooks</p>
+<p>اگر پیشنهادهای دیگری دارید، لطفاً با خیال راحت یک issue یا PR باز کنید.</p>
+</blockquote>
+<h2 id="books"><a class="header" href="#books">کتاب‌ها</a></h2>
+<ul>
+<li><a href="https://www.cis.upenn.edu/~bcpierce/tapl/">Types and Programming Languages</a></li>
+<li><a href="https://www.cs.rochester.edu/~scott/pragmatics/">Programming Language Pragmatics</a></li>
+<li><a href="https://www.cs.cmu.edu/~rwh/pfpl/">Practical Foundations for Programming Languages</a></li>
+<li><a href="https://www.pearson.com/us/higher-education/program/Aho-Compilers-Principles-Techniques-and-Tools-2nd-Edition/PGM167067.html">Compilers: Principles, Techniques, and Tools, 2nd Edition</a></li>
+<li><a href="https://www.cs.kent.ac.uk/people/staff/rej/gcbook/">Garbage Collection: Algorithms for Automatic Dynamic Memory Management</a></li>
+<li><a href="https://www.amazon.com/Linkers-Kaufmann-Software-Engineering-Programming/dp/1558604960">Linkers and Loaders</a> (نسخه‌های رایگانی از این کتاب نیز وجود دارد، اما نسخه‌ای که پیوندش را داده بودیم ظاهراً فعلاً آفلاین است.)</li>
+<li><a href="https://www.goodreads.com/book/show/887908.Advanced_Compiler_Design_and_Implementation">Advanced Compiler Design and Implementation</a></li>
+<li><a href="https://www.goodreads.com/book/show/2063103.Building_an_Optimizing_Compiler">Building an Optimizing Compiler</a></li>
+<li><a href="http://www.craftinginterpreters.com/">Crafting Interpreters</a></li>
+</ul>
+<h2 id="courses"><a class="header" href="#courses">دوره‌ها</a></h2>
+<ul>
+<li><a href="https://www.cs.uoregon.edu/research/summerschool/archives.html">University of Oregon Programming Languages Summer School archive</a></li>
+</ul>
+<h2 id="wikis"><a class="header" href="#wikis">ویکی‌ها</a></h2>
+<ul>
+<li><a href="https://en.wikipedia.org/wiki/List_of_programming_languages_by_type">Wikipedia</a></li>
+<li><a href="https://esolangs.org/wiki/Main_Page">Esoteric Programming Languages</a></li>
+<li><a href="https://plato.stanford.edu/index.html">Stanford Encyclopedia of Philosophy</a></li>
+<li><a href="https://ncatlab.org/nlab/show/HomePage">nLab</a></li>
+</ul>
+<h2 id="misc-papers-and-blog-posts"><a class="header" href="#misc-papers-and-blog-posts">مقاله‌ها و نوشته‌های وبلاگی متفرقه</a></h2>
+<ul>
+<li><a href="https://www.cse.chalmers.se/research/group/logic/book/">Programming in Martin-Löf’s Type Theory</a></li>
+<li><a href="https://dl.acm.org/doi/10.1145/3093333.3009882">Polymorphism, Subtyping, and Type Inference in MLsub</a></li>
+</ul><nav class="page-nav"><a href="../sanitizers.html">→ پشتیبانی از Sanitizerها</a><a href="glossary.html">پیوست ب: واژه‌نامه ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

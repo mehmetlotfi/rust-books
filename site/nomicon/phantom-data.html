@@ -1,0 +1,139 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>PhantomData — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="phantom-data"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="phantomdata"><a class="header" href="#phantomdata">PhantomData</a></h1>
+<p>هنگام کار با کد unsafe، اغلب ممکن است به وضعیتی برسیم که نوع‌ها یا طول عمرها از نظر منطقی به یک ساختار مرتبط‌اند، اما در واقع بخشی از هیچ فیلدی نیستند. این بیشتر با طول عمرها رخ می‌دهد. برای مثال، <code>Iter</code> برای <code>&amp;'a [T]</code> (تقریباً) به این صورت تعریف می‌شود:</p>
+<pre><code class="language-rust compile_fail">struct Iter&lt;'a, T: 'a&gt; {
+    ptr: *const T,
+    end: *const T,
+}</code></pre>
+<p>اما از آنجا که <code>'a</code> در بدنهٔ ساختار استفاده نشده است، <em>بدون کران</em> است. <a href="https://rust-lang.github.io/rfcs/0738-variance.html#the-corner-case-unused-parameters-and-parameters-that-are-only-used-unsafely">به دلیل مشکلاتی که این وضعیت در گذشته ایجاد کرده است</a>، طول عمرها و نوع‌های بدون کران در تعریف ساختارها <em>ممنوع</em> هستند. بنابراین باید به نحوی در بدنه به این نوع‌ها ارجاع بدهیم. انجام درست این کار برای داشتن وردایی (variance) درست و drop checking درست ضروری است.</p>
+<p>این کار را با <code>PhantomData</code> انجام می‌دهیم که یک نوع نشانگر ویژه است. <code>PhantomData</code> هیچ فضایی اشغال نمی‌کند، اما برای مقاصد تحلیل ایستا فیلدی از نوع داده‌شده را شبیه‌سازی می‌کند. این روش کم‌خطاتر از آن دانسته شد که صراحتاً به سیستم نوع بگوییم چه نوع وردایی‌ای می‌خواهیم، و در عین حال چیزهای مفید دیگری مانند صفت‌های خودکار (auto trait) و اطلاعات موردنیاز drop check را نیز فراهم می‌کند.</p>
+<p><code>Iter</code> از نظر منطقی شامل تعدادی <code>&amp;'a T</code> است، پس دقیقاً همین را به <code>PhantomData</code> می‌گوییم که شبیه‌سازی کند:</p>
+<pre><code class="language-rust">use std::marker;
+
+struct Iter&lt;'a, T: 'a&gt; {
+    ptr: *const T,
+    end: *const T,
+    _marker: marker::PhantomData&lt;&amp;'a T&gt;,
+}</code></pre>
+<p>و تمام. طول عمر کران‌دار خواهد شد و iterator شما نسبت به <code>'a</code> و <code>T</code> هم‌وردا (covariant) خواهد بود. همه‌چیز به‌درستی کار می‌کند.</p>
+<h2 id="generic-parameters-and-drop-checking"><a class="header" href="#generic-parameters-and-drop-checking">پارامترهای جنریک و drop-checking</a></h2>
+<p>در گذشته یک نکتهٔ دیگر نیز باید در نظر گرفته می‌شد.</p>
+<p>همین مستندات پیش‌تر می‌گفت:</p>
+<blockquote>
+<p>مثال مهم دیگر Vec است که (تقریباً) به این صورت تعریف می‌شود:</p>
+<pre><code class="language-rust">struct Vec&lt;T&gt; {
+    data: *const T, // *const for variance!
+    len: usize,
+    cap: usize,
+}</code></pre>
+<p>برخلاف مثال قبلی، <em>به نظر می‌رسد</em> همه‌چیز دقیقاً همان‌طور است که می‌خواهیم. هر آرگومان جنریک Vec دست‌کم در یک فیلد ظاهر می‌شود. آماده‌ایم!</p>
+<p>نه.</p>
+<p>drop checker با سخاوت تشخیص می‌دهد که <code>Vec&lt;T&gt;</code> مالک هیچ مقداری از نوع T نیست. این به نوبهٔ خود باعث می‌شود نتیجه بگیرد که برای تعیین درستی drop check لازم نیست نگران باشد Vec در نابودگرش (destructor) هیچ T ای را drop کند. این به نوبهٔ خود به افراد اجازه می‌دهد با استفاده از نابودگر Vec ناامنی ایجاد کنند.</p>
+<p>برای اینکه به drop checker بگوییم ما <em>مالک</em> مقادیری از نوع T هستیم و بنابراین ممکن است هنگام drop شدن <em>خودمان</em> برخی T ها را drop کنیم، باید یک <code>PhantomData</code> اضافی اضافه کنیم که دقیقاً همین را بگوید:</p>
+<pre><code class="language-rust">use std::marker;
+
+struct Vec&lt;T&gt; {
+    data: *const T, // *const for variance!
+    len: usize,
+    cap: usize,
+    _owns_T: marker::PhantomData&lt;T&gt;,
+}</code></pre>
+</blockquote>
+<p>اما از زمان <a href="https://rust-lang.github.io/rfcs/1238-nonparametric-dropck.html">RFC 1238</a>، <strong>این دیگر درست نیست و ضرورتی هم ندارد</strong>.</p>
+<p>اگر بنویسید:</p>
+<pre><code class="language-rust">struct Vec&lt;T&gt; {
+    data: *const T, // `*const` for variance!
+    len: usize,
+    cap: usize,
+}
+
+<span class="boring">#[cfg(any())]
+</span>impl&lt;T&gt; Drop for Vec&lt;T&gt; { /* … */ }</code></pre>
+<p>آنگاه وجود آن <code>impl&lt;T&gt; Drop for Vec&lt;T&gt;</code> باعث می‌شود Rust در نظر بگیرد که آن <code>Vec&lt;T&gt;</code> مالک مقادیری از نوع <code>T</code> است (به‌طور دقیق‌تر: ممکن است مقادیری از نوع <code>T</code> را در پیاده‌سازی <code>Drop</code> خود به کار ببرد) و بنابراین Rust اجازه نخواهد داد هنگام drop شدن یک <code>Vec&lt;T&gt;</code> این مقادیر <em>معلق</em> (dangle) باشند.</p>
+<p>وقتی یک نوع از قبل <code>Drop impl</code> دارد، <strong>افزودن یک فیلد اضافی <code>_owns_T: PhantomData&lt;T&gt;</code> در نتیجه <em>زائد</em> است و از نظر dropck هیچ کاری انجام نمی‌دهد</strong> (همچنان روی وردایی و صفت‌های خودکار اثر می‌گذارد).</p>
+<ul>
+<li>(یک حالت مرزی پیشرفته: اگر نوعی که <code>PhantomData</code> را در بر دارد اصلاً <code>Drop</code> impl نداشته باشد، اما همچنان drop glue داشته باشد (از طریق داشتن فیلدی <em>دیگر</em> که drop glue دارد)، آنگاه ملاحظات dropck/<code>#[may_dangle]</code> که در اینجا ذکر شد نیز صدق می‌کنند: در این صورت یک فیلد <code>PhantomData&lt;T&gt;</code> الزام می‌کند که هر زمان نوع در بر گیرنده از حوزه خارج می‌شود، <code>T</code> قابل drop شدن باشد).</li>
+</ul>
+<hr>
+<p>اما این وضعیت گاهی می‌تواند به کدی بیش‌ازحد محدودکننده منجر شود. به همین دلیل کتابخانهٔ استاندارد از یک اتریبیوت ناپایدار و <code>unsafe</code> استفاده می‌کند تا دوباره به رفتار drop-checking «بررسی‌نشدهٔ» قدیمی، که همین مستندات دربارهٔ آن هشدار می‌داد، برگردد: اتریبیوت <code>#[may_dangle]</code>.</p>
+<h3 id="an-exception-the-special-case-of-the-standard-library-and-its-unstable-may_dangle"><a class="header" href="#an-exception-the-special-case-of-the-standard-library-and-its-unstable-may_dangle">یک استثنا: حالت ویژهٔ کتابخانهٔ استاندارد و <code>#[may_dangle]</code> ناپایدار آن</a></h3>
+<p>اگر فقط کد کتابخانهٔ خودتان را می‌نویسید می‌توانید از این بخش بگذرید؛ اما اگر کنجکاو هستید که کتابخانهٔ استاندارد با تعریف واقعی <code>Vec</code> چه می‌کند، متوجه می‌شوید که برای سلامت و امنیت همچنان باید از یک فیلد <code>_owns_T: PhantomData&lt;T&gt;</code> استفاده کند.</p>
+<details><summary>برای دیدن دلیل اینجا کلیک کنید</summary>
+<p>برای دیدن دلیل اینجا کلیک کنید</p>
+<pre><code class="language-rust">fn main() {
+    let mut v: Vec&lt;&amp;str&gt; = Vec::new();
+    let s: String = "Short-lived".into();
+    v.push(&amp;s);
+    drop(s);
+} // &lt;- `v` is dropped here</code></pre>
+<p>با تعریف کلاسیک <code>impl&lt;T&gt; Drop for Vec&lt;T&gt; {</code>، کد بالا <a href="https://rust.godbolt.org/z/ans15Kqz3">رد می‌شود</a>.</p>
+<p>در واقع، در این حالت ما یک بردار <code>Vec&lt;/* T = */ &amp;'s str&gt;</code> از ارجاع‌هایی با طول عمر <code>'s</code> به <code>str</code>ها داریم، اما در حالت <code>let s: String</code>، این رشته پیش از <code>Vec</code> drop می‌شود و در نتیجه تا زمانی که <code>Vec</code> drop می‌شود، <code>'s</code> <strong>منقضی شده است</strong> و <code>impl&lt;'s&gt; Drop for Vec&lt;&amp;'s str&gt; {</code> به کار می‌رود.</p>
+<p>این یعنی اگر چنین <code>Drop</code>ی به کار می‌رفت، با یک طول عمر <code>'s</code> <em>منقضی‌شده</em> یا <em>معلق</em> (dangling) سروکار داشت. اما این با اصول Rust در تضاد است، که طبق آن‌ها به‌طور پیش‌فرض همهٔ ارجاع‌های Rust که در امضای یک تابع دخیل‌اند معلق نیستند و dereference کردنشان معتبر است.</p>
+<p>به همین دلیل Rust باید این قطعه کد را محافظه‌کارانه رد کند.</p>
+<p>و با این حال، در مورد <code>Vec</code> واقعی، پیاده‌سازی <code>Drop</code> به <code>&amp;'s str</code> اهمیتی نمی‌دهد، <em>چون drop glue مختص خودش را ندارد</em>: فقط می‌خواهد بافر پشتیبان را آزاد کند.</p>
+<p>به بیان دیگر، خوب می‌شد اگر قطعه کد بالا به‌نحوی پذیرفته می‌شد، یا با در نظر گرفتن حالت ویژه برای <code>Vec</code>، یا با تکیه بر یک ویژگی خاص <code>Vec</code>: <code>Vec</code> می‌توانست سعی کند <em>قول بدهد هنگام drop شدن از <code>&amp;'s str</code>هایی که نگه داشته استفاده نمی‌کند</em>.</p>
+<p>این همان نوع قول <code>unsafe</code> است که با <code>#[may_dangle]</code> قابل بیان است:</p>
+<pre><code class="language-rust ignore">unsafe impl&lt;#[may_dangle] 's&gt; Drop for Vec&lt;&amp;'s str&gt; { /* … */ }</code></pre>
+<p>مثال زیر را در نظر بگیرید:</p>
+<pre><code class="language-rust ignore">unsafe impl&lt;#[may_dangle] T&gt; Drop for Vec&lt;T&gt; { /* … */ }</code></pre>
+<p>راه <code>unsafe</code> برای کنار گذاشتن این فرض محافظه‌کارانه‌ای است که drop checker در Rust دربارهٔ پارامترهای نوعِ یک نمونهٔ drop‌شده می‌کند، یعنی اینکه اجازه ندارند معلق باشند.</p>
+<p>و وقتی این کار انجام می‌شود، مانند آنچه در کتابخانهٔ استاندارد هست، باید در حالتی که <code>T</code> خودش drop glue دارد دقت کنیم. در این مورد، تصور کنید <code>&amp;'s str</code>ها را با <code>struct PrintOnDrop&lt;'s&gt; /* = */ (&amp;'s str);</code> جایگزین کنیم که یک پیاده‌سازی <code>Drop</code> دارد و در آن <code>&amp;'s str</code> درونی dereference شده و روی صفحه چاپ می‌شود.</p>
+<p>در واقع، <code>Drop for Vec&lt;T&gt; {</code> پیش از آزاد کردن بافر پشتیبان، باید هر آیتم <code>T</code> را در صورت داشتن drop glue به‌صورت تراگذری (transitive) drop کند؛ در مورد <code>PrintOnDrop&lt;'s&gt;</code> این یعنی <code>Drop for Vec&lt;PrintOnDrop&lt;'s&gt;&gt;</code> پیش از آزاد کردن بافر پشتیبان باید عناصر <code>PrintOnDrop&lt;'s&gt;</code> را به‌صورت تراگذری drop کند.</p>
+<p>پس وقتی گفتیم <code>'s</code> می‌تواند <code>#[may_dangle]</code> باشد، این گزاره بیش‌ازحد آزادانه بود. بهتر است بگوییم: «<code>'s</code> می‌تواند معلق باشد، به شرط آنکه در drop glue تراگذری‌ای دخیل نباشد». یا به‌طور کلی‌تر، «<code>T</code> می‌تواند معلق باشد، به شرط آنکه در drop glue تراگذری‌ای دخیل نباشد». این «استثنا بر استثنا» هرگاه <strong>مالک یک <code>T</code> باشیم</strong> وضعیتی فراگیر است. به همین دلیل <code>#[may_dangle]</code> در Rust به‌اندازهٔ کافی هوشمند است که از این کنار گذاشتن آگاه باشد، و بنابراین <em>وقتی پارامتر جنریک به‌صورت مالکانه</em> در فیلدهای struct نگه داشته شود، غیرفعال می‌شود.</p>
+<p>به همین دلیل کتابخانهٔ استاندارد در نهایت به این می‌رسد:</p>
+<pre><code class="language-rust"><span class="boring">#[cfg(any())]
+</span>// we pinky-swear not to use `T` when dropping a `Vec`…
+unsafe impl&lt;#[may_dangle] T&gt; Drop for Vec&lt;T&gt; {
+    fn drop(&amp;mut self) {
+        unsafe {
+            if mem::needs_drop::&lt;T&gt;() {
+                /* … except here, that is, … */
+                ptr::drop_in_place::&lt;[T]&gt;(/* … */);
+            }
+            // …
+            dealloc(/* … */)
+            // …
+        }
+    }
+}
+
+struct Vec&lt;T&gt; {
+    // … except for the fact that a `Vec` owns `T` items and
+    // may thus be dropping `T` items on drop!
+    _owns_T: core::marker::PhantomData&lt;T&gt;,
+
+    ptr: *const T, // `*const` for variance (but this does not express ownership of a `T` *per se*)
+    len: usize,
+    cap: usize,
+}</code></pre>
+</details>
+<hr>
+<p>اشاره‌گرهای خامی که مالک یک تخصیص هستند الگویی چنان فراگیر است که نوع‌های خودِ کتابخانهٔ استاندارد هر بار همین اجزا را کنار هم می‌گذارند:</p>
+<ul>
+<li>یک <code>NonNull&lt;T&gt;</code>، برای واریانس و بهینه‌سازی اشاره‌گر تهی (null-pointer optimization)</li>
+<li>a <code>PhantomData&lt;T&gt;</code></li>
+<li>پیاده‌سازی‌های <code>Send</code>/<code>Sync</code> طوری که انگار یک <code>T</code> در آن نگه داشته شده است</li>
+</ul>
+<p>(سال‌ها کتابخانهٔ استاندارد این اجزا را در یک نوع داخلی با نام <code>Unique&lt;T&gt;</code> بسته‌بندی می‌کرد. این نوع هرگز پایدار نشد و از آن زمان حذف شده است.)</p>
+<h2 id="table-of-phantomdata-patterns"><a class="header" href="#table-of-phantomdata-patterns">جدول الگوهای <code>PhantomData</code></a></h2>
+<p>در اینجا جدولی از همهٔ شیوه‌های شگفت‌انگیزی آمده که می‌توان از <code>PhantomData</code> استفاده کرد:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>نوع Phantom</th><th style="text-align: center">وردایی <code>'a</code></th><th style="text-align: center">وردایی <code>T</code></th><th style="text-align: center"><code>Send</code>/<code>Sync</code><br>(یا نبود آن‌ها)</th><th style="text-align: center"><code>'a</code> یا <code>T</code> معلق در drop glue<br>(<em>مثلاً</em> <code>#[may_dangle] Drop</code>)</th></tr>
+</thead>
+<tbody>
+<tr><td><code>PhantomData&lt;T&gt;</code></td><td style="text-align: center">-</td><td style="text-align: center"><strong>هم‌وردا</strong></td><td style="text-align: center">به ارث می‌رسد</td><td style="text-align: center">غیرمجاز («مالک <code>T</code>»)</td></tr>
+<tr><td><code>PhantomData&lt;&amp;'a T&gt;</code></td><td style="text-align: center"><strong>هم‌وردا</strong></td><td style="text-align: center"><strong>هم‌وردا</strong></td><td style="text-align: center"><code>Send + Sync</code><br>نیازمند<br><code>T : Sync</code></td><td style="text-align: center">مجاز</td></tr>
+<tr><td><code>PhantomData&lt;&amp;'a mut T&gt;</code></td><td style="text-align: center"><strong>هم‌وردا</strong></td><td style="text-align: center"><strong>ناوردا</strong></td><td style="text-align: center">به ارث می‌رسد</td><td style="text-align: center">مجاز</td></tr>
+<tr><td><code>PhantomData&lt;*const T&gt;</code></td><td style="text-align: center">-</td><td style="text-align: center"><strong>هم‌وردا</strong></td><td style="text-align: center"><code>!Send + !Sync</code></td><td style="text-align: center">مجاز</td></tr>
+<tr><td><code>PhantomData&lt;*mut T&gt;</code></td><td style="text-align: center">-</td><td style="text-align: center"><strong>ناوردا</strong></td><td style="text-align: center"><code>!Send + !Sync</code></td><td style="text-align: center">مجاز</td></tr>
+<tr><td><code>PhantomData&lt;fn(T)&gt;</code></td><td style="text-align: center">-</td><td style="text-align: center"><strong>پادوردا</strong></td><td style="text-align: center"><code>Send + Sync</code></td><td style="text-align: center">مجاز</td></tr>
+<tr><td><code>PhantomData&lt;fn() -&gt; T&gt;</code></td><td style="text-align: center">-</td><td style="text-align: center"><strong>هم‌وردا</strong></td><td style="text-align: center"><code>Send + Sync</code></td><td style="text-align: center">مجاز</td></tr>
+<tr><td><code>PhantomData&lt;fn(T) -&gt; T&gt;</code></td><td style="text-align: center">-</td><td style="text-align: center"><strong>ناوردا</strong></td><td style="text-align: center"><code>Send + Sync</code></td><td style="text-align: center">مجاز</td></tr>
+<tr><td><code>PhantomData&lt;Cell&lt;&amp;'a ()&gt;&gt;</code></td><td style="text-align: center"><strong>ناوردا</strong></td><td style="text-align: center">-</td><td style="text-align: center"><code>Send + !Sync</code></td><td style="text-align: center">مجاز</td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li>نکته: برای کنار گذاشتن auto-trait با نام <code>Unpin</code> به‌جای آن به نوع اختصاصی <a href="https://doc.rust-lang.org/core/marker/struct.PhantomPinned.html"><code>PhantomPinned</code></a> نیاز است.</li>
+</ul><nav class="page-nav"><a href="dropck.html">→ بررسی Drop</a><a href="borrow-splitting.html">تقسیم قرض‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

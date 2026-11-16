@@ -1,0 +1,96 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>`#[test]` implementation — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="test-implementation"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="the-test-attribute"><a class="header" href="#the-test-attribute">attribute با نام <code>#[test]</code></a></h1>
+<p>بسیاری از برنامه‌نویسان Rust به attribute داخلی به نام <code>#[test]</code> تکیه می‌کنند.
+فقط باید تابعی را علامت بزنید و چند assert مثل زیر بگنجانید:</p>
+<pre><code class="language-rust ignore">#[test]
+fn my_test() {
+    assert!(2+2 == 4);
+}</code></pre>
+<p>وقتی این برنامه با <code>rustc --test</code> یا <code>cargo test</code> کامپایل شود، فایل اجرایی‌ای تولید می‌کند که می‌تواند این و هر تابع تست دیگر را اجرا کند.
+این روش تست اجازه می‌دهد تست‌ها به‌شکلی طبیعی کنار کد زندگی کنند.
+حتی می‌توانید تست‌ها را درون ماژول‌های خصوصی بگذارید:</p>
+<pre><code class="language-rust ignore">mod my_priv_mod {
+    fn my_priv_func() -&gt; bool {}
+
+    #[test]
+    fn test_priv_func() {
+        assert!(my_priv_func());
+    }
+}</code></pre>
+<p>بنابراین آیتم‌های خصوصی را می‌توان به‌آسانی تست کرد بدون اینکه نگران نمایان‌کردنشان برای هر نوع ابزار تست بیرونی باشید.
+این کلید ergonomics تست در Rust است.
+اما از نظر معناشناسی کمی عجیب است.
+چگونه هر نوع تابع <code>main</code> این تست‌ها را فراخوانی می‌کند اگر دیده نمی‌شوند؟
+<code>rustc --test</code> دقیقاً چه می‌کند؟</p>
+<p><code>#[test]</code> به‌صورت تبدیل نحوی درون <a href="https://github.com/rust-lang/rust/tree/HEAD/compiler/rustc_ast"><code>rustc_ast</code></a> کامپایلر پیاده‌سازی شده است.
+اساساً یک <a href="./macro-expansion.html"><code>macro</code></a> شیک است که crate را در ۳ گام بازنویسی می‌کند:</p>
+<h2 id="step-1-re-exporting"><a class="header" href="#step-1-re-exporting">Step 1: Re-Exporting</a></h2>
+<p>همان‌طور که پیش‌تر گفته شد، تست‌ها می‌توانند درون ماژول‌های خصوصی باشند، پس راهی برای نمایان‌کردن آن‌ها به تابع main لازم داریم بدون شکستن کد موجود.
+برای این منظور، <a href="https://github.com/rust-lang/rust/tree/HEAD/compiler/rustc_ast"><code>rustc_ast</code></a> ماژول‌های محلی به نام <code>__test_reexports</code> می‌سازد که تست‌ها را به‌صورت بازگشتی دوباره export می‌کنند.
+این گسترش مثال بالا را به این ترجمه می‌کند:</p>
+<pre><code class="language-rust ignore">mod my_priv_mod {
+    fn my_priv_func() -&gt; bool {}
+
+    pub fn test_priv_func() {
+        assert!(my_priv_func());
+    }
+
+    pub mod __test_reexports {
+        pub use super::test_priv_func;
+    }
+}</code></pre>
+<p>اکنون تست ما با <code>my_priv_mod::__test_reexports::test_priv_func</code> قابل‌دسترسی است.
+برای ساختارهای ماژول عمیق‌تر، <code>__test_reexports</code> ماژول‌هایی را که تست دارند دوباره export می‌کند، پس تستی در <code>a::b::my_test</code> به <code>a::__test_reexports::b::__test_reexports::my_test</code> تبدیل می‌شود.
+هرچند این فرایند کاملاً ایمن به نظر می‌رسد،
+اگر ماژول <code>__test_reexports</code> از قبل وجود داشته باشد چه می‌شود؟
+پاسخ: هیچ.</p>
+<p>برای توضیح، باید بفهمیم <a href="./ast-validation.html">درخت نحو انتزاعی</a> Rust <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/symbol/struct.Ident.html">شناسه‌ها</a> را چگونه نمایش می‌دهد.
+نام هر تابع، متغیر، ماژول و غیره به‌صورت رشته ذخیره نمی‌شود،
+بلکه به‌صورت <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/symbol/struct.Symbol.html">Symbol</a> مات که اساساً شمارهٔ شناسهٔ هر شناسه است.
+کامپایلر hashtable جداگانه‌ای نگه می‌دارد که در صورت نیاز اجازه می‌دهد نام قابل‌خواندن برای انسان یک Symbol را بازیابی کنیم (مثلاً هنگام چاپ خطای نحوی).
+وقتی کامپایلر ماژول <code>__test_reexports</code> را تولید می‌کند،
+یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/symbol/struct.Symbol.html">Symbol</a> جدید برای شناسه می‌سازد،
+پس هرچند <code>__test_reexports</code> تولیدشده توسط کامپایلر ممکن است نامی مشابه نسخهٔ دست‌نویس شما داشته باشد، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/symbol/struct.Symbol.html">Symbol</a> مشترک ندارد.
+این تکنیک از تعارض نام هنگام تولید کد جلوگیری می‌کند و پایهٔ hygiene در <a href="./macro-expansion.html"><code>macro</code></a> Rust است.</p>
+<h2 id="step-2-harness-generation"><a class="header" href="#step-2-harness-generation">Step 2: Harness generation</a></h2>
+<p>اکنون که تست‌هایمان از ریشهٔ crate قابل‌دسترسی‌اند، باید کاری با آن‌ها بکنیم. <a href="./ast-validation.html"><code>rustc_ast</code></a> ماژولی مثل زیر تولید می‌کند:</p>
+<pre><code class="language-rust ignore">#[main]
+pub fn main() {
+    extern crate test;
+    test::test_main_env_args(&amp;[&amp;path::to::test1, /*...*/]);
+}</code></pre>
+<p>اینجا <code>path::to::test1</code> ثابتی از نوع <a href="https://doc.rust-lang.org/test/struct.TestDescAndFn.html"><code>test::TestDescAndFn</code></a> است.</p>
+<p>هرچند این تبدیل ساده است، بینش زیادی دربارهٔ اینکه تست‌ها واقعاً چگونه اجرا می‌شوند به ما می‌دهد.
+تست‌ها در آرایه‌ای جمع می‌شوند و به test runner با نام <code>test_main_env_args</code> داده می‌شوند.
+به اینکه <a href="https://doc.rust-lang.org/test/struct.TestDescAndFn.html"><code>TestDescAndFn</code></a> دقیقاً چیست بازمی‌گردیم،
+اما فعلاً نکتهٔ کلیدی این است که crateای به نام <a href="https://doc.rust-lang.org/test/index.html"><code>test</code></a> هست که بخشی از core در Rust است و همهٔ runtime مربوط به تست را پیاده‌سازی می‌کند.
+رابط <a href="https://doc.rust-lang.org/test/index.html"><code>test</code></a> ناپایدار است، پس تنها راه پایدار تعامل با آن ماکروی <code>#[test]</code> است.</p>
+<h2 id="step-3-test-object-generation"><a class="header" href="#step-3-test-object-generation">گام ۳: تولید شیء تست</a></h2>
+<p>اگر پیش‌تر در Rust تست نوشته باشید، ممکن است با برخی attributeهای اختیاری موجود روی توابع تست آشنا باشید.
+برای مثال، می‌توان تستی را با <code>#[should_panic]</code> annotate کرد اگر انتظار داریم تست باعث panic شود.
+چیزی شبیه این است:</p>
+<pre><code class="language-rust ignore">#[test]
+#[should_panic]
+fn foo() {
+    panic!("intentional");
+}</code></pre>
+<p>یعنی تست‌های ما بیش از توابع ساده‌اند، اطلاعات پیکربندی هم دارند.
+<code>test</code> این داده‌های پیکربندی را در <code>struct</code>ای به نام <a href="https://doc.rust-lang.org/test/struct.TestDesc.html"><code>TestDesc</code></a> کدگذاری می‌کند.
+برای هر تابع تست در یک crate،
+<a href="https://github.com/rust-lang/rust/tree/HEAD/compiler/rustc_ast"><code>rustc_ast</code></a> attributeهای آن را تجزیه می‌کند و نمونهٔ <a href="https://doc.rust-lang.org/test/struct.TestDesc.html"><code>TestDesc</code></a> تولید می‌کند.
+سپس <a href="https://doc.rust-lang.org/test/struct.TestDesc.html"><code>TestDesc</code></a> و تابع تست را در <code>struct</code> با نام <a href="https://doc.rust-lang.org/test/struct.TestDescAndFn.html"><code>TestDescAndFn</code></a> ترکیب می‌کند که <a href="https://doc.rust-lang.org/test/fn.test_main_env_args.html"><code>test_main_env_args</code></a> روی آن عمل می‌کند.
+برای تست مشخصی، نمونهٔ <a href="https://doc.rust-lang.org/test/struct.TestDescAndFn.html"><code>TestDescAndFn</code></a> تولیدشده این‌طور به نظر می‌رسد:</p>
+<pre><code class="language-rust ignore">self::test::TestDescAndFn{
+  desc: self::test::TestDesc{
+    name: self::test::StaticTestName("foo"),
+    ignore: false,
+    should_panic: self::test::ShouldPanic::Yes,
+    allow_fail: false,
+  },
+  testfn: self::test::StaticTestFn(||
+    self::test::assert_test_result(::crate::__test_reexports::foo())),
+}</code></pre>
+<p>پس از ساخت آرایه‌ای از این اشیای تست، آن‌ها از طریق harness تولیدشده در گام ۲ به test runner داده می‌شوند.</p>
+<h2 id="inspecting-the-generated-code"><a class="header" href="#inspecting-the-generated-code">بازرسی کد تولیدشده</a></h2>
+<p>در <code>rustc</code> نوع <code>nightly</code>، پرچم ناپایداری به نام <code>unpretty</code> هست که می‌توانید برای چاپ منبع ماژول پس از گسترش <a href="./macro-expansion.html"><code>macro</code></a> به‌کار ببرید:</p>
+<pre><code class="language-bash">$ rustc my_mod.rs -Z unpretty=hir
+</code></pre><nav class="page-nav"><a href="attributes.html">→ Attributeها</a><a href="panic-implementation.html">پیاده‌سازی panic ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

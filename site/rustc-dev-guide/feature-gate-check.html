@@ -1,0 +1,82 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>بررسی دروازهٔ قابلیت — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="feature-gate-check"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="feature-gate-checking"><a class="header" href="#feature-gate-checking">بررسی feature gate</a></h1>
+<p>برای مراحل افزودن، حذف، تغییر نام یا پایدارسازی feature gateها، به <a href="./feature-gates.html">Feature gates</a> مراجعه کنید.</p>
+<p>feature gateها از استفاده از قابلیت‌های ناپایدار زبان و کتابخانه جلوگیری می‌کنند، مگر این‌که با <code>#![feature(...)]</code> که فقط در nightly کار می‌کند، صراحتاً فعال شده باشند. این فصل پیاده‌سازی feature gating را مستند می‌کند: gateها کجا تعریف می‌شوند، چگونه فعال می‌شوند و استفاده از آن‌ها چگونه راستی‌آزمایی می‌شود.</p>
+<!-- date-check: Feb 2026 -->
+<h2 id="feature-definitions"><a class="header" href="#feature-definitions">تعریف featureها</a></h2>
+<p>همه‌ی تعریف‌های feature gate در crate با نام <code>rustc_feature</code> قرار دارند:</p>
+<ul>
+<li><strong>featureهای ناپایدار</strong> در <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_feature/src/unstable.rs"><code>rustc_feature/src/unstable.rs</code></a> و از طریق ماکرو <code>declare_features!</code> تعریف می‌شوند. این کار featureها را با شماره‌ی issue و فرادادهای پیگیری مرتبط می‌کند.</li>
+<li><strong>featureهای پذیرفته‌شده</strong> (پایدارشده) در <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_feature/src/accepted.rs"><code>rustc_feature/src/accepted.rs</code></a> فهرست شده‌اند.</li>
+<li><strong>featureهای حذف‌شده</strong> (که صراحتاً ممنوع شده‌اند) در <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_feature/src/removed.rs"><code>rustc_feature/src/removed.rs</code></a> فهرست شده‌اند.</li>
+<li><strong>attributeها و cfgهای درونی gate‌شده</strong> در <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_feature/src/builtin_attrs.rs"><code>rustc_feature/src/builtin_attrs.rs</code></a> تعریف می‌شوند.</li>
+</ul>
+<p>نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_feature/struct.Features.html"><code>rustc_feature::Features</code></a> <strong>مجموعه‌ی featureهای فعال</strong> یک crate را نشان می‌دهد. توابع کمکی‌ای مانند <code>enabled</code>، <code>incomplete</code> و <code>internal</code> هنگام کامپایل برای بررسی وضعیت به کار می‌روند.</p>
+<h2 id="collecting-features"><a class="header" href="#collecting-features">گردآوری featureها</a></h2>
+<p>پیش از اعتبارسنجی AST یا گسترش (expansion)، <code>rustc</code> attributeهای <code>#![feature(...)]</code> سطح crate را گردآوری می‌کند تا مجموعه‌ی <code>Features</code> فعال را بسازد.</p>
+<ul>
+<li>گردآوری در <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_expand/src/config.rs"><code>rustc_expand/src/config.rs</code></a> و در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_expand/config/fn.features.html"><code>features</code></a> انجام می‌شود.</li>
+<li>هر ورودی <code>#![feature]</code> با جدول‌های <code>unstable</code>، <code>accepted</code> و <code>removed</code> مقایسه و دسته‌بندی می‌شود:
+<ul>
+<li>featureهای <strong>حذف‌شده</strong> بلافاصله خطا ایجاد می‌کنند.</li>
+<li>featureهای <strong>پذیرفته‌شده</strong> ثبت می‌شوند اما به nightly نیاز ندارند. روی stable/beta، تابع <code>maybe_stage_features</code> در <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_ast_passes/src/feature_gate.rs"><code>rustc_ast_passes/src/feature_gate.rs</code></a> تشخیص مربوط به نسخه‌های غیر nightly را صادر می‌کند و featureهای پایدار را فهرست می‌کند؛ پیام «قبلاً پایدار شده است» از همین‌جا می‌آید.</li>
+<li>featureهای <strong>ناپایدار</strong> به‌عنوان فعال ثبت می‌شوند.</li>
+<li>featureهای ناشناخته به‌عنوان <strong>featureهای کتابخانه</strong> در نظر گرفته می‌شوند و بعداً اعتبارسنجی می‌شوند.</li>
+</ul>
+</li>
+<li>با <code>-Z allow-features=...</code>، هر feature <strong>ناپایدار</strong> یا <strong>ناشناخته</strong> که در فهرست مجاز نباشد رد می‌شود.</li>
+<li><a href="https://doc.rust-lang.org/beta/unstable-book/compiler-environment-variables/RUSTC_BOOTSTRAP.html"><code>RUSTC_BOOTSTRAP</code></a> به <code>UnstableFeatures::from_environment</code> وارد می‌شود. این متغیر کنترل می‌کند که کامپایلر «nightly» تلقی شود یا نه، که امکان دور زدن feature gateها هنگام bootstrap را می‌دهد یا (با <code>-1</code>) صراحتاً آن را غیرفعال می‌کند.</li>
+</ul>
+<h2 id="parser-gating"><a class="header" href="#parser-gating">gating در تجزیه‌گر (parser)</a></h2>
+<p>برخی نحوها هنگام تجزیه شناسایی و gate می‌شوند. تجزیه‌گر spanها را برای بررسی بعدی ثبت می‌کند تا تشخیص‌ها یکدست بمانند و تا پس از پایان تجزیه به تعویق بیفتند.</p>
+<ul>
+<li><a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_session/src/parse.rs"><code>rustc_session/src/parse.rs</code></a> نوع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_session/parse/struct.GatedSpans.html"><code>GatedSpans</code></a> و متد <code>gate</code> را تعریف می‌کند.</li>
+<li>تجزیه‌گر هنگام مواجهه با نحوی که به gate نیاز دارد (مثلاً <code>async for</code>، <code>yield</code>، الگوهای آزمایشی) در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_parse/parser/index.html"><code>rustc_parse/src/parser/*</code></a> از آن استفاده می‌کند.</li>
+</ul>
+<h2 id="checking-pass"><a class="header" href="#checking-pass">گذر بررسی</a></h2>
+<p>منطق مرکزی در <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_ast_passes/src/feature_gate.rs"><code>rustc_ast_passes/src/feature_gate.rs</code></a> قرار دارد، عمدتاً در <code>check_crate</code> و بازدیدکننده‌ی AST آن.</p>
+<h3 id="check_crate"><a class="header" href="#check_crate"><code>check_crate</code></a></h3>
+<p><code>check_crate</code> اعتبارسنجی سطح بالا را انجام می‌دهد:</p>
+<ul>
+<li><code>maybe_stage_features</code>: <code>#![feature]</code> را روی stable/beta رد می‌کند.</li>
+<li><code>check_incompatible_features</code>: اطمینان می‌دهد ترکیب‌های ناسازگار featureها (که در <code>rustc_feature::INCOMPATIBLE_FEATURES</code> اعلام شده‌اند) با هم استفاده نشوند.</li>
+<li><code>check_new_solver_banned_features</code>: featureهایی را که با حالت کامپایلر برای حل‌کننده‌ی صفت بعدی ناسازگارند ممنوع می‌کند.</li>
+<li><code>check_features_requiring_new_solver</code>: برای featureهایی که با حل‌کننده‌ی قدیمی ناسازگارند، استفاده از حل‌کننده‌ی صفت جدید را الزامی می‌کند.</li>
+<li><strong>spanهای gate‌شده در parser</strong>: <code>GatedSpans</code> ثبت‌شده هنگام تجزیه را پردازش می‌کند (به <a href="#checking-gatedspans">بررسی <code>GatedSpans</code></a> نگاه کنید).</li>
+</ul>
+<h3 id="checking-gatedspans"><a class="header" href="#checking-gatedspans">بررسی <code>GatedSpans</code></a></h3>
+<p><code>check_crate</code> روی <code>sess.psess.gated_spans</code> پیمایش می‌کند:</p>
+<ul>
+<li>ماکرو <code>gate_all!</code> برای هر span که gate شده است، در صورت فعال نبودن feature، تشخیص صادر می‌کند.</li>
+<li>برخی gateها منطق اضافی دارند (مثلاً <code>yield</code> می‌تواند با <code>coroutines</code> یا <code>gen_blocks</code> مجاز شود).</li>
+<li>gateهای قدیمی (مثلاً <code>box_patterns</code>، <code>try_blocks</code>) ممکن است مسیر جداگانه‌ای داشته باشند که به‌جای خطای قطعی، هشدار ناسازگاری آینده صادر می‌کند.</li>
+</ul>
+<h3 id="ast-visitor"><a class="header" href="#ast-visitor">بازدیدکننده‌ی AST</a></h3>
+<p>یک <code>PostExpansionVisitor</code> روی AST گسترش‌یافته حرکت می‌کند تا ساختارهایی را بررسی کند که بررسی‌شان پس از گسترش آسان‌تر است.</p>
+<ul>
+<li>این بازدیدکننده از ماکروهای کمکی (<code>gate!</code>، <code>gate_alt!</code>، <code>gate_multi!</code>) برای بررسی موارد زیر استفاده می‌کند:
+<ol>
+<li>آیا feature فعال است؟</li>
+<li>آیا <code>span.allows_unstable</code> آن را مجاز می‌کند (برای ماکروهای داخلی کامپایلر)؟</li>
+</ol>
+</li>
+<li>نمونه‌ها شامل <code>trait_alias</code>، <code>decl_macro</code>، <code>extern types</code> و شکل‌های مختلف <code>impl Trait</code> هستند.</li>
+</ul>
+<h2 id="attributes-and-cfg"><a class="header" href="#attributes-and-cfg">attributeها و <code>cfg</code></a></h2>
+<p>افزون بر نحو، rustc روی attributeها و گزینه‌های <code>cfg</code> هم gate اعمال می‌کند.</p>
+<h3 id="built-in-attributes"><a class="header" href="#built-in-attributes">attributeهای درونی</a></h3>
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_ast_passes/feature_gate/fn.check_attribute.html"><code>rustc_ast_passes::check_attribute</code></a> attributeها را با <code>BUILTIN_ATTRIBUTE_SET</code> مقایسه می‌کند.</li>
+<li>اگر attribute از نوع <code>AttributeGate::Gated</code> باشد و feature فعال نباشد، <code>feature_err</code> صادر می‌شود.</li>
+</ul>
+<h3 id="cfg-options"><a class="header" href="#cfg-options">گزینه‌های <code>cfg</code></a></h3>
+<ul>
+<li><a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_attr_parsing/src/attributes/cfg.rs"><code>rustc_attr_parsing/src/attributes/cfg.rs</code></a> تابع <code>gate_cfg</code> را تعریف می‌کند و از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_feature/fn.find_gated_cfg.html"><code>rustc_feature::find_gated_cfg</code></a> برای رد کردن <code>cfg</code>های gate‌شده استفاده می‌کند.</li>
+<li><code>gate_cfg</code> به <code>Span::allows_unstable</code> احترام می‌گذارد و به ماکروهای داخلی کامپایلر اجازه می‌دهد در صورتی که با <code>#[allow_internal_unstable]</code> علامت‌گذاری شده باشند، gateهای <code>cfg</code> را دور بزنند.</li>
+<li>فهرست cfgهای gate‌شده در <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_feature/src/builtin_attrs.rs"><code>rustc_feature/src/builtin_attrs.rs</code></a> تعریف شده است.</li>
+</ul>
+<h2 id="diagnostics"><a class="header" href="#diagnostics">تشخیص‌ها (Diagnostics)</a></h2>
+<p>توابع کمکی تشخیص در <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_session/src/parse.rs"><code>rustc_session/src/parse.rs</code></a> قرار دارند.</p>
+<ul>
+<li><code>feature_err</code> و <code>feature_warn</code> تشخیص‌های استاندارد صادر می‌کنند و در صورت امکان شماره‌ی issue پیگیری را به آن‌ها پیوست می‌کنند.</li>
+<li><code>Span::allows_unstable</code> در <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_span/src/lib.rs"><code>rustc_span/src/lib.rs</code></a> بررسی می‌کند که آیا span از ماکرویی با علامت <code>#[allow_internal_unstable]</code> سرچشمه گرفته است یا نه. این کار به ماکروهای داخلی اجازه می‌دهد روی کانال‌های stable از featureهای ناپایدار استفاده کنند، در حالی که برای کد کاربر gateها اعمال می‌شوند.</li>
+</ul><nav class="page-nav"><a href="ast-validation.html">→ اعتبارسنجی AST</a><a href="lang-items.html">Lang Itemها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

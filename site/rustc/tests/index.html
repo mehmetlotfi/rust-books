@@ -1,0 +1,129 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>آزمون‌ها — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="tests/index"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="tests"><a class="header" href="#tests">آزمون‌ها</a></h1>
+<p><code>rustc</code> یک امکان داخلی برای ساخت و اجرای آزمون‌های یک crate دارد. اطلاعات بیشتر دربارهٔ نوشتن و اجرای آزمون‌ها را می‌توان در <a href="../../book/ch11-00-testing.html">فصل آزمون</a> کتاب زبان برنامه‌نویسی Rust یافت.</p>
+<p>آزمون‌ها به‌صورت تابع‌های آزاد با <a href="../../reference/attributes/testing.html#the-test-attribute">ویژگی <code>#[test]</code></a> نوشته می‌شوند. برای مثال:</p>
+<pre><code class="language-rust">#[test]
+fn it_works() {
+    assert_eq!(2 + 2, 4);
+}</code></pre>
+<p>آزمون‌ها در صورتی «موفق» (pass) می‌شوند که بدون خطا برگردند. اگر <a href="../../book/ch09-01-unrecoverable-errors-with-panic.html">panic</a> کنند، یا نوعی مانند <a href="https://doc.rust-lang.org/std/result/index.html"><code>Result</code></a> را برگردانند که trait به نام <a href="https://doc.rust-lang.org/std/process/trait.Termination.html"><code>Termination</code></a> را با مقداری غیرصفر پیاده‌سازی می‌کند، «شکست» (fail) می‌خورند.</p>
+<p>با دادن <a href="../command-line-arguments.html#option-test">گزینهٔ <code>--test</code></a> به <code>rustc</code>، کامپایلر crate را در حالتی ویژه می‌سازد تا فایل اجرایی‌ای تولید کند که آزمون‌های درون crate را اجرا می‌کند. پرچم <code>--test</code> تغییرات زیر را اعمال می‌کند:</p>
+<ul>
+<li>crate به‌عنوان <a href="../../reference/linkage.html">نوع crate</a> از نوع <code>bin</code> ساخته می‌شود و این آن را مجبور به فایل اجرایی بودن می‌کند.</li>
+<li>فایل اجرایی را با <a href="https://doc.rust-lang.org/test/index.html"><code>libtest</code></a> لینک می‌کند؛ این همان ابزار اجرای آزمون (test harness) است که بخشی از کتابخانهٔ استاندارد است و اجرای آزمون‌ها را بر عهده دارد.</li>
+<li>یک <a href="../../reference/crates-and-source-files.html#main-functions">تابع <code>main</code></a> تولید می‌کند که آرگومان‌های خط فرمان را پردازش می‌کند و آزمون‌ها را اجرا می‌کند. این تابع <code>main</code> جدید به‌عنوان نقطهٔ ورود فایل اجرایی جایگزین هر تابع <code>main</code> موجود می‌شود، هرچند <code>main</code> موجود همچنان کامپایل خواهد شد.</li>
+<li><a href="../../reference/conditional-compilation.html#test">گزینهٔ cfg با نام <code>test</code></a> را فعال می‌کند که به کد شما اجازه می‌دهد با استفاده از کامپایل شرطی تشخیص دهد که آیا به‌عنوان آزمون ساخته می‌شود یا نه.</li>
+<li>ساخت تابع‌هایی را که با ویژگی‌های <a href="../../reference/attributes/testing.html#the-test-attribute"><code>test</code></a> و <a href="#benchmarks"><code>bench</code></a> حاشیه‌نویسی شده‌اند فعال می‌کند، که توسط ابزار اجرای آزمون اجرا می‌شوند.</li>
+</ul>
+<p>پس از ساخته شدن فایل اجرایی، می‌توانید آن را اجرا کنید تا آزمون‌ها اجرا شوند و گزارشی از آزمون‌های موفق و ناموفق دریافت کنید. اگر برای مدیریت پروژه‌تان از <a href="../../cargo/index.html">Cargo</a> استفاده می‌کنید، دستور داخلی <a href="../../cargo/commands/cargo-test.html"><code>cargo test</code></a> در آن وجود دارد که همهٔ این کارها را به‌طور خودکار انجام می‌دهد. نمونه‌ای از خروجی به این شکل است:</p>
+<pre><code class="language-text">running 4 tests
+test it_works ... ok
+test check_valid_args ... ok
+test invalid_characters ... ok
+test walks_the_dog ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+</code></pre>
+<blockquote>
+<p><strong>نکته</strong>: آزمون‌ها باید با <a href="../../book/ch09-01-unrecoverable-errors-with-panic.html">راهبرد panic از نوع <code>unwind</code></a> ساخته شوند. دلیلش این است که همهٔ آزمون‌ها در یک فرایند (process) اجرا می‌شوند و قرار است panicها را بگیرند، که با راهبرد <code>abort</code> ممکن نیست. برای پشتیبانی آزمایشی از راهبرد <code>abort</code> از طریق اجرای آزمون‌ها در فرایندهای جداگانه، گزینهٔ ناپایدار <a href="https://github.com/rust-lang/rust/issues/67650"><code>-Z panic-abort-tests</code></a> را ببینید.</p>
+</blockquote>
+<h2 id="test-attributes"><a class="header" href="#test-attributes">ویژگی‌های آزمون</a></h2>
+<p>آزمون‌ها با استفاده از ویژگی‌ها (attributes) روی تابع‌های آزاد مشخص می‌شوند. ویژگی‌های زیر برای آزمون به کار می‌روند؛ برای جزئیات بیشتر مستندات پیوندشده را ببینید:</p>
+<ul>
+<li><a href="../../reference/attributes/testing.html#the-test-attribute"><code>#[test]</code></a> — مشخص می‌کند که یک تابع آزمونی است که باید اجرا شود.</li>
+<li><code>#[bench]</code> — مشخص می‌کند که یک تابع محک (benchmark) است که باید اجرا شود. محک‌ها فعلاً ناپایدارند و فقط در کانال nightly موجودند؛ برای جزئیات بیشتر <a href="../../unstable/library-features/test.html">مستندات ناپایدار</a> را ببینید.</li>
+<li><a href="../../reference/attributes/testing.html#the-should_panic-attribute"><code>#[should_panic]</code></a> — مشخص می‌کند که تابع آزمون فقط در صورتی موفق می‌شود که تابع <a href="../../book/ch09-01-unrecoverable-errors-with-panic.html">panic کند</a>.</li>
+<li><a href="../../reference/attributes/testing.html#the-ignore-attribute"><code>#[ignore]</code></a> — مشخص می‌کند که تابع آزمون کامپایل می‌شود اما به‌طور پیش‌فرض اجرا نمی‌شود. برای اجرای این آزمون‌ها گزینه‌های <a href="#--ignored"><code>--ignored</code></a> و <a href="#--include-ignored"><code>--include-ignored</code></a> را ببینید.</li>
+</ul>
+<h2 id="cli-arguments"><a class="header" href="#cli-arguments">آرگومان‌های CLI</a></h2>
+<p>ابزار اجرای libtest چندین آرگومان خط فرمان برای کنترل رفتار خود دارد.</p>
+<blockquote>
+<p>نکته: هنگام اجرا با <a href="../../cargo/commands/cargo-test.html"><code>cargo test</code></a>، آرگومان‌های CLI مربوط به libtest باید پس از آرگومان <code>--</code> داده شوند تا پرچم‌های Cargo از پرچم‌های ابزار اجرای آزمون (harness) متمایز شوند. برای مثال: <code>cargo test -- --no-capture</code></p>
+</blockquote>
+<h3 id="filters"><a class="header" href="#filters">فیلترها</a></h3>
+<p>آرگومان‌های موضعی (آن‌هایی که پیشوند <code>-</code> ندارند) به‌عنوان فیلتر در نظر گرفته می‌شوند و فقط آزمون‌هایی را اجرا می‌کنند که نامشان با یکی از آن رشته‌ها مطابقت دارد. فیلتر با هر زیررشته‌ای که در مسیر کامل تابع آزمون باشد مطابقت می‌کند. برای مثال، اگر تابع آزمون <code>it_works</code> در ماژول <code>utils::paths::tests</code> باشد، هر یک از فیلترهای <code>works</code>، <code>path</code>، <code>utils::</code> یا <code>utils::paths::tests::it_works</code> با آن آزمون مطابقت خواهد داشت.</p>
+<p>برای گزینه‌های بیشتر جهت کنترل اینکه کدام آزمون‌ها اجرا شوند، <a href="#selection-options">گزینه‌های انتخاب</a> را ببینید.</p>
+<h3 id="action-options"><a class="header" href="#action-options">گزینه‌های عمل</a></h3>
+<p>گزینه‌های زیر به‌جای اجرای آزمون‌ها، اعمال دیگری انجام می‌دهند.</p>
+<h4 id="--list"><a class="header" href="#--list"><code>--list</code></a></h4>
+<p>فهرستی از همهٔ آزمون‌ها و محک‌ها را چاپ می‌کند. هیچ‌یک از آزمون‌ها را اجرا نمی‌کند. می‌توان از <a href="#filters">فیلترها</a> برای فهرست‌کردن فقط آزمون‌های منطبق استفاده کرد.</p>
+<h4 id="-h---help"><a class="header" href="#-h---help"><code>-h</code>, <code>--help</code></a></h4>
+<p>اطلاعات استفاده و گزینه‌های خط فرمان را نمایش می‌دهد.</p>
+<h3 id="selection-options"><a class="header" href="#selection-options">گزینه‌های انتخاب</a></h3>
+<p>گزینه‌های زیر نحوهٔ انتخاب آزمون‌ها را تغییر می‌دهند.</p>
+<h4 id="--test"><a class="header" href="#--test"><code>--test</code></a></h4>
+<p>این حالت پیش‌فرض است که در آن همهٔ آزمون‌ها اجرا می‌شوند و همهٔ محک‌ها نیز فقط با یک تکرار اجرا می‌شوند (برای اطمینان از اینکه محک کار می‌کند، بدون صرف زمان برای انجام واقعی محک‌گیری). این را می‌توان با پرچم <code>--bench</code> ترکیب کرد تا هم آزمون‌ها اجرا شوند و هم محک‌گیری کامل انجام شود.</p>
+<h4 id="--bench"><a class="header" href="#--bench"><code>--bench</code></a></h4>
+<p>این در حالتی اجرا می‌شود که آزمون‌ها نادیده گرفته می‌شوند و فقط محک‌ها اجرا می‌شوند. این را می‌توان با <code>--test</code> ترکیب کرد تا هم محک‌ها و هم آزمون‌ها اجرا شوند.</p>
+<h4 id="--exact"><a class="header" href="#--exact"><code>--exact</code></a></h4>
+<p>این <a href="#filters">فیلترها</a> را مجبور می‌کند دقیقاً با مسیر کامل آزمون مطابقت کنند. برای مثال، اگر آزمون <code>it_works</code> در ماژول <code>utils::paths::tests</code> باشد، فقط رشتهٔ <code>utils::paths::tests::it_works</code> با آن آزمون مطابقت خواهد داشت.</p>
+<h4 id="--skip-filter"><a class="header" href="#--skip-filter"><code>--skip</code> <em>FILTER</em></a></h4>
+<p>هر آزمونی را که نامش شامل رشتهٔ <em>FILTER</em> داده‌شده باشد نادیده می‌گیرد. این پرچم را می‌توان چندین بار داد.</p>
+<h4 id="--ignored"><a class="header" href="#--ignored"><code>--ignored</code></a></h4>
+<p>فقط آزمون‌هایی را اجرا می‌کند که با <a href="../../reference/attributes/testing.html#the-ignore-attribute">ویژگی <code>ignore</code></a> علامت‌گذاری شده‌اند.</p>
+<h4 id="--include-ignored"><a class="header" href="#--include-ignored"><code>--include-ignored</code></a></h4>
+<p>هم آزمون‌های <a href="#--ignored">نادیده‌گرفته‌شده</a> و هم غیرنادیده‌گرفته‌شده را اجرا می‌کند.</p>
+<h4 id="--exclude-should-panic"><a class="header" href="#--exclude-should-panic"><code>--exclude-should-panic</code></a></h4>
+<p>آزمون‌هایی را که با <a href="../../reference/attributes/testing.html#the-should_panic-attribute">ویژگی <code>should_panic</code></a> علامت‌گذاری شده‌اند حذف می‌کند.</p>
+<p>⚠️ 🚧 این گزینه <a href="#unstable-options">ناپایدار</a> است و به پرچم <code>-Z unstable-options</code> نیاز دارد. برای اطلاعات بیشتر <a href="https://github.com/rust-lang/rust/issues/82348">مسئلهٔ پیگیری #82348</a> را ببینید.</p>
+<h3 id="execution-options"><a class="header" href="#execution-options">گزینه‌های اجرا</a></h3>
+<p>گزینه‌های زیر بر نحوهٔ اجرای آزمون‌ها تأثیر می‌گذارند.</p>
+<h4 id="--fail-fast"><a class="header" href="#--fail-fast"><code>--fail-fast</code></a></h4>
+<p>آزمون‌ها را پس از اولین شکست متوقف می‌کند.</p>
+<p>اگر آزمون‌ها به‌صورت موازی اجرا شوند (که پیش‌فرض است)، آزمون‌هایی که از قبل روی نخ‌های دیگر شروع شده‌اند اجازه می‌یابند پیش از خروج فرایند تا پایان اجرا شوند.</p>
+<p>توجه کنید که هنگام اجرای موازی آزمون‌ها، ترتیب اجرای آزمون‌ها غیرقطعی است: اگر چند آزمون شکست بخورند، اولین شکستی که با آن مواجه شود گزارش می‌شود.</p>
+<p>⚠️ 🚧 این به پرچم <code>-Z unstable-options</code> نیاز دارد.</p>
+<h4 id="--test-threads-num_threads"><a class="header" href="#--test-threads-num_threads"><code>--test-threads</code> <em>NUM_THREADS</em></a></h4>
+<p>تعداد نخ‌هایی را که برای اجرای موازی آزمون‌ها استفاده می‌شوند تعیین می‌کند. به‌طور پیش‌فرض، از میزان همروندی موجود روی سخت‌افزار که توسط <a href="https://doc.rust-lang.org/std/thread/fn.available_parallelism.html"><code>available_parallelism</code></a> مشخص می‌شود استفاده می‌کند.</p>
+<p>منسوخ‌شده: این را می‌توان با متغیر محیطی <code>RUST_TEST_THREADS</code> نیز مشخص کرد.</p>
+<h4 id="--force-run-in-process"><a class="header" href="#--force-run-in-process"><code>--force-run-in-process</code></a></h4>
+<p>هنگام استفاده از <a href="../../book/ch09-01-unrecoverable-errors-with-panic.html">راهبرد panic از نوع <code>abort</code></a>، آزمون‌ها را مجبور می‌کند در یک فرایند واحد اجرا شوند.</p>
+<p>⚠️ 🚧 این فقط با گزینهٔ ناپایدار <a href="https://github.com/rust-lang/rust/issues/67650"><code>-Z panic-abort-tests</code></a> کار می‌کند و به پرچم <code>-Z unstable-options</code> نیاز دارد. برای اطلاعات بیشتر <a href="https://github.com/rust-lang/rust/issues/67650">مسئلهٔ پیگیری #67650</a> را ببینید.</p>
+<h4 id="--ensure-time"><a class="header" href="#--ensure-time"><code>--ensure-time</code></a></h4>
+<p>⚠️ 🚧 این گزینه <a href="#unstable-options">ناپایدار</a> است و به پرچم <code>-Z unstable-options</code> نیاز دارد. برای اطلاعات بیشتر <a href="https://github.com/rust-lang/rust/issues/64888">مسئلهٔ پیگیری #64888</a> و <a href="../../unstable/compiler-flags/report-time.html">مستندات ناپایدار</a> را ببینید.</p>
+<h4 id="--shuffle"><a class="header" href="#--shuffle"><code>--shuffle</code></a></h4>
+<p>آزمون‌ها را به‌جای ترتیب الفبایی پیش‌فرض، به ترتیب تصادفی اجرا می‌کند.</p>
+<p>منسوخ‌شده: این را می‌توان با تنظیم متغیر محیطی <code>RUST_TEST_SHUFFLE</code> به هر مقداری غیر از <code>0</code> نیز مشخص کرد.</p>
+<p>بذر مولد اعداد تصادفی که چاپ می‌شود را می‌توان به <a href="#--shuffle-seed-seed"><code>--shuffle-seed</code></a> داد تا آزمون‌ها دوباره با همان ترتیب اجرا شوند.</p>
+<p>توجه کنید که <code>--shuffle</code> بر موازی بودن یا نبودن اجرای آزمون‌ها تأثیری ندارد. برای اجرای ترتیبی آزمون‌ها با ترتیب تصادفی، از <code>--shuffle --test-threads 1</code> استفاده کنید.</p>
+<p>⚠️ 🚧 این گزینه <a href="#unstable-options">ناپایدار</a> است و به پرچم <code>-Z unstable-options</code> نیاز دارد. برای اطلاعات بیشتر <a href="https://github.com/rust-lang/rust/issues/89583">مسئلهٔ پیگیری #89583</a> را ببینید.</p>
+<h4 id="--shuffle-seed-seed"><a class="header" href="#--shuffle-seed-seed"><code>--shuffle-seed</code> <em>SEED</em></a></h4>
+<p>مانند <a href="#--shuffle"><code>--shuffle</code></a> است، اما مولد اعداد تصادفی را با <em>SEED</em> مقداردهی اولیه می‌کند. بنابراین، دوبار فراخوانی ابزار اجرای آزمون با <code>--shuffle-seed</code> <em>SEED</em> آزمون‌ها را هر دو بار با یک ترتیب اجرا می‌کند.</p>
+<p><em>SEED</em> هر عدد صحیح بدون علامت ۶۴ بیتی است، برای مثال عددی که توسط <a href="#--shuffle"><code>--shuffle</code></a> تولید شده باشد.</p>
+<p>منسوخ‌شده: این را می‌توان با متغیر محیطی <code>RUST_TEST_SHUFFLE_SEED</code> نیز مشخص کرد.</p>
+<p>⚠️ 🚧 این گزینه <a href="#unstable-options">ناپایدار</a> است و به پرچم <code>-Z unstable-options</code> نیاز دارد. برای اطلاعات بیشتر <a href="https://github.com/rust-lang/rust/issues/89583">مسئلهٔ پیگیری #89583</a> را ببینید.</p>
+<h3 id="output-options"><a class="header" href="#output-options">گزینه‌های خروجی</a></h3>
+<p>گزینه‌های زیر بر رفتار خروجی تأثیر می‌گذارند.</p>
+<h4 id="-q---quiet"><a class="header" href="#-q---quiet"><code>-q</code>, <code>--quiet</code></a></h4>
+<p>به‌جای یک خط برای هر آزمون، یک نویسه برای هر آزمون نمایش می‌دهد. این مستعاری برای <a href="#--format-format"><code>--format=terse</code></a> است.</p>
+<h4 id="--no-capture"><a class="header" href="#--no-capture"><code>--no-capture</code></a></h4>
+<p>stdout و stderr آزمون را ضبط نمی‌کند و به آزمون‌ها اجازه می‌دهد در کنسول چاپ کنند. معمولاً خروجی ضبط می‌شود و فقط در صورت شکست آزمون نمایش داده می‌شود.</p>
+<p>منسوخ‌شده: این را می‌توان با تنظیم متغیر محیطی <code>RUST_TEST_NOCAPTURE</code> به هر مقداری غیر از <code>0</code> نیز مشخص کرد.</p>
+<p><code>--nocapture</code> یک مستعار منسوخ برای <code>--no-capture</code> است.</p>
+<h4 id="--show-output"><a class="header" href="#--show-output"><code>--show-output</code></a></h4>
+<p>stdout و stderr آزمون‌های موفق را پس از اجرای همهٔ آزمون‌ها نمایش می‌دهد.</p>
+<p>این را با <a href="#--no-capture"><code>--no-capture</code></a> مقایسه کنید که به آزمون‌ها اجازه می‌دهد <em>در حین اجرا</em> چاپ کنند، که اگر چند آزمون به‌طور موازی اجرا شوند می‌تواند به خروجی درهم‌آمیخته منجر شود؛ <code>--show-output</code> تضمین می‌کند خروجی پیوسته باشد، اما نیاز دارد منتظر پایان همهٔ آزمون‌ها بمانید.</p>
+<h4 id="--color-color"><a class="header" href="#--color-color"><code>--color</code> <em>COLOR</em></a></h4>
+<p>کنترل می‌کند چه زمانی از خروجی رنگی ترمینال استفاده شود. گزینه‌های معتبر:</p>
+<ul>
+<li><code>auto</code>: اگر stdout یک tty باشد و <a href="#--no-capture"><code>--no-capture</code></a> استفاده نشده باشد، رنگی می‌کند. این پیش‌فرض است.</li>
+<li><code>always</code>: همیشه خروجی را رنگی می‌کند.</li>
+<li><code>never</code>: هرگز خروجی را رنگی نمی‌کند.</li>
+</ul>
+<h4 id="--format-format"><a class="header" href="#--format-format"><code>--format</code> <em>FORMAT</em></a></h4>
+<p>قالب خروجی را کنترل می‌کند. گزینه‌های معتبر:</p>
+<ul>
+<li><code>pretty</code>: این قالب پیش‌فرض است، با یک خط برای هر آزمون.</li>
+<li><code>terse</code>: فقط یک نویسه برای هر آزمون نمایش می‌دهد. <a href="#-q---quiet"><code>--quiet</code></a> مستعاری برای این گزینه است.</li>
+<li><code>json</code>: اشیای JSON تولید می‌کند، یکی در هر خط. ⚠️ 🚧 این گزینه <a href="#unstable-options">ناپایدار</a> است و به پرچم <code>-Z unstable-options</code> نیاز دارد. برای اطلاعات بیشتر <a href="https://github.com/rust-lang/rust/issues/49359">مسئلهٔ پیگیری #49359</a> را ببینید.</li>
+</ul>
+<h4 id="--logfile-path"><a class="header" href="#--logfile-path"><code>--logfile</code> <em>PATH</em></a></h4>
+<p>نتایج آزمون‌ها را در فایل داده‌شده می‌نویسد.</p>
+<p>این گزینه منسوخ شده است.</p>
+<h4 id="--report-time"><a class="header" href="#--report-time"><code>--report-time</code></a></h4>
+<p>⚠️ 🚧 این گزینه <a href="#unstable-options">ناپایدار</a> است و به پرچم <code>-Z unstable-options</code> نیاز دارد. برای اطلاعات بیشتر <a href="https://github.com/rust-lang/rust/issues/64888">مسئلهٔ پیگیری #64888</a> و <a href="../../unstable/compiler-flags/report-time.html">مستندات ناپایدار</a> را ببینید.</p>
+<h3 id="unstable-options"><a class="header" href="#unstable-options">گزینه‌های ناپایدار</a></h3>
+<p>برخی گزینه‌های CLI در وضعیت «ناپایدار» اضافه می‌شوند، یعنی برای آزمایش و تست در نظر گرفته شده‌اند تا مشخص شود گزینه درست کار می‌کند، طراحی درستی دارد و مفید است. ممکن است گزینه درست کار نکند، خراب شود یا در هر زمان تغییر کند. برای نشان دادن اینکه می‌دانید از یک گزینهٔ ناپایدار استفاده می‌کنید، باید پرچم خط فرمان <code>-Z unstable-options</code> را بدهید.</p>
+<h2 id="benchmarks"><a class="header" href="#benchmarks">محک‌ها (Benchmarks)</a></h2>
+<p>ابزار اجرای libtest از اجرای محک‌ها برای تابع‌هایی که با ویژگی <code>#[bench]</code> حاشیه‌نویسی شده‌اند پشتیبانی می‌کند. محک‌ها فعلاً ناپایدارند و فقط در <a href="../../book/appendix-07-nightly-rust.html">کانال nightly</a> در دسترس‌اند. اطلاعات بیشتر را می‌توان در <a href="../../unstable/library-features/test.html">کتاب ناپایدار</a> یافت.</p>
+<h2 id="custom-test-frameworks"><a class="header" href="#custom-test-frameworks">چارچوب‌های آزمون سفارشی</a></h2>
+<p>پشتیبانی آزمایشی از استفاده از ابزارهای اجرای آزمون سفارشی روی <a href="../../book/appendix-07-nightly-rust.html">کانال nightly</a> در دسترس است. برای اطلاعات بیشتر <a href="https://github.com/rust-lang/rust/issues/50297">مسئلهٔ پیگیری #50297</a> و <a href="../../unstable/language-features/custom-test-frameworks.html">مستندات custom_test_frameworks</a> را ببینید.</p><nav class="page-nav"><a href="../json.html">→ خروجی JSON</a><a href="../targets/index.html">هدف‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

@@ -1,0 +1,71 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>Drop elaboration — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="mir/drop-elaboration"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="drop-elaboration"><a class="header" href="#drop-elaboration">حذف‌ابهام drop (Drop elaboration)</a></h1>
+<h2 id="dynamic-drops"><a class="header" href="#dynamic-drops">dropهای پویا</a></h2>
+<p>طبق <a href="../../reference/destructors.html">مرجع Rust</a>:</p>
+<blockquote>
+<p>وقتی یک متغیر یا مقدار موقت مقداردهی‌شده از محدوده خارج می‌شود، destructor آن اجرا می‌شود، یا به عبارتی drop می‌شود. انتساب نیز در صورتی که عملوند سمت چپ مقداردهی‌شده باشد، destructor آن را اجرا می‌کند. اگر یک متغیر به‌صورت جزئی مقداردهی شده باشد، فقط فیلدهای مقداردهی‌شده‌ی آن drop می‌شوند.</p>
+</blockquote>
+<p>هنگام ساخت MIR، ترمیناتورهای <code>Drop</code> و <code>DropAndReplace</code> نشان‌دهنده‌ی جاهایی هستند که ممکن است drop رخ دهد. با این حال، در این مرحله، وجود این ترمیناتورها تضمین نمی‌کند که یک destructor اجرا شود. دلیلش این است که هدفِ یک drop ممکن است پیش از رسیدن به ترمیناتور مقداردهی‌نشده باشد (معمولاً چون از آن move شده است). به‌طور کلی نمی‌توانیم در زمان کامپایل بدانیم که یک متغیر مقداردهی شده است یا نه.</p>
+<pre><code class="language-rust">let mut y = vec![];
+
+{
+    let x = vec![1, 2, 3];
+    if std::process::id() % 2 == 0 {
+        y = x; // conditionally move `x` into `y`
+    }
+} // `x` goes out of scope here. Should it be dropped?</code></pre>
+<p>در این موارد باید به‌صورت <em>پویا</em> پیگیری کنیم که آیا یک متغیر مقداردهی شده است یا خیر. قوانین این کار به‌تفصیل در <a href="https://rust-lang.github.io/rfcs/0320-nonzeroing-dynamic-drop.html">RFC 320: Non-zeroing dynamic drops</a> بیان شده است.</p>
+<h2 id="drop-obligations"><a class="header" href="#drop-obligations">تعهدات drop</a></h2>
+<p>از RFC:</p>
+<blockquote>
+<p>وقتی یک متغیر محلی مقداردهی می‌شود، مجموعه‌ای از «تعهدات drop» ایجاد می‌کند: مجموعه‌ای از مسیرهای ساختاری (برای مثال یک متغیر محلی <code>a</code>، یا مسیری به یک فیلد مانند <code>b.f.y</code>) که باید drop شوند.</p>
+<p>تعهدات drop برای یک متغیر محلی x با نوع ساختاری <code>T</code> از تحلیل ساختار <code>T</code> محاسبه می‌شوند. اگر خودِ <code>T</code> صفت <code>Drop</code> را پیاده‌سازی کند، آنگاه <code>x</code> یک تعهد drop است. اگر <code>T</code> صفت <code>Drop</code> را پیاده‌سازی نکند، آنگاه مجموعه‌ی تعهدات drop اجتماع تعهدات drop فیلدهای <code>T</code> است.</p>
+</blockquote>
+<p>وقتی از یک مسیر ساختاری move می‌شود (و در نتیجه مقداردهی‌نشده می‌شود)، هر تعهد drop مربوط به آن مسیر یا نوادگانش (<code>path.f</code>، <code>path.f.g.h</code> و غیره) آزاد می‌شود. نوع‌هایی که پیاده‌سازی <code>Drop</code> دارند اجازه‌ی move از فیلدهای منفرد را نمی‌دهند، بنابراین نیازی به پیگیری وضعیت مقداردهی از طریق آن‌ها نیست.</p>
+<p>وقتی یک متغیر محلی از محدوده خارج می‌شود (<code>Drop</code>)، یا وقتی یک مسیر ساختاری با انتساب بازنویسی می‌شود (<code>DropAndReplace</code>)، تعهدات drop مربوط به آن متغیر یا مسیر را بررسی می‌کنیم. مگر اینکه آن تعهد تا این نقطه آزاد شده باشد، پیاده‌سازی <code>Drop</code> مرتبط با آن فراخوانی می‌شود. برای نوع‌های <code>enum</code>، فقط فیلدهای مربوط به نوع «فعال» باید drop شوند. هنگام پردازش تعهدات drop برای چنین نوع‌هایی، ابتدا discriminant را بررسی می‌کنیم تا نوع فعال مشخص شود. تمام تعهدات drop مربوط به نوع‌های غیر از نوع فعال نادیده گرفته می‌شوند.</p>
+<p>در اینجا چند نوع جالب برای روشن‌تر شدن این قوانین آمده است:</p>
+<pre><code class="language-rust">struct NoDrop(u8); // No `Drop` impl. No fields with `Drop` impls.
+
+struct NeedsDrop(Vec&lt;u8&gt;); // No `Drop` impl but has fields with `Drop` impls.
+
+struct ThinVec(*const u8); // Custom `Drop` impl. Individual fields cannot be moved from.
+
+impl Drop for ThinVec {
+    fn drop(&amp;mut self) { /* ... */ }
+}
+
+enum MaybeDrop {
+    Yes(NeedsDrop),
+    No(NoDrop),
+}</code></pre>
+<h2 id="drop-elaboration-1"><a class="header" href="#drop-elaboration-1">Drop elaboration</a></h2>
+<p>یک مدل معتبر برای این قوانین این است که برای هر مسیر ساختاری که در هر نقطه‌ای از تابع استفاده می‌شود، یک پرچم بولی (یک «drop flag») نگه داریم. این پرچم هنگام مقداردهی مسیر تنظیم می‌شود و هنگام move شدن از مسیر پاک می‌شود. وقتی یک <code>Drop</code> رخ می‌دهد، پرچم‌های همه‌ی تعهدات مرتبط با هدف <code>Drop</code> را بررسی می‌کنیم و برای آن‌هایی که هنوز معتبرند، پیاده‌سازی <code>Drop</code> مربوط را فراخوانی می‌کنیم.</p>
+<p>این فرایند—تبدیل MIR تازه‌ساخته‌شده با ترمیناتورهای نادقیق <code>Drop</code> و <code>DropAndReplace</code> به MIR‌ای دارای drop flag—به drop elaboration معروف است. وقتی یک دستور MIR باعث می‌شود یک متغیر مقداردهی (یا مقداردهی‌نشده) شود، drop elaboration کدی درج می‌کند که drop flag آن متغیر را تنظیم (یا پاک) کند. ترمیناتورهای <code>Drop</code> را درون شرط‌هایی قرار می‌دهد که drop flagهای تازه‌درج‌شده را بررسی می‌کنند.</p>
+<p>Drop elaboration همچنین ترمیناتورهای <code>DropAndReplace</code> را به یک <code>Drop</code> از هدف و یک نوشتن در مکانِ تازه‌drop‌شده تقسیم می‌کند. این کار تا حدی با آنچه تا اینجا گفتیم نامرتبط است.</p>
+<p>پس از اتمام این کار، ترمیناتورهای <code>Drop</code> در MIR متناظر با فراخوانی «drop glue» یا «drop shim» برای نوع مکانِ drop‌شده هستند. drop glue یک نوع، پیاده‌سازی <code>Drop</code> آن نوع را (در صورت وجود) فراخوانی می‌کند و سپس به‌صورت بازگشتی drop glue همه‌ی فیلدهای آن نوع را فراخوانی می‌کند.</p>
+<h2 id="drop-elaboration-in-rustc"><a class="header" href="#drop-elaboration-in-rustc">Drop elaboration در <code>rustc</code></a></h2>
+<p>رویکرد توصیف‌شده در بالا پرهزینه‌تر از حد لازم است. می‌توان چند بهینه‌سازی را تصور کرد:</p>
+<ul>
+<li>فقط مسیرهایی که هدف یک <code>Drop</code> هستند (یا هدف پیشوندی از آن‌هاست) به drop flag نیاز دارند.</li>
+<li>برخی متغیرها هنگام drop شدن مشخصاً مقداردهی‌شده (یا مقداردهی‌نشده) هستند. این‌ها به drop flag نیاز ندارند.</li>
+<li>اگر مجموعه‌ای از مسیرها فقط از طریق یک پیشوند مشترک drop یا move می‌شوند، آن مسیرها می‌توانند یک drop flag مشترک داشته باشند.</li>
+</ul>
+<p>زیرمجموعه‌ای از این بهینه‌سازی‌ها در <code>rustc</code> پیاده‌سازی شده است.</p>
+<p>در کامپایلر، drop elaboration میان چند ماژول تقسیم شده است. خودِ pass <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_mir_transform/src/elaborate_drops.rs">اینجا</a> تعریف شده است، اما <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_mir_transform/src/elaborate_drops.rs">منطق اصلی</a> در جای دیگری تعریف شده، چون برای ساخت <a href="https://github.com/rust-lang/rust/blob/HEAD/compiler/rustc_mir_transform/src/shim.rs">drop shimها</a> نیز به کار می‌رود.</p>
+<p>Drop elaboration هر <code>Drop</code> در MIR تازه‌ساخته‌شده را یکی از چهار نوع زیر مشخص می‌کند:</p>
+<ul>
+<li><code>Static</code>، هدف همیشه مقداردهی‌شده است.</li>
+<li><code>Dead</code>، هدف همیشه <strong>نا</strong>مقداردهی‌شده است.</li>
+<li><code>Conditional</code>، هدف یا کاملاً مقداردهی‌شده است یا کاملاً مقداردهی‌نشده. به‌صورت جزئی مقداردهی نشده است.</li>
+<li><code>Open</code>، هدف ممکن است به‌صورت جزئی مقداردهی شده باشد.</li>
+</ul>
+<p>برای این کار از یک جفت تحلیل جریان داده به نام‌های <code>MaybeInitializedPlaces</code> و <code>MaybeUninitializedPlaces</code> استفاده می‌کند. اگر یک مکان در یکی از این دو باشد ولی در دیگری نباشد، آنگاه وضعیت مقداردهی هدف در زمان کامپایل معلوم است (<code>Dead</code> یا <code>Static</code>). در این حالت، drop elaboration برای هدف پرچمی اضافه نمی‌کند. صرفاً ترمیناتور <code>Drop</code> را حذف می‌کند (<code>Dead</code>) یا حفظ می‌کند (<code>Static</code>).</p>
+<p>برای dropهای <code>Conditional</code>، می‌دانیم که وضعیت مقداردهی متغیر به‌طور کلی با وضعیت مقداردهی فیلدهایش یکسان است. بنابراین، پس از تولید یک drop flag برای هدف آن drop، فراخوانی drop glue آن هدف ایمن است.</p>
+<h3 id="open-drops"><a class="header" href="#open-drops">dropهای <code>Open</code></a></h3>
+<p>dropهای <code>Open</code> پیچیده‌ترین هستند، زیرا باید یک ترمیناتور <code>Drop</code> واحد را به چند ترمیناتور مختلف بشکنیم، یکی برای هر فیلدِ هدف که نوعش drop glue دارد (<code>Ty::needs_drop</code>). نمی‌توانیم drop glue خودِ هدف را فراخوانی کنیم، چون این کار مستلزم مقداردهی‌شدن همه‌ی فیلدهای هدف است. به یاد داشته باشید، متغیرهایی که نوعشان پیاده‌سازی سفارشی <code>Drop</code> دارد، dropهای <code>Open</code> را مجاز نمی‌کنند، چون نمی‌توان از فیلدهایشان move کرد.</p>
+<p>این کار با دسته‌بندی بازگشتی هر فیلد به‌عنوان <code>Dead</code>، <code>Static</code>، <code>Conditional</code> یا <code>Open</code> انجام می‌شود. فیلدهایی که نوعشان drop glue ندارد به‌طور خودکار <code>Dead</code> هستند و لازم نیست در بازگشت بررسی شوند. وقتی به فیلدی می‌رسیم که نوعش <code>Open</code> نیست، آن را مانند حالت‌های بالا مدیریت می‌کنیم. اگر فیلد نیز <code>Open</code> باشد، بازگشت ادامه می‌یابد.</p>
+<p>شایان ذکر است که dropهای <code>Open</code> مربوط به enumها چگونه مدیریت می‌شوند. درون drop elaboration، هر نوعِ enum مانند یک فیلد در نظر گرفته می‌شود، با این پایای ثابت که در هر لحظه فقط یکی از این «فیلدهای نوع» می‌تواند مقداردهی‌شده باشد. در حالت کلی نمی‌دانیم کدام نوع فعال است، بنابراین باید drop glue مربوط به enum را (که discriminant را بررسی می‌کند) فراخوانی کنیم یا discriminant را خودمان به‌عنوان بخشی از یک drop <code>Open</code> بسط‌یافته بررسی کنیم. با این حال، در برخی موارد (برای مثال درون یک بازوی <code>match</code>) می‌دانیم کدام نوعِ enum فعال است. این اطلاعات در تحلیل‌های جریان داده‌ی <code>MaybeInitializedPlaces</code> و <code>MaybeUninitializedPlaces</code> با علامت‌گذاری همه‌ی مکان‌های متناظر با نوع‌های غیرفعال به‌عنوان مقداردهی‌نشده کدگذاری می‌شود.</p>
+<h3 id="cleanup-paths"><a class="header" href="#cleanup-paths">مسیرهای پاکسازی</a></h3>
+<p>TODO: درباره‌ی drop elaboration و unwinding بحث شود.</p>
+<h2 id="aside-drop-elaboration-and-const-eval"><a class="header" href="#aside-drop-elaboration-and-const-eval">نکته‌ی جانبی: drop elaboration و const-eval</a></h2>
+<p>در Rust، توابعی که واجد شرایط ارزیابی در زمان کامپایل هستند باید صراحتاً با کلیدواژه‌ی <code>const</code> علامت‌گذاری شوند. این شامل پیاده‌سازی‌های صفت <code>Drop</code> نیز می‌شود که ممکن است <code>const</code> باشند یا نباشند. کدی که واجد شرایط ارزیابی در زمان کامپایل است فقط می‌تواند توابع <code>const</code> را فراخوانی کند، بنابراین هر فراخوانی پیاده‌سازی‌های غیر-const از <code>Drop</code> در چنین کدی باید ممنوع شود.</p>
+<p>فراخوانی یک پیاده‌سازی <code>Drop</code> در MIR به‌صورت یک ترمیناتور <code>Drop</code> کدگذاری می‌شود. با این حال، همان‌طور که در بالا گفتیم، یک ترمیناتور <code>Drop</code> در MIR تازه‌ساخته‌شده لزوماً به فراخوانی <code>Drop::drop</code> منجر نمی‌شود. هدف drop ممکن است در آن نقطه مقداردهی‌نشده باشد. این یعنی بررسی <code>Drop</code>های غیر-const روی MIR تازه‌ساخته‌شده می‌تواند به خطاهای کاذب منجر شود. در عوض، منتظر می‌مانیم تا پس از اجرای drop elaboration، که dropهای <code>Dead</code> را (آن‌هایی که هدفشان مشخصاً مقداردهی‌نشده است) حذف می‌کند، این بررسی‌ها را اجرا کنیم.</p><nav class="page-nav"><a href="dataflow.html">→ جریان داده MIR</a><a href="../borrow-check.html">بررسی‌کنندهٔ قرض ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

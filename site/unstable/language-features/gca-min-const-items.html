@@ -1,0 +1,84 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>gca-min-const-items — کتاب قابلیت‌های ناپایدار</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="language-features/gca-min-const-items"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../../unstable/the-unstable-book.html" style="color:inherit;text-decoration:none">کتاب قابلیت‌های ناپایدار</a><small class="en-title" dir="ltr">The Unstable Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="gca_min_const_items"><a class="header" href="#gca_min_const_items">gca_min_const_items</a></h1>
+<p>MVP آرگومان‌های const جنریک (مسیرها به آیتم‌های const مستقیم و نوع‌های اولیه) را فعال می‌کند.</p>
+<p>issue ردیابی این قابلیت: <a href="https://github.com/rust-lang/rust/issues/132980">#132980</a></p>
+<hr>
+<p>هشدار: این قابلیت ناقص است؛ طراحی و نحو آن ممکن است تغییر کند.</p>
+<p>این قابلیت به‌عنوان جایگزینی حداقلی برای <a href="generic-const-exprs.html">generic_const_exprs</a> عمل می‌کند که زیرمجموعهٔ کوچک‌تری از امکانات را مجاز می‌کند و رویکرد پیاده‌سازی متفاوتی دارد. این قابلیت عمداً محدودکننده‌تر است، که به پرهیز از موارد مرزی‌ای کمک می‌کند که پیاده‌سازی درست <code>generic_const_exprs</code> را دشوار می‌کنند. برای جزئیات بیشتر <a href="https://github.com/rust-lang/project-const-generics/blob/main/documents/min_const_generics_plan.md">پیشینهٔ قابلیت</a> را ببینید.</p>
+<p>قابلیت‌های مرتبط: <a href="gca-macroless-args.html">gca_macroless_args</a>، <a href="gca-const-items.html">gca_const_items</a>، <a href="generic-const-items.html">generic_const_items</a>.</p>
+<h2 id="gca-macro"><a class="header" href="#gca-macro">ماکروی <code>gca!</code></a></h2>
+<p>این قابلیت یک ماکروی جدید معرفی می‌کند: <code>gca!</code>.</p>
+<p>وقتی یک عبارت به‌عنوان آرگومان generic به کار می‌رود، معمولاً به‌صورت یک «anon const» پایین‌آورده (lower) می‌شود، یعنی عبارتی که برای سیستم نوع مات (opaque) است و نمی‌تواند generic داشته باشد. استفاده از <code>gca!</code> به‌جای آن، عبارت را «به‌طور مستقیم» نمایش می‌دهد، یعنی بدون anon const، به شکلی که برای سیستم نوع قابل مشاهده است.</p>
+<p>(توجه کنید که مسیرهای ساده به پارامترهای generic همیشه بدون <code>gca!</code> به‌طور مستقیم نمایش داده می‌شوند، زیرا این کار هم‌اکنون روی stable کار می‌کند)</p>
+<p>برای غیرفعال کردن لزوم نوشتن <code>gca!</code>، <a href="gca-macroless-args.html">gca_macroless_args</a> را ببینید.</p>
+<h2 id="direct-const-items"><a class="header" href="#direct-const-items">آیتم‌های const مستقیم</a></h2>
+<p>این قابلیت نوع جدیدی از آیتم را معرفی می‌کند: constهایی با سمت راست <code>gca!</code>. constهایی که سمت راست مستقیم دارند می‌توانند در بافت‌های نوع به کار روند، مثلاً:</p>
+<pre><code class="language-compile_fail">#![allow(incomplete_features)]
+#![feature(gca_min_const_items)]
+
+const X: usize = core::gca!(1);
+const Y: usize = 1;
+
+struct Foo {
+    good_arr: [(); core::gca!(X)], // Allowed
+    bad_arr: [(); core::gca!(Y)], // Will not compile
+}
+</code></pre>
+<h2 id="examples"><a class="header" href="#examples">نمونه‌ها</a></h2>
+<pre><code class="language-rust">#![allow(incomplete_features)]
+#![feature(gca_min_const_items)]
+
+trait Bar {
+    #[rustc_always_gca]
+    const VAL: usize;
+    #[rustc_always_gca]
+    const VAL2: usize;
+}
+
+struct Baz;
+
+impl Bar for Baz {
+    const VAL: usize = core::gca!(2);
+    const VAL2: usize = core::gca!(const { Self::VAL * 2 });
+}
+
+struct Foo&lt;B: Bar&gt; {
+    arr1: [usize; core::gca!(B::VAL)],
+    arr2: [usize; core::gca!(B::VAL2)],
+}</code></pre>
+<p>توجه کنید که با <a href="generic-const-exprs.html">generic_const_exprs</a> همین نمونه به شکل زیر خواهد بود:</p>
+<pre><code class="language-rust">#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
+
+trait Bar {
+    const VAL: usize;
+    const VAL2: usize;
+}
+
+struct Baz;
+
+impl Bar for Baz {
+    const VAL: usize = 2;
+    const VAL2: usize = const { Self::VAL * 2 };
+}
+
+struct Foo&lt;B: Bar&gt;
+where
+    [(); B::VAL]:,
+    [(); B::VAL2]:,
+{
+    arr1: [usize; B::VAL],
+    arr2: [usize; B::VAL2],
+}</code></pre>
+<p>استفاده از تابع‌های const مجاز است:</p>
+<pre><code class="language-rust">#![allow(incomplete_features)]
+#![feature(gca_min_const_items)]
+
+const VAL: usize = 1;
+
+const fn inc(val: usize) -&gt; usize {
+    val + 1
+}
+
+const INC: usize = core::gca!(const { inc(VAL) });
+
+const ARR: [usize; INC] = [0; INC];</code></pre><nav class="page-nav"><a href="../../unstable/language-features/gca-macroless-items.html">→ gca-macroless-items</a><a href="../../unstable/language-features/generic-const-exprs.html">generic-const-exprs ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../unstable/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

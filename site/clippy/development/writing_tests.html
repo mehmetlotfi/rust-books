@@ -1,0 +1,142 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>نوشتن آزمون — کتاب Clippy</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="development/writing_tests"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Clippy</a><small class="en-title" dir="ltr">The Clippy Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="testing"><a class="header" href="#testing">آزمون‌نویسی</a></h1>
+<p>توسعهٔ lintها برای Clippy یک فرایند توسعهٔ آزمون‌محور (TDD) است، زیرا نخستین کار ما پیش از پیاده‌سازی هر منطقی برای یک lint جدید، نوشتن چند نمونه آزمون است.</p>
+<h2 id="develop-lints-with-tests"><a class="header" href="#develop-lints-with-tests">توسعهٔ lintها همراه با آزمون‌ها</a></h2>
+<p>وقتی Clippy را توسعه می‌دهیم، وارد قلمرویی پیچیده و پرآشوب می‌شویم که پر از مشکلات برنامه‌نویسی، خطاهای سبکی، کد نامنطقی و بی‌توجهی به قراردادهاست. آزمون‌ها نخستین لایهٔ نظمی هستند که می‌توانیم برای تعیین اینکه یک lint جدید کِی و کجا باید فعال شود یا نشود، از آن بهره ببریم.</p>
+<p>افزون بر این، نوشتن آزمون‌ها در ابتدا به توسعه‌دهندگان Clippy کمک می‌کند برای نخستین نسخه و بهبودهای بعدی یک lint تعادلی بیابند. با داشتن نمونه‌آزمون‌ها، لازم نیست نگران پیچیده‌سازی بیش‌ازحد یک lint در نسخهٔ اول یا از قلم افتادن برخی حالت‌های مرزی بدیهی آن باشیم. این رویکرد ما را قادر می‌سازد هر lint را به‌صورت تکرارشونده بهبود دهیم.</p>
+<h2 id="clippy-ui-tests"><a class="header" href="#clippy-ui-tests">آزمون‌های UI در Clippy</a></h2>
+<p>ما برای آزمون در Clippy از <strong>آزمون‌های UI</strong> استفاده می‌کنیم. این آزمون‌های UI بررسی می‌کنند که خروجی Clippy دقیقاً همان چیزی باشد که انتظار داریم. هر آزمون فقط یک فایل ساده از Rust است که کدی را که می‌خواهیم بررسی کنیم در خود دارد.</p>
+<p>خروجی Clippy با یک فایل <code>.stderr</code> مقایسه می‌شود. توجه کنید که لازم نیست این فایل را خودتان بسازید. تولید فایل‌های <code>.stderr</code> را با دستور <a href="#cargo-bless"><code>cargo bless</code></a> (که بعداً خواهیم دید) انجام می‌دهیم.</p>
+<h3 id="write-test-cases"><a class="header" href="#write-test-cases">نوشتن نمونه‌آزمون‌ها</a></h3>
+<p>حالا بیایید دربارهٔ چند آزمون برای lint خیالی <code>foo_functions</code> خود فکر کنیم. کار را با باز کردن فایل آزمون <code>tests/ui/foo_functions.rs</code> که توسط <code>cargo dev new_lint</code> ساخته شده است آغاز می‌کنیم.</p>
+<p>برای شروع، فایل را با چند مثال به‌روز کنید:</p>
+<pre><code class="language-rust">#![warn(clippy::foo_functions)] // &lt; Add this, so the lint is guaranteed to be enabled in this file
+
+// Impl methods
+struct A;
+impl A {
+    pub fn fo(&amp;self) {}
+    pub fn foo(&amp;self) {}
+    //~^ foo_functions
+    pub fn food(&amp;self) {}
+}
+
+// Default trait methods
+trait B {
+    fn fo(&amp;self) {}
+    fn foo(&amp;self) {}
+    //~^ foo_functions
+    fn food(&amp;self) {}
+}
+
+// Plain functions
+fn fo() {}
+fn foo() {}
+//~^ foo_functions
+fn food() {}
+
+fn main() {
+    // We also don't want to lint method calls
+    foo();
+    let a = A;
+    a.foo();
+}</code></pre>
+<p>بدون منطق واقعی lint که هنگام دیدن نام تابع <code>foo</code> آن lint را صادر کند، این آزمون شکست می‌خورد، زیرا انتظار داریم در خط‌هایی که با <code>//~^ foo_functions</code> علامت‌گذاری شده‌اند خطا داشته باشیم. با این حال، اکنون می‌توانیم آزمون را با دستور زیر اجرا کنیم:</p>
+<pre><code class="language-sh">$ TESTNAME=foo_functions cargo uitest
+</code></pre>
+<p>Clippy کامپایل می‌شود و با شکایت از اینکه هیچ خطایی دریافت نکرده شکست می‌خورد:</p>
+<pre><code>...Clippy warnings and test outputs...
+error: diagnostic code `clippy::foo_functions` not found on line 8
+ --&gt; tests/ui/foo_functions.rs:9:10
+  |
+9 |     //~^ foo_functions
+  |          ^^^^^^^^^^^^^ expected because of this pattern
+  |
+
+error: diagnostic code `clippy::foo_functions` not found on line 16
+  --&gt; tests/ui/foo_functions.rs:17:10
+   |
+17 |     //~^ foo_functions
+   |          ^^^^^^^^^^^^^ expected because of this pattern
+   |
+
+error: diagnostic code `clippy::foo_functions` not found on line 23
+  --&gt; tests/ui/foo_functions.rs:24:6
+   |
+24 | //~^ foo_functions
+   |      ^^^^^^^^^^^^^ expected because of this pattern
+   |
+
+</code></pre>
+<p>این طبیعی است. بالاخره ما مقداری کد Rust نوشته‌ایم، اما هنوز واقعاً هیچ منطقی برای تشخیص توابع <code>foo</code> و صدور lint در Clippy پیاده‌سازی نکرده‌ایم.</p>
+<p>با پیاده‌سازی تدریجی منطق lint، این دستور اجرای آزمون UI را مرتب اجرا می‌کنیم. Clippy شروع به نمایش اطلاعاتی می‌کند که به ما اجازه می‌دهد بررسی کنیم آیا خروجی دارد به چیزی که می‌خواهیم تبدیل می‌شود.</p>
+<h3 id="example-output"><a class="header" href="#example-output">نمونهٔ خروجی</a></h3>
+<p>وقتی lint <code>foo_functions</code> ما آزمایش می‌شود، خروجی چیزی شبیه این خواهد بود:</p>
+<pre><code>failures:
+---- compile_test stdout ----
+normalized stderr:
+error: function called "foo"
+  --&gt; tests/ui/foo_functions.rs:6:12
+   |
+LL |     pub fn foo(&amp;self) {}
+   |            ^^^
+   |
+   = note: `-D clippy::foo-functions` implied by `-D warnings`
+error: function called "foo"
+  --&gt; tests/ui/foo_functions.rs:13:8
+   |
+LL |     fn foo(&amp;self) {}
+   |        ^^^
+error: function called "foo"
+  --&gt; tests/ui/foo_functions.rs:19:4
+   |
+LL | fn foo() {}
+   |    ^^^
+error: aborting due to 3 previous errors
+</code></pre>
+<p>به برچسب <em>failures</em> در بالای این قطعه توجه کنید؛ آن را در بخش بعد (با ذخیرهٔ این خروجی) از بین می‌بریم.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><em>توجه:</em> می‌توانید با تعیین یک فهرست جداشده با ویرگول، چند فایل آزمون را اجرا کنید: <code>TESTNAME=foo_functions,bar_methods,baz_structs</code>.</p>
+</blockquote>
+<h3 id="cargo-bless"><a class="header" href="#cargo-bless"><code>cargo bless</code></a></h3>
+<p>وقتی از خروجی راضی شدیم، باید این دستور را اجرا کنیم تا فایل <code>.stderr</code> را برای lint خود تولید یا به‌روز کنیم:</p>
+<pre><code class="language-sh">$ TESTNAME=foo_functions cargo uibless
+</code></pre>
+<p>این دستور پیشنهادها و اصلاح‌های صادرشدهٔ lint را در فایل <code>.stderr</code> می‌نویسد، همراه با دلیل lint، اصلاح‌های پیشنهادی، شمارهٔ خط‌ها و غیره.</p>
+<p>پس از آن، اجرای <code>TESTNAME=foo_functions cargo uitest</code> باید موفق باشد. وقتی lint خود را کامیت می‌کنیم، باید فایل‌های <code>.stderr</code> تولیدشده را هم کامیت کنیم.</p>
+<p>به‌طور کلی، باید فقط فایل‌هایی را کامیت کنید که <code>cargo bless</code> برای lint مشخصی که در حال ساخت یا ویرایش آن هستید تغییر داده است.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><em>توجه:</em> اگر فایل‌های <code>.stderr</code> و <code>.fixed</code> تولیدشده خالی باشند، باید حذف شوند.</p>
+</blockquote>
+<h2 id="toml-tests"><a class="header" href="#toml-tests">آزمون‌های <code>toml</code></a></h2>
+<p>برخی lintها را می‌توان از طریق فایل <code>clippy.toml</code> پیکربندی کرد. آن مقادیر پیکربندی در <code>tests/ui-toml</code> آزموده می‌شوند.</p>
+<p>برای افزودن یک آزمون جدید در آنجا، یک پوشهٔ جدید بسازید و این فایل‌ها را اضافه کنید:</p>
+<ul>
+<li><code>clippy.toml</code>: مقدار پیکربندی‌ای را که می‌خواهید بیازمایید اینجا بگذارید.</li>
+<li><code>lint_name.rs</code>: فایل آزمونی که کد آزمایشی را در آن می‌گذارید و باید بسته به پیکربندی تنظیم‌شده در فایل <code>clippy.toml</code> رفتار متفاوتی از lint ببیند.</li>
+</ul>
+<p>فایل‌های احتمالی <code>.stderr</code> و <code>.fixed</code> را باز هم می‌توان با <code>cargo bless</code> تولید کرد.</p>
+<h2 id="cargo-lints"><a class="header" href="#cargo-lints">lintهای Cargo</a></h2>
+<p>فرایند آزمون برای lintهای Cargo متفاوت است، چون اینجا به فایل مانیفست <code>Cargo.toml</code> علاقه‌مندیم. در این حالت به یک crate کمینه نیز نیاز داریم که به آن مانیفست مرتبط باشد. این آزمون‌ها در <code>tests/ui-cargo</code> تولید می‌شوند.</p>
+<p>تصور کنید یک lint نمونهٔ جدید به نام <code>foo_categories</code> داریم؛ می‌توانیم این دستور را اجرا کنیم:</p>
+<pre><code class="language-sh">$ cargo dev new_lint --name=foo_categories --pass=late --category=cargo
+</code></pre>
+<p>پس از اجرای <code>cargo dev new_lint</code>، به‌طور پیش‌فرض دو crate جدید می‌یابیم که هر کدام مانیفست خود را دارند:</p>
+<ul>
+<li><code>tests/ui-cargo/foo_categories/fail/Cargo.toml</code>: این فایل باید باعث شود lint جدید خطا صادر کند.</li>
+<li><code>tests/ui-cargo/foo_categories/pass/Cargo.toml</code>: این فایل نباید lint را فعال کند.</li>
+</ul>
+<p>اگر به حالت‌های بیشتری نیاز دارید، می‌توانید یکی از آن crateها (زیر <code>foo_categories</code>) را کپی کنید و نامش را تغییر دهید.</p>
+<p>فرایند تولید فایل <code>.stderr</code> مانند lintهای دیگر است و گذاشتن متغیر <code>TESTNAME</code> پیش از <code>cargo uitest</code> برای lintهای Cargo هم کار می‌کند.</p>
+<h2 id="rustfix-tests"><a class="header" href="#rustfix-tests">آزمون‌های Rustfix</a></h2>
+<p>اگر lintی که روی آن کار می‌کنید از پیشنهادهای ساختاریافته استفاده می‌کند، <a href="https://github.com/rust-lang/cargo/tree/main/crates/rustfix"><code>rustfix</code></a> پیشنهادهای lint را روی کد فایل آزمون اعمال می‌کند و نتیجه را با محتوای یک فایل <code>.fixed</code> مقایسه می‌کند.</p>
+<p>پیشنهادهای ساختاریافته به کاربر می‌گویند چگونه کدی را که با <a href="https://doc.rust-lang.org/beta/nightly-rustc/clippy_utils/diagnostics/fn.span_lint_and_sugg.html"><code>span_lint_and_sugg</code></a> lint شده است اصلاح یا بازنویسی کند.</p>
+<p>اگر از <code>span_lint_and_sugg</code> برای تولید پیشنهاد استفاده شود، اما همهٔ پیشنهادها به کد معتبر نرسند، می‌توانید با گذاشتن نظر <code>//@no-rustfix</code> در بالای فایل آزمون، از اجرای <code>rustfix</code> روی آن فایل جلوگیری کنید.</p>
+<p>دربارهٔ پیشنهادها در <a href="emitting_lints.html">فصل بعدی</a> به‌طور عمیق‌تر صحبت خواهیم کرد.</p>
+<p>برای تولید خودکار فایل <code>.fixed</code> پس از اجرای آزمون‌ها از <code>cargo bless</code> استفاده کنید.</p>
+<h2 id="testing-manually"><a class="header" href="#testing-manually">آزمون دستی</a></h2>
+<p>آزمودن دستی روی یک فایل نمونه می‌تواند مفید باشد، اگر چند <code>println!</code> اضافه کرده‌اید و خروجی مجموعه آزمون ناخوانا شده است.</p>
+<p>برای امتحان Clippy با تغییرات محلی خود، دستور زیر را از ریشهٔ نسخهٔ کاری اجرا کنید.</p>
+<pre><code class="language-sh">$ cargo dev lint input.rs
+</code></pre><nav class="page-nav"><a href="defining_lints.html">→ تعریف lint</a><a href="lint_passes.html">Lint Passes ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../clippy/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

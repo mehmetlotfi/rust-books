@@ -1,0 +1,265 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>ارجاع‌ها و قرض‌گیری — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch04-02-references-and-borrowing"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="references-and-borrowing"><a class="header" href="#references-and-borrowing">ارجاعات و قرض گرفتن (References and Borrowing)</a></h2>
+<p>مشکل کدی که در لیستینگ 4-5 با استفاده از تاپل وجود دارد این است که باید <code>String</code> را به تابع فراخوانی‌کننده بازگردانیم تا بعد از فراخوانی <code>calculate_length</code> بتوانیم همچنان از <code>String</code> استفاده کنیم، زیرا <code>String</code> به <code>calculate_length</code> منتقل شده است. در عوض، می‌توانیم یک ارجاع به مقدار <code>String</code> ارائه دهیم. یک <em>ارجاع</em> مشابه یک اشاره‌گر (Pointer) است، به این معنا که یک آدرس است که می‌توانیم از آن پیروی کنیم تا به داده‌هایی که در آن آدرس ذخیره شده‌اند دسترسی پیدا کنیم؛ این داده‌ها متعلق به متغیر دیگری هستند. برخلاف اشاره‌گر (Pointer)، یک ارجاع تضمین می‌کند که به یک مقدار معتبر از نوع خاصی در طول عمر آن ارجاع اشاره می‌کند.</p>
+<p>در اینجا نحوه تعریف و استفاده از یک تابع <code>calculate_length</code> آورده شده است که به جای گرفتن مالکیت مقدار، یک ارجاع به یک شی به عنوان پارامتر دارد:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let s1 = String::from("hello");
+
+    let len = calculate_length(&amp;s1);
+
+    println!("The length of '{s1}' is {len}.");
+}
+
+fn calculate_length(s: &amp;String) -&gt; usize {
+    s.len()
+}</code></pre>
+</figure>
+<p>اول، توجه کنید که تمام کد مربوط به تاپل در اعلام متغیر و مقدار بازگشتی تابع حذف شده است. دوم، دقت کنید که ما <code>&amp;s1</code> را به <code>calculate_length</code> می‌دهیم و در تعریف آن، <code>&amp;String</code> می‌گیریم به جای <code>String</code>. این علامت‌های &amp; نماینده‌ی <em>ارجاعات</em> هستند و به شما اجازه می‌دهند تا به مقداری اشاره کنید بدون اینکه مالکیت آن را بگیرید. شکل 4-6 این مفهوم را نشان می‌دهد.</p>
+<img alt="سه جدول: جدول s فقط یک اشاره‌گر (Pointer) به جدول s1 دارد. جدول s1 شامل داده‌های استک برای s1 است و به داده‌های رشته‌ای در هیپ اشاره می‌کند." src="img/trpl04-06.svg" class="center">
+<p><span class="caption">شکل ۴-۶: نمودار <code>&amp;String</code> با نام <code>s</code> که به <code>String</code> با نام <code>s1</code> اشاره می‌کند</span></p>
+<blockquote>
+<p>توجه: متضاد ارجاع دادن با استفاده از <code>&amp;</code>، <em>عدم ارجاع</em> است که با عملگر عدم ارجاع، یعنی <code>*</code>، انجام می‌شود. برخی از موارد استفاده از عملگر عدم ارجاع را در فصل 8 خواهیم دید و جزئیات مربوط به عدم ارجاع را در فصل 15 بحث خواهیم کرد.</p>
+</blockquote>
+<p>بیایید نگاهی دقیق‌تر به فراخوانی تابع بیندازیم:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let s1 = String::from("hello");
+
+    let len = calculate_length(&amp;s1);
+<span class="boring">
+</span><span class="boring">    println!("The length of '{s1}' is {len}.");
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">fn calculate_length(s: &amp;String) -&gt; usize {
+</span><span class="boring">    s.len()
+</span><span class="boring">}</span></code></pre>
+<p>سینتکس <code>&amp;s1</code> به ما اجازه می‌دهد یک ارجاع ایجاد کنیم که به مقدار <code>s1</code> <em>اشاره می‌کند</em> اما مالک آن نیست. از آنجایی که ارجاع مالک آن نیست، مقداری که به آن اشاره می‌کند زمانی که ارجاع استفاده نمی‌شود حذف نخواهد شد.</p>
+<p>به همین ترتیب، امضای تابع از <code>&amp;</code> استفاده می‌کند تا نشان دهد که نوع پارامتر <code>s</code> یک ارجاع است. بیایید برخی توضیحات اضافه کنیم:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span><span class="boring">    let s1 = String::from("hello");
+</span><span class="boring">
+</span><span class="boring">    let len = calculate_length(&amp;s1);
+</span><span class="boring">
+</span><span class="boring">    println!("The length of '{s1}' is {len}.");
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn calculate_length(s: &amp;String) -&gt; usize { // s is a reference to a String
+    s.len()
+} // Here, s goes out of scope. But because s does not have ownership of what
+  // it refers to, the String is not dropped.</code></pre>
+<p>دامنه‌ای که متغیر <code>s</code> در آن معتبر است، مشابه دامنه‌ی هر پارامتر تابع است، اما مقدار اشاره‌شده توسط ارجاع زمانی که <code>s</code> استفاده نمی‌شود حذف نمی‌شود، زیرا <code>s</code> مالکیت ندارد. وقتی توابع ارجاعات را به جای مقادیر واقعی به عنوان پارامتر دارند، نیازی نخواهیم داشت مقادیر را بازگردانیم تا مالکیت را بازگردانیم، زیرا هرگز مالکیتی نداشته‌ایم.</p>
+<p>ما عمل ایجاد یک ارجاع را <em>قرض گرفتن</em> می‌نامیم. همانند زندگی واقعی، اگر شخصی چیزی را مالک باشد، شما می‌توانید آن را از او قرض بگیرید. وقتی کارتان تمام شد، باید آن را بازگردانید. شما مالک آن نیستید.</p>
+<p>پس چه اتفاقی می‌افتد اگر بخواهیم چیزی که قرض گرفته‌ایم را تغییر دهیم؟ کد موجود در لیستینگ 4-6 را امتحان کنید. هشدار: این کار نمی‌کند!</p>
+<figure class="listing" id="listing-4-6">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">fn main() {
+    let s = String::from("hello");
+
+    change(&amp;s);
+}
+
+fn change(some_string: &amp;String) {
+    some_string.push_str(", world");
+}</code></pre>
+<figcaption><a href="#listing-4-6">لیست ۴-۶</a>: تلاش برای تغییر مقدار قرض گرفته شده</figcaption>
+</figure>
+<p>در اینجا خطا آورده شده است:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling ownership v0.1.0 (file:///projects/ownership)
+error[E0596]: cannot borrow `*some_string` as mutable, as it is behind a `&amp;` reference
+ --&gt; src/main.rs:8:5
+  |
+8 |     some_string.push_str(", world");
+  |     ^^^^^^^^^^^ `some_string` is a `&amp;` reference, so it cannot be borrowed as mutable
+  |
+help: consider changing this to be a mutable reference
+  |
+7 | fn change(some_string: &amp;mut String) {
+  |                         +++
+
+For more information about this error, try `rustc --explain E0596`.
+error: could not compile `ownership` (bin "ownership") due to 1 previous error
+</code></pre>
+<p>همانطور که متغیرها به صورت پیش‌فرض غیرقابل تغییر هستند، ارجاعات نیز به همین صورت هستند. ما اجازه نداریم چیزی که به آن ارجاع داریم را تغییر دهیم.</p>
+<h3 id="mutable-references"><a class="header" href="#mutable-references">ارجاعات متغیر</a></h3>
+<p>ما می‌توانیم کد موجود در لیستینگ 4-6 را طوری اصلاح کنیم که به ما اجازه دهد یک مقدار قرض گرفته شده را تغییر دهیم، با چند تغییر کوچک که به جای آن از <em>ارجاع متغیر</em> استفاده کنیم:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust">fn main() {
+    let mut s = String::from("hello");
+
+    change(&amp;mut s);
+}
+
+fn change(some_string: &amp;mut String) {
+    some_string.push_str(", world");
+}</code></pre>
+</figure>
+<p>ابتدا <code>s</code> را به <code>mut</code> تغییر می‌دهیم. سپس یک ارجاع متغیر با <code>&amp;mut s</code> ایجاد می‌کنیم، جایی که تابع <code>change</code> را فراخوانی می‌کنیم، و امضای تابع را به‌روزرسانی می‌کنیم تا یک ارجاع متغیر با <code>some_string: &amp;mut String</code> بپذیرد. این بسیار واضح می‌کند که تابع <code>change</code> مقدار قرض گرفته شده را تغییر خواهد داد.</p>
+<p>ارجاعات متغیر یک محدودیت بزرگ دارند: اگر یک ارجاع متغیر به یک مقدار داشته باشید، نمی‌توانید هیچ ارجاع دیگری به آن مقدار داشته باشید. این کد که تلاش می‌کند دو ارجاع متغیر به <code>s</code> ایجاد کند، ناموفق خواهد بود:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">fn main() {
+</span>    let mut s = String::from("hello");
+
+    let r1 = &amp;mut s;
+    let r2 = &amp;mut s;
+
+    println!("{r1}, {r2}");
+<span class="boring">}</span></code></pre>
+</figure>
+<p>در اینجا خطا آورده شده است:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling ownership v0.1.0 (file:///projects/ownership)
+error[E0499]: cannot borrow `s` as mutable more than once at a time
+ --&gt; src/main.rs:5:14
+  |
+4 |     let r1 = &amp;mut s;
+  |              ------ first mutable borrow occurs here
+5 |     let r2 = &amp;mut s;
+  |              ^^^^^^ second mutable borrow occurs here
+6 |
+7 |     println!("{r1}, {r2}");
+  |                -- first borrow later used here
+
+For more information about this error, try `rustc --explain E0499`.
+error: could not compile `ownership` (bin "ownership") due to 1 previous error
+</code></pre>
+<p>این خطا می‌گوید که این کد نامعتبر است زیرا نمی‌توانیم <code>s</code> را به طور همزمان بیش از یک بار به صورت متغیر قرض بگیریم. اولین قرض متغیر در <code>r1</code> است و باید تا زمانی که در <code>println!</code> استفاده شود باقی بماند، اما بین ایجاد آن ارجاع متغیر و استفاده از آن، ما سعی کردیم یک ارجاع متغیر دیگر در <code>r2</code> ایجاد کنیم که همان داده‌ای را قرض می‌گیرد که <code>r1</code> نیز قرض گرفته است.</p>
+<p>محدودیتی که از ایجاد چند ارجاع متغیر به داده‌های یکسان به طور همزمان جلوگیری می‌کند، امکان تغییر داده‌ها را فراهم می‌کند اما به صورت بسیار کنترل شده. این چیزی است که تازه‌کاران زبان Rust ممکن است با آن مشکل داشته باشند زیرا اکثر زبان‌ها به شما اجازه می‌دهند هر زمان که بخواهید داده‌ها را تغییر دهید. مزیت این محدودیت این است که Rust می‌تواند از مسابقات داده (<em>data race</em>) در زمان کامپایل جلوگیری کند. یک <em>مسابقه داده</em> مشابه یک شرایط مسابقه (<em>race condition</em>) است و زمانی رخ می‌دهد که این سه رفتار اتفاق بیفتند:</p>
+<ul>
+<li>دو یا چند اشاره‌گر (Pointer) به طور همزمان به داده‌های یکسان دسترسی پیدا می‌کنند.</li>
+<li>حداقل یکی از اشاره‌گر (Pointer)ها برای نوشتن در داده‌ها استفاده می‌شود.</li>
+<li>هیچ مکانیزمی برای هماهنگ کردن دسترسی به داده‌ها استفاده نمی‌شود.</li>
+</ul>
+<p>مسابقات داده باعث رفتار نامشخص می‌شوند و در زمان اجرای برنامه ممکن است یافتن و رفع آن‌ها دشوار باشد؛ Rust با عدم کامپایل کدهای دارای مسابقات داده از این مشکل جلوگیری می‌کند!</p>
+<p>همانطور که همیشه، می‌توانیم از آکولادها برای ایجاد یک اسکوپ جدید استفاده کنیم که امکان وجود ارجاعات متغیر متعدد را فراهم می‌کند، اما نه به صورت <em>همزمان</em>:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let mut s = String::from("hello");
+
+    {
+        let r1 = &amp;mut s;
+    } // r1 goes out of scope here, so we can make a new reference with no problems.
+
+    let r2 = &amp;mut s;
+<span class="boring">}</span></code></pre>
+<p>Rust یک قانون مشابه برای ترکیب ارجاعات متغیر و غیرمتغیر اعمال می‌کند. این کد منجر به خطا می‌شود:</p>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">fn main() {
+</span>    let mut s = String::from("hello");
+
+    let r1 = &amp;s; // no problem
+    let r2 = &amp;s; // no problem
+    let r3 = &amp;mut s; // BIG PROBLEM
+
+    println!("{r1}, {r2}, and {r3}");
+<span class="boring">}</span></code></pre>
+<p>در اینجا خطا آورده شده است:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling ownership v0.1.0 (file:///projects/ownership)
+error[E0502]: cannot borrow `s` as mutable because it is also borrowed as immutable
+ --&gt; src/main.rs:6:14
+  |
+4 |     let r1 = &amp;s; // no problem
+  |              -- immutable borrow occurs here
+5 |     let r2 = &amp;s; // no problem
+6 |     let r3 = &amp;mut s; // BIG PROBLEM
+  |              ^^^^^^ mutable borrow occurs here
+7 |
+8 |     println!("{r1}, {r2}, and {r3}");
+  |                -- immutable borrow later used here
+
+For more information about this error, try `rustc --explain E0502`.
+error: could not compile `ownership` (bin "ownership") due to 1 previous error
+</code></pre>
+<p>ای وای! ما <em>همچنین</em> نمی‌توانیم یک ارجاع متغیر داشته باشیم در حالی که یک ارجاع غیرمتغیر به همان مقدار داریم.</p>
+<p>کاربرانی که از یک ارجاع غیرمتغیر استفاده می‌کنند، انتظار ندارند که مقدار به طور ناگهانی تغییر کند! با این حال، چندین ارجاع غیرمتغیر مجاز هستند زیرا هیچ‌کسی که فقط داده‌ها را می‌خواند، نمی‌تواند خواندن دیگران را تحت تأثیر قرار دهد.</p>
+<p>توجه داشته باشید که اسکوپ یک ارجاع از جایی که معرفی می‌شود شروع شده و تا آخرین باری که از آن استفاده می‌شود ادامه دارد. به عنوان مثال، این کد کامپایل می‌شود زیرا آخرین استفاده از ارجاعات غیرمتغیر در <code>println!</code> است، قبل از اینکه ارجاع متغیر معرفی شود:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let mut s = String::from("hello");
+
+    let r1 = &amp;s; // no problem
+    let r2 = &amp;s; // no problem
+    println!("{r1} and {r2}");
+    // Variables r1 and r2 will not be used after this point.
+
+    let r3 = &amp;mut s; // no problem
+    println!("{r3}");
+<span class="boring">}</span></code></pre>
+<p>اسکوپ‌های ارجاعات غیرمتغیر <code>r1</code> و <code>r2</code> بعد از <code>println!</code> که در آنجا آخرین بار استفاده شده‌اند به پایان می‌رسند، که این قبل از ایجاد ارجاع متغیر <code>r3</code> است. این اسکوپ‌ها همپوشانی ندارند، بنابراین این کد مجاز است: کامپایلر می‌تواند تشخیص دهد که ارجاع دیگر در نقطه‌ای قبل از پایان اسکوپ استفاده نمی‌شود.</p>
+<p>حتی اگر خطاهای قرض گرفتن ممکن است گاهی اوقات ناامیدکننده باشند، به یاد داشته باشید که این کامپایلر Rust است که به شما نشان می‌دهد یک باگ بالقوه در اوایل (در زمان کامپایل به جای زمان اجرا) وجود دارد و دقیقا به شما می‌گوید مشکل کجاست. سپس نیازی نیست که پیگیری کنید چرا داده‌های شما آن چیزی نیست که فکر می‌کردید.</p>
+<h3 id="dangling-references"><a class="header" href="#dangling-references">ارجاعات آویزان</a></h3>
+<p>در زبان‌هایی که از اشاره‌گر (Pointer)ها استفاده می‌کنند، ایجاد اشتباه یک <em>اشاره‌گر (Pointer) آویزان</em> آسان است—اشاره‌گر (Pointer)ی که به مکانی در حافظه اشاره می‌کند که ممکن است به شخص دیگری داده شده باشد—با آزاد کردن مقداری حافظه در حالی که اشاره‌گر (Pointer) به آن حافظه را حفظ می‌کنید. در Rust، برعکس، کامپایلر تضمین می‌کند که ارجاعات هرگز ارجاعات آویزان نخواهند بود: اگر به داده‌هایی ارجاع دارید، کامپایلر اطمینان می‌دهد که داده‌ها قبل از ارجاع به داده‌ها از محدوده خارج نمی‌شوند.</p>
+<p>بیایید سعی کنیم یک ارجاع آویزان ایجاد کنیم تا ببینیم چگونه Rust با یک خطای زمان کامپایل از این اتفاق جلوگیری می‌کند:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile">fn main() {
+    let reference_to_nothing = dangle();
+}
+
+fn dangle() -&gt; &amp;String {
+    let s = String::from("hello");
+
+    &amp;s
+}</code></pre>
+</figure>
+<p>در اینجا خطا آورده شده است:</p>
+<pre><code class="language-console">$ cargo run
+   Compiling ownership v0.1.0 (file:///projects/ownership)
+error[E0106]: missing lifetime specifier
+ --&gt; src/main.rs:5:16
+  |
+5 | fn dangle() -&gt; &amp;String {
+  |                ^ expected named lifetime parameter
+  |
+  = help: this function's return type contains a borrowed value, but there is no value for it to be borrowed from
+help: consider using the `'static` lifetime, but this is uncommon unless you're returning a borrowed value from a `const` or a `static`
+  |
+5 | fn dangle() -&gt; &amp;'static String {
+  |                 +++++++
+help: instead, you are more likely to want to return an owned value
+  |
+5 - fn dangle() -&gt; &amp;String {
+5 + fn dangle() -&gt; String {
+  |
+
+For more information about this error, try `rustc --explain E0106`.
+error: could not compile `ownership` (bin "ownership") due to 1 previous error
+</code></pre>
+<p>این پیام خطا به ویژگی‌ای اشاره دارد که هنوز پوشش نداده‌ایم: طول عمرها (<em>lifetimes</em>). ما طول عمرها را به طور مفصل در فصل 10 مورد بحث قرار خواهیم داد. اما، اگر بخش‌های مربوط به طول عمرها را نادیده بگیرید، پیام کلید مشکل این کد را بیان می‌کند:</p>
+<pre><code class="language-text">this function's return type contains a borrowed value, but there is no value
+for it to be borrowed from
+</code></pre>
+<p>بیایید نگاهی دقیق‌تر به آنچه که در هر مرحله از کد <code>dangle</code> اتفاق می‌افتد بیندازیم:</p>
+<figure class="listing">
+<span class="file-name">Filename: src/main.rs</span>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">fn main() {
+</span><span class="boring">    let reference_to_nothing = dangle();
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn dangle() -&gt; &amp;String { // dangle returns a reference to a String
+
+    let s = String::from("hello"); // s is a new String
+
+    &amp;s // we return a reference to the String, s
+} // Here, s goes out of scope and is dropped, so its memory goes away.
+  // Danger!</code></pre>
+</figure>
+<p>از آنجا که <code>s</code> داخل <code>dangle</code> ایجاد می‌شود، زمانی که کد <code>dangle</code> تمام می‌شود، <code>s</code> از محدوده خارج می‌شود و آزاد می‌گردد. اما ما سعی کردیم یک ارجاع به آن برگردانیم. این بدان معناست که این ارجاع به یک <code>String</code> نامعتبر اشاره می‌کند. این خوب نیست! Rust اجازه نمی‌دهد این کار را انجام دهیم.</p>
+<p>راه‌حل در اینجا این است که به جای آن <code>String</code> را به طور مستقیم برگردانید:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span><span class="boring">    let string = no_dangle();
+</span><span class="boring">}
+</span><span class="boring">
+</span>fn no_dangle() -&gt; String {
+    let s = String::from("hello");
+
+    s
+}</code></pre>
+<p>این بدون هیچ مشکلی کار می‌کند. مالکیت به بیرون منتقل می‌شود و هیچ چیزی آزاد نمی‌شود.</p>
+<h3 id="the-rules-of-references"><a class="header" href="#the-rules-of-references">قوانین ارجاعات</a></h3>
+<p>بیایید آنچه درباره ارجاعات بحث کردیم را مرور کنیم:</p>
+<ul>
+<li>در هر زمان مشخص، می‌توانید <em>یا</em> یک ارجاع متغیر داشته باشید <em>یا</em> هر تعداد ارجاع غیرمتغیر.</li>
+<li>ارجاعات باید همیشه معتبر باشند.</li>
+</ul>
+<p>در مرحله بعد، به نوع دیگری از ارجاع خواهیم پرداخت: بخش‌ها (<em>slices</em>).</p><nav class="page-nav"><a href="ch04-01-what-is-ownership.html">→ مالکیت چیست؟</a><a href="ch04-03-slices.html">نوع Slice ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

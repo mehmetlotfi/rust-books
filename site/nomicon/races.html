@@ -1,0 +1,65 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>رقابت‌ها — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="races"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="data-races-and-race-conditions"><a class="header" href="#data-races-and-race-conditions">رقابت‌های داده و شرایط رقابتی</a></h1>
+<p>Safe Rust نبود رقابت داده (data race) را تضمین می‌کند، که به این صورت تعریف می‌شود:</p>
+<ul>
+<li>دو یا چند نخ هم‌زمان به یک مکان از حافظه دسترسی دارند</li>
+<li>یک یا چند تا از آن‌ها در حال نوشتن‌اند</li>
+<li>یک یا چند تا از آن‌ها همگام‌سازی نشده‌اند</li>
+</ul>
+<p>رقابت داده رفتار تعریف‌نشده دارد و بنابراین انجام آن در Safe Rust غیرممکن است. رقابت‌های داده <em>عمدتاً</em> فقط از طریق سیستم مالکیت Rust جلوگیری می‌شوند: نمی‌توان یک ارجاع تغییرپذیر را alias کرد، پس نمی‌توان رقابت داده ایجاد کرد. تغییرپذیری درونی (interior mutability) این را پیچیده‌تر می‌کند، و این تا حد زیادی دلیل وجود صفت‌های Send و Sync است (برای توضیح بیشتر بخش بعد را ببینید).</p>
+<p><strong>با این حال Rust از شرایط رقابتی (race condition) عمومی جلوگیری نمی‌کند.</strong></p>
+<p>این در شرایطی که زمان‌بند (scheduler) را کنترل نمی‌کنید از نظر ریاضی غیرممکن است، و این در محیط عادی سیستم‌عامل صادق است. اگر پیشگیری (preemption) را کنترل کنید، جلوگیری از رقابت‌های عمومی <em>ممکن است</em> شدنی باشد - این تکنیک در فریم‌ورک‌هایی مانند <a href="https://github.com/rtic-rs/rtic">RTIC</a> به کار می‌رود. با این حال، در عمل کنترل بر زمان‌بندی حالتی بسیار نادر است.</p>
+<p>به همین دلیل، «امن» به حساب می‌آید که Rust دچار بن‌بست (deadlock) شود یا به‌خاطر همگام‌سازی نادرست کاری بی‌معنی انجام دهد: این را شرط رقابتی عمومی یا رقابت منابع می‌نامند. بدیهی است که چنین برنامه‌ای چندان خوب نیست، اما Rust البته نمی‌تواند از همهٔ خطاهای منطقی جلوگیری کند.</p>
+<p>در هر صورت، یک شرط رقابتی به‌تنهایی نمی‌تواند امنیت حافظه را در یک برنامهٔ Rust نقض کند. فقط در ترکیب با کد unsafe دیگری است که یک شرط رقابتی می‌تواند واقعاً امنیت حافظه را نقض کند. برای مثال، یک برنامهٔ درست این شکلی است:</p>
+<pre><code class="language-rust no_run">use std::thread;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+
+let data = vec![1, 2, 3, 4];
+// Arc so that the memory the AtomicUsize is stored in still exists for
+// the other thread to increment, even if we completely finish executing
+// before it. Rust won't compile the program without it, because of the
+// lifetime requirements of thread::spawn!
+let idx = Arc::new(AtomicUsize::new(0));
+let other_idx = idx.clone();
+
+// `move` captures other_idx by-value, moving it into this thread
+thread::spawn(move || {
+    // It's ok to mutate idx because this value
+    // is an atomic, so it can't cause a Data Race.
+    other_idx.fetch_add(10, Ordering::SeqCst);
+});
+
+// Index with the value loaded from the atomic. This is safe because we
+// read the atomic memory only once, and then pass a copy of that value
+// to the Vec's indexing implementation. This indexing will be correctly
+// bounds checked, and there's no chance of the value getting changed
+// in the middle. However our program may panic if the thread we spawned
+// managed to increment before this ran. A race condition because correct
+// program execution (panicking is rarely correct) depends on order of
+// thread execution.
+println!("{}", data[idx.load(Ordering::SeqCst)]);</code></pre>
+<p>اگر در عوض بررسی کران را از پیش انجام دهیم و سپس به‌صورت unsafe با یک مقدار بررسی‌نشده به داده دسترسی پیدا کنیم، می‌توانیم باعث شویم یک شرط رقابتی امنیت حافظه را نقض کند:</p>
+<pre><code class="language-rust no_run">use std::thread;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+
+let data = vec![1, 2, 3, 4];
+
+let idx = Arc::new(AtomicUsize::new(0));
+let other_idx = idx.clone();
+
+// `move` captures other_idx by-value, moving it into this thread
+thread::spawn(move || {
+    // It's ok to mutate idx because this value
+    // is an atomic, so it can't cause a Data Race.
+    other_idx.fetch_add(10, Ordering::SeqCst);
+});
+
+if idx.load(Ordering::SeqCst) &lt; data.len() {
+    unsafe {
+        // Incorrectly loading the idx after we did the bounds check.
+        // It could have changed. This is a race condition, *and dangerous*
+        // because we decided to do `get_unchecked`, which is `unsafe`.
+        println!("{}", data.get_unchecked(idx.load(Ordering::SeqCst)));
+    }
+}</code></pre><nav class="page-nav"><a href="concurrency.html">→ همروندی</a><a href="send-and-sync.html">Send و Sync ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../nomicon/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

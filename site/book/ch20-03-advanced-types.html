@@ -1,0 +1,218 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>نوع‌های پیشرفته — زبان برنامه‌نویسی Rust</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="ch20-03-advanced-types"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="title-page.html" style="color:inherit;text-decoration:none">زبان برنامه‌نویسی Rust</a><small class="en-title" dir="ltr">The Rust Programming Language</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h2 id="advanced-types"><a class="header" href="#advanced-types">انواع (Typeهای) پیشرفته</a></h2>
+<p>سیستم نوع‌بندی Rust شامل ویژگی‌هایی است که تاکنون فقط به آن‌ها اشاره کرده‌ایم و هنوز به‌طور کامل مورد بحث قرار نگرفته‌اند. ابتدا به بررسی الگوی newtype می‌پردازیم تا بفهمیم چرا این الگو به‌عنوان انواع مفید است. سپس به aliasهای نوع می‌پردازیم، که ویژگی مشابهی با newtype دارند اما با تفاوت‌هایی در معناشناسی. همچنین، نوع <code>!</code> و انواع پویا (dynamically sized types) را نیز بررسی خواهیم کرد.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="using-the-newtype-pattern-for-type-safety-and-abstraction"></a></p>
+<h3 id="type-safety-and-abstraction-with-the-newtype-pattern"><a class="header" href="#type-safety-and-abstraction-with-the-newtype-pattern">استفاده از الگوی Newtype برای ایمنی نوع و انتزاع</a></h3>
+<p>این بخش فرض می‌کند که پیش‌تر بخش <a href="ch20-02-advanced-traits.html#implementing-external-traits-with-the-newtype-pattern">«استفاده از الگوی Newtype برای پیاده‌سازی Traitهای خارجی»</a><!-- ignore --> را خوانده‌اید. الگوی newtype برای کارهایی فراتر از آن‌چه تاکنون بحث کردیم نیز مفید است، از جمله اعمال محدودیت‌های ایستا (statically) برای جلوگیری از اشتباه گرفتن مقادیر و مشخص‌کردن واحد یک مقدار. مثالی از استفاده‌ی newtype برای مشخص‌کردن واحدها را در لیستینگ 20-16 مشاهده کردید: به خاطر بیاورید که ساختارهای <code>Millimeters</code> و <code>Meters</code> مقادیر <code>u32</code> را درون یک newtype می‌پیچیدند. اگر تابعی با پارامتری از نوع <code>Millimeters</code> بنویسیم، برنامه‌ای که به‌اشتباه سعی کند آن تابع را با مقداری از نوع <code>Meters</code> یا یک <code>u32</code> معمولی فراخوانی کند، کامپایل نخواهد شد.</p>
+<p>ما همچنین می‌توانیم از الگوی newtype برای انتزاع جزئیات پیاده‌سازی یک نوع استفاده کنیم: نوع جدید می‌تواند یک API عمومی ارائه دهد که با API نوع داخلی خصوصی متفاوت است.</p>
+<p>الگوی newtype همچنین می‌تواند پیاده‌سازی داخلی را پنهان کند. برای مثال، می‌توانیم یک نوع <code>People</code> ارائه دهیم که یک <code>HashMap&lt;i32, String&gt;</code> را در خود بپیچد؛ این ساختار شناسه‌ی هر فرد را با نام او نگه می‌دارد. کدی که از <code>People</code> استفاده می‌کند، تنها با API عمومی‌ای که ما ارائه می‌دهیم تعامل خواهد داشت، مانند متدی برای افزودن یک رشته‌ی نام به مجموعه‌ی <code>People</code>؛ این کد نیازی ندارد بداند که ما به‌صورت داخلی برای نام‌ها یک شناسه‌ی <code>i32</code> اختصاص می‌دهیم. الگوی newtype روشی سبک‌وزن برای رسیدن به کپسوله‌سازی و پنهان‌سازی جزئیات پیاده‌سازی است؛ موضوعی که در فصل ۱۸، در بخش <a href="ch18-01-what-is-oo.html#encapsulation-that-hides-implementation-details">«کپسوله‌سازی برای پنهان‌سازی جزئیات پیاده‌سازی»</a><!-- ignore --> بررسی کردیم.</p>
+<!-- Old headings. Do not remove or links may break. -->
+<p><a id="creating-type-synonyms-with-type-aliases"></a></p>
+<h3 id="type-synonyms-and-type-aliases"><a class="header" href="#type-synonyms-and-type-aliases">ایجاد مترادف‌های نوع با استفاده از Type Aliases</a></h3>
+<p>Rust قابلیت تعریف <em>alias نوع</em> را برای ارائه یک نام دیگر برای یک نوع موجود فراهم می‌کند. برای این کار از کلمه‌کلیدی <code>type</code> استفاده می‌کنیم. به‌عنوان مثال، می‌توانیم alias‌ای به نام <code>Kilometers</code> برای نوع <code>i32</code> ایجاد کنیم:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    type Kilometers = i32;
+<span class="boring">
+</span><span class="boring">    let x: i32 = 5;
+</span><span class="boring">    let y: Kilometers = 5;
+</span><span class="boring">
+</span><span class="boring">    println!("x + y = {}", x + y);
+</span><span class="boring">}</span></code></pre>
+<p>اکنون نام مستعار <code>Kilometers</code> یک <em>مترادف</em> برای نوع <code>i32</code> است؛ برخلاف انواع <code>Millimeters</code> و <code>Meters</code> که در لیستینگ 20-16 ایجاد کردیم، <code>Kilometers</code> یک نوع جداگانه و جدید نیست. مقادیری که نوع آن‌ها <code>Kilometers</code> باشد، همانند مقادیر نوع <code>i32</code> در نظر گرفته می‌شوند:</p>
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    type Kilometers = i32;
+
+    let x: i32 = 5;
+    let y: Kilometers = 5;
+
+    println!("x + y = {}", x + y);
+<span class="boring">}</span></code></pre>
+<p>از آن‌جا که <code>Kilometers</code> و <code>i32</code> از نظر نوع یکسان هستند، می‌توانیم مقادیری از هر دو نوع را با هم جمع کنیم و همچنین می‌توانیم مقادیر <code>Kilometers</code> را به توابعی بدهیم که پارامترهایی از نوع <code>i32</code> دارند. با این حال، با استفاده از این روش، مزایای بررسی نوع را که از الگوی newtype (الگوی نوع جدید) به‌دست می‌آید، نخواهیم داشت. به‌عبارت دیگر، اگر در جایی <code>Kilometers</code> و <code>i32</code> را با هم اشتباه بگیریم، کامپایلر به ما خطا نخواهد داد.</p>
+<p>استفاده اصلی از مترادف‌های نوع برای کاهش تکرار است. به‌عنوان مثال، ممکن است یک نوع طولانی مانند این داشته باشیم:</p>
+<pre><code class="language-rust ignore">Box&lt;dyn Fn() + Send + 'static&gt;</code></pre>
+<p>نوشتن این نوع طولانی در امضاهای توابع و به‌عنوان توضیحات نوع در سراسر کد می‌تواند خسته‌کننده و مستعد خطا باشد. تصور کنید پروژه‌ای پر از کدی مانند آنچه در فهرست 20-25 نشان داده شده است.</p>
+<figure class="listing" id="listing-20-25">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    let f: Box&lt;dyn Fn() + Send + 'static&gt; = Box::new(|| println!("hi"));
+
+    fn takes_long_type(f: Box&lt;dyn Fn() + Send + 'static&gt;) {
+        // --snip--
+    }
+
+    fn returns_long_type() -&gt; Box&lt;dyn Fn() + Send + 'static&gt; {
+        // --snip--
+<span class="boring">        Box::new(|| ())
+</span>    }
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-20-25">لیست ۲۰-۲۵</a>: استفاده از یک نوع طولانی در چندین مکان</figcaption>
+</figure>
+<p>یک <strong>نوع مستعار</strong> (type alias) این کد را با کاهش تکرار خواناتر و مدیریت‌پذیرتر می‌کند. در فهرست 20-26، ما یک مستعار به نام <code>Thunk</code> برای نوع طولانی معرفی کرده‌ایم و می‌توانیم همه استفاده‌ها از این نوع را با مستعار کوتاه‌تر <code>Thunk</code> جایگزین کنیم.</p>
+<figure class="listing" id="listing-20-26">
+<pre><code class="language-rust"><span class="boring">fn main() {
+</span>    type Thunk = Box&lt;dyn Fn() + Send + 'static&gt;;
+
+    let f: Thunk = Box::new(|| println!("hi"));
+
+    fn takes_long_type(f: Thunk) {
+        // --snip--
+    }
+
+    fn returns_long_type() -&gt; Thunk {
+        // --snip--
+<span class="boring">        Box::new(|| ())
+</span>    }
+<span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-20-26">لیست ۲۰-۲۶</a>: معرفی نام مستعار &lt;code&gt;&lt;/x-listing&gt;Thunk&lt;/code&gt; برای کاهش تکرار</figcaption>
+</figure>
+<p>این کد بسیار خواناتر و نوشتن آن آسان‌تر است! انتخاب یک نام معنادار برای نوع مستعار می‌تواند به انتقال مقصود شما کمک کند. (برای مثال، <em>thunk</em> کلمه‌ای است که به کدی اشاره دارد که قرار است در آینده اجرا شود، بنابراین برای اشاره به یک closure که ذخیره می‌شود، مناسب است).</p>
+<p>نوع‌های مستعار همچنین معمولاً با نوع <code>Result&lt;T, E&gt;</code> برای کاهش تکرار استفاده می‌شوند. به‌عنوان نمونه، ماژول <code>std::io</code> در کتابخانه استاندارد را در نظر بگیرید. عملیات I/O اغلب یک <code>Result&lt;T, E&gt;</code> برمی‌گرداند تا مواقعی که عملیات با شکست مواجه می‌شود مدیریت شود. این کتابخانه یک ساختار <code>std::io::Error</code> دارد که تمامی خطاهای ممکن در I/O را نمایش می‌دهد. بسیاری از توابع در <code>std::io</code> <code>Result&lt;T, E&gt;</code> را برمی‌گردانند که در آن <code>E</code> برابر با <code>std::io::Error</code> است، مانند این توابع در trait <code>Write</code>:</p>
+<pre><code class="language-rust noplayground">use std::fmt;
+use std::io::Error;
+
+pub trait Write {
+    fn write(&amp;mut self, buf: &amp;[u8]) -&gt; Result&lt;usize, Error&gt;;
+    fn flush(&amp;mut self) -&gt; Result&lt;(), Error&gt;;
+
+    fn write_all(&amp;mut self, buf: &amp;[u8]) -&gt; Result&lt;(), Error&gt;;
+    fn write_fmt(&amp;mut self, fmt: fmt::Arguments) -&gt; Result&lt;(), Error&gt;;
+}</code></pre>
+<p>عبارت <code>Result&lt;..., Error&gt;</code> به دفعات تکرار شده است. به همین دلیل، در ماژول <code>std::io</code> یک نوع مستعار (type alias) به این شکل تعریف شده است:</p>
+<pre><code class="language-rust noplayground"><span class="boring">use std::fmt;
+</span><span class="boring">
+</span>type Result&lt;T&gt; = std::result::Result&lt;T, std::io::Error&gt;;
+<span class="boring">
+</span><span class="boring">pub trait Write {
+</span><span class="boring">    fn write(&amp;mut self, buf: &amp;[u8]) -&gt; Result&lt;usize&gt;;
+</span><span class="boring">    fn flush(&amp;mut self) -&gt; Result&lt;()&gt;;
+</span><span class="boring">
+</span><span class="boring">    fn write_all(&amp;mut self, buf: &amp;[u8]) -&gt; Result&lt;()&gt;;
+</span><span class="boring">    fn write_fmt(&amp;mut self, fmt: fmt::Arguments) -&gt; Result&lt;()&gt;;
+</span><span class="boring">}</span></code></pre>
+<p>از آنجا که این تعریف در ماژول <code>std::io</code> قرار دارد، می‌توانیم از نوع مستعار <code>std::io::Result&lt;T&gt;</code> استفاده کنیم؛ به این معنی که <code>Result&lt;T, E&gt;</code> با مقدار <code>E</code> برابر با <code>std::io::Error</code> است. امضای توابع موجود در trait <code>Write</code> به این شکل خواهد بود:</p>
+<pre><code class="language-rust noplayground"><span class="boring">use std::fmt;
+</span><span class="boring">
+</span><span class="boring">type Result&lt;T&gt; = std::result::Result&lt;T, std::io::Error&gt;;
+</span><span class="boring">
+</span>pub trait Write {
+    fn write(&amp;mut self, buf: &amp;[u8]) -&gt; Result&lt;usize&gt;;
+    fn flush(&amp;mut self) -&gt; Result&lt;()&gt;;
+
+    fn write_all(&amp;mut self, buf: &amp;[u8]) -&gt; Result&lt;()&gt;;
+    fn write_fmt(&amp;mut self, fmt: fmt::Arguments) -&gt; Result&lt;()&gt;;
+}</code></pre>
+<p>این نوع مستعار از دو جنبه کمک‌کننده است: نوشتن کد را ساده‌تر می‌کند <em>و</em> یک رابط کاربری یکپارچه در تمام بخش‌های <code>std::io</code> فراهم می‌آورد. از آنجا که این یک مستعار است، همچنان یک <code>Result&lt;T, E&gt;</code> معمولی است؛ به این معنی که می‌توانیم از تمام متدهایی که روی <code>Result&lt;T, E&gt;</code> کار می‌کنند استفاده کنیم، همچنین از نحو خاص مانند عملگر <code>?</code>.</p>
+<h3 id="the-never-type-that-never-returns"><a class="header" href="#the-never-type-that-never-returns">نوع هرگز که هیچ‌گاه بازنمی‌گردد</a></h3>
+<p>Rust دارای یک نوع ویژه به نام <code>!</code> است که در نظریه نوع‌ها به عنوان <em>نوع خالی</em> (empty type) شناخته می‌شود، زیرا هیچ مقداری ندارد. ما ترجیح می‌دهیم آن را <em>نوعی که هرگز بازنمی‌گردد</em> (never type) بنامیم، زیرا به‌جای نوع بازگشتی قرار می‌گیرد زمانی که یک تابع هرگز بازنمی‌گردد. به مثال زیر توجه کنید:</p>
+<pre><code class="language-rust noplayground">fn bar() -&gt; ! {
+    // --snip--
+<span class="boring">    panic!();
+</span>}</code></pre>
+<p>این کد به این صورت خوانده می‌شود: «تابع <code>bar</code> هرگز باز نمی‌گردد.» تابع‌هایی که هرگز باز نمی‌گردند، <em>تابع‌های واگرا (diverging functions)</em> نام دارند. ما نمی‌توانیم مقداری از نوع <code>!</code> بسازیم، بنابراین <code>bar</code> نمی‌تواند هیچ‌گاه مقداری بازگرداند.</p>
+<p>اما چه فایده‌ای دارد نوعی که نمی‌توانید هیچ مقداری از آن بسازید؟ کدی را به یاد آورید که در لیست ۲-۵، بخشی از بازی حدس عدد بود؛ ما بخشی از آن را این‌جا در لیست 20-27 بازتولید کرده‌ایم.</p>
+<figure class="listing" id="listing-20-27">
+<pre><code class="language-rust ignore"><span class="boring">use std::cmp::Ordering;
+</span><span class="boring">use std::io;
+</span><span class="boring">
+</span><span class="boring">use rand::prelude::*;
+</span><span class="boring">
+</span><span class="boring">fn main() {
+</span><span class="boring">    println!("Guess the number!");
+</span><span class="boring">
+</span><span class="boring">    let secret_number = rand::rng().random_range(1..=100);
+</span><span class="boring">
+</span><span class="boring">    println!("The secret number is: {secret_number}");
+</span><span class="boring">
+</span><span class="boring">    loop {
+</span><span class="boring">        println!("Please input your guess.");
+</span><span class="boring">
+</span><span class="boring">        let mut guess = String::new();
+</span><span class="boring">
+</span><span class="boring">        // --snip--
+</span><span class="boring">
+</span><span class="boring">        io::stdin()
+</span><span class="boring">            .read_line(&amp;mut guess)
+</span><span class="boring">            .expect("Failed to read line");
+</span><span class="boring">
+</span>        let guess: u32 = match guess.trim().parse() {
+            Ok(num) =&gt; num,
+            Err(_) =&gt; continue,
+        };
+<span class="boring">
+</span><span class="boring">        println!("You guessed: {guess}");
+</span><span class="boring">
+</span><span class="boring">        // --snip--
+</span><span class="boring">
+</span><span class="boring">        match guess.cmp(&amp;secret_number) {
+</span><span class="boring">            Ordering::Less =&gt; println!("Too small!"),
+</span><span class="boring">            Ordering::Greater =&gt; println!("Too big!"),
+</span><span class="boring">            Ordering::Equal =&gt; {
+</span><span class="boring">                println!("You win!");
+</span><span class="boring">                break;
+</span><span class="boring">            }
+</span><span class="boring">        }
+</span><span class="boring">    }
+</span><span class="boring">}</span></code></pre>
+<figcaption><a href="#listing-20-27">لیست ۲۰-۲۷</a>: یک &lt;code&gt;&lt;/x-listing&gt;match&lt;/code&gt; با بازوی پایانی که به &lt;code&gt;continue&lt;/code&gt; ختم می‌شود</figcaption>
+</figure>
+<p>در آن زمان، از برخی جزئیات در این کد عبور کردیم. در بخش <a href="ch06-02-match.html#the-match-control-flow-construct">«ساختار کنترلی <code>match</code>»</a><!-- ignore --> در فصل ۶، بحث کردیم که تمام بازوهای <code>match</code> باید یک نوع بازگشتی یکسان داشته باشند. برای مثال، کد زیر کار نمی‌کند:</p>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">fn main() {
+</span><span class="boring">    let guess = "3";
+</span>    let guess = match guess.trim().parse() {
+        Ok(_) =&gt; 5,
+        Err(_) =&gt; "hello",
+    };
+<span class="boring">}</span></code></pre>
+<p>نوع <code>guess</code> در این کد باید هم عدد صحیح (<em>integer</em>) و هم رشته (<em>string</em>) باشد، و Rust نیاز دارد که <code>guess</code> تنها یک نوع داده داشته باشد. بنابراین، دستور <code>continue</code> چه مقداری را برمی‌گرداند؟ چگونه توانستیم از یک بازو مقدار <code>u32</code> بازگردانیم و در بازوی دیگر <code>continue</code> را قرار دهیم که در لیست ۲۰-۲۷ آورده شده است؟</p>
+<p>همان‌طور که احتمالاً حدس زده‌اید، دستور <code>continue</code> دارای نوع <code>!</code> است. یعنی، وقتی Rust نوع <code>guess</code> را محاسبه می‌کند، به هر دو بازوی <code>match</code> نگاه می‌کند: بازوی اول مقداری از نوع <code>u32</code> دارد و بازوی دوم مقداری از نوع <code>!</code>. از آنجا که <code>!</code> نمی‌تواند هیچ مقداری داشته باشد، Rust نتیجه‌گیری می‌کند که نوع <code>guess</code> برابر با <code>u32</code> است.</p>
+<p>روش رسمی برای توصیف این رفتار این است که عبارت‌های نوع <code>!</code> می‌توانند به هر نوع دیگری تبدیل شوند (<em>coerce</em>). ما می‌توانیم بازوی <code>match</code> را با دستور <code>continue</code> پایان دهیم زیرا <code>continue</code> مقداری باز نمی‌گرداند؛ بلکه کنترل را به بالای حلقه بازمی‌گرداند، بنابراین در حالت <code>Err</code>، هیچ مقداری به <code>guess</code> اختصاص داده نمی‌شود.</p>
+<p>نوع <code>!</code> در ماکرو <code>panic!</code> نیز مفید است. به یاد بیاورید تابع <code>unwrap</code> که روی مقادیر <code>Option&lt;T&gt;</code> فراخوانی می‌کنیم تا مقداری را تولید کند یا با استفاده از این تعریف متوقف شود:</p>
+<pre><code class="language-rust ignore"><span class="boring">enum Option&lt;T&gt; {
+</span><span class="boring">    Some(T),
+</span><span class="boring">    None,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">use crate::Option::*;
+</span><span class="boring">
+</span>impl&lt;T&gt; Option&lt;T&gt; {
+    pub fn unwrap(self) -&gt; T {
+        match self {
+            Some(val) =&gt; val,
+            None =&gt; panic!("called `Option::unwrap()` on a `None` value"),
+        }
+    }
+}</code></pre>
+<p>در این کد، همان چیزی که در <code>match</code> لیست ۲۰-۲۷ رخ داد اتفاق می‌افتد: Rust می‌بیند که <code>val</code> از نوع <code>T</code> است و <code>panic!</code> از نوع <code>!</code> است، بنابراین نتیجه کلی عبارت <code>match</code> برابر با <code>T</code> است. این کد کار می‌کند زیرا <code>panic!</code> هیچ مقداری تولید نمی‌کند؛ بلکه برنامه را متوقف می‌کند. در حالت <code>None</code>، ما مقداری از <code>unwrap</code> بازنمی‌گردانیم، بنابراین این کد معتبر است.</p>
+<p>یک عبارت نهایی که نوع <code>!</code> دارد، حلقه <code>loop</code> است:</p>
+<pre><code class="language-rust ignore"><span class="boring">fn main() {
+</span>    print!("forever ");
+
+    loop {
+        print!("and ever ");
+    }
+<span class="boring">}</span></code></pre>
+<p>اینجا، حلقه هیچ‌گاه متوقف نمی‌شود، بنابراین نوع <code>!</code> مقدار عبارت خواهد بود. با این حال، اگر <code>break</code> درون حلقه باشد، این موضوع درست نخواهد بود، زیرا حلقه وقتی به <code>break</code> می‌رسد، متوقف می‌شود.</p>
+<h3 id="dynamically-sized-types-and-the-sized-trait"><a class="header" href="#dynamically-sized-types-and-the-sized-trait">typeها با اندازه پویا (dynamic) و ویژگی <code>Sized</code></a></h3>
+<p>Rust باید جزئیات معینی دربارهٔ نوع‌هایش بداند، مانند اینکه برای یک مقدار از یک نوع خاص چقدر فضا باید تخصیص دهد. این موضوع باعث می‌شود یک گوشه از سیستم نوع آن در ابتدا کمی گیج‌کننده باشد: مفهوم <em>نوع‌های با اندازهٔ پویا (dynamically sized types)</em>. این نوع‌ها که گاهی <em>DST</em> یا <em>نوع‌های بی‌اندازه (unsized types)</em> نامیده می‌شوند، به ما اجازه می‌دهند کدی بنویسیم که از مقادیری استفاده می‌کند که اندازهٔ آن‌ها را فقط در زمان اجرا می‌توانیم بدانیم.</p>
+<p>بیایید وارد جزئیات نوعی با اندازه‌ی پویا (Dynamically Sized Type یا DST) به نام <code>str</code> شویم که در طول این کتاب بارها از آن استفاده کرده‌ایم. بله درست است، منظورمان <code>&amp;str</code> نیست، بلکه خود <code>str</code> به‌تنهایی یک DST است. در بسیاری از موارد، مانند زمانی که متنی توسط کاربر وارد می‌شود، ما نمی‌دانیم طول رشته چقدر است تا زمانی که برنامه اجرا شود. این بدان معناست که نمی‌توانیم یک متغیر از نوع <code>str</code> ایجاد کنیم و نه می‌توانیم آرگومانی از نوع <code>str</code> دریافت کنیم. به مثال زیر توجه کنید که کار نمی‌کند:</p>
+<pre><code class="language-rust ignore does_not_compile"><span class="boring">fn main() {
+</span>    let s1: str = "Hello there!";
+    let s2: str = "How's it going?";
+<span class="boring">}</span></code></pre>
+<p>Rust نیاز دارد که بداند چقدر حافظه برای هر مقدار از یک نوع خاص تخصیص دهد، و تمام مقادیر یک نوع باید از همان مقدار حافظه استفاده کنند. اگر Rust اجازه می‌داد این کد را بنویسیم، این دو مقدار <code>str</code> باید از یک مقدار فضا استفاده می‌کردند. اما آن‌ها طول‌های متفاوتی دارند: <code>s1</code> به ۱۲ بایت فضای ذخیره‌سازی نیاز دارد و <code>s2</code> به ۱۵ بایت. به همین دلیل است که ایجاد یک متغیر که یک نوع با اندازه دایتانیک داشته باشد ممکن نیست.</p>
+<p>خب، چه باید بکنیم؟ در این مورد، پاسخ را از قبل می‌دانید: نوع <code>s1</code> و <code>s2</code> را به‌جای <code>str</code>، برش رشته (<code>&amp;str</code>) قرار می‌دهیم. از بخش <a href="ch04-03-slices.html#string-slices">«برش‌های رشته‌ای»</a><!-- ignore --> در فصل ۴ به یاد بیاورید که ساختار داده slice فقط موقعیت شروع و طول برش را ذخیره می‌کند. بنابراین، اگرچه <code>&amp;T</code> یک مقدار واحد است که آدرس حافظهٔ محل <code>T</code> را ذخیره می‌کند، یک برش رشته <em>دو</em> مقدار است: آدرس <code>str</code> و طول آن. به همین دلیل می‌توانیم اندازهٔ مقدار یک برش رشته را در زمان کامپایل بدانیم: دو برابر طول یک <code>usize</code> است. یعنی همیشه اندازهٔ یک برش رشته را می‌دانیم، فارغ از اینکه رشته‌ای که به آن اشاره می‌کند چقدر طولانی باشد. به‌طور کلی، روش استفاده از نوع‌های با اندازهٔ پویا در Rust همین است: آن‌ها یک تکه فراداده (metadata) اضافی دارند که اندازهٔ اطلاعات پویا را ذخیره می‌کند. قاعدهٔ طلایی نوع‌های با اندازهٔ پویا این است که همیشه باید مقادیر آن‌ها را پشت یک اشاره‌گر از نوعی قرار دهیم.</p>
+<p>ما می‌توانیم <code>str</code> را با انواع مختلفی از اشاره‌گرها ترکیب کنیم: برای مثال، <code>Box&lt;str&gt;</code> یا <code>Rc&lt;str&gt;</code>. در واقع، قبلاً نیز این را دیده‌اید اما با نوعی دیگر از نوع‌های با اندازه‌ی پویا: traits. هر trait یک نوع با اندازه‌ی پویا است که می‌توانیم با استفاده از نام trait به آن ارجاع دهیم. در بخش <a href="ch18-02-trait-objects.html#using-trait-objects-to-abstract-over-shared-behavior">“استفاده از trait objectها برای انتزاع‌سازی روی رفتار مشترک”</a><!-- ignore --> در فصل ۱۸، گفتیم که برای استفاده از traits به عنوان trait object، باید آن‌ها را پشت یک اشاره‌گر قرار دهیم، مانند <code>&amp;dyn Trait</code> یا <code>Box&lt;dyn Trait&gt;</code> (<code>Rc&lt;dyn Trait&gt;</code> نیز کار می‌کند).</p>
+<p>برای کار با تایپ‌های دایتانیک، Rust ویژگی <code>Sized</code> را فراهم می‌کند تا تعیین کند که آیا اندازه یک نوع در زمان کامپایل مشخص است یا خیر. این ویژگی به طور خودکار برای هر چیزی که اندازه آن در زمان کامپایل مشخص باشد پیاده‌سازی می‌شود. علاوه بر این، Rust به طور ضمنی یک محدودیت روی <code>Sized</code> را به هر تابع جنریک اضافه می‌کند. یعنی یک تعریف تابع جنریک به این صورت:</p>
+<pre><code class="language-rust ignore">fn generic&lt;T&gt;(t: T) {
+    // --snip--
+}</code></pre>
+<p>در واقع، به گونه‌ای رفتار می‌شود که گویی این را نوشته‌ایم:</p>
+<pre><code class="language-rust ignore">fn generic&lt;T: Sized&gt;(t: T) {
+    // --snip--
+}</code></pre>
+<p>به طور پیش‌فرض، توابع جنریک فقط روی نوع‌هایی کار خواهند کرد که اندازه آن‌ها در زمان کامپایل مشخص باشد. با این حال، می‌توانید از سینتکس خاص زیر برای کاهش این محدودیت استفاده کنید:</p>
+<pre><code class="language-rust ignore">fn generic&lt;T: ?Sized&gt;(t: &amp;T) {
+    // --snip--
+}</code></pre>
+<p>یک محدودیت ویژگی روی <code>?Sized</code> به این معنی است که “<code>T</code> ممکن است <code>Sized</code> باشد یا نباشد” و این یادداشت، پیش‌فرضی که نوع‌های جنریک باید اندازه مشخصی در زمان کامپایل داشته باشند را لغو می‌کند. سینتکس <code>?Trait</code> با این معنا تنها برای <code>Sized</code> در دسترس است، نه برای هیچ ویژگی دیگری.</p>
+<p>همچنین توجه داشته باشید که نوع پارامتر <code>t</code> را از <code>T</code> به <code>&amp;T</code> تغییر دادیم. از آنجایی که نوع ممکن است <code>Sized</code> نباشد، باید از آن پشت یک نوع اشاره‌گر (Pointer) استفاده کنیم. در این مورد، یک ارجاع انتخاب کرده‌ایم.</p>
+<p>در ادامه، درباره توابع و closureها صحبت خواهیم کرد!</p><nav class="page-nav"><a href="ch20-02-advanced-traits.html">→ صفت‌های پیشرفته</a><a href="ch20-04-advanced-functions-and-closures.html">توابع و closureهای پیشرفته ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../book/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

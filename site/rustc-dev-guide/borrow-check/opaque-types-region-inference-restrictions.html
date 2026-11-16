@@ -1,0 +1,135 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>محدودیت‌های استنتاج ناحیه — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="borrow-check/opaque-types-region-inference-restrictions"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="opaque-types-region-inference-restrictions"><a class="header" href="#opaque-types-region-inference-restrictions">محدودیت‌های استنتاج region برای opaque typeها</a></h1>
+<p>در این فصل محدودیت‌های مختلفی را بررسی می‌کنیم که هنگام تعریف hidden typeهای opaque typeها، بر آرگومان‌های جنریک آن‌ها اعمال می‌کنیم: <code>Opaque&lt;'a, 'b, .., A, B, ..&gt; := SomeHiddenType</code>.</p>
+<p>این محدودیت‌ها در borrow checking پیاده‌سازی شده‌اند (<a href="https://github.com/rust-lang/rust/blob/435b5255148617128f0a9b17bacd3cc10e032b23/compiler/rustc_borrowck/src/region_infer/opaque_types.rs">منبع</a>)، زیرا borrow checking آخرین گام استنتاج opaque typeهاست.</p>
+<h2 id="background-type-and-const-generic-arguments"><a class="header" href="#background-type-and-const-generic-arguments">پیش‌زمینه: آرگومان‌های جنریک نوع و ثابت</a></h2>
+<p>برای آرگومان‌های نوع، دو محدودیت لازم است: هر آرگومان نوع باید (۱) یک پارامتر نوع باشد و (۲) در میان آرگومان‌های جنریک یکتا باشد. همین موارد برای آرگومان‌های const نیز اعمال می‌شود.</p>
+<p>مثالی از حالت (۱):</p>
+<pre><code class="language-rust">type Opaque&lt;X&gt; = impl Sized;
+
+// `T` is a type parameter.
+// Opaque&lt;T&gt; := ();
+fn good&lt;T&gt;() -&gt; Opaque&lt;T&gt; {}
+
+// `()` is not a type parameter.
+// Opaque&lt;()&gt; := ();
+fn bad() -&gt; Opaque&lt;()&gt; {} //~ ERROR</code></pre>
+<p>مثالی از حالت (۲):</p>
+<pre><code class="language-rust">type Opaque&lt;X, Y&gt; = impl Sized;
+
+// `T` and `U` are unique in the generic args.
+// Opaque&lt;T, U&gt; := T;
+fn good&lt;T, U&gt;(t: T, _u: U) -&gt; Opaque&lt;T, U&gt; { t }
+
+// `T` appears twice in the generic args.
+// Opaque&lt;T, T&gt; := T;
+fn bad&lt;T&gt;(t: T) -&gt; Opaque&lt;T, T&gt; { t } //~ ERROR</code></pre>
+<p><strong>انگیزه:</strong> در حالت اول یعنی <code>Opaque&lt;()&gt; := ()</code>، hidden type مبهم است، زیرا با دو تفسیر مختلف سازگار است: <code>Opaque&lt;X&gt; := X</code> و <code>Opaque&lt;X&gt; := ()</code>. به همین ترتیب در حالت دوم یعنی <code>Opaque&lt;T, T&gt; := T</code>، مبهم است که باید به‌صورت <code>Opaque&lt;X, Y&gt; := X</code> تفسیر شود یا <code>Opaque&lt;X, Y&gt; := Y</code>. به دلیل این ابهام، هر دو حالت به‌عنوان استفاده‌ی تعریف‌کننده‌ی (defining use) نامعتبر رد می‌شوند.</p>
+<h2 id="uniqueness-restriction"><a class="header" href="#uniqueness-restriction">محدودیت یکتایی</a></h2>
+<p>هر آرگومان طول عمر باید در فهرست آرگومان‌ها یکتا باشد و نباید <code>'static</code> باشد. این برای جلوگیری از ابهام در استنتاج hidden type است، مشابه حالت پارامترهای نوع. برای مثال، defining use نامعتبر زیر یعنی <code>Opaque&lt;'static&gt; := Inv&lt;'static&gt;</code> با هر دو <code>Opaque&lt;'x&gt; := Inv&lt;'static&gt;</code> و <code>Opaque&lt;'x&gt; := Inv&lt;'x&gt;</code> سازگار است.</p>
+<pre><code class="language-rust">type Opaque&lt;'x&gt; = impl Sized + 'x;
+type Inv&lt;'a&gt; = Option&lt;*mut &amp;'a ()&gt;;
+
+fn good&lt;'a&gt;() -&gt; Opaque&lt;'a&gt; { Inv::&lt;'static&gt;::None }
+
+fn bad() -&gt; Opaque&lt;'static&gt; { Inv::&lt;'static&gt;::None }
+//~^ ERROR</code></pre>
+<pre><code class="language-rust">type Opaque&lt;'x, 'y&gt; = impl Trait&lt;'x, 'y&gt;;
+
+fn good&lt;'a, 'b&gt;() -&gt; Opaque&lt;'a, 'b&gt; {}
+
+fn bad&lt;'a&gt;() -&gt; Opaque&lt;'a, 'a&gt; {}
+//~^ ERROR</code></pre>
+<p><strong>برابری معنایی طول عمرها:</strong> یکی از پیچیدگی‌های طول عمرها در مقایسه با پارامترهای نوع این است که دو طول عمر که از نظر نحوی متفاوت‌اند ممکن است از نظر معنایی برابر باشند. بنابراین هنگام بررسی یکتا بودن طول عمرها باید محتاط باشیم.</p>
+<pre><code class="language-rust">// This is also invalid because `'a` is *semantically* equal to `'static`.
+fn still_bad_1&lt;'a: 'static&gt;() -&gt; Opaque&lt;'a&gt; {}
+//~^ Should error!
+
+// This is also invalid because `'a` and `'b` are *semantically* equal.
+fn still_bad_2&lt;'a: 'b, 'b: 'a&gt;() -&gt; Opaque&lt;'a, 'b&gt; {}
+//~^ Should error!</code></pre>
+<h2 id="an-exception-to-uniqueness-rule"><a class="header" href="#an-exception-to-uniqueness-rule">یک استثنا برای قاعده‌ی یکتایی</a></h2>
+<p>استثنایی برای قاعده‌ی یکتایی بالا زمانی است که کران‌های (bounds) موجود در تعریف opaque type ایجاب کنند یک پارامتر طول عمر برابر با پارامتر دیگری یا برابر با طول عمر <code>'static</code> باشد.</p>
+<pre><code class="language-rust">// The definition requires `'x` to be equal to `'static`.
+type Opaque&lt;'x: 'static&gt; = impl Sized + 'x;
+
+fn good() -&gt; Opaque&lt;'static&gt; {}</code></pre>
+<p><strong>انگیزه:</strong> تلاش برای پیاده‌سازی محدودیت یکتایی برای RPITها منجر به <a href="https://github.com/rust-lang/rust/pull/112842#issuecomment-1610057887">شکستی شد که crater پیدا کرد</a>. این مشکل را می‌توان با همین استثنا برای قاعده کاهش داد. مثالی از کدی که در غیر این صورت می‌شکست:</p>
+<pre><code class="language-rust">struct Type&lt;'a&gt;(&amp;'a ());
+impl&lt;'a&gt; Type&lt;'a&gt; {
+    // `'b == 'a`
+    fn do_stuff&lt;'b: 'a&gt;(&amp;'b self) -&gt; impl Trait&lt;'a, 'b&gt; {}
+}</code></pre>
+<p><strong>چرا این درست است:</strong> برای چنین defining useای مانند <code>Opaque&lt;'a, 'a&gt; := &amp;'a str</code>، می‌توان آن را به هر دو شیوه تفسیر کرد – یا به‌صورت <code>Opaque&lt;'x, 'y&gt; := &amp;'x str</code> یا به‌صورت <code>Opaque&lt;'x, 'y&gt; := &amp;'y str</code> – و فرقی نمی‌کند، زیرا هر استفاده از <code>Opaque</code> طبق قواعد well-formedness تضمین می‌کند که هر دو پارامتر برابرند.</p>
+<h2 id="universal-lifetimes-restriction"><a class="header" href="#universal-lifetimes-restriction">محدودیت طول عمرهای جهانی</a></h2>
+<p>فقط طول عمرهای کمیت‌پذیرشده‌ی جهانی (universally quantified) در آرگومان‌های opaque type مجازند. این شامل پارامترهای طول عمر و placeholderها می‌شود.</p>
+<pre><code class="language-rust">type Opaque&lt;'x&gt; = impl Sized + 'x;
+
+fn test&lt;'a&gt;() -&gt; Opaque&lt;'a&gt; {
+    // `Opaque&lt;'empty&gt; := ()`
+    let _: Opaque&lt;'_&gt; = ();
+    //~^ ERROR
+}</code></pre>
+<p><strong>انگیزه:</strong> این باعث می‌شود آرگومان‌های طول عمر و نوع رفتاری سازگار داشته باشند، اما این فقط یک امتیاز جانبی است. دلیل واقعی این محدودیت صرفاً فنی است، چون الگوریتم <a href="region-inference/member-constraints.html">member constraints</a> با یک محدودیت بنیادین روبه‌رو است: هنگام مواجهه با تعریف opaque type به شکل <code>Opaque&lt;'?1&gt; := &amp;'?2 u8</code>، یک member constraint به شکل <code>'?2 member-of ['static, '?1]</code> ثبت می‌شود. برای اینکه الگوریتم بتواند انتخاب درست را برگزیند، مجموعه‌ی <em>کامل</em> روابط «outlives» بین regionهای انتخاب <code>['static, '?1]</code> باید پیش از انجام استنتاج region از قبل معلوم باشد. این فقط زمانی برآورده می‌شود که هر region انتخاب یکی از این دو باشد:</p>
+<ol>
+<li>یک region جهانی (universal)، یعنی <code>RegionKind::Re{EarlyParam,LateParam,Placeholder,Static}</code>، چون روابط بین regionهای جهانی پیش از استنتاج region، از کران‌های صریح و ضمنی کاملاً معلوم است.</li>
+<li>یا یک region وجودی (existential) که «به‌طور اکید برابر» با یک region جهانی است. برابری اکید طول عمر در ادامه تعریف شده است و در اینجا لازم است، چون تنها نوع برابری‌ای است که پیش از استنتاج کامل region قابل ارزیابی است.</li>
+</ol>
+<p><strong>برابری اکید طول عمر:</strong> می‌گوییم دو طول عمر به‌طور اکید برابرند اگر بین آن‌ها قیدهای outlives دوطرفه وجود داشته باشد. در اصطلاح NLL، این یعنی طول عمرها بخشی از یک <a href="https://en.wikipedia.org/wiki/Strongly_connected_component">SCC</a> یکسان‌اند. نکته‌ی مهم اینکه این نوع برابری را می‌توان پیش از استنتاج کامل region ارزیابی کرد (البته پس از جمع‌آوری قیدها). نوع دیگر برابری زمانی است که استنتاج region در نهایت به دو متغیر طول عمر یک مقدار یکسان بدهد، حتی اگر به‌طور اکید برابر نباشند. برای اینکه ببینید قبلاً چگونه این تفاوت را با هم خلط می‌کردیم، <a href="https://github.com/rust-lang/rust/issues/113971">#113971</a> را ببینید.</p>
+<p><strong>تعامل با محدودیت «یک‌بار به‌جز region‌ها» (once modulo regions)</strong> در مثال بالا توجه کنید که opaque type در signature برابر <code>Opaque&lt;'a&gt;</code> است و opaque type در defining use نامعتبر برابر <code>Opaque&lt;'empty&gt;</code> است. در طرح پیشنهادی MiniTAIT، یعنی قاعده‌ی <a href="https://github.com/rust-lang/rust/pull/116935">“once modulo regions”</a>، این حالت از قبل ممنوع است. اگرچه ممکن است به نظر برسد محدودیت «طول عمرهای جهانی» زائد می‌شود، چون به‌طور منطقی از محدودیت‌های «MiniTAIT» نتیجه می‌شود، بحث بعدیِ مرتبط درباره‌ی برابری طول عمر و closureها همچنان مرتبط باقی می‌ماند.</p>
+<h2 id="closure-restrictions"><a class="header" href="#closure-restrictions">محدودیت‌های closure</a></h2>
+<p>وقتی opaque type در بدنه‌ی یک closure، coroutine یا inline-const تعریف می‌شود، طول عمرهای جهانی که نسبت به closure «خارجی» هستند در آرگومان‌های opaque type مجاز نیستند. regionهای خارجی در <a href="https://github.com/rust-lang/rust/blob/caf730043232affb6b10d1393895998cb4968520/compiler/rustc_borrowck/src/universal_regions.rs#L201."><code>RegionClassification::External</code></a> تعریف شده‌اند.</p>
+<p>مثال: (این یکی اتفاقاً در nightly فعلی کامپایل می‌شود، اما مثال‌های عملی‌تر از قبل با خطاهای گیج‌کننده رد می‌شوند.)</p>
+<pre><code class="language-rust">type Opaque&lt;'x&gt; = impl Sized + 'x;
+
+fn test&lt;'a&gt;() -&gt; Opaque&lt;'a&gt; {
+    let _ = || {
+        // `'a` is external to the closure
+        let _: Opaque&lt;'a&gt; = ();
+        //~^ Should be an error!
+    };
+    ()
+}</code></pre>
+<p><strong>انگیزه:</strong> در بدنه‌ی closureها، طول عمرهای خارجی، هرچند در دسته‌ی طول عمرهای «جهانی» قرار می‌گیرند، بیشتر مانند طول عمرهای وجودی رفتار می‌کنند، به این معنا که روابط بین آن‌ها از پیش معلوم نیست؛ در عوض مقادیرشان درست مثل طول عمرهای وجودی استنتاج می‌شود و الزامات به تابع والد بازگردانده می‌شود. این الگوریتم member constraints را، همان‌طور که در بالا توضیح داده شد، می‌شکند:</p>
+<blockquote>
+<p>برای اینکه الگوریتم بتواند انتخاب درست را برگزیند، مجموعه‌ی کامل روابط «outlives» بین regionهای انتخاب <code>['static, '?1]</code> باید پیش از انجام استنتاج region از قبل معلوم باشد</p>
+</blockquote>
+<p>در اینجا مثالی هست که جزئیات چگونگی این را نشان می‌دهد:</p>
+<pre><code class="language-rust">type Opaque&lt;'x, 'y&gt; = impl Sized;
+
+//
+fn test&lt;'a, 'b&gt;(s: &amp;'a str) -&gt; impl FnOnce() -&gt; Opaque&lt;'a, 'b&gt; {
+    move || { s }
+    //~^ ERROR hidden type for `Opaque&lt;'_, '_&gt;` captures lifetime that does not appear in bounds
+}
+
+// The above closure body is desugared into something like:
+fn test::{closure#0}(_upvar: &amp;'?8 str) -&gt; Opaque&lt;'?6, '?7&gt; {
+    return _upvar
+}
+
+// where `['?8, '?6, ?7]` are universal lifetimes *external* to the closure.
+// There are no known relations between them *inside* the closure.
+// But in the parent fn it is known that `'?6: '?8`.
+//
+// When encountering an opaque definition `Opaque&lt;'?6, '?7&gt; := &amp;'8 str`,
+// The member constraints algorithm does not know enough to safely make `?8 = '?6`.
+// For this reason, it errors with a sensible message:
+// "hidden type captures lifetime that does not appear in bounds".</code></pre>
+<p>بدون این محدودیت‌ها، پیام‌های خطا گیج‌کننده‌اند و مهم‌تر اینکه این خطر وجود دارد که کدی را بپذیریم که احتمالاً در آینده خواهد شکست، چون member constraints در closureها به‌شدت معیوب‌اند.</p>
+<p><strong>نوع‌های خروجی:</strong> به باور من رایج‌ترین سناریویی که در کدهای دنیای واقعی باعث این مشکلات می‌شود، نوع‌های خروجی closureها و بلوک‌های async است. شایان ذکر است که بین closureها و بلوک‌های async تفاوتی وجود دارد که این مشکل را بیشتر نشان می‌دهد و ناشی از <a href="https://github.com/rust-lang/rust/blob/9cf18e98f82d85fa41141391d54485b8747da46f/compiler/rustc_hir_typeck/src/closure.rs#L743">hack مربوط به <code>replace_opaque_types_with_inference_vars</code></a> است که فقط برای futureها اعمال می‌شود.</p>
+<pre><code class="language-rust">type Opaque&lt;'x&gt; = impl Sized + 'x;
+fn test&lt;'a&gt;() -&gt; impl FnOnce() -&gt; Opaque&lt;'a&gt; {
+    // Output type of the closure is Opaque&lt;'a&gt;
+    // -&gt; hidden type definition happens *inside* the closure
+    // -&gt; rejected.
+    move || {}
+    //~^ ERROR expected generic lifetime parameter, found `'_`
+}</code></pre>
+<pre><code class="language-rust">use std::future::Future;
+type Opaque&lt;'x&gt; = impl Sized + 'x;
+fn test&lt;'a&gt;() -&gt; impl Future&lt;Output = Opaque&lt;'a&gt;&gt; {
+    // Output type of the async block is unit `()`
+    // -&gt; hidden type definition happens in the parent fn
+    // -&gt; accepted.
+    async move {}
+}</code></pre><nav class="page-nav"><a href="../return-position-impl-trait-in-trait.html">→ Impl Trait در جایگاه بازگشتی در صفت</a><a href="../effects.html">صفت‌های ثابت و بررسی شرط ثابت ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

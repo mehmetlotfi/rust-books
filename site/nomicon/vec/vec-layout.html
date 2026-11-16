@@ -1,0 +1,29 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>چیدمان — راست‌نومیکون</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="vec/vec-layout"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../intro.html" style="color:inherit;text-decoration:none">راست‌نومیکون</a><small class="en-title" dir="ltr">The Rustonomicon</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="layout"><a class="header" href="#layout">چیدمان</a></h1>
+<p>نخست باید چیدمان ساختار را مشخص کنیم. یک Vec سه بخش دارد: اشاره‌گری به تخصیص حافظه، اندازهٔ آن تخصیص، و تعداد عناصری که مقداردهی اولیه شده‌اند.</p>
+<p>اگر ساده‌لوحانه فکر کنیم، یعنی می‌خواهیم همین طراحی را داشته باشیم:</p>
+<!-- ignore: simplified code -->
+<pre><code class="language-rust ignore">pub struct Vec&lt;T&gt; {
+    ptr: *mut T,
+    cap: usize,
+    len: usize,
+}</code></pre>
+<p>و واقعاً هم این کد کامپایل می‌شود. متأسفانه بیش از حد سخت‌گیرانه است. کامپایلر وردایی (variance) بیش از حد سخت‌گیرانه‌ای به ما می‌دهد. بنابراین <code>&amp;Vec&lt;&amp;'static str&gt;</code> را نمی‌توان در جایی که <code>&amp;Vec&lt;&amp;'a str&gt;</code> انتظار می‌رود استفاده کرد. برای همهٔ جزئیات دربارهٔ وردایی، <a href="../ownership.html">فصل مربوط به مالکیت و طول عمر</a> را ببینید.</p>
+<p>همان‌طور که در فصل مالکیت دیدیم، کتابخانهٔ استاندارد وقتی اشاره‌گر خامی به تخصیصی دارد که مالک آن است، به‌جای <code>*mut T</code> از <code>Unique&lt;T&gt;</code> استفاده می‌کند. با این حال Unique ناپایدار است، پس ترجیح می‌دهیم در صورت امکان از آن استفاده نکنیم.</p>
+<ul>
+<li>ما نسبت به <code>T</code> هم‌وردا (covariant) هستیم</li>
+<li>ممکن است مالک مقداری از نوع <code>T</code> باشیم (این برای مثال فعلی ما اهمیتی ندارد، اما برای اینکه ببینید چرا <code>std::vec::Vec&lt;T&gt;</code> واقعی به این نیاز دارد، <a href="../phantom-data.html">فصل مربوط به PhantomData</a> را ببینید)</li>
+<li>اگر <code>T</code> از نوع Send/Sync باشد، ما هم Send/Sync هستیم</li>
+<li>اشاره‌گر ما هرگز null نیست (بنابراین <code>Option&lt;Vec&lt;T&gt;&gt;</code> بهینه‌سازی اشاره‌گر null را دریافت می‌کند)</li>
+</ul>
+<p>همهٔ این الزامات را می‌توانیم در Rust پایدار پیاده‌سازی کنیم. برای این کار، به‌جای <code>Unique&lt;T&gt;</code> از <a href="https://doc.rust-lang.org/std/ptr/struct.NonNull.html"><code>NonNull&lt;T&gt;</code></a> استفاده می‌کنیم، که پوشش دیگری پیرامون یک اشاره‌گر خام است و دو مورد از ویژگی‌های بالا را به ما می‌دهد: یعنی نسبت به <code>T</code> هم‌وردا است و اعلام شده که هرگز null نیست. با پیاده‌سازی Send/Sync در صورتی که <code>T</code> چنین باشد، همان نتایج استفاده از <code>Unique&lt;T&gt;</code> را به دست می‌آوریم:</p>
+<pre><code class="language-rust">use std::ptr::NonNull;
+
+pub struct Vec&lt;T&gt; {
+    ptr: NonNull&lt;T&gt;,
+    cap: usize,
+    len: usize,
+}
+
+unsafe impl&lt;T: Send&gt; Send for Vec&lt;T&gt; {}
+unsafe impl&lt;T: Sync&gt; Sync for Vec&lt;T&gt; {}
+<span class="boring">fn main() {}</span></code></pre><nav class="page-nav"><a href="vec.html">→ پیاده‌سازی Vec</a><a href="vec-alloc.html">تخصیص حافظه ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../nomicon/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

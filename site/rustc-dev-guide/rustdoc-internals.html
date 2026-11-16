@@ -1,0 +1,221 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>درونیات Rustdoc — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="rustdoc-internals"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="rustdoc-internals"><a class="header" href="#rustdoc-internals">Rustdoc internals</a></h1>
+<p>این صفحه گذرها (passes) و حالت‌های <a href="https://github.com/rust-lang/rust/tree/HEAD/src/tools/rustdoc"><code>rustdoc</code></a> را شرح می‌دهد.
+برای نمای کلی <code>rustdoc</code>، <a href="./rustdoc.html">فصل «نمای کلی Rustdoc»</a> را ببینید.</p>
+<h2 id="from-crate-to-clean"><a class="header" href="#from-crate-to-clean">از crate تا clean</a></h2>
+<p>در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/librustdoc/core.rs"><code>core.rs</code></a> دو آیتم مرکزی هست: <code>struct</code> با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/core/struct.DocContext.html"><code>rustdoc::core::DocContext</code></a>
+و تابع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/core/fn.run_global_ctxt.html"><code>rustdoc::core::run_global_ctxt</code></a>.
+دومی جایی است که <code>rustdoc</code> به <code>rustc</code> رجوع می‌کند تا crate را تا نقطه‌ای کامپایل کند که
+<code>rustdoc</code> بتواند کار را در دست بگیرد.
+اولی ظرف حالتی است که هنگام پیمایش یک crate برای جمع‌آوری مستنداتش به‌کار می‌رود.</p>
+<p>فرایند اصلی پیمایش crate در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/librustdoc/clean/mod.rs"><code>clean/mod.rs</code></a> از طریق چند تابع انجام می‌شود
+که نامشان با <code>clean_</code> شروع می‌شود.
+هر تابع یک ساختار داده <code>hir</code> یا <code>ty</code> می‌پذیرد و ساختار <code>clean</code> مورد استفادهٔ <code>rustdoc</code> را خروجی می‌دهد.
+برای مثال، <a href="https://doc.rust-lang.org/nightly/nightly-rustc/src/rustdoc/clean/mod.rs.html#256-267">این تابع برای تبدیل طول‌عمرها</a>:</p>
+<pre><code class="language-rust ignore">fn clean_lifetime&lt;'tcx&gt;(lifetime: &amp;hir::Lifetime, cx: &amp;mut DocContext&lt;'tcx&gt;) -&gt; Lifetime {
+    if let Some(
+        rbv::ResolvedArg::EarlyBound(did)
+        | rbv::ResolvedArg::LateBound(_, _, did)
+        | rbv::ResolvedArg::Free(_, did),
+    ) = cx.tcx.named_bound_var(lifetime.hir_id)
+        &amp;&amp; let Some(lt) = cx.args.get(&amp;did).and_then(|arg| arg.as_lt())
+    {
+        return lt.clone();
+    }
+    Lifetime(lifetime.ident.name)
+}</code></pre>
+<p>همچنین <code>clean/mod.rs</code> نوع‌های «<a href="./ast-validation.html">درخت نحو انتزاعی
+(<code>AST</code>)</a> پاک‌شده» را تعریف می‌کند که بعداً برای رندر صفحه‌های مستندات به‌کار می‌روند.
+معمولاً هر کدام همراه یک تابع
+<code>clean_*</code> هستند که یک نوع <a href="./ast-validation.html"><code>AST</code></a> یا <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/index.html">بازنمایی میانی سطح بالا
+(<code>HIR</code>)</a> را از <code>rustc</code> می‌گیرد و به نوع «پاک‌شدهٔ» مناسب تبدیل می‌کند.
+آیتم‌های «بزرگ» مثل ماژول‌ها یا آیتم‌های وابسته ممکن است
+در تابع <code>clean</code> خود پردازش اضافی داشته باشند، اما بیشتر این
+<code>impl</code>ها تبدیل‌های سرراست‌اند.
+«نقطهٔ ورود» این ماژول
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/clean/utils/fn.krate.html#"><code>clean::utils::krate</code></a> است که توسط <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/core/fn.run_global_ctxt.html"><code>run_global_ctxt</code></a> فراخوانی می‌شود.</p>
+<p>اولین گام در <a href="https://doc.rust-lang.org/nightly/nightly-rustc/src/rustdoc/clean/utils.rs.html#31-77"><code>clean::utils::krate</code></a> فراخوانی
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/visit_ast/struct.RustdocVisitor.html"><code>visit_ast::RustdocVisitor</code></a> برای پردازش درخت ماژول به یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/visit_ast/struct.Module.html"><code>visit_ast::Module</code></a> میانی است.
+این گامی است که واقعاً
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/hir/struct.Crate.html"><code>rustc_middle::hir::Crate</code></a> را پیمایش می‌کند و جنبه‌های مختلف name resolution را نرمال‌سازی می‌کند، مثل:</p>
+<ul>
+<li>مدیریت <code>#[doc(inline)]</code> و <code>#[doc(no_inline)]</code></li>
+<li>مدیریت import globها و دورها، تا تکراری یا درخت پوشهٔ بی‌نهایت نداشته باشیم</li>
+<li>inline‌کردن exportهای عمومی <code>use</code> از آیتم‌های خصوصی، یا نمایش خط «Reexport» در صفحهٔ ماژول</li>
+<li>inline‌کردن آیتم‌های دارای <code>#[doc(hidden)]</code> اگر آیتم پایه پنهان باشد اما</li>
+<li>نمایش ماکروهای <code>#[macro_export]</code>‌شده در ریشهٔ crate، صرف‌نظر از اینکه به‌صورت reexport تعریف شده باشند یا نه</li>
+</ul>
+<p>پس از این گام، <code>clean::krate</code> تابع <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/clean/fn.clean_doc_module.html"><code>clean_doc_module</code></a> را فراخوانی می‌کند که واقعاً
+آیتم‌های <code>HIR</code> را به <a href="./ast-validation.html"><code>AST</code></a> پاک‌شده تبدیل می‌کند.
+اینجا همچنین گامی است که inline کردن بین‌crate انجام می‌شود،
+که نیازمند تبدیل ساختارهای داده <code>rustc_middle</code> به <a href="./ast-validation.html"><code>AST</code></a> پاک‌شده است.</p>
+<p>کار عمدهٔ دیگری که در <code>clean/mod.rs</code> رخ می‌دهد جمع‌آوری doc commentها
+و attributeهای <code>#[doc=""]</code> در یک فیلد جداگانه از <code>struct</code> با نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/clean/types/struct.Attributes.html"><code>Attributes</code></a>
+است که روی هر چیزی که مستندات دست‌نویس می‌گیرد وجود دارد.
+این کار جمع‌آوری این مستندات را در ادامهٔ فرایند آسان‌تر می‌کند.</p>
+<p>خروجی اصلی این فرایند یک <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/clean/types/struct.Crate.html"><code>clean::types::Crate</code></a> با درختی از <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/clean/types/struct.Item.html"><code>Item</code></a>هاست
+که آیتم‌های قابل‌مستندسازی عمومی در crate هدف را توصیف می‌کنند.</p>
+<h3 id="passes-anything-but-a-gas-station-or-hot-potato"><a class="header" href="#passes-anything-but-a-gas-station-or-hot-potato">Passes Anything But a Gas Station (یا: Hot Potato)</a></h3>
+<p>پیش از رفتن به گام اصلی بعدی، چند «گذر» (pass) مهم روی
+<a href="./ast-validation.html"><code>AST</code></a> پاک‌شده رخ می‌دهد.
+چندتا از این گذرها <code>lint</code> و گزارش‌اند، اما برخی آیتم‌های جدید را تغییر می‌دهند یا تولید می‌کنند.</p>
+<p>همهٔ این‌ها در پوشهٔ <a href="https://github.com/rust-lang/rust/tree/HEAD/src/librustdoc/passes"><code>librustdoc/passes</code></a> پیاده‌سازی شده‌اند، برای هر گذر یک فایل.
+به‌طور پیش‌فرض همهٔ این گذرها روی crate اجرا می‌شوند، اما آن‌هایی که
+مربوط به حذف آیتم‌های خصوصی/پنهان‌اند با دادن
+<code>--document-private-items</code> به <code>rustdoc</code> دور زده می‌شوند.
+توجه کنید، برخلاف مجموعهٔ قبلی تبدیل‌های <a href="./ast-validation.html"><code>AST</code></a>،
+گذرها روی crate <em>پاک‌شده</em> اجرا می‌شوند.</p>
+<p>فهرست گذرها تا <!-- date-check --> مارس 2023:</p>
+<ul>
+<li>
+<p><code>calculate-doc-coverage</code> اطلاعات مورد استفادهٔ پرچم <code>--show-coverage</code> را محاسبه می‌کند.</p>
+</li>
+<li>
+<p><code>check-doc-test-visibility</code> <code>lint</code>های مربوط به دید <code>doctest</code> را اجرا می‌کند.
+این گذر پیش از <code>strip-private</code> اجرا می‌شود،
+و به همین دلیل باید از <code>run-lints</code> جدا باشد.</p>
+</li>
+<li>
+<p><code>collect-intra-doc-links</code> resolves <a href="../rustdoc/write-documentation/linking-to-items-by-name.html">intra-doc links</a>.</p>
+</li>
+<li>
+<p><code>collect-trait-impls</code> <code>impl</code>های <code>trait</code> را برای هر آیتم در crate جمع می‌کند.
+برای مثال، اگر <code>struct</code>ی تعریف کنیم که <code>trait</code>ی را پیاده‌سازی می‌کند،
+این گذر یادداشت می‌کند که <code>struct</code> آن <code>trait</code> را پیاده‌سازی می‌کند.</p>
+</li>
+<li>
+<p><code>propagate-doc-cfg</code> مقدار <code>#[doc(cfg(...))]</code> را به آیتم‌های فرزند منتشر می‌کند.</p>
+</li>
+<li>
+<p><code>run-lints</code> برخی <code>lint</code>های <code>rustdoc</code> را که در <code>passes/lint</code> تعریف شده‌اند اجرا می‌کند.
+این آخرین گذری است که اجرا می‌شود.</p>
+<ul>
+<li>
+<p><code>bare_urls</code> پیوندهایی را که به لینک تبدیل نشده‌اند شناسایی می‌کند، مثلاً در Markdown مثل
+<code>Go to https://example.com/.</code> پیشنهاد می‌کند پیوند را در براکت زاویه‌ای بپیچید:
+<code>Go to &lt;https://example.com/&gt;.</code> تا به لینک تبدیل شود.
+این کد پشت <code>lint</code> با نام <code>rustdoc::bare_urls</code> است <!-- date-check: may 2022 -->.</p>
+</li>
+<li>
+<p><code>check_code_block_syntax</code> نحو درون بلوک‌های کد Rust را اعتبارسنجی می‌کند
+(<code>```rust</code>)</p>
+</li>
+<li>
+<p><code>html_tags</code> <code>HTML</code> نامعتبر (مثل <code>&lt;span&gt;</code> بسته‌نشده)
+را در doc commentها شناسایی می‌کند.</p>
+</li>
+</ul>
+</li>
+<li>
+<p><code>strip-hidden</code> و <code>strip-private</code> همهٔ آیتم‌های <code>doc(hidden)</code> و خصوصی را از خروجی حذف می‌کنند.
+<code>strip-private</code> به‌طور ضمنی <code>strip-priv-imports</code> را هم شامل می‌شود.
+اساساً هدف حذف آیتم‌هایی است که برای مستندات عمومی مرتبط نیستند.
+این گذر وقتی <code>--document-hidden-items</code> داده شود رد می‌شود.</p>
+</li>
+<li>
+<p><code>strip-priv-imports</code> همهٔ دستورهای import خصوصی (<code>use</code>، <code>extern crate</code>) را از crate حذف می‌کند.
+این لازم است چون <code>rustdoc</code> importهای <em>عمومی</em> را
+یا با inline کردن مستندات آیتم در ماژول یا با ساخت بخش «Reexports» که import در آن است مدیریت می‌کند.
+این گذر تضمین می‌کند همهٔ این importها واقعاً برای مستندات مرتبط‌اند.
+از نظر فنی فقط وقتی اجرا می‌شود که <code>--document-private-items</code> داده شود، اما <code>strip-private</code>
+همین کار را انجام می‌دهد.</p>
+</li>
+<li>
+<p><code>strip-private</code> همهٔ آیتم‌های خصوصی را که از بیرون دیده نمی‌شوند از crate حذف می‌کند.
+این گذر وقتی <code>--document-private-items</code> داده شود رد می‌شود.</p>
+</li>
+</ul>
+<p>ماژول <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/passes/stripper/index.html"><code>stripper</code></a> هم در <code>librustdoc/passes</code> هست، اما
+مجموعه‌ای از توابع کمکی برای گذرهای <code>strip-*</code> است و خودش گذر نیست.</p>
+<h2 id="from-clean-to-html"><a class="header" href="#from-clean-to-html">از clean تا HTML</a></h2>
+<p>اینجا جایی است که «فاز دوم» در <code>rustdoc</code> آغاز می‌شود.
+این فاز عمدتاً در
+پوشه‌های <a href="https://github.com/rust-lang/rust/tree/HEAD/src/librustdoc/formats"><code>librustdoc/formats</code></a> و <a href="https://github.com/rust-lang/rust/tree/HEAD/src/librustdoc/html"><code>librustdoc/html</code></a> قرار دارد و همه‌چیز با
+<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/formats/renderer/fn.run_format.html"><code>formats::renderer::run_format</code></a> شروع می‌شود.
+این کد مسئول راه‌اندازی نوعی است که
+<code>impl FormatRenderer</code> دارد، که برای <code>HTML</code> <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/html/render/context/struct.Context.html"><code>Context</code></a> است.</p>
+<p>این struct متدهایی دارد که <code>run_format</code> برای هدایت رندر مستندات فراخوانی می‌کند، شامل:</p>
+<ul>
+<li><code>init</code> فایل‌های <code>static.files</code> را به‌علاوهٔ فهرست جست‌وجو و <code>src/</code> تولید می‌کند</li>
+<li><code>item</code> خود فایل‌های <code>HTML</code> آیتم را تولید می‌کند</li>
+<li><code>after_krate</code> منابع سراسری دیگر مثل <code>all.html</code> را تولید می‌کند</li>
+</ul>
+<p>در <code>item</code>، «رندر صفحه» با ترکیبی از قالب‌های <a href="https://docs.rs/askama/latest/askama/">Askama</a>
+و فراخوانی‌های دستی <code>write!()</code> رخ می‌دهد، که از <a href="https://github.com/rust-lang/rust/blob/HEAD/src/librustdoc/html/layout.rs"><code>html/layout.rs</code></a> شروع می‌شود.
+بخش‌هایی که به قالب تبدیل نشده‌اند درون مجموعه‌ای از پیاده‌سازی‌های <code>std::fmt::Display</code>
+و توابعی رخ می‌دهند که <code>&amp;mut std::fmt::Formatter</code> را دست‌به‌دست می‌کنند.</p>
+<p>بخش‌هایی که واقعاً از آیتم‌ها و مستندات <code>HTML</code> تولید می‌کنند
+با <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/html/render/print_item/fn.print_item.html"><code>print_item</code></a> که در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/librustdoc/html/render/print_item.rs"><code>html/render/print_item.rs</code></a> تعریف شده شروع می‌شوند، که بر اساس نوع <code>Item</code> در حال رندر
+به یکی از چند تابع <code>item_*</code> منتقل می‌کند.</p>
+<p>بسته به اینکه دنبال چه نوع کد رندری هستید، احتمالاً آن را
+یا در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/librustdoc/html/render/mod.rs"><code>html/render/mod.rs</code></a> برای آیتم‌های اصلی مثل «چه بخش‌هایی را باید برای صفحهٔ <code>struct</code> چاپ کنم» می‌یابید یا در <a href="https://github.com/rust-lang/rust/blob/HEAD/src/librustdoc/html/format.rs"><code>html/format.rs</code></a> برای اجزای کوچک‌تر
+مثل «بند where را به‌عنوان بخشی از آیتم دیگر چگونه چاپ کنم».</p>
+<p>هر وقت <code>rustdoc</code> به آیتمی برسد که باید مستندات دست‌نویس را کنارش چاپ کند، به <a href="https://github.com/rust-lang/rust/blob/HEAD/src/librustdoc/html/markdown.rs"><code>html/markdown.rs</code></a> رجوع می‌کند که با parser مربوط به Markdown ارتباط برقرار می‌کند.
+این به‌صورت مجموعه‌ای از نوع‌ها در دسترس است که رشته‌ای از Markdown را می‌پیچند و
+<code>fmt::Display</code> را برای تولید متن <code>HTML</code> پیاده‌سازی می‌کنند.
+پیش از اجرای parser مربوط به Markdown، مراقبت ویژه‌ای برای فعال‌کردن قابلیت‌هایی مثل پاورقی و جدول و افزودن
+هایلایت نحو به بلوک‌های کد Rust (از طریق <code>html/highlight.rs</code>) انجام می‌دهد.
+تابعی به نام <a href="https://doc.rust-lang.org/nightly/nightly-rustc/src/rustdoc/html/markdown.rs.html#749-818"><code>find_codes</code></a> هم هست که
+توسط <code>find_testable_codes</code> فراخوانی می‌شود و مخصوصاً بلوک‌های کد Rust را اسکن می‌کند تا
+کد test-runner بتواند همهٔ <code>doctest</code>های crate را بیابد.</p>
+<h3 id="from-soup-to-nuts-or-an-unbroken-thread-stretches-from-those-first-cells-to-us"><a class="header" href="#from-soup-to-nuts-or-an-unbroken-thread-stretches-from-those-first-cells-to-us">From Soup to Nuts (یا: <a class="header" href="#from-soup-to-nuts-or-an-unbroken-thread-stretches-from-those-first-cells-to-us">«An Unbroken Thread Stretches From Those First <code>Cell</code>s To Us»</a>)</a></h3>
+<p>مهم است توجه کنیم که <code>rustdoc</code> می‌تواند حتی هنگام تولید <code>HTML</code> مستقیماً از کامپایلر اطلاعات نوع بخواهد.
+این <a href="https://github.com/rust-lang/rust/pull/80090">پیش‌تر این‌طور نبود</a>، و
+بسیاری از معماری <code>rustdoc</code> طوری طراحی شده بود که این کار را نکند، اما
+<code>TyCtxt</code> اکنون به <code>formats::renderer::run_format</code> داده می‌شود، که برای
+اجرای تولید هم <code>HTML</code> و هم قالب JSON (ناپایدار تا <!-- date-check --> مه 2026) به‌کار می‌رود.</p>
+<p>این تغییر به تغییرات دیگر اجازه داده داده‌ای را از <a href="./ast-validation.html"><code>AST</code></a> «clean» حذف کنند
+که به‌آسانی از کوئری‌های <code>TyCtxt</code> قابل‌استخراج است، و معمولاً PRهایی را که فیلد از «clean» حذف می‌کنند می‌پذیریم (به‌صورت نرم منسوخ شده)، اما این
+به‌دلیل دو محدودیت دیگر که <code>rustdoc</code> تحت آن‌ها اجرا می‌شود پیچیده است:</p>
+<ul>
+<li>می‌توان برای crateهایی که واقعاً type checking را نمی‌گذرانند مستندات تولید کرد.
+این برای تولید مستنداتی که پیکربندی‌های متقابلاً ناسازگار پلتفرم را پوشش می‌دهند به‌کار می‌رود، مثل اینکه <code>libstd</code> یک بستهٔ واحد مستندات دارد که
+همهٔ سیستم‌عامل‌های پشتیبانی‌شده را پوشش می‌دهد.
+یعنی <code>rustdoc</code> باید بتواند از <code>HIR</code> مستندات تولید کند.</li>
+<li>مستندات می‌توانند بین crateها inline شوند.
+چون فرادادهٔ crate شامل <code>HIR</code> نیست،
+باید بتوان مستندات inline را از داده‌های <code>rustc_middle</code> تولید کرد.</li>
+</ul>
+<p><a href="./ast-validation.html"><code>AST</code></a> «clean» به‌عنوان قالب خروجی مشترک برای هر دو قالب ورودی عمل می‌کند.
+در clean مقداری داده هم هست که مستقیماً با <code>HIR</code> متناظر نیست، مثل
+<code>impl</code>های ترکیبی برای traitهای خودکار و <code>impl</code>های blanket که توسط گذر <code>collect-trait-impls</code> تولید می‌شوند.</p>
+<p>مقداری داده اضافی در <code>html::render::context::{Context, SharedContext}</code> ذخیره می‌شود.
+این دو نوع راهی برای جداسازی داده‌های <code>rustdoc</code> برای آیندهٔ احتمالی تولید مستندات چندنخی (multithreaded)
+و همچنین سازمان‌یافته‌نگه‌داشتن چیزها هستند:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/html/render/context/struct.Context.html"><code>Context</code></a> داده‌های مورد استفاده برای تولید صفحهٔ فعلی را ذخیره می‌کند، مثل مسیر آن،
+فهرست شناسه‌های <code>HTML</code> که استفاده شده‌اند (برای پرهیز از <code>id=""</code> تکراری)
+و اشاره‌گر به <code>SharedContext</code>.</li>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/html/render/context/struct.SharedContext.html"><code>SharedContext</code></a> داده‌هایی را ذخیره می‌کند که بین صفحه‌ها تغییر نمی‌کنند، مثل اشاره‌گر <code>tcx</code>
+و فهرست همهٔ نوع‌ها.</li>
+</ul>
+<h2 id="other-tricks-up-its-sleeve"><a class="header" href="#other-tricks-up-its-sleeve">ترفندهای دیگر در آستین</a></h2>
+<p>همهٔ این‌ها فرایند تولید مستندات <code>HTML</code> از یک crate در Rust را شرح می‌دهد، اما چند حالت اصلی دیگر هم هست که <code>rustdoc</code> در آن‌ها اجرا می‌شود.
+می‌توان آن را روی یک فایل Markdown مستقل هم اجرا کرد، یا می‌تواند <code>doctest</code>ها را روی کد Rust یا
+فایل‌های Markdown مستقل اجرا کند.
+برای اولی، مستقیماً به
+<code>html/markdown.rs</code> می‌رود، و به‌صورت اختیاری حالتی دارد که فهرست مطالب را به خروجی <code>HTML</code> اضافه می‌کند.</p>
+<p>برای دومی، <code>rustdoc</code> کامپایل جزئی مشابهی برای گرفتن مستندات مرتبط در <code>test.rs</code> اجرا می‌کند، اما به‌جای عبور از فرایند کامل clean و
+رندر، پیمایش بسیار ساده‌تری از crate اجرا می‌کند تا <em>فقط</em> مستندات دست‌نویس را بگیرد.
+در ترکیب با
+«<code>find_testable_code</code>» که در بالا گفته شد در <code>html/markdown.rs</code>، مجموعه‌ای از
+تست‌ها را می‌سازد که پیش از سپردن به test runner اجرا شوند.
+یک مکان قابل‌توجه در <code>test.rs</code> تابع <code>make_test</code> است، که جایی است که <code>doctest</code>های دست‌نویس
+به چیزی که قابل‌اجرا باشد تبدیل می‌شوند.</p>
+<p>مطالعهٔ بیشتر دربارهٔ <code>make_test</code> را می‌توانید
+<a href="https://quietmisdreavus.net/code/2018/02/23/how-the-doctests-get-made/">اینجا</a> بیابید.</p>
+<h2 id="testing-locally"><a class="header" href="#testing-locally">Testing locally</a></h2>
+<p>برخی قابلیت‌های مستندات <code>HTML</code> تولیدشده ممکن است نیاز به ذخیره‌سازی محلی (local storage)
+بین صفحه‌ها داشته باشند، که بدون سرور <code>HTTP</code> خوب کار نمی‌کند.
+برای تست این قابلیت‌ها به‌صورت محلی، می‌توانید یک سرور <code>HTTP</code> محلی اجرا کنید، مثل این:</p>
+<pre><code class="language-console">$ ./x doc library
+# The documentation has been generated into `build/[YOUR ARCH]/doc`.
+$ python3 -m http.server -d build/[YOUR ARCH]/doc
+</code></pre>
+<p>حالا می‌توانید مستندات خود را مثل وقتی که در اینترنت میزبانی شده مرور کنید.
+برای مثال، نشانی <code>std</code> برابر <code>rust/std/</code> خواهد بود.</p>
+<h2 id="see-also"><a class="header" href="#see-also">همچنین ببینید</a></h2>
+<ul>
+<li><a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/">مستندات API مربوط به <code>rustdoc</code></a></li>
+<li><a href="./rustdoc.html">نمای کلی <code>rustdoc</code></a></li>
+<li><a href="https://doc.rust-lang.org/nightly/rustdoc/">راهنمای کاربر rustdoc</a></li>
+</ul><nav class="page-nav"><a href="parallel-rustc.html">→ کامپایل موازی</a><a href="rustdoc-internals/search.html">جست‌وجو ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

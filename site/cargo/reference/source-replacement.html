@@ -1,0 +1,85 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>جایگزینی منبع — کتاب Cargo</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="reference/source-replacement"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../index.html" style="color:inherit;text-decoration:none">کتاب Cargo</a><small class="en-title" dir="ltr">The Cargo Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="source-replacement"><a class="header" href="#source-replacement">جایگزینی منبع</a></h1>
+<p>این سند دربارهٔ تغییر مسیر ارتباط با <a href="registries.html">رجیستری‌ها</a> یا مخازن <a href="specifying-dependencies.html#specifying-dependencies-from-git-repositories">وابستگی‌های مبتنی بر git</a> به یک منبع داده‌ٔ دیگر است، مانند سروری که آینهٔ رجیستری اصلی است یا یک نسخهٔ محلی دقیق.</p>
+<p>اگر می‌خواهید وابستگی‌های منفرد را وصله (patch) کنید، بخش <a href="overriding-dependencies.html">بازنویسی وابستگی‌ها</a> را در این مستندات ببینید. اگر می‌خواهید نحوهٔ ارسال درخواست‌های شبکه توسط Cargo را کنترل کنید، پیکربندی‌های <a href="config.html#http"><code>[http]</code></a> و <a href="config.html#net"><code>[net]</code></a> را ببینید.</p>
+<p>یک <em>منبع</em> (source) ارائه‌دهنده‌ای است که شامل crateهایی است که می‌توانند به‌عنوان وابستگی یک بسته به کار روند. Cargo از قابلیت <strong>جایگزین‌کردن یک منبع با منبع دیگر</strong> پشتیبانی می‌کند تا راهبردهایی مانند موارد زیر بیان شوند:</p>
+<ul>
+<li>
+<p>Vendoring — می‌توان منابع سفارشی تعریف کرد که نمایانگر crateهای روی فایل‌سیستم محلی هستند. این منابع زیرمجموعه‌ای از منبعی‌اند که جایگزین آن می‌شوند و در صورت لزوم می‌توان آن‌ها را درون بسته‌ها commit کرد.</p>
+</li>
+<li>
+<p>Mirroring — می‌توان منابع را با یک نسخهٔ معادل جایگزین کرد که نقش کش خود crates.io را دارد.</p>
+</li>
+</ul>
+<p>Cargo دربارهٔ جایگزینی منبع یک فرض اساسی دارد: کد منبع در هر دو منبع دقیقاً یکسان است. توجه کنید که این همچنین به این معناست که منبع جایگزین مجاز نیست crateهایی داشته باشد که در منبع اصلی وجود ندارند.</p>
+<p>در نتیجه، جایگزینی منبع برای موقعیت‌هایی مانند وصله‌کردن یک وابستگی یا رجیستری خصوصی مناسب نیست. Cargo از وصله‌کردن وابستگی‌ها از طریق <a href="overriding-dependencies.html">کلید <code>[patch]</code></a> پشتیبانی می‌کند و پشتیبانی از رجیستری خصوصی در <a href="registries.html">فصل رجیستری‌ها</a> توضیح داده شده است.</p>
+<p>هنگام استفاده از جایگزینی منبع، اجرای دستورهایی که نیاز دارند مستقیماً با رجیستری تماس بگیرند<sup class="footnote-reference" id="fr-1-1"><a href="#footnote-1">1</a></sup> مستلزم ارسال گزینهٔ <code>--registry</code> است. این کار به جلوگیری از هرگونه ابهام دربارهٔ اینکه با کدام رجیستری تماس گرفته شود کمک می‌کند و از توکن احراز هویت رجیستری مشخص‌شده استفاده خواهد کرد.</p>
+<h2 id="configuration"><a class="header" href="#configuration">پیکربندی</a></h2>
+<p>پیکربندی منابع جایگزین از طریق <a href="config.html"><code>.cargo/config.toml</code></a> انجام می‌شود و مجموعهٔ کامل کلیدهای موجود به این شرح است:</p>
+<pre><code class="language-toml"># The `source` table is where all keys related to source-replacement
+# are stored.
+[source]
+
+# Under the `source` table are a number of other tables whose keys are a
+# name for the relevant source. For example this section defines a new
+# source, called `my-vendor-source`, which comes from a directory
+# located at `vendor` relative to the directory containing this `.cargo/config.toml`
+# file
+[source.my-vendor-source]
+directory = "vendor"
+
+# The crates.io default source for crates is available under the name
+# "crates-io", and here we use the `replace-with` key to indicate that it's
+# replaced with our source above.
+#
+# The `replace-with` key can also reference an alternative registry name
+# defined in the `[registries]` table.
+[source.crates-io]
+replace-with = "my-vendor-source"
+
+# Each source has its own table where the key is the name of the source
+[source.the-source-name]
+
+# Indicate that `the-source-name` will be replaced with `another-source`,
+# defined elsewhere
+replace-with = "another-source"
+
+# Several kinds of sources can be specified (described in more detail below):
+registry = "https://example.com/path/to/index"
+local-registry = "path/to/registry"
+directory = "path/to/vendor"
+
+# Git sources can optionally specify a branch/tag/rev as well
+git = "https://example.com/path/to/repo"
+# branch = "master"
+# tag = "v1.0.1"
+# rev = "313f44e8"
+</code></pre>
+<h2 id="registry-sources"><a class="header" href="#registry-sources">منابع رجیستری</a></h2>
+<p>«منبع رجیستری» منبعی است که مانند خود crates.io کار می‌کند. این منبع یک ایندکس است که با مشخصات https://doc.rust-lang.org/cargo/reference/registry-index.html سازگار است و یک فایل پیکربندی دارد که نشان می‌دهد crateها از کجا دانلود شوند.</p>
+<p>منابع رجیستری می‌توانند از <a href="registries.html#registry-protocols">پروتکل git یا پروتکل sparse HTTP</a> استفاده کنند:</p>
+<pre><code class="language-toml"># Git protocol
+registry = "ssh://git@example.com/path/to/index.git"
+
+# Sparse HTTP protocol
+registry = "sparse+https://example.com/path/to/index"
+
+# HTTPS git protocol
+registry = "https://example.com/path/to/index"
+</code></pre>
+<h2 id="local-registry-sources"><a class="header" href="#local-registry-sources">منابع رجیستری محلی</a></h2>
+<p>«منبع رجیستری محلی» قرار است زیرمجموعه‌ای از یک منبع رجیستری دیگر باشد که روی فایل‌سیستم محلی در دسترس است (همان vendoring). رجیستری‌های محلی از پیش دانلود می‌شوند، معمولاً با <code>Cargo.lock</code> همگام‌سازی می‌شوند و از مجموعه‌ای از فایل‌های <code>*.crate</code> و یک ایندکس مانند رجیستری عادی تشکیل شده‌اند.</p>
+<p>روش اصلی مدیریت و ایجاد منابع رجیستری محلی، زیردستور <a href="https://crates.io/crates/cargo-local-registry"><code>cargo-local-registry</code></a> است که <a href="https://crates.io/crates/cargo-local-registry">در crates.io موجود است</a> و با <code>cargo install --locked cargo-local-registry</code> نصب می‌شود.</p>
+<p>رجیستری‌های محلی در یک دایرکتوری قرار دارند و شامل تعدادی فایل <code>*.crate</code> دانلودشده از crates.io و نیز یک دایرکتوری <code>index</code> با همان قالب پروژهٔ crates.io-index هستند (که فقط با ورودی‌های crateهای موجود پر شده است).</p>
+<h2 id="directory-sources"><a class="header" href="#directory-sources">منابع دایرکتوری</a></h2>
+<p>«منبع دایرکتوری» شبیه منبع رجیستری محلی است، از این جهت که شامل تعدادی crate در دسترس روی فایل‌سیستم محلی است و برای vendor کردن وابستگی‌ها مناسب است. منابع دایرکتوری عمدتاً توسط زیردستور <code>cargo vendor</code> مدیریت می‌شوند.</p>
+<p>اما منابع دایرکتوری با رجیستری‌های محلی تفاوت دارند، چون شامل نسخهٔ بازشدهٔ فایل‌های <code>*.crate</code> هستند و همین در برخی موقعیت‌ها آن را برای commit کردن همه‌چیز در سیستم کنترل نسخه مناسب‌تر می‌کند. منبع دایرکتوری فقط یک دایرکتوری است که شامل تعدادی دایرکتوری دیگر است و آن‌ها کد منبع crateها (نسخهٔ بازشدهٔ فایل‌های <code>*.crate</code>) را دارند. در حال حاضر هیچ محدودیتی روی نام هر دایرکتوری اعمال نمی‌شود.</p>
+<p>هر crate در یک منبع دایرکتوری همچنین یک فایل فراداده (metadata) به نام <code>.cargo-checksum.json</code> دارد تا در برابر تغییرات تصادفی محافظت کند. این یک سازوکار امنیتی نیست و در برابر تغییرات مخرب محافظت نمی‌کند.</p>
+<h2 id="git-sources"><a class="header" href="#git-sources">منابع git</a></h2>
+<p>منابع git نمایانگر مخازنی هستند که <a href="specifying-dependencies.html#specifying-dependencies-from-git-repositories">وابستگی‌های مبتنی بر git</a> از آن‌ها استفاده می‌کنند. از آن‌ها برای مشخص‌کردن اینکه کدام وابستگی‌های مبتنی بر git باید با منابع جایگزین عوض شوند استفاده می‌شود.</p>
+<p>منابع git به <a href="registries.html#registry-protocols">رجیستری‌های git</a> ربطی <em>ندارند</em> و نمی‌توان از آن‌ها برای جایگزینی منابع رجیستری استفاده کرد.</p>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-1">
+<p>نمونه‌هایی از این دستورها در <a href="../commands/publishing-commands.html">دستورهای انتشار</a> آمده است. <a href="#fr-1-1">↩</a></p>
+</li>
+</ol><nav class="page-nav"><a href="overriding-dependencies.html">→ بازنویسی وابستگی‌ها</a><a href="resolver.html">حل وابستگی‌ها ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../cargo/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

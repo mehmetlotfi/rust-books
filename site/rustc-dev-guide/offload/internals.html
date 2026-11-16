@@ -1,0 +1,39 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>درونیات انتقال بار به GPU — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="offload/internals"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="stdoffload"><a class="header" href="#stdoffload">std::offload</a></h1>
+<p>این ماژول در حال توسعهٔ فعال است.
+پس از ورود به upstream، باید به توسعه‌دهندگان Rust اجازه دهد کد Rust را روی GPUها اجرا کنند.
+هدف ما توسعهٔ یک رابط برنامه‌نویسی GPU به سبک <code>rusty</code> است که به‌طور پیش‌فرض امن، راحت و به‌اندازهٔ کافی سریع باشد.
+این شامل جابه‌جایی خودکار داده به GPU و از آن، به شکلی کارآمد است.
+ما (بعداً) رابط‌های پیشرفته‌تر، و احتمالاً ناایمن، هم ارائه خواهیم داد که کنترل بیشتری فراهم می‌کنند.</p>
+<p>پیاده‌سازی بر پایهٔ پروژهٔ «offload» در LLVM است که پیش‌تر توسط OpenMP برای اجرای کد Fortran یا C++ روی GPUها به‌کار می‌رود.
+تا زمانی که پروژه در حال توسعه است، کاربران باید برای تکمیل فرایند کامپایل کامپایلرهای دیگری مثل clang را فراخوانی کنند.</p>
+<h2 id="high-level-compilation-design"><a class="header" href="#high-level-compilation-design">High-level compilation design:</a></h2>
+<p>ما از رویکرد کامپایل تک‌منبعی سه‌گذره استفاده می‌کنیم.</p>
+<p>ابتدا کد میزبان (host) (مثلاً x86-64) را کامپایل می‌کنیم تا بفهمیم کد میزبان به کدام نمونه‌سازی‌های kernel، از جمله جنریک‌ها، نیاز دارد.
+این گذر codegen انجام نمی‌دهد؛ به‌جای آن مانیفستی می‌نویسد که هر نمونهٔ <code>#[offload_kernel]</code> (با آرگومان‌های جنریک مشخص) مورد نیاز کد میزبان را ثبت می‌کند.</p>
+<p>سپس همهٔ توابعی را که باید برای دستگاه (device) offload شوند کامپایل می‌کنیم
+(مثلاً nvptx64، amdgcn-amd-amdhsa، و در آینده intel) و مانیفست را با
+<code>-Zoffload=Device=&lt;manifest&gt;</code> می‌دهیم.
+نمونه‌های kernel ثبت‌شده به‌عنوان ریشهٔ monomorphization اضافه می‌شوند تا kernelهای جنریک لازم codegen شوند.
+فعلاً annotationهای دست‌وپاگیر <code>#cfg(target_os="")</code> لازم است، اما قصد داریم در آینده این‌ها را بر اساس intrinsic مربوط به offload تشخیص دهیم.
+این کامپایل device فعلاً از سامانهٔ Query داخلی rustc بهره نمی‌برد، پس در حال حاضر همیشه kernelهای شما را دوباره کامپایل می‌کند.
+رفع این باید آسان باشد، اما فعلاً به قابلیت‌ها و بهبود عملکرد زمان اجرا اولویت می‌دهیم.
+اگر می‌خواهید آن را پیاده‌سازی کنید حتماً تماس بگیرید!</p>
+<p>سپس کد میزبان (مثلاً x86-64) را کامپایل می‌کنیم، که بیشتر منطق offload در آن رخ می‌دهد.
+در سمت میزبان، فراخوانی‌هایی به runtime مربوط به openmp offload تولید می‌کنیم
+تا چیدمان نوع‌ها را به آن اطلاع دهیم (نسخهٔ ساده‌شده‌ای از TypeTreeهای autodiff).
+همچنین از سامانهٔ نوع استفاده می‌کنیم تا بفهمیم آرگومان‌های kernel باید فقط به device منتقل شوند (مثلاً <code>&amp;[f32;1024]</code>)،
+فقط از device، یا هر دو (مثلاً <code>&amp;mut [f64]</code>).
+سپس kernel را اجرا می‌کنیم و پس از آن به runtime اطلاع می‌دهیم این محیط را پایان دهد و داده‌ها را (تا حد لازم) برگرداند.</p>
+<p>گذر سوم برای میزبان آرتیفکت‌های kernel را از کامپایل device بارگذاری می‌کند.
+rustc به‌طور کلی نباید چیدمان پوشهٔ ساخت را «حدس بزند» یا hardcode کند،
+و بنابراین باید مسیر آرتیفکت‌های kernel و مانیفست در فراخوانی‌های مربوطه به آن گفته شود.
+منطق این را می‌توان در cargo ادغام کرد،
+اما فقط یک wrapper ساده برای cargo هم کافی است،
+که تا زمان دیده‌شدن پذیرش گسترده‌تر به‌سادگی می‌توانیم از طریق crates.io ارائه دهیم.</p>
+<p>ممکن است وسوسه‌انگیز باشد دربارهٔ رویکرد کامپایل تک‌منبعی تک‌گذره فکر کنیم.
+اما بخش بزرگی از frontend در rustc (مثلاً AST) هر کد مرده‌ای را (مثلاً کد پشت <code>cfg</code> غیرفعال) حذف می‌کند.
+وادار‌کردن frontend به گسترش و lowering ساده‌لوحانهٔ کد برای دو هدف به تعاریف متعدد یک نماد (و مشکلات دیگر) می‌انجامد.
+آموزش‌دادن کل میانهٔ rustc و backend تا آگاه باشند هر نماد اکنون ممکن است دو پیاده‌سازی داشته باشد کار بزرگی است،
+و مشکوک است چرا باید کل کامپایلر را پیچیده‌تر کنیم اگر جایگزین یک wrapper حدود ۵ خطی برای cargo باشد.
+ما همچنان کل پایپ‌لاین کامپایل را کنترل می‌کنیم و هم کد میزبان و هم device در دسترس است،
+بنابراین نباید تفاوت عملکردی در زمان اجرا بین دو رویکرد باشد.</p><nav class="page-nav"><a href="../rustdoc-internals/rustdoc-json-test-suite.html">→ مجموعه آزمون rustdoc-json</a><a href="installation.html">نصب ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc-dev-guide/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>

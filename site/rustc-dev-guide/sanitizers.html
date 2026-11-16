@@ -1,0 +1,95 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../assets/theme.js"></script><title>پشتیبانی از Sanitizerها — راهنمای توسعهٔ rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../assets/favicon.svg"><link rel="manifest" href="../manifest.webmanifest"><link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/highlight.css"></head><body data-page="sanitizers"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="getting-started.html" style="color:inherit;text-decoration:none">راهنمای توسعهٔ rustc</a><small class="en-title" dir="ltr">rustc Development Guide</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="sanitizers-support"><a class="header" href="#sanitizers-support">پشتیبانی از Sanitizerها</a></h1>
+<p>کامپایلر Rust از sanitizerهای زیر پشتیبانی می‌کند:</p>
+<ul>
+<li><a href="https://clang.llvm.org/docs/AddressSanitizer.html">AddressSanitizer</a>، یک آشکارساز سریع‌تر خطاهای حافظه.
+این ابزار می‌تواند دسترسی خارج از محدوده به heap، stack و globalها، استفاده پس از آزادسازی (use after free)، استفاده
+پس از بازگشت (use after return)، آزادسازی مضاعف (double free)، آزادسازی نامعتبر (invalid free) و نشت حافظه را تشخیص دهد.</li>
+<li><a href="https://clang.llvm.org/docs/ControlFlowIntegrity.html">ControlFlowIntegrity</a>، یکپارچگی جریان کنترل LLVM (CFI)، حفاظت از جریان کنترل
+در یال‌های رو به جلو (forward-edge) را فراهم می‌کند.</li>
+<li><a href="https://clang.llvm.org/docs/HardwareAssistedAddressSanitizerDesign.html">Hardware-assisted AddressSanitizer</a> شبیه
+AddressSanitizer است، اما مبتنی بر کمک جزئی سخت‌افزار است.</li>
+<li><a href="https://clang.llvm.org/docs/ControlFlowIntegrity.html#fsanitize-kcfi">KernelControlFlowIntegrity</a>، یکپارچگی جریان کنترل هستهٔ LLVM
+(KCFI)، حفاظت از جریان کنترل در یال‌های رو به جلو را برای هستهٔ سیستم‌عامل‌ها فراهم می‌کند.</li>
+<li><a href="https://clang.llvm.org/docs/LeakSanitizer.html">LeakSanitizer</a>، یک آشکارساز نشت حافظه در زمان اجرا.</li>
+<li><a href="https://clang.llvm.org/docs/MemorySanitizer.html">MemorySanitizer</a>، آشکارساز خواندن‌های مقداردهی‌نشده.</li>
+<li><a href="https://clang.llvm.org/docs/ThreadSanitizer.html">ThreadSanitizer</a>، یک آشکارساز سریع data race.</li>
+</ul>
+<h2 id="how-to-use-the-sanitizers"><a class="header" href="#how-to-use-the-sanitizers">sanitizerها را چگونه به کار ببریم؟</a></h2>
+<p>برای فعال کردن یک sanitizer، با گزینهٔ <code>-Z sanitizer=...</code> کامپایل کنید که مقدار آن یکی
+از <code>address</code>، <code>cfi</code>، <code>hwaddress</code>، <code>kcfi</code>، <code>leak</code>، <code>memory</code> یا <code>thread</code> است.
+برای جزئیات بیشتر دربارهٔ نحوهٔ استفاده از sanitizerها،
+به پرچم sanitizer در <a href="https://doc.rust-lang.org/unstable-book">کتاب قابلیت‌های ناپایدار</a> مراجعه کنید.</p>
+<h2 id="how-sanitizers-are-implemented-in-rustc"><a class="header" href="#how-sanitizers-are-implemented-in-rustc">sanitizerها در rustc چگونه پیاده‌سازی شده‌اند</a></h2>
+<p>پیاده‌سازی sanitizerها (به‌جز CFI) تقریباً به‌طور کامل به LLVM متکی است.
+کامپایلر Rust نقطهٔ یکپارچه‌سازی passهای ابزارنگاری زمان کامپایل LLVM
+و کتابخانه‌های زمان اجراست.
+مهم‌ترین جنبه‌های پیاده‌سازی به این شرح است:</p>
+<ul>
+<li>
+<p>کتابخانه‌های زمان اجرای sanitizer بخشی از پروژهٔ <a href="https://github.com/llvm/llvm-project/tree/main/compiler-rt">compiler-rt</a> هستند و
+وقتی در <code>bootstrap.toml</code> فعال شوند،
+<a href="https://github.com/rust-lang/rust/blob/1ead4761e9e2f056385768614c23ffa7acb6a19e/src/bootstrap/src/core/build_steps/llvm.rs#L958-L1031">ساخته می‌شوند</a>، آن هم روی <a href="https://github.com/rust-lang/rust/blob/1ead4761e9e2f056385768614c23ffa7acb6a19e/src/bootstrap/src/core/build_steps/llvm.rs#L1073-L1111">targetهای پشتیبانی‌شده</a>:</p>
+<pre><code class="language-toml">build.sanitizers = true
+</code></pre>
+<p>زمان‌های اجرا <a href="https://github.com/rust-lang/rust/blob/1ead4761e9e2f056385768614c23ffa7acb6a19e/src/bootstrap/src/core/build_steps/compile.rs#L637-L676">در libdir مربوط به target قرار داده می‌شوند</a>.</p>
+</li>
+<li>
+<p>در طول تولید کد LLVM، توابعی که قرار است ابزارنگاری شوند با یک صفت (attribute) مناسب LLVM
+<a href="https://github.com/rust-lang/rust/blob/1.55.0/compiler/rustc_codegen_llvm/src/attributes.rs#L42-L58">علامت‌گذاری می‌شوند</a>:
+<code>SanitizeAddress</code>، <code>SanitizeHWAddress</code>، <code>SanitizeMemory</code> یا <code>SanitizeThread</code>.
+به‌طور پیش‌فرض همهٔ توابع ابزارنگاری می‌شوند، اما این
+رفتار را می‌توان با <code>#[sanitize(xyz = "on|off|&lt;other&gt;")]</code> تغییر داد.</p>
+</li>
+<li>
+<p>تصمیم‌گیری دربارهٔ اینکه ابزارنگاری انجام شود یا نه فقط در
+سطح تابع ممکن است.
+در مواردی که این تصمیم‌ها بین توابع متفاوت است،
+ممکن است لازم باشد inlining هم در <a href="https://github.com/rust-lang/rust/blob/1.55.0/compiler/rustc_mir/src/transform/inline.rs#L314-L316">سطح MIR</a> و هم در <a href="https://github.com/rust-lang/llvm-project/blob/9330ec5a4c1df5fc1fa62f993ed6a04da68cb040/llvm/include/llvm/IR/Attributes.td#L225-L241">سطح LLVM</a> مهار شود.</p>
+</li>
+<li>
+<p>LLVM IR تولیدشده توسط rustc با <a href="https://github.com/rust-lang/rust/blob/1.55.0/compiler/rustc_codegen_llvm/src/back/write.rs#L660-L678">passهای اختصاصی
+LLVM</a> ابزارنگاری می‌شود که برای هر sanitizer متفاوت است.
+passهای ابزارنگاری پس از passهای بهینه‌سازی فراخوانی می‌شوند.</p>
+</li>
+<li>
+<p>هنگام تولید یک فایل اجرایی، کتابخانهٔ زمان اجرای مخصوص sanitizer
+<a href="https://github.com/rust-lang/rust/blob/1.55.0/compiler/rustc_codegen_ssa/src/back/link.rs#L1053-L1089">لینک می‌شود</a>.
+کتابخانه‌ها در libdir مربوط به target جست‌وجو می‌شوند.
+ابتدا جست‌وجو نسبت به system root بازنویسی‌شده (overridden) انجام می‌شود و سپس
+نسبت به system root پیش‌فرض.
+بازگشت به system root پیش‌فرض
+تضمین می‌کند که زمان‌های اجرای sanitizer هنگام استفاده از sysrootهای بازنویسی‌شده
+که توسط cargo <code>-Z build-std</code> یا xargo ساخته شده‌اند در دسترس بمانند.</p>
+</li>
+</ul>
+<h2 id="testing-sanitizers"><a class="header" href="#testing-sanitizers">آزمودن sanitizerها</a></h2>
+<p>sanitizerها با آزمون‌های تولید کد (code generation) در
+<a href="https://github.com/rust-lang/rust/tree/HEAD/tests/codegen-llvm"><code>tests/codegen-llvm/sanitize*.rs</code></a> و آزمون‌های کارکردی سرتاسری در
+دایرکتوری <a href="https://github.com/rust-lang/rust/tree/HEAD/tests/ui/sanitizer"><code>tests/ui/sanitizer/</code></a> اعتبارسنجی می‌شوند.</p>
+<p>آزمودن کارکرد sanitizer به زمان‌های اجرای sanitizer (که وقتی
+<code>build.sanitizer = true</code> در <code>bootstrap.toml</code> باشد ساخته می‌شوند) و targetای نیاز دارد که از یک sanitizer خاص پشتیبانی کند.
+وقتی یک sanitizer روی target مفروضی پشتیبانی نشود، آزمون‌های sanitizer نادیده گرفته می‌شوند.
+این رفتار توسط دستورالعمل‌های <code>needs-sanitizer-*</code> در compiletest کنترل می‌شود.</p>
+<h2 id="enabling-a-sanitizer-on-a-new-target"><a class="header" href="#enabling-a-sanitizer-on-a-new-target">فعال کردن یک sanitizer روی یک target جدید</a></h2>
+<p>برای فعال کردن یک sanitizer روی targetی جدید که از پیش توسط LLVM پشتیبانی می‌شود:</p>
+<ol>
+<li>sanitizer را در فهرست <code>supported_sanitizers</code> در <a href="https://github.com/rust-lang/rust/blob/1.55.0/compiler/rustc_target/src/spec/x86_64_unknown_linux_gnu.rs#L10-L11">تعریف target</a> بگنجانید.
+اکنون <code>rustc --target .. -Zsanitizer=..</code> باید sanitizer را به‌عنوان پشتیبانی‌شده بشناسد.</li>
+<li><a href="https://github.com/rust-lang/rust/blob/1ead4761e9e2f056385768614c23ffa7acb6a19e/src/bootstrap/src/core/build_steps/llvm.rs#L1073-L1111">زمان اجرا را برای target بسازید و در libdir قرار دهید.</a></li>
+<li><a href="https://github.com/rust-lang/rust/blob/1.55.0/src/tools/compiletest/src/util.rs#L87-L116">به compiletest یاد بدهید که targetتان اکنون از sanitizer پشتیبانی می‌کند.</a>
+آزمون‌های علامت‌گذاری‌شده با <code>needs-sanitizer-*</code> اکنون باید روی target اجرا شوند.</li>
+<li>برای تأیید، آزمون‌ها را با <code>./x test --force-rerun tests/ui/sanitize/</code> اجرا کنید.</li>
+<li><a href="https://github.com/rust-lang/rust/blob/1.55.0/src/ci/docker/host-x86_64/dist-x86_64-linux/Dockerfile#L94">–enable-sanitizers در پیکربندی CI</a> را تنظیم کنید تا زمان اجرای sanitizer
+به‌عنوان بخشی از فرایند انتشار ساخته و توزیع شود.</li>
+</ol>
+<h2 id="additional-information"><a class="header" href="#additional-information">اطلاعات بیشتر</a></h2>
+<ul>
+<li><a href="https://github.com/google/sanitizers/wiki/">صفحهٔ پروژهٔ Sanitizers</a></li>
+<li><a href="https://clang.llvm.org/docs/AddressSanitizer.html">AddressSanitizer در Clang</a></li>
+<li><a href="https://clang.llvm.org/docs/ControlFlowIntegrity.html">ControlFlowIntegrity در Clang</a></li>
+<li><a href="https://clang.llvm.org/docs/HardwareAssistedAddressSanitizerDesign.html">Hardware-assisted AddressSanitizer</a></li>
+<li><a href="https://clang.llvm.org/docs/ControlFlowIntegrity.html#fsanitize-kcfi">KernelControlFlowIntegrity در Clang</a></li>
+<li><a href="https://clang.llvm.org/docs/LeakSanitizer.html">LeakSanitizer در Clang</a></li>
+<li><a href="https://clang.llvm.org/docs/MemorySanitizer.html">MemorySanitizer در Clang</a></li>
+<li><a href="https://clang.llvm.org/docs/ThreadSanitizer.html">ThreadSanitizer در Clang</a></li>
+</ul><nav class="page-nav"><a href="llvm-coverage-instrumentation.html">→ پوشش کد مبتنی بر منبع LLVM</a><a href="appendix/background.html">پیوست الف: مباحث پیش‌زمینه ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../index.html">کتابخانه</a><a href="../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../rustc-dev-guide/toc.js"></script><script src="../assets/highlight.js"></script><script src="../assets/app.js"></script></body></html>

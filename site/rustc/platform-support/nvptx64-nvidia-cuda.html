@@ -1,0 +1,110 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf6ee"><meta name="color-scheme" content="light dark"><script src="../../assets/theme.js"></script><title>nvptx64-nvidia-cuda — کتاب rustc</title><meta name="description" content="مستندات فارسی و آفلاین زبان Rust"><link rel="icon" href="../../assets/favicon.svg"><link rel="manifest" href="../../manifest.webmanifest"><link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/highlight.css"></head><body data-page="platform-support/nvptx64-nvidia-cuda"><header class="topbar"><button class="menu-btn" aria-label="بازکردن فهرست">☰</button><a class="brand" href="../../../index.html"><i class="gear"></i><span>آموزش Rust به زبان فارسی</span></a><nav><a href="../../../index.html">کتابخانه</a><a href="https://www.rust-lang.org/">وب‌سایت سازنده</a><a href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a><a class="nav-gpl" href="../../free-software/index.html">نرم‌افزار آزاد · GPLv3</a><a href="https://github.com/mehmetlotfi">صفحه گیتهاب مترجم</a></nav><input class="search" data-search placeholder="جست‌وجو در این کتاب…" aria-label="جست‌وجو"></header><main class="layout"><aside class="sidebar"><h2><a href="../what-is-rustc.html" style="color:inherit;text-decoration:none">کتاب rustc</a><small class="en-title" dir="ltr">The rustc Book</small></h2><ul class="toc" id="toc"></ul></aside><section class="doc"><article class="article"><h1 id="nvptx64-nvidia-cuda"><a class="header" href="#nvptx64-nvidia-cuda"><code>nvptx64-nvidia-cuda</code></a></h1>
+<p><strong>سطح: 2</strong></p>
+<p>این هدف برای استقرار کد روی شتاب‌دهنده‌های Nvidia® مبتنی بر پلتفرم CUDA آن‌ها در نظر گرفته شده است.</p>
+<h2 id="target-maintainers"><a class="header" href="#target-maintainers">نگهدارندگان هدف</a></h2>
+<p><a href="https://github.com/kjetilkjeka">@kjetilkjeka</a> <a href="https://github.com/kulst">@kulst</a></p>
+<h2 id="requirements"><a class="header" href="#requirements">الزامات</a></h2>
+<p>این هدف <code>no_std</code> است و به‌طور پیش‌فرض از <code>llvm-bitcode-linker</code> استفاده می‌کند. برای خروجی PTX، با نوع crate برابر <code>cdylib</code> بسازید. مؤلفه‌های لازم برای این روند کاری عبارت‌اند از:</p>
+<ul>
+<li><code>rustup toolchain add nightly</code></li>
+<li><code>rustup component add llvm-tools --toolchain nightly</code></li>
+<li><code>rustup component add llvm-bitcode-linker --toolchain nightly</code></li>
+</ul>
+<p>برای استفاده از کتابخانهٔ core دو گزینه وجود دارد:</p>
+<ul>
+<li><code>rustup component add rust-src --toolchain nightly</code> و ساخت با <code>-Z build-std=core</code>.</li>
+<li><code>rustup target add nvptx64-nvidia-cuda --toolchain nightly</code></li>
+</ul>
+<h3 id="target-and-features"><a class="header" href="#target-and-features">هدف و ویژگی‌ها</a></h3>
+<p>اغلب مفید است که معماری SM هدف را مشخص کنید، مثلاً <code>-C target-cpu=sm_89</code>، زیرا حالت پیش‌فرض به‌جای کارایی، سازگاری گسترده را در اولویت قرار می‌دهد. انجام این کار نسخهٔ PTX را نیز برابر <em>بیشینهٔ</em> این دو مقدار انتخاب می‌کند: (الف) قدیمی‌ترین نسخهٔ PTX که از پردازندهٔ هدف انتخاب‌شده پشتیبانی می‌کند (به <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#release-notes-ptx-release-history">این جدول</a> نگاه کنید) و (ب) قدیمی‌ترین نسخهٔ PTX که toolchain مربوط به Rust پشتیبانی می‌کند؛ این کار سازگاری با درایور را به بیشترین حد می‌رساند. می‌توان از <code>-C target-feature=+ptx80</code> برای انتخاب نسخهٔ PTX جدیدتر بدون تغییر معماری SM هدف استفاده کرد (در این حالت پیش‌فرض، یعنی <code>ptx78</code>، به درایور CUDA نسخهٔ 11.8 نیاز دارد، در حالی که <code>ptx80</code> به درایور نسخهٔ 12.0 نیاز دارد). نسخه‌های جدیدتر PTX ممکن است تولید کد کارآمدتری را ممکن کنند.</p>
+<p>برای این هدف، کامپایلر اعمال می‌کند که همهٔ crateهایی که در یک فایل دودویی ساخته می‌شوند مقدار یکسانی برای <code>-C target-cpu</code> داشته باشند. بنابراین اگر مقداری متفاوت از پیش‌فرض فعلی (<code>sm_70</code>) تعیین می‌کنید، لازم است <code>core</code> را هم با همین مقدار به‌صورت دستی بسازید. این کار با فراخوانی cargo با <code>-Z build-std=core</code> و استفاده از toolchain نایتلی ممکن است. هرچند Rust مانند LLVM <code>ptx*</code> و <code>sm_*</code> را به‌صورت target feature نشان می‌دهد، باید آن‌ها را دارای granularity دودویی نیز دانست. با این حال، کامپایلر این را اعمال نمی‌کند. هنگام ساخت هم‌زمان crateها، باید مقدار یکسانی برای همهٔ crateها از طریق <code>-C target-feature</code> تعیین شود. اگرچه کامپایلر <code>#[target_feature(enable = "ptx80", enable = "sm_89")]</code> را می‌پذیرد، این حالت پشتیبانی نمی‌شود، ممکن است مطابق انتظار رفتار نکند و در آینده ممکن است خطا شود.</p>
+<h2 id="minimum-sm-and-ptx-support-by-rust-version"><a class="header" href="#minimum-sm-and-ptx-support-by-rust-version">حداقل پشتیبانی SM و PTX بر اساس نسخهٔ Rust</a></h2>
+<p>پشتیبانی از معماری‌های سخت‌افزاری قدیمی و نسخه‌های PTX ISA به‌صورت دوره‌ای حذف می‌شود. این جدول حداقل نسخه‌های پشتیبانی‌شده را برای هر نسخهٔ Rust نشان می‌دهد.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Rust</th><th>حداقل SM</th><th>حداقل PTX ISA</th></tr>
+</thead>
+<tbody>
+<tr><td>- 1.96</td><td>2.0</td><td>3.2</td></tr>
+<tr><td>1.97 - TBD</td><td>7.0 (Volta+)</td><td>7.0 (CUDA 11+)</td></tr>
+</tbody>
+</table>
+</div>
+<p>برای نمای کلی کامل از اینکه کدام GPUها از کد ساخته‌شده برای یک نسخهٔ مشخص SM پشتیبانی می‌کنند، <a href="https://developer.nvidia.com/cuda/gpus">مستندات CUDA GPU Compute Capability</a> را ببینید.</p>
+<h2 id="building-rust-kernels"><a class="header" href="#building-rust-kernels">ساخت kernelهای Rust</a></h2>
+<p>یک crate از نوع <code>no_std</code> که شامل یک یا چند تابع با <code>extern "ptx-kernel"</code> باشد را می‌توان با دستوری مانند دستور زیر به PTX کامپایل کرد.</p>
+<pre><code class="language-console">$ RUSTFLAGS='-Ctarget-cpu=sm_89' cargo +nightly rustc --target=nvptx64-nvidia-cuda -Zbuild-std=core --crate-type=cdylib
+</code></pre>
+<p>intrinsicهای موجود در <code>core::arch::nvptx</code> ممکن است از <code>#[cfg(target_feature = "...")]</code> استفاده کنند، بنابراین لازم است <code>-Zbuild-std=core</code> را با <code>RUSTFLAGS</code> مناسب به کار ببرید. مؤلفه‌های زیر برای این روند کاری لازم هستند:</p>
+<pre><code class="language-console">$ rustup component add rust-src --toolchain nightly
+$ rustup component add llvm-tools --toolchain nightly
+$ rustup component add llvm-bitcode-linker --toolchain nightly
+</code></pre>
+<h2 id="target-specific-restrictions"><a class="header" href="#target-specific-restrictions">محدودیت‌های مخصوص هدف</a></h2>
+<p>معماری مجموعه دستورالعمل PTX الزامات ویژه‌ای دربارهٔ آنچه مجاز است و آنچه مجاز نیست دارد. برای جلوگیری از تولید PTX نامعتبر یا ایجاد رفتار تعریف‌نشده توسط LLVM، هنگام کامپایل برای این هدف برخی قابلیت‌های زبان Rust مجاز نیستند.</p>
+<h3 id="static-initializers-must-be-acyclic"><a class="header" href="#static-initializers-must-be-acyclic">مقداردهنده‌های اولیهٔ static باید غیرچرخه‌ای باشند</a></h3>
+<p>مقداردهندهٔ اولیهٔ یک static نباید با خودش یا با مقداردهندهٔ اولیهٔ static دیگری چرخه تشکیل دهد. بنابراین کامپایلر نه‌تنها static خودارجاع <code>A</code> را رد می‌کند، بلکه همهٔ staticهای زیر را نیز رد می‌کند.</p>
+<pre><code class="language-Rust">struct Foo(&amp;'static Foo);
+
+static A: Foo = Foo(&amp;A); //~ ERROR static initializer forms a cycle involving `A`
+
+static B0: Foo = Foo(&amp;B1); //~ ERROR static initializer forms a cycle involving `B0`
+static B1: Foo = Foo(&amp;B0);
+
+static C0: Foo = Foo(&amp;C1); //~ ERROR static initializer forms a cycle involving `C0`
+static C1: Foo = Foo(&amp;C2);
+static C2: Foo = Foo(&amp;C0);
+</code></pre>
+<p>مقداردهنده‌های اولیهٔ غیرچرخه‌ای مجاز هستند:</p>
+<pre><code class="language-Rust">struct Bar(&amp;'static u32);
+
+static BAR: Bar = Bar(&amp;INT); // is allowed
+static INT: u32 = 42u32; // also allowed
+</code></pre>
+<!-- FIXME: fill this out
+
+## Requirements
+
+Does the target support host tools, or only cross-compilation? Does the target
+support std, or alloc (either with a default allocator, or if the user supplies
+an allocator)?
+
+Document the expectations of binaries built for the target. Do they assume
+specific minimum features beyond the baseline of the CPU/environment/etc? What
+version of the OS or environment do they expect?
+
+Are there notable `#[target_feature(...)]` or `-C target-feature=` values that
+programs may wish to use?
+
+What calling convention does `extern "C"` use on the target?
+
+What format do binaries use by default? ELF, PE, something else?
+
+## Building the target
+
+If Rust doesn't build the target by default, how can users build it? Can users
+just add it to the `target` list in `bootstrap.toml`?
+
+## Building Rust programs
+
+Rust does not yet ship pre-compiled artifacts for this target. To compile for
+this target, you will either need to build Rust with the target enabled (see
+"Building the target" above), or build your own copy of `core` by using
+`build-std` or similar.
+
+## Testing
+
+Does the target support running binaries, or do binaries have varying
+expectations that prevent having a standard way to run them? If users can run
+binaries, can they do so in some common emulator, or do they need native
+hardware? Does the target support running the Rust testsuite?
+
+## Cross-compilation toolchains and C code
+
+Does the target support C code? If so, what toolchain target should users use
+to build compatible C code? (This may match the target triple, or it may be a
+toolchain for a different target triple, potentially with specific options or
+caveats.)
+
+--><nav class="page-nav"><a href="mips-release-6.html">→ mipsisa*r6*-unknown-linux-gnu*</a><a href="oe-linux-gnu.html">*-oe-linux-gnu ←</a></nav></article><footer class="site-footer"><span>ترجمهٔ فارسی مستندات رسمی Rust</span><a href="../../../index.html">کتابخانه</a><a href="../../license.html">لایسنس و حق نشر</a><a class="sp" href="https://doc.rust-lang.org/">نسخهٔ انگلیسی</a></footer></section></main><script src="../../rustc/toc.js"></script><script src="../../assets/highlight.js"></script><script src="../../assets/app.js"></script></body></html>
